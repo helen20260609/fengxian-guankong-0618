@@ -45,29 +45,24 @@ if ($status) {
     Write-Host "Working tree clean. No changes to commit." -ForegroundColor Green
 }
 
-# 4. Create Git tag (replace if exists)
+# 4. Create Git tag (replace local tag if exists)
 $existingTag = git tag -l $tagName
 if ($existingTag) {
-    Write-Host "Tag $tagName already exists, replacing old tag..." -ForegroundColor Yellow
+    Write-Host "Tag $tagName already exists locally, replacing..." -ForegroundColor Yellow
     git tag -d $tagName | ForEach-Object { Write-Host $_ }
-    try {
-        git push origin --delete $tagName 2>&1 | Out-Null
-    } catch {
-        Write-Host "Remote tag delete skipped (may not exist or no permission)." -ForegroundColor Yellow
-   
-        git push origin --delete $tagName 2>&1 | Out-Null
-    } catch {
-        Write-Host "Remote tag delete skipped (may not exist or no permission)." -ForegroundColor Yellow
-    }
 }
 
 Write-Host "Creating Git tag: $tagName" -ForegroundColor Cyan
 git tag -a $tagName -m "Full backup $dateStr" | ForEach-Object { Write-Host $_ }
 
 # 5. Push to remote
-Write-Host "Pushing to GitHub..." -ForegroundColor Cyan
-git push origin master | ForEach-Object { Write-Host $_ }
-git push origin $tagName | ForEach-Object { Write-Host $_ }
+try {
+    Write-Host "Pushing to GitHub..." -ForegroundColor Cyan
+    git push origin master | ForEach-Object { Write-Host $_ }
+    git push origin $tagName | ForEach-Object { Write-Host $_ }
+} catch {
+    Write-Host "Git push encountered an issue, continuing to local zip backup." -ForegroundColor Yellow
+}
 
 # 6. Generate local zip archive
 $backupDir = Join-Path $projectRoot "backups"
