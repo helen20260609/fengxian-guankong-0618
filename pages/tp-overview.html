@@ -411,8 +411,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     <th>统一社会信用代码</th>
                     <th>法人代表</th>
                     <th>联系电话</th>
-                    <th>信用评分</th>
-                    <th>成立时间</th>
+                    <th class="sortable" data-field="score" data-type="number" onclick="sortOrgList('score')">信用评分</th>
+                    <th class="sortable" data-field="established" data-type="date" onclick="sortOrgList('established')">成立时间</th>
                     <th>状态</th>
                     <th>操作</th>
                 </tr>
@@ -433,6 +433,12 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .credit-a { background: #00bcd4; }
 .credit-b { background: #f59e0b; }
 .credit-c { background: #d93025; }
+/* 排序表头 */
+.list-table thead th.sortable { cursor: pointer; user-select: none; }
+.list-table thead th.sortable .sort-icon { margin-left: 6px; font-size: 12px; color: var(--primary, #1a73e8); }
+.list-table thead th.sortable.sort-asc,
+.list-table thead th.sortable.sort-desc { color: var(--primary, #1a73e8); background: rgba(26,115,232,0.06); }
+
 /* 状态徽章 */
 .status-badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
 .status-in { background: rgba(30,142,62,0.12); color: var(--success); }
@@ -955,6 +961,7 @@ document.addEventListener('DOMContentLoaded', function() {
 var orgPage = 1;
 var orgPageSize = 10;
 var filteredOrgList = [];
+var orgSort = { field: '', dir: '' };
 
 function buildOrgListData() {
     if (typeof getAllOrgs !== 'function') return [];
@@ -1027,6 +1034,7 @@ function renderOrgList(reset) {
     document.getElementById('orgListCount').textContent = '共 ' + total + ' 条记录';
     document.getElementById('orgListCount').style.display = 'none';
     renderOrgPagination(totalPages);
+    updateSortHeaders();
 }
 
 function escapeHtml(text) {
@@ -1064,7 +1072,7 @@ function getOrgFilteredList() {
             });
         } catch (e) { console.error('加载统一机构数据失败', e); }
     }
-    return list.filter(function(org) {
+    var result = list.filter(function(org) {
         var orgField = org.field || '';
         var orgQual = org.qual || '';
         var orgCredit = org.credit || org.creditLevel || '';
@@ -1076,6 +1084,48 @@ function getOrgFilteredList() {
             if (orgName.toLowerCase().indexOf(keyword) === -1) return false;
         }
         return true;
+    });
+    // 排序
+    if (orgSort.field && orgSort.dir) {
+        result.sort(function(a, b) {
+            var va, vb;
+            if (orgSort.field === 'score') {
+                va = parseFloat(a.score) || 0;
+                vb = parseFloat(b.score) || 0;
+            } else if (orgSort.field === 'established') {
+                va = a.established ? new Date(a.established).getTime() : 0;
+                vb = b.established ? new Date(b.established).getTime() : 0;
+            } else {
+                return 0;
+            }
+            return orgSort.dir === 'asc' ? va - vb : vb - va;
+        });
+    }
+    return result;
+}
+
+function sortOrgList(field) {
+    if (orgSort.field === field) {
+        orgSort.dir = orgSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        orgSort.field = field;
+        orgSort.dir = 'desc';
+    }
+    updateSortHeaders();
+    renderOrgList();
+}
+
+function updateSortHeaders() {
+    document.querySelectorAll('#orgListTable thead th.sortable').forEach(function(th) {
+        th.classList.remove('sort-asc', 'sort-desc');
+        var icon = th.querySelector('.sort-icon');
+        if (icon) icon.remove();
+        if (th.getAttribute('data-field') === orgSort.field) {
+            th.classList.add(orgSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+            th.innerHTML += ' <span class="sort-icon" title="当前排序：' + (orgSort.dir === 'asc' ? '升序' : '降序') + '">' + (orgSort.dir === 'asc' ? '↑' : '↓') + '</span>';
+        } else {
+            th.innerHTML += ' <span class="sort-icon" title="点击可排序">⇅</span>';
+        }
     });
 }
 

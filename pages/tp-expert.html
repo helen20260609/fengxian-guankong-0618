@@ -73,16 +73,25 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .table-wrapper .list-table .sticky-col-1,
-    .table-wrapper .list-table td:first-child,
+    .table-wrapper .list-table td:first-child {
+        width: 120px;
+        min-width: 120px;
+        max-width: 120px;
+        position: sticky;
+        left: 0;
+        z-index: 100;
+        background: #ffffff;
+        border-right: 1px solid var(--border, #dadce0);
+        box-shadow: 2px 0 4px rgba(0,0,0,0.06);
+    }
     .table-wrapper .list-table .sticky-col-2,
     .table-wrapper .list-table td:nth-child(2) {
-        position: static;
-        background: transparent;
-        border-right: none;
+        width: 180px;
+        min-width: 180px;
+        max-width: 180px;
     }
-    .table-wrapper .list-table th.sticky-col-1,
-    .table-wrapper .list-table th.sticky-col-2 { position: static; z-index: auto; background: var(--header-bg); }
-    .table-wrapper .list-table thead th { position: sticky; top: 0; z-index: 1; background: var(--header-bg); border-bottom: 1px solid var(--border); }
+    .table-wrapper .list-table thead th.sticky-col-1 { z-index: 101; background: #f8f9fa; }
+    .table-wrapper .list-table thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; border-bottom: 1px solid var(--border); }
 
 /* 表单布局 */
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px; }
@@ -209,6 +218,10 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .data-table .actions .audit:hover { color: #c2410c; text-decoration: underline; }
 .data-table .actions .edit { color: var(--primary); cursor: pointer; }
 .data-table .actions .edit:hover { color: var(--primary-dark); text-decoration: underline; }
+.data-table .actions .domain { color: var(--secondary); cursor: pointer; }
+.data-table .actions .domain:hover { color: #1a6f4b; text-decoration: underline; }
+.data-table .actions .history { color: var(--text-secondary); cursor: pointer; }
+.data-table .actions .history:hover { color: var(--text-primary); text-decoration: underline; }
 .data-table th:nth-child(7), .data-table td:nth-child(7) { min-width: 60px; }
 /* 状态开关（Apple UISwitch 风格） */
 	.switch-wrap { display: inline-flex; align-items: center; cursor: pointer; }
@@ -384,14 +397,14 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         <div class="table-wrapper" style="overflow-x:auto;position:relative;">
             <table class="list-table sticky-table" id="expertTable">
                 <colgroup>
-                    <col style="width: 80px; min-width: 80px;">
+                    <col style="width: 120px; min-width: 120px;">
                     <col style="width: 260px; min-width: 260px;">
                     <col style="width: 120px; min-width: 120px;">
                     <col style="width: 100px; min-width: 100px;">
                     <col style="width: 100px; min-width: 100px;">
                     <col style="width: 140px; min-width: 140px;">
                     <col style="width: 80px; min-width: 80px;">
-                    <col style="width: 160px; min-width: 160px;">
+                    <col style="width: 240px; min-width: 240px;">
                 </colgroup>
                 <thead>
                     <tr>
@@ -506,12 +519,12 @@ function renderExpertTable() {
                     '<span class="slider"></span>' +
                 '</label>' +
             '</div>';
-        var isInd = item.expertType === '独立专家' || (!item.expertType && !item.orgId && !item.org);
+        var isInd = !item.org && (item.expertType === '独立专家' || !item.expertType);
         var orgCell = isInd ?
             '<span style="color:var(--primary);font-weight:500;">独立专家</span>' :
             (item.orgId ?
                 '<a style="cursor:pointer;color:var(--primary);text-decoration:underline;" onclick="goToTPOrg(\'' + item.orgId + '\')">' + (item.org || '') + '</a>' :
-                (item.org || ''));
+                (item.org || '<span style="color:var(--primary);font-weight:500;">独立专家</span>'));
         tr.innerHTML =
             '<td>' + item.name + '</td>' +
             '<td>' + orgCell + '</td>' +
@@ -525,7 +538,8 @@ function renderExpertTable() {
                     '<a class="table-link view" onclick="viewExpert(\'' + item.name + '\')">查看</a>' +
                     '<a class="table-link edit" onclick="editExpert(\'' + item.name + '\')">编辑</a>' +
                     '<a class="table-link audit" onclick="auditExpert(\'' + item.name + '\')">审核</a>' +
-                    '<a class="table-link" style="color:var(--success);" onclick="addExpertToProject(\'' + item.name + '\')" title="加入项目"><i class="fas fa-user-plus"></i>加入项目</a>' +
+                    '<a class="table-link domain" onclick="adjustExpertDomain(\'' + item.name + '\')">专业领域调整</a>' +
+                    '<a class="table-link history" onclick="viewExpertHistory(\'' + item.name + '\')">历史</a>' +
                 '</div>' +
             '</td>';
         tbody.appendChild(tr);
@@ -652,6 +666,17 @@ function editExpert(name) {
     var url = 'tp-expert-add.html?mode=edit&name=' + encodeURIComponent(name);
     if (params.orgId) url += '&orgId=' + encodeURIComponent(params.orgId);
     openExpertModal(url, '编辑专家信息', 'modal-wide');
+    var iframe = document.getElementById('expertModalIframe');
+    if (iframe) {
+        iframe.onload = function() {
+            try {
+                var item = expertList.find(function(e) { return e.name === name; });
+                if (item) {
+                    iframe.contentWindow.postMessage({ action: 'setExpertData', item: item }, '*');
+                }
+            } catch(e) {}
+        };
+    }
 }
 
 function auditExpert(name) {
@@ -668,6 +693,52 @@ function openExpertAdd() {
     openExpertModal(url, '专家信息录入', 'modal-wide');
 }
 
+function adjustExpertDomain(name) {
+    var item = expertList.find(function(e) { return e.name === name; });
+    if (!item) return;
+    document.getElementById('domainExpertName').value = name;
+    document.getElementById('domainExpertNameDisplay').value = name;
+    document.getElementById('domainExpertOldDomain').value = item.domain || '';
+    document.getElementById('domainExpertOldDirection').value = item.direction || '';
+    document.getElementById('domainExpertNewDomain').value = item.domain || '';
+    document.getElementById('domainExpertNewDirection').value = item.direction || '';
+    document.getElementById('domainAdjustReason').value = '';
+    document.getElementById('domainModalOverlay').classList.add('active');
+}
+
+function closeDomainModal() {
+    var overlay = document.getElementById('domainModalOverlay');
+    if (overlay) overlay.classList.remove('active');
+}
+
+function submitDomainAdjust() {
+    var name = document.getElementById('domainExpertName').value;
+    var item = expertList.find(function(e) { return e.name === name; });
+    if (!item) return;
+    var newDomain = document.getElementById('domainExpertNewDomain').value;
+    var newDirection = document.getElementById('domainExpertNewDirection').value;
+    var reason = document.getElementById('domainAdjustReason').value.trim();
+    if (!newDomain || !newDirection) {
+        alert('请选择新的专业领域和从事方向');
+        return;
+    }
+    if (newDomain === item.domain && newDirection === item.direction) {
+        alert('新的专业领域/方向与当前相同，无需调整');
+        return;
+    }
+    var data = { name: name, domain: newDomain, direction: newDirection, remark: reason };
+    var idx = expertList.findIndex(function(e) { return e.name === name; });
+    if (idx !== -1) {
+        var oldItem = expertList[idx];
+        recordExpertChange(name, '专业领域调整', oldItem, data, getCurrentOperator(), reason || '调整专业领域');
+        expertList[idx] = Object.assign({}, oldItem, { domain: newDomain, direction: newDirection });
+    }
+    saveExpertData();
+    searchExpert();
+    closeDomainModal();
+    alert('专家 "' + name + '" 的专业领域已调整。');
+}
+
 function toggleExpertStatus(name) {
     var item = expertList.find(function(e) { return e.name === name; });
     if (!item) return;
@@ -675,20 +746,7 @@ function toggleExpertStatus(name) {
     var actionText = item.status === '启用' ? '停用' : '启用';
     if (!confirm('确定要' + actionText + '专家 "' + name + '" 吗？')) return;
     item.status = newStatus;
-    if (!item.history) item.history = [];
-    item.history.unshift({
-        time: formatNow(),
-        action: actionText,
-        operator: getCurrentOperator(),
-        remark: '专家状态被' + actionText
-    });
-    addGlobalHistory({
-        targetName: item.name,
-        action: actionText,
-        operator: getCurrentOperator(),
-        remark: '专家状态被' + actionText,
-        time: formatNow()
-    });
+    recordExpertChange(name, '状态变更', null, { status: newStatus }, getCurrentOperator(), '专家状态被' + actionText);
     saveExpertData();
     searchExpert();
     alert('专家 "' + name + '" 已' + actionText + '。');
@@ -824,6 +882,51 @@ function saveExpertData() {
     }
 }
 
+function recordExpertChange(name, type, oldData, newData, operator, remark) {
+    var item = expertList.find(function(e) { return e.name === name; });
+    if (!item) return;
+    var record = {
+        time: formatNow(),
+        action: type,
+        operator: operator || getCurrentOperator(),
+        remark: remark || ''
+    };
+    if (type === '编辑' && oldData && newData) {
+        var fields = {
+            name: '姓名', gender: '性别', birth: '出生年月', org: '工作单位',
+            domain: '专业领域', direction: '专业方向', title: '职称', titleOrg: '评定机构',
+            titleTime: '评定时间', years: '工作年限', phone: '联系电话', email: '电子邮箱', address: '通讯地址'
+        };
+        var diff = [];
+        for (var key in fields) {
+            var oldVal = (oldData[key] || '').toString();
+            var newVal = (newData[key] || '').toString();
+            if (oldVal !== newVal) {
+                diff.push(fields[key] + '：' + oldVal + ' → ' + newVal);
+            }
+        }
+        if (diff.length) record.diff = diff;
+    } else if (type === '专业领域调整' && oldData && newData) {
+        var oldDomain = (oldData.domain || '').toString();
+        var oldDirection = (oldData.direction || '').toString();
+        var newDomain = (newData.domain || '').toString();
+        var newDirection = (newData.direction || '').toString();
+        if (oldDomain !== newDomain || oldDirection !== newDirection) {
+            record.diff = ['专业领域：' + oldDomain + ' → ' + newDomain, '从事方向：' + oldDirection + ' → ' + newDirection];
+        }
+    }
+    if (!item.history) item.history = [];
+    item.history.unshift(record);
+    addGlobalHistory({
+        targetName: item.name,
+        action: type,
+        operator: record.operator,
+        remark: remark || '',
+        time: record.time
+    });
+    saveExpertData();
+}
+
 function viewExpertHistory(name) {
     var item = expertList.find(function(e) { return e.name === name; });
     if (!item) return;
@@ -845,10 +948,6 @@ function renderHistoryTimeline(item) {
     var container = document.getElementById('historyTimeline');
     if (!container) return;
     var list = (item.history || []).slice();
-    // 合并该专家的全局删除记录
-    globalExpertHistory.forEach(function(r) {
-        if (r.targetName === item.name) list.push(r);
-    });
     // 按时间倒序
     list.sort(function(a, b) { return new Date(b.time) - new Date(a.time); });
     if (list.length === 0) {
@@ -910,15 +1009,17 @@ window.addEventListener('message', function(e) {
             var idx = expertList.findIndex(function(item) { return item.name === name; });
             if (idx !== -1) {
                 var oldItem = expertList[idx];
-                var diff = computeDiff(oldItem, data);
-                expertList[idx] = Object.assign({}, oldItem, data, {
-                    history: (oldItem.history || []).concat([{
-                        time: formatNow(),
-                        action: '编辑',
-                        operator: getCurrentOperator(),
-                        remark: '修改专家信息',
-                        diff: diff
-                    }])
+                recordExpertChange(name, '编辑', oldItem, data, getCurrentOperator(), '修改专家信息');
+                expertList[idx] = Object.assign({}, oldItem, data);
+            }
+        } else if (mode === 'domain') {
+            var idx = expertList.findIndex(function(item) { return item.name === name; });
+            if (idx !== -1) {
+                var oldItem = expertList[idx];
+                recordExpertChange(name, '专业领域调整', oldItem, data, getCurrentOperator(), data.remark || '调整专业领域');
+                expertList[idx] = Object.assign({}, oldItem, {
+                    domain: data.domain,
+                    direction: data.direction
                 });
             }
         }
@@ -963,42 +1064,6 @@ function computeDiff(oldItem, newItem) {
         }
     }
     return diff;
-}
-
-
-function addExpertToProject(name) {
-    var expert = expertList.find(function(e) { return e.name === name; });
-    if (!expert) return;
-    var projects = getAllProjectGroups();
-    if (!projects.length) {
-        if (confirm('暂无项目，是否前往创建项目？')) {
-            location.href = 'tp-expert-select.html';
-        }
-        return;
-    }
-    var options = projects.map(function(p, i) { return (i + 1) + '. ' + (p.projectName || p.projectId); }).join('\n');
-    var input = prompt('请选择要加入的项目（输入序号）：\n' + options);
-    var idx = parseInt(input, 10);
-    if (!idx || idx < 1 || idx > projects.length) return;
-    var project = projects[idx - 1];
-    if (!project.experts) project.experts = [];
-    var exists = project.experts.some(function(e) { return e.name === name; });
-    if (exists) {
-        alert('该专家已在项目“' + project.projectName + '”中');
-        return;
-    }
-    var unifiedExpert = getExpertByName(name);
-    var isIndependent = unifiedExpert ? (unifiedExpert.expertType === '独立专家' || !unifiedExpert.orgId) : (expert.expertType === '独立专家' || (!expert.expertType && !expert.orgId && !expert.org));
-    project.experts.push({
-        expertId: unifiedExpert ? unifiedExpert.expertId : ('EXP-NAME-' + name),
-        name: expert.name,
-        orgName: isIndependent ? '独立专家' : (expert.org || ''),
-        domain: expert.domain || '',
-        title: expert.title || '',
-        expertType: isIndependent ? '独立专家' : '机构专家'
-    });
-    updateProjectGroup(project);
-    alert('已将专家“' + expert.name + '”加入项目“' + project.projectName + '”');
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1059,6 +1124,70 @@ function resetExpert() {
         </div>
         <div class="modal-body" style="padding: 0; overflow: hidden;">
             <iframe id="expertModalIframe" class="modal-iframe"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- 专业领域调整弹窗 -->
+<div class="modal-overlay" id="domainModalOverlay" onclick="if(event.target===this)closeDomainModal()">
+    <div class="modal-container modal-narrow" id="domainModalContainer">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-tags" style="color: var(--secondary);"></i> 专业领域调整</div>
+            <button class="modal-close" onclick="closeDomainModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+            <input type="hidden" id="domainExpertName">
+            <div class="form-row" style="grid-template-columns: 1fr; margin-bottom: 16px;">
+                <div class="form-group">
+                    <label>专家姓名</label>
+                    <input type="text" id="domainExpertNameDisplay" readonly style="background: var(--bg-dark); color: var(--text-secondary);">
+                </div>
+            </div>
+            <div class="form-row" style="grid-template-columns: 1fr 1fr; margin-bottom: 16px;">
+                <div class="form-group">
+                    <label>当前专业领域</label>
+                    <input type="text" id="domainExpertOldDomain" readonly style="background: var(--bg-dark); color: var(--text-secondary);">
+                </div>
+                <div class="form-group">
+                    <label>当前从事方向</label>
+                    <input type="text" id="domainExpertOldDirection" readonly style="background: var(--bg-dark); color: var(--text-secondary);">
+                </div>
+            </div>
+            <div class="form-row" style="grid-template-columns: 1fr 1fr; margin-bottom: 16px;">
+                <div class="form-group">
+                    <label>新专业领域 <span class="required">*</span></label>
+                    <select id="domainExpertNewDomain">
+                        <option>结构安全</option>
+                        <option>消防安全</option>
+                        <option>电气安全</option>
+                        <option>建筑施工安全</option>
+                        <option>化工安全</option>
+                        <option>环境安全</option>
+                        <option>燃气安全</option>
+                        <option>交通安全</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>新从事方向 <span class="required">*</span></label>
+                    <select id="domainExpertNewDirection">
+                        <option>安全评估</option>
+                        <option>隐患排查</option>
+                        <option>检测检验</option>
+                        <option>应急咨询</option>
+                        <option>事故调查</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row" style="grid-template-columns: 1fr;">
+                <div class="form-group">
+                    <label>调整原因</label>
+                    <textarea id="domainAdjustReason" rows="3" placeholder="请填写调整原因..."></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeDomainModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitDomainAdjust()"><i class="fas fa-save"></i> 保存调整</button>
         </div>
     </div>
 </div>

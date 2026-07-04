@@ -87,7 +87,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .stat-trend.down { color: var(--danger); }
 
 /* 图表区域 */
-.chart-row { display: flex; flex-direction: row; gap: var(--gap); margin-bottom: 20px; }
+.chart-row { display: flex; flex-direction: row; gap: var(--gap); }
+.chart-row + .chart-row { margin-top: var(--gap); }
 .chart-card { min-width: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .chart-card.wide { flex: 2 1 0; }
 .chart-card.narrow { flex: 1 1 0; }
@@ -227,43 +228,43 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 <!-- 统计概览 Tab -->
 <div id="tab-overview" class="tab-panel">
     <!-- 统计卡片 -->
-    <div class="stat-row">
-        <div class="stat-item" onclick="setDrill('orgCount')">
+    <div class="stat-row" id="statCards">
+        <div class="stat-item" data-drill="orgCount" onclick="setDrill('orgCount')">
             <div class="stat-icon blue"><i class="fas fa-building"></i></div>
             <div class="stat-info">
-                <div class="stat-number">128</div>
+                <div class="stat-number" id="statOrgCount">0</div>
                 <div class="stat-label">机构总数</div>
-                <div class="stat-trend up"><i class="fas fa-arrow-up"></i> 本月新增 8</div>
+                <div class="stat-trend up" id="statOrgTrend"><i class="fas fa-arrow-up"></i> 本月新增 <span>0</span></div>
             </div>
         </div>
-        <div class="stat-item" onclick="setDrill('serviceCount')">
+        <div class="stat-item" data-drill="serviceCount" onclick="setDrill('serviceCount')">
             <div class="stat-icon green"><i class="fas fa-file-contract"></i></div>
             <div class="stat-info">
-                <div class="stat-number">1,256</div>
+                <div class="stat-number" id="statServiceCount">0</div>
                 <div class="stat-label">服务数量</div>
-                <div class="stat-trend up"><i class="fas fa-arrow-up"></i> 合同/项目/报告</div>
+                <div class="stat-trend up">合同/项目/报告</div>
             </div>
         </div>
-        <div class="stat-item" onclick="setDrill('serviceQuality')">
+        <div class="stat-item" data-drill="serviceQuality" onclick="setDrill('serviceQuality')">
             <div class="stat-icon cyan"><i class="fas fa-award"></i></div>
             <div class="stat-info">
-                <div class="stat-number">96.2%</div>
+                <div class="stat-number" id="statQuality">0%</div>
                 <div class="stat-label">服务质量</div>
-                <div class="stat-trend up"><i class="fas fa-arrow-up"></i> 合格/及时/一次通过</div>
+                <div class="stat-trend up">合格/及时/一次通过</div>
             </div>
         </div>
-        <div class="stat-item" onclick="setDrill('satisfaction')">
+        <div class="stat-item" data-drill="satisfaction" onclick="setDrill('satisfaction')">
             <div class="stat-icon purple"><i class="fas fa-smile"></i></div>
             <div class="stat-info">
-                <div class="stat-number">4.8</div>
+                <div class="stat-number" id="statSatisfaction">0</div>
                 <div class="stat-label">客户满意度</div>
-                <div class="stat-trend up"><i class="fas fa-arrow-up"></i> 平均分 5分制</div>
+                <div class="stat-trend up">平均分 5分制</div>
             </div>
         </div>
-        <div class="stat-item" onclick="setDrill('credit')">
+        <div class="stat-item" data-drill="credit" onclick="setDrill('credit')">
             <div class="stat-icon orange"><i class="fas fa-star"></i></div>
             <div class="stat-info">
-                <div class="stat-number">A级 68%</div>
+                <div class="stat-number" id="statCredit">A级 0%</div>
                 <div class="stat-label">信用分布</div>
                 <div class="stat-trend">各等级机构占比</div>
             </div>
@@ -323,6 +324,9 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 <div class="filter-actions">
                     <button class="btn btn-primary" onclick="refreshOverview()">
                         <i class="fas fa-sync-alt"></i> 刷新
+                    </button>
+                    <button class="btn btn-outline" onclick="resetDrillFilter()">
+                        <i class="fas fa-undo"></i> 重置下钻
                     </button>
                     <button class="btn btn-outline" onclick="openReportConfig()">
                         <i class="fas fa-cog"></i> 自定义报表
@@ -497,9 +501,9 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         </div>
     </div>
 
-    <div class="panel" id="reportPreviewPanel" style="display:none;">
+    <div class="panel" id="reportPreviewPanel">
         <div class="panel-header">
-            <div class="panel-title"><i class="fas fa-eye"></i> 报告预览</div>
+            <div class="panel-title"><i class="fas fa-eye"></i> 报告实时预览</div>
             <div class="filter-actions">
                 <button class="btn btn-sm btn-outline" onclick="exportReport()">
                     <i class="fas fa-file-export"></i> 导出
@@ -508,6 +512,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         </div>
         <div class="panel-body">
             <div id="reportPreview" class="report-preview"></div>
+            <div id="reportCharts" style="margin-top:16px;"></div>
         </div>
     </div>
 </div>
@@ -600,31 +605,93 @@ function buildOrgList() {
         var performances = typeof getPerformancesByOrg === 'function' ? getPerformancesByOrg(o.orgId) : [];
         var experts = typeof getExpertsByOrg === 'function' ? getExpertsByOrg(o.orgId) : [];
         var credit = typeof getCreditByOrg === 'function' ? getCreditByOrg(o.orgId) : null;
-        var seed = 0;
-        for (var i = 0; i < o.orgId.length; i++) seed += o.orgId.charCodeAt(i);
         var score = credit && typeof credit.score === 'number' ? credit.score : (o.score || 80);
-        var creditLevel = 'A';
-        if (score < 80) creditLevel = 'C';
-        else if (score < 90) creditLevel = 'B';
+        var creditLevel = o.creditLevel || '未评级';
+        if (!o.creditLevel) {
+            if (score >= 90) creditLevel = 'AAA';
+            else if (score >= 85) creditLevel = 'AA';
+            else if (score >= 80) creditLevel = 'A';
+            else if (score >= 70) creditLevel = 'B';
+            else creditLevel = 'C';
+        }
         var district = (o.region || '').replace(/^上海市/, '');
+        // 基于真实合同/业绩计算数量，避免随机 seed
+        var contractCount = contracts.length;
+        var projectCount = performances.length;
+        var reportCount = contractCount + projectCount;
+        // 服务质量指标：基于合同状态计算，默认兜底
+        var qualifiedRate = computeQualifiedRate(contracts, performances);
+        var onTimeRate = computeOnTimeRate(contracts, performances);
+        var passRate = computePassRate(performances);
+        // 满意度：基于业绩结论映射
+        var satisfaction = computeSatisfaction(performances);
+        var satisfactionDist = computeSatisfactionDist(performances);
         return {
             orgId: o.orgId,
             name: o.orgName,
             type: o.orgType || '其他机构',
             field: o.field || '',
             district: district,
-            contracts: contracts.length,
-            projects: performances.length,
-            reports: contracts.length + performances.length,
-            qualifiedRate: 90 + (seed % 9),
-            onTimeRate: 85 + (seed % 13),
-            passRate: 88 + (seed % 11),
-            satisfaction: parseFloat((4.0 + (seed % 10) / 10).toFixed(1)),
+            established: o.established || '',
+            contracts: contractCount,
+            projects: projectCount,
+            reports: reportCount,
+            qualifiedRate: qualifiedRate,
+            onTimeRate: onTimeRate,
+            passRate: passRate,
+            satisfaction: satisfaction,
+            satisfactionDist: satisfactionDist,
             experts: experts.length,
             credit: creditLevel,
+            score: score,
             status: o.status === '正常' ? '已审核' : '待审核'
         };
     });
+}
+
+function computeQualifiedRate(contracts, performances) {
+    var total = contracts.length + performances.length;
+    if (total === 0) return 0;
+    var pass = 0;
+    contracts.forEach(function(c) { if (c.status === '已验收' || c.status === '执行中') pass++; });
+    performances.forEach(function(p) { if (p.conclusion === '优秀' || p.conclusion === '良好' || p.conclusion === '合格') pass++; });
+    return Math.round(pass / total * 100);
+}
+
+function computeOnTimeRate(contracts, performances) {
+    var total = contracts.length + performances.length;
+    if (total === 0) return 0;
+    // 简单判定：已验收/已通过视为按时
+    var onTime = 0;
+    contracts.forEach(function(c) { if (c.status === '已验收') onTime++; });
+    performances.forEach(function(p) { if (p.auditStatus === '已通过') onTime++; });
+    return Math.round(onTime / total * 100);
+}
+
+function computePassRate(performances) {
+    var total = performances.length;
+    if (total === 0) return 0;
+    var pass = performances.filter(function(p) { return p.auditStatus === '已通过'; }).length;
+    return Math.round(pass / total * 100);
+}
+
+function computeSatisfaction(performances) {
+    if (!performances.length) return 4.0;
+    var map = { '优秀': 5.0, '良好': 4.5, '合格': 4.0, '不合格': 2.5 };
+    var sum = 0;
+    performances.forEach(function(p) { sum += map[p.conclusion] || 4.0; });
+    return parseFloat((sum / performances.length).toFixed(1));
+}
+
+function computeSatisfactionDist(performances) {
+    var dist = { '5星': 0, '4星': 0, '3星': 0, '2星': 0, '1星': 0 };
+    if (!performances.length) return dist;
+    var map = { '优秀': 5, '良好': 4, '合格': 3, '不合格': 2 };
+    performances.forEach(function(p) {
+        var star = map[p.conclusion] || 3;
+        dist[star + '星']++;
+    });
+    return dist;
 }
 
 var orgList = buildOrgList();
@@ -634,6 +701,7 @@ var filteredOrgList = orgList.slice();
 var statsPage = 1;
 var statsPageSize = 5;
 var chartInstances = {};
+var currentFilters = { orgId: '', timeDim: 'month', area: '', field: '', type: '' };
 
 var templates = JSON.parse(localStorage.getItem('orgReportTemplates') || '[]');
 var reports = JSON.parse(localStorage.getItem('orgReports') || '[]');
@@ -672,15 +740,37 @@ function initOrgFilter() {
     sel.value = current;
 }
 
-function applyOrgFilter() {
-    var sel = document.getElementById('orgFilter');
-    if (!sel) { filteredOrgList = orgList.slice(); return; }
-    var orgId = sel.value;
-    if (orgId) {
-        filteredOrgList = orgList.filter(function(item) { return item.orgId === orgId; });
-    } else {
-        filteredOrgList = orgList.slice();
-    }
+function initAreaFilter() {
+    var sel = document.getElementById('areaDim');
+    if (!sel || typeof getAllOrgs !== 'function') return;
+    var areas = [];
+    getAllOrgs().forEach(function(o) {
+        var district = (o.region || '').replace(/^上海市/, '');
+        if (district && areas.indexOf(district) === -1) areas.push(district);
+    });
+    sel.innerHTML = '<option value="">全部区域</option>' + areas.map(function(a) { return '<option>' + a + '</option>'; }).join('');
+}
+
+function applyFilters() {
+    var orgSel = document.getElementById('orgFilter');
+    var timeSel = document.getElementById('timeDim');
+    var areaSel = document.getElementById('areaDim');
+    var fieldSel = document.getElementById('fieldDim');
+    var typeSel = document.getElementById('typeDim');
+    currentFilters = {
+        orgId: orgSel ? orgSel.value : '',
+        timeDim: timeSel ? timeSel.value : 'month',
+        area: areaSel ? areaSel.value : '',
+        field: fieldSel ? fieldSel.value : '',
+        type: typeSel ? typeSel.value : ''
+    };
+    filteredOrgList = orgList.filter(function(item) {
+        if (currentFilters.orgId && item.orgId !== currentFilters.orgId) return false;
+        if (currentFilters.area && item.district !== currentFilters.area) return false;
+        if (currentFilters.field && item.field !== currentFilters.field) return false;
+        if (currentFilters.type && item.type !== currentFilters.type) return false;
+        return true;
+    });
     statsPage = 1;
 }
 
@@ -688,7 +778,7 @@ function setOrgFilter(orgId) {
     var sel = document.getElementById('orgFilter');
     if (!sel || !orgId) return;
     sel.value = orgId;
-    applyOrgFilter();
+    applyFilters();
 }
 
 function setDrill(type) {
@@ -698,17 +788,97 @@ function setDrill(type) {
     refreshOverview();
 }
 
+function renderStatCards() {
+    var list = filteredOrgList.length ? filteredOrgList : orgList;
+    var total = list.length;
+    var serviceCount = list.reduce(function(sum, i) { return sum + i.contracts + i.projects + i.reports; }, 0);
+    var avgQuality = total ? Math.round(list.reduce(function(sum, i) { return sum + i.qualifiedRate; }, 0) / total) : 0;
+    var avgSatisfaction = total ? (list.reduce(function(sum, i) { return sum + i.satisfaction; }, 0) / total).toFixed(1) : 0;
+    var creditA = list.filter(function(i) { return i.credit === 'A' || i.credit === 'AA' || i.credit === 'AAA'; }).length;
+    var creditAPct = total ? Math.round(creditA / total * 100) : 0;
+    var newThisMonth = list.filter(function(i) {
+        if (!i.established) return false;
+        var d = new Date(i.established);
+        var now = new Date();
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).length;
+    document.getElementById('statOrgCount').textContent = total;
+    document.querySelector('#statOrgTrend span').textContent = newThisMonth;
+    document.getElementById('statServiceCount').textContent = serviceCount.toLocaleString();
+    document.getElementById('statQuality').textContent = avgQuality + '%';
+    document.getElementById('statSatisfaction').textContent = avgSatisfaction;
+    document.getElementById('statCredit').textContent = 'A级及以上 ' + creditAPct + '%';
+    document.querySelectorAll('.stat-item').forEach(function(el) { el.classList.toggle('active', el.dataset.drill === currentDrill); });
+}
+
 function switchChartType(type) {
     currentChartType = type;
     refreshOverview();
 }
 
 function refreshOverview() {
-    applyOrgFilter();
+    applyFilters();
+    renderStatCards();
     renderMainChart();
     renderSubChart();
     renderTrendChart();
     renderStatsTable();
+}
+
+function renderSubChart(highlightName) {
+    var el = document.getElementById('subChart');
+    if (!el) return;
+    if (chartInstances.sub) { chartInstances.sub.dispose(); }
+    chartInstances.sub = echarts.init(el);
+    var list = filteredOrgList.length ? filteredOrgList : orgList;
+    var creditMap = {};
+    list.forEach(function(item) {
+        var key = item.credit + '级';
+        creditMap[key] = (creditMap[key] || 0) + 1;
+    });
+    if (Object.keys(creditMap).length === 0) {
+        creditMap['未评级'] = 0;
+    }
+    var creditData = Object.keys(creditMap).map(function(k) { return { value: creditMap[k], name: k }; });
+    var selected = {};
+    if (highlightName) {
+        creditData.forEach(function(d) { selected[d.name] = d.name === highlightName; });
+    }
+    chartInstances.sub.setOption({
+        tooltip: { trigger: 'item' },
+        legend: { orient: 'vertical', left: 'left', textStyle: { color: 'var(--text-secondary)' } },
+        series: [{ type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false, label: { show: false }, selectedMode: highlightName ? 'single' : false, selected: selected, data: creditData }]
+    });
+    chartInstances.sub.on('click', function(params) { showDrillDetail(params.name); });
+}
+
+function drillByMainChart(name) {
+    // 根据当前指标判断下钻维度
+    var list = filteredOrgList.length ? filteredOrgList : orgList;
+    if (currentDrill === 'credit') {
+        var level = name.replace('级', '');
+        filteredOrgList = list.filter(function(item) { return item.credit === level; });
+        renderSubChart(name);
+    } else if (currentDrill === 'satisfaction') {
+        filteredOrgList = list.filter(function(item) { return Math.round(item.satisfaction) === Math.round(parseFloat(name)) || item.type === name; });
+        renderSubChart();
+    } else if (currentDrill === 'newOrg') {
+        var year = name.replace('年', '');
+        filteredOrgList = list.filter(function(item) { return (item.established || '').substring(0, 4) === year; });
+        renderSubChart();
+    } else {
+        filteredOrgList = list.filter(function(item) { return item.type === name; });
+        renderSubChart();
+    }
+    statsPage = 1;
+    renderStatsTable();
+    renderStatCards();
+    renderTrendChart();
+}
+
+function resetDrillFilter() {
+    applyFilters();
+    refreshOverview();
 }
 
 function renderMainChart() {
@@ -754,26 +924,7 @@ function renderMainChart() {
         };
     }
     chartInstances.main.setOption(option);
-    chartInstances.main.on('click', function(params) { showDrillDetail(params.name); });
-}
-
-function renderSubChart() {
-    var el = document.getElementById('subChart');
-    if (!el) return;
-    if (chartInstances.sub) { chartInstances.sub.dispose(); }
-    chartInstances.sub = echarts.init(el);
-    var creditData = [
-        { value: 68, name: 'A级' },
-        { value: 22, name: 'B级' },
-        { value: 7, name: 'C级' },
-        { value: 3, name: '未评级' }
-    ];
-    chartInstances.sub.setOption({
-        tooltip: { trigger: 'item' },
-        legend: { orient: 'vertical', left: 'left', textStyle: { color: 'var(--text-secondary)' } },
-        series: [{ type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false, label: { show: false }, data: creditData }]
-    });
-    chartInstances.sub.on('click', function(params) { showDrillDetail(params.name); });
+    chartInstances.main.on('click', function(params) { drillByMainChart(params.name); });
 }
 
 function renderTrendChart() {
@@ -799,29 +950,42 @@ function renderTrendChart() {
 }
 
 function getDrillData(drill) {
+    var list = filteredOrgList.length ? filteredOrgList : orgList;
     var counts = {};
     if (drill === 'orgCount') {
-        orgList.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + 1; });
+        list.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + 1; });
     } else if (drill === 'serviceCount') {
-        orgList.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.contracts + item.projects + item.reports; });
+        list.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.contracts + item.projects + item.reports; });
     } else if (drill === 'serviceQuality') {
-        orgList.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.qualifiedRate; });
-        for (var k in counts) { counts[k] = Math.round(counts[k] / orgList.filter(function(i) { return i.type === k; }).length); }
+        list.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.qualifiedRate; });
+        for (var k in counts) { counts[k] = Math.round(counts[k] / list.filter(function(i) { return i.type === k; }).length); }
     } else if (drill === 'satisfaction') {
-        orgList.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.satisfaction; });
-        for (var k in counts) { counts[k] = (counts[k] / orgList.filter(function(i) { return i.type === k; }).length).toFixed(1); }
+        list.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.satisfaction; });
+        for (var k in counts) { counts[k] = (counts[k] / list.filter(function(i) { return i.type === k; }).length).toFixed(1); }
     } else if (drill === 'credit') {
-        orgList.forEach(function(item) { counts[item.credit + '级'] = (counts[item.credit + '级'] || 0) + 1; });
+        list.forEach(function(item) { counts[item.credit + '级'] = (counts[item.credit + '级'] || 0) + 1; });
     } else if (drill === 'timeliness') {
-        orgList.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.onTimeRate; });
-        for (var k in counts) { counts[k] = Math.round(counts[k] / orgList.filter(function(i) { return i.type === k; }).length); }
+        list.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.onTimeRate; });
+        for (var k in counts) { counts[k] = Math.round(counts[k] / list.filter(function(i) { return i.type === k; }).length); }
     } else if (drill === 'passRate') {
-        orgList.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.passRate; });
-        for (var k in counts) { counts[k] = Math.round(counts[k] / orgList.filter(function(i) { return i.type === k; }).length); }
+        list.forEach(function(item) { counts[item.type] = (counts[item.type] || 0) + item.passRate; });
+        for (var k in counts) { counts[k] = Math.round(counts[k] / list.filter(function(i) { return i.type === k; }).length); }
     } else if (drill === 'newOrg') {
-        return [{ name: '检测检验', value: 12 }, { name: '安全评价', value: 8 }, { name: '设计咨询', value: 6 }, { name: '施工监理', value: 4 }, { name: '其他', value: 3 }];
+        return getNewOrgData(list);
     }
     return Object.keys(counts).map(function(k) { return { name: k, value: counts[k] }; });
+}
+
+function getNewOrgData(list) {
+    var map = {};
+    list.forEach(function(item) {
+        var y = (item.established || '').substring(0, 4);
+        if (y) map[y] = (map[y] || 0) + 1;
+    });
+    if (Object.keys(map).length === 0) {
+        return [{ name: '检测检验', value: 0 }, { name: '安全评价', value: 0 }, { name: '设计咨询', value: 0 }, { name: '施工监理', value: 0 }, { name: '其他', value: 0 }];
+    }
+    return Object.keys(map).sort().map(function(k) { return { name: k + '年', value: map[k] }; });
 }
 
 function showDrillDetail(name) {
@@ -934,8 +1098,133 @@ function initCheckboxGroup(id, key) {
             el.classList.toggle('checked');
             var vals = Array.from(document.querySelectorAll('#' + id + ' .checkbox-item.checked')).map(function(e) { return e.dataset.value; });
             reportConfig[key] = vals;
+            debounceRenderReportPreview();
         });
     });
+}
+
+var reportPreviewTimer = null;
+function debounceRenderReportPreview() {
+    if (reportPreviewTimer) clearTimeout(reportPreviewTimer);
+    reportPreviewTimer = setTimeout(renderReportPreview, 300);
+}
+
+function renderReportPreview() {
+    var name = document.getElementById('reportName').value.trim() || '自定义统计报告';
+    var period = document.getElementById('reportPeriod').value;
+    var periodText = { week: '周报', month: '月报', quarter: '季报', year: '年报' }[period];
+    var preview = document.getElementById('reportPreview');
+    var panel = document.getElementById('reportPreviewPanel');
+    var chartsContainer = document.getElementById('reportCharts');
+    panel.style.display = 'block';
+    var html = '<strong>' + name + '（' + periodText + '）</strong><br>';
+    html += '统计指标：' + reportConfig.indicators.map(function(i) { return indicatorName(i); }).join('、') + '<br>';
+    html += '统计维度：' + reportConfig.dimensions.map(function(i) { return dimensionName(i); }).join('、') + '<br>';
+    html += '可视化形式：' + reportConfig.chartTypes.join('、') + '<br><br>';
+    html += '核心数据摘要：<br>';
+    reportConfig.indicators.forEach(function(ind) {
+        html += '• ' + indicatorName(ind) + '：' + getIndicatorSummary(ind) + '<br>';
+    });
+    preview.innerHTML = html;
+
+    chartsContainer.innerHTML = '';
+    if (reportConfig.chartTypes.indexOf('table') !== -1) {
+        chartsContainer.appendChild(buildReportTable());
+    }
+    reportConfig.chartTypes.forEach(function(type) {
+        if (type === 'table') return;
+        var chartDiv = document.createElement('div');
+        chartDiv.className = 'panel';
+        chartDiv.style.marginTop = '16px';
+        chartDiv.style.marginBottom = '0';
+        chartDiv.innerHTML = '<div class="panel-header"><div class="panel-title">' + chartTypeTitle(type) + '</div></div><div class="panel-body" style="height:320px;"><div id="reportChart-' + type + '" style="width:100%;height:100%;"></div></div>';
+        chartsContainer.appendChild(chartDiv);
+        setTimeout(function() { renderReportChart(type, 'reportChart-' + type); }, 0);
+    });
+}
+
+function chartTypeTitle(type) {
+    return { bar: '柱状图', pie: '饼图', line: '折线图' }[type] || type;
+}
+
+function buildReportTable() {
+    var panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.style.marginTop = '16px';
+    panel.style.marginBottom = '0';
+    var list = filteredOrgList.length ? filteredOrgList : orgList;
+    var html = '<div class="panel-header"><div class="panel-title"><i class="fas fa-table"></i> 数据明细</div></div><div class="panel-body" style="padding:0;"><div class="table-wrapper"><table class="data-table"><thead><tr><th>机构名称</th><th>类型</th><th>领域</th><th>区域</th>' + reportConfig.indicators.map(function(i) { return '<th>' + indicatorName(i) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    list.slice(0, 20).forEach(function(item) {
+        html += '<tr><td>' + item.name + '</td><td>' + item.type + '</td><td>' + item.field + '</td><td>' + item.district + '</td>' + reportConfig.indicators.map(function(i) { return '<td>' + formatIndicatorValue(i, item) + '</td>'; }).join('') + '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+    panel.innerHTML = html;
+    return panel;
+}
+
+function formatIndicatorValue(ind, item) {
+    if (ind === 'orgCount') return 1;
+    if (ind === 'serviceCount') return item.contracts + item.projects + item.reports;
+    if (ind === 'serviceQuality') return item.qualifiedRate + '%';
+    if (ind === 'satisfaction') return item.satisfaction;
+    if (ind === 'credit') return item.credit;
+    if (ind === 'timeliness') return item.onTimeRate + '%';
+    if (ind === 'passRate') return item.passRate + '%';
+    if (ind === 'newOrg') return item.established || '-';
+    return '-';
+}
+
+function renderReportChart(type, containerId) {
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    var chart = echarts.init(el);
+    var dimension = reportConfig.dimensions[0] || 'orgType';
+    var indicator = reportConfig.indicators[0] || 'orgCount';
+    var data = getReportDataByDimension(dimension, indicator);
+    var option = {};
+    if (type === 'bar') {
+        option = {
+            tooltip: { trigger: 'axis' }, grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'category', data: data.map(function(i) { return i.name; }) },
+            yAxis: { type: 'value' },
+            series: [{ data: data.map(function(i) { return i.value; }), type: 'bar', itemStyle: { borderRadius: [4, 4, 0, 0], color: '#1a73e8' } }]
+        };
+    } else if (type === 'pie') {
+        option = { tooltip: { trigger: 'item' }, series: [{ type: 'pie', radius: '60%', data: data }] };
+    } else if (type === 'line') {
+        option = {
+            tooltip: { trigger: 'axis' }, grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'category', data: data.map(function(i) { return i.name; }) },
+            yAxis: { type: 'value' },
+            series: [{ data: data.map(function(i) { return i.value; }), type: 'line', smooth: true }]
+        };
+    }
+    chart.setOption(option);
+}
+
+function getReportDataByDimension(dimension, indicator) {
+    var list = filteredOrgList.length ? filteredOrgList : orgList;
+    var keyFn = function(item) {
+        if (dimension === 'time') return (item.established || '').substring(0, 4) || '未知';
+        if (dimension === 'area') return item.district || '未知';
+        if (dimension === 'field') return item.field || '未知';
+        if (dimension === 'orgType') return item.type || '未知';
+        if (dimension === 'credit') return item.credit || '未知';
+        return item.type;
+    };
+    var counts = {};
+    list.forEach(function(item) {
+        var key = keyFn(item);
+        var value = 0;
+        if (indicator === 'orgCount') value = 1;
+        else if (indicator === 'serviceCount') value = item.contracts + item.projects + item.reports;
+        else if (indicator === 'serviceQuality') value = item.qualifiedRate;
+        else if (indicator === 'satisfaction') value = item.satisfaction;
+        else if (indicator === 'timeliness') value = item.onTimeRate;
+        else if (indicator === 'passRate') value = item.passRate;
+        counts[key] = (counts[key] || 0) + value;
+    });
+    return Object.keys(counts).map(function(k) { return { name: k, value: counts[k] }; });
 }
 
 function openReportConfig() { switchTab('report'); }
@@ -1093,16 +1382,20 @@ window.addEventListener('resize', function() {
 
 window.onload = function() {
     initOrgFilter();
+    initAreaFilter();
     var params = getTPQueryParams ? getTPQueryParams() : { orgId: '' };
     if (params.orgId) {
         setOrgFilter(params.orgId);
     }
-    initCheckboxGroup('indicatorGroup', 'indicators');
-    initCheckboxGroup('dimensionGroup', 'dimensions');
-    initCheckboxGroup('chartTypeGroup', 'chartTypes');
+    initCheckboxGroup('indicatorGroup', 'indicators', reportConfig, renderReportPreview);
+    initCheckboxGroup('dimensionGroup', 'dimensions', reportConfig, renderReportPreview);
+    initCheckboxGroup('chartTypeGroup', 'chartTypes', reportConfig, renderReportPreview);
+    document.getElementById('reportName').addEventListener('input', debounceRenderReportPreview);
+    document.getElementById('reportPeriod').addEventListener('change', renderReportPreview);
     refreshOverview();
-    renderTemplates();
-    renderReports();
+    renderTemplates(templates);
+    renderReports(reports);
+    renderReportPreview();
 };
 </script>
 </body>

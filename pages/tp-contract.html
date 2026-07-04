@@ -84,7 +84,12 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     transition: border-color 0.2s;
     font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
 }
-.form-group input:focus, .form-group select:focus { border-color: var(--primary); }
+/* 只读字段样式 */
+.form-group input[readonly], .form-group select:disabled {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    cursor: not-allowed;
+}
 
 /* 按钮 */
 .form-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
@@ -137,6 +142,11 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .table-link:hover { text-decoration: underline; }
 .table-link-danger { color: var(--danger); }
 .table-link-danger:hover { color: #b91c1c; }
+
+/* 分页数字按钮 */
+.page-number-btn { padding: 6px 12px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); cursor: pointer; min-width: 34px; }
+.page-number-btn:hover { border-color: var(--primary); color: var(--primary); }
+.page-number-active { background: var(--primary); border-color: var(--primary); color: #fff; }
 
 /* 模态框 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: none; align-items: center; justify-content: center; }
@@ -239,7 +249,27 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 </div>
                 <div class="form-group">
                     <label>机构名称 <span class="required">*</span></label>
-                    <select id="modalOrgName"></select>
+                    <select id="modalOrgName" onchange="onModalOrgChange(this.value)"></select>
+                </div>
+            </div>
+            <div class="form-row" id="orgInfoRow">
+                <div class="form-group">
+                    <label>法定代表人</label>
+                    <input type="text" id="modalOrgLegalPerson" readonly>
+                </div>
+                <div class="form-group">
+                    <label>联系电话</label>
+                    <input type="text" id="modalOrgPhone" readonly>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>资质等级</label>
+                    <input type="text" id="modalOrgQual" readonly>
+                </div>
+                <div class="form-group">
+                    <label>信用等级 / 评分</label>
+                    <input type="text" id="modalOrgCredit" readonly>
                 </div>
             </div>
             <div class="form-row">
@@ -297,7 +327,54 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     </div>
 </div>
 
-<!-- 关联项目专家组 -->
+<!-- 合同审核弹窗 -->
+<div class="modal-overlay" id="contractAuditModal">
+    <div class="modal-container" style="width: 640px;">
+        <div class="modal-header">
+            <div class="modal-title" id="auditModalTitle"><i class="fas fa-check-circle" style="color: var(--primary);"></i> 合同审核</div>
+            <button class="modal-close" onclick="closeContractAuditModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="auditModalContractId">
+            <div class="form-row" style="grid-template-columns: 1fr 1fr;">
+                <div class="form-group">
+                    <label>项目名称</label>
+                    <input type="text" id="auditModalProjectName" disabled>
+                </div>
+                <div class="form-group">
+                    <label>机构名称</label>
+                    <input type="text" id="auditModalOrgName" disabled>
+                </div>
+            </div>
+            <div class="form-row" style="grid-template-columns: 1fr 1fr;">
+                <div class="form-group">
+                    <label>服务期限</label>
+                    <input type="text" id="auditModalServicePeriod" disabled>
+                </div>
+                <div class="form-group">
+                    <label>合同金额</label>
+                    <input type="text" id="auditModalAmount" disabled>
+                </div>
+            </div>
+            <div class="form-row" style="margin-bottom: 0;">
+                <div class="form-group full-width" style="grid-column: 1 / -1;">
+                    <label>已上传报告</label>
+                    <div id="auditModalReportList" class="report-list"></div>
+                </div>
+            </div>
+            <div class="form-row" style="margin-bottom: 0;">
+                <div class="form-group full-width" style="grid-column: 1 / -1;">
+                    <label>审核意见</label>
+                    <textarea id="auditModalOpinion" rows="3" placeholder="请输入审核意见，确认报告合格后完成履约"></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeContractAuditModal()">取消</button>
+            <button class="btn btn-success" id="auditModalConfirmBtn" onclick="confirmContractAudit()"><i class="fas fa-check-circle"></i> 确认合格，完成履约</button>
+        </div>
+    </div>
+</div>
 <div class="card" id="projectGroupCard" style="margin-bottom: 20px; display:none;">
     <div class="card-header">
         <div class="card-title"><i class="fas fa-users"></i> 关联项目专家组</div>
@@ -446,9 +523,10 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             <tbody id="contractLedgerTbody">
             </tbody>
         </table>
-        <div class="pagination" id="contractLedgerPagination" style="display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 16px; padding: 0 16px 16px;">
-            <span class="page-info" id="contractLedgerPageInfo" style="font-size: 13px; color: var(--text-secondary);">1 / 1</span>
+        <div class="pagination" id="contractLedgerPagination" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; padding: 0 16px 16px;">
+            <span class="page-total" id="contractLedgerPageTotal" style="font-size: 13px; color: var(--text-secondary);">共 0 条</span>
             <button class="btn btn-outline" id="contractLedgerPrevBtn" style="padding: 6px 14px; font-size: 13px;" onclick="changeContractLedgerPage(-1)">上一页</button>
+            <div id="contractLedgerPageNumbers" style="display: flex; gap: 8px;"></div>
             <button class="btn btn-outline" id="contractLedgerNextBtn" style="padding: 6px 14px; font-size: 13px;" onclick="changeContractLedgerPage(1)">下一页</button>
         </div>
     </div>
@@ -477,6 +555,30 @@ function initModalOrgSelect(selectedOrgId) {
     });
     select.innerHTML = html;
     if (selectedOrgId) select.value = selectedOrgId;
+}
+
+function fillContractOrgInfo(orgId) {
+    var org = getOrgById(orgId);
+    document.getElementById('modalOrgLegalPerson').value = org ? org.legalPerson : '';
+    document.getElementById('modalOrgPhone').value = org ? org.phone : '';
+    document.getElementById('modalOrgQual').value = org ? org.qual : '';
+    document.getElementById('modalOrgCredit').value = org ? (org.creditLevel + ' / ' + org.score + '分') : '';
+    var scopeInput = document.getElementById('modalServiceScope');
+    if (org && scopeInput && !scopeInput.value.trim()) {
+        scopeInput.value = org.field || org.orgType || '';
+    }
+}
+
+function clearContractOrgInfo() {
+    document.getElementById('modalOrgLegalPerson').value = '';
+    document.getElementById('modalOrgPhone').value = '';
+    document.getElementById('modalOrgQual').value = '';
+    document.getElementById('modalOrgCredit').value = '';
+}
+
+function onModalOrgChange(orgId) {
+    if (!orgId) { clearContractOrgInfo(); return; }
+    fillContractOrgInfo(orgId);
 }
 
 function getOrgWarehouseUrl(orgId) {
@@ -570,12 +672,8 @@ function setContractModalReadOnly(readonly) {
             document.getElementById(id).disabled = readonly;
         }
     });
-    // 查看模式下隐藏上传控件，仅展示报告列表（可预览/下载）
-    var reportUpload = document.getElementById('modalReportUpload');
-    if (reportUpload) reportUpload.style.display = readonly ? 'none' : '';
     document.getElementById('modalSaveBtn').style.display = readonly ? 'none' : 'inline-flex';
     document.getElementById('modalCloseBtn').style.display = readonly ? 'inline-flex' : 'none';
-    // 查看模式下如已上传报告，显示“确认合格，完成履约”按钮
     var confirmBtn = document.getElementById('modalConfirmBtn');
     if (confirmBtn) confirmBtn.style.display = 'none';
 }
@@ -590,6 +688,7 @@ function viewContract(id) {
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye" style="color: var(--primary);"></i> 合同详情';
     document.getElementById('modalProjectName').value = data.projectName;
     initModalOrgSelect(data.orgId);
+    fillContractOrgInfo(data.orgId);
     document.getElementById('modalServiceScope').value = data.serviceScope;
     document.getElementById('modalServicePeriod').value = data.servicePeriod;
     document.getElementById('modalAmount').value = data.amount;
@@ -631,12 +730,91 @@ function confirmContractQualified() {
     }
 }
 
+function auditContract(id) {
+    var data = contractData[id];
+    if (!data) {
+        alert('未找到合同数据');
+        return;
+    }
+    document.getElementById('auditModalContractId').value = id;
+    document.getElementById('auditModalProjectName').value = data.projectName || '';
+    document.getElementById('auditModalOrgName').value = data.orgName || '';
+    document.getElementById('auditModalServicePeriod').value = data.servicePeriod || '';
+    document.getElementById('auditModalAmount').value = data.amount || '';
+    document.getElementById('auditModalOpinion').value = '';
+
+    var reportList = document.getElementById('auditModalReportList');
+    if (!data.reports || data.reports.length === 0) {
+        reportList.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">暂无上传报告，请先上传报告</span>';
+    } else {
+        reportList.innerHTML = data.reports.map(function(r, idx) {
+            return '<div class="report-item">' +
+                '<i class="fas fa-file-alt"></i>' +
+                '<span>' + r + '</span>' +
+                '<a href="javascript:void(0)" onclick="downloadContractReport(\'' + id + '\', ' + idx + ')" title="下载报告"><i class="fas fa-download"></i> 下载</a>' +
+                '</div>';
+        }).join('');
+    }
+
+    var confirmBtn = document.getElementById('auditModalConfirmBtn');
+    if (confirmBtn) confirmBtn.disabled = !(data.reports && data.reports.length > 0);
+
+    document.getElementById('contractAuditModal').classList.add('active');
+}
+
+function closeContractAuditModal() {
+    document.getElementById('contractAuditModal').classList.remove('active');
+}
+
+function downloadContractReport(id, index) {
+    var data = contractData[id];
+    if (!data || !data.reports || !data.reports[index]) return;
+    var fileName = data.reports[index];
+    // 模拟文件内容下载
+    var content = '【模拟报告附件】\n\n合同编号：' + id + '\n项目名称：' + (data.projectName || '-') + '\n机构名称：' + (data.orgName || '-') + '\n报告文件：' + fileName + '\n\n该文件为模拟下载内容，实际项目中应替换为真实文件流或后端下载接口。';
+    var blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fileName.replace(/\\.[^/.]+$/, '') + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert('已下载报告：' + fileName);
+}
+
+function confirmContractAudit() {
+    var id = document.getElementById('auditModalContractId').value;
+    if (!id) return;
+    var data = contractData[id];
+    if (!data) return;
+    if (!data.reports || data.reports.length === 0) {
+        alert('请先上传报告后再确认合格');
+        return;
+    }
+    var opinion = document.getElementById('auditModalOpinion').value.trim();
+    if (confirm('确认报告合格并完成履约？')) {
+        data.status = '已完成';
+        var ledgerRow = contractLedgerAllRows.find(function(row) { return row.id === parseInt(id); });
+        if (ledgerRow) {
+            ledgerRow.status = '已完成';
+            ledgerRow.statusClass = 'tag-blue';
+        }
+        renderContractLedger();
+        alert('合同“' + data.projectName + '”已审核通过并完成履约' + (opinion ? '，审核意见：' + opinion : ''));
+        closeContractAuditModal();
+    }
+}
+
 function addContract() {
     document.getElementById('modalContractId').value = '';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus-circle" style="color: var(--primary);"></i> 合同创建';
     document.getElementById('modalSaveBtn').innerHTML = '<i class="fas fa-save"></i> 创建合同';
     document.getElementById('modalProjectName').value = '上海市建筑工地施工安全风险评估';
     initModalOrgSelect(currentOrgId || '');
+    clearContractOrgInfo();
+    fillContractOrgInfo(currentOrgId || '');
     document.getElementById('modalServiceScope').value = '建筑工地';
     document.getElementById('modalServicePeriod').value = '2026-04-01 ~ 2026-06-30';
     document.getElementById('modalAmount').value = '12.8';
@@ -677,9 +855,14 @@ function saveContract() {
         payment: document.getElementById('modalPayment').value,
         deliverable: document.getElementById('modalDeliverable').value,
         acceptance: document.getElementById('modalAcceptance').value,
+        qualLevel: org ? org.qual : '',
+        creditLevel: org ? org.creditLevel : '',
+        creditScore: org ? org.score : 0,
         status: '执行中'
     };
     if (projectId) contract.projectId = projectId;
+    var old = id ? contractData[id] : null;
+    contract.reports = old ? (old.reports || []) : [];
     updateContract(contract);
     if (projectId) {
         var project = getProjectGroupById(projectId);
@@ -691,11 +874,6 @@ function saveContract() {
             project.orgCode = org ? org.orgCode : '';
             updateProjectGroup(project);
         }
-    }
-    if (id) {
-        // 同步修改 reports 缓存
-        var old = contractData[id];
-        contract.reports = old ? (old.reports || []) : [];
     }
     refreshContractData();
     alert(id ? '合同更新成功：' + projectName : '合同创建成功：' + projectName);
@@ -732,15 +910,32 @@ function renderContractLedger() {
             '<td>' + (item.projectGroupName ? item.projectGroupName + '（' + item.projectGroupCount + '人）' : '-') + '</td>' +
             '<td><span class="tag ' + item.statusClass + '">' + item.status + '</span></td>' +
             '<td style="text-align: center; white-space: nowrap; width: 220px;">' +
-                '<a href="#" class="table-link" onclick="viewContract(' + item.id + '); return false;">查看</a>' +
-                '<a href="#" class="table-link" onclick="editContract(' + item.id + '); return false;">编辑</a>' +
-                '<a href="#" class="table-link table-link-danger" onclick="deleteContract(' + item.id + '); return false;">删除</a>' +
+                '<a href="#" class="table-link" onclick="viewContract(\'' + item.id + '\'); return false;">查看</a>' +
+                '<a href="#" class="table-link" onclick="editContract(\'' + item.id + '\'); return false;">编辑</a>' +
+                '<a href="#" class="table-link" onclick="auditContract(\'' + item.id + '\'); return false;">审核</a>' +
+                '<a href="#" class="table-link table-link-danger" onclick="deleteContract(\'' + item.id + '\'); return false;">删除</a>' +
             '</td>';
         tbody.appendChild(tr);
     });
-    document.getElementById('contractLedgerPageInfo').textContent = contractLedgerPage + ' / ' + totalPages;
+    document.getElementById('contractLedgerPageTotal').textContent = '共 ' + contractLedgerFilteredRows.length + ' 条';
     document.getElementById('contractLedgerPrevBtn').disabled = contractLedgerPage <= 1;
     document.getElementById('contractLedgerNextBtn').disabled = contractLedgerPage >= totalPages;
+    renderContractLedgerPageNumbers(totalPages);
+}
+
+function renderContractLedgerPageNumbers(totalPages) {
+    var numbers = document.getElementById('contractLedgerPageNumbers');
+    if (!numbers) return;
+    var html = '';
+    for (var i = 1; i <= totalPages; i++) {
+        html += '<button class="page-number-btn ' + (i === contractLedgerPage ? 'page-number-active' : '') + '" onclick="goContractLedgerPage(' + i + ')">' + i + '</button>';
+    }
+    numbers.innerHTML = html;
+}
+
+function goContractLedgerPage(page) {
+    contractLedgerPage = page;
+    renderContractLedger();
 }
 
 function changeContractLedgerPage(delta) {
@@ -782,6 +977,7 @@ function editContract(id) {
     document.getElementById('modalSaveBtn').innerHTML = '<i class="fas fa-save"></i> 保存';
     document.getElementById('modalProjectName').value = data.projectName;
     initModalOrgSelect(data.orgId);
+    fillContractOrgInfo(data.orgId);
     document.getElementById('modalServiceScope').value = data.serviceScope;
     document.getElementById('modalServicePeriod').value = data.servicePeriod;
     document.getElementById('modalAmount').value = data.amount;
@@ -853,7 +1049,11 @@ function bindModalReportUpload() {
         var files = Array.from(e.target.files);
         if (!files.length) return;
         var id = document.getElementById('modalContractId').value;
-        var data = contractData[id] || {};
+        var data = contractData[id];
+        if (!data) {
+            data = {};
+            contractData[id] = data;
+        }
         if (!data.reports) data.reports = [];
         files.forEach(function(file) {
             data.reports.push(file.name);

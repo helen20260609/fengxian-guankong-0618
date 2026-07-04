@@ -227,14 +227,70 @@ function initOrgSelect() {
 
 function initExpertAdd() {
     initOrgSelect();
+    var mode = getParam('mode');
+    var name = getParam('name');
+    var titleEl = document.getElementById('submitBtn');
+    if (mode === 'edit' && name && titleEl) {
+        titleEl.innerHTML = '<i class="fas fa-save"></i> 保存修改';
+    }
 }
+
+// 回填专家数据到表单
+function loadExpertIntoForm(item) {
+    if (!item) return;
+    if (item.name) document.getElementById('expertName').value = item.name;
+    if (item.gender) document.getElementById('expertGender').value = item.gender;
+    if (item.birth) document.getElementById('expertBirth').value = item.birth;
+    var orgSelect = document.getElementById('expertOrg');
+    if (orgSelect) {
+        if (item.orgId) {
+            orgSelect.value = item.orgId;
+        } else if (item.org) {
+            for (var i = 0; i < orgSelect.options.length; i++) {
+                if (orgSelect.options[i].text === item.org) {
+                    orgSelect.value = orgSelect.options[i].value;
+                    break;
+                }
+            }
+            // 未匹配到现有机构时，动态添加一个选项以保留原单位
+            if (!orgSelect.value && orgSelect.value !== item.org) {
+                var customOpt = document.createElement('option');
+                customOpt.value = '__CUSTOM__';
+                customOpt.text = item.org;
+                orgSelect.appendChild(customOpt);
+                orgSelect.value = '__CUSTOM__';
+            }
+        }
+    }
+    if (item.domain) document.getElementById('expertDomain').value = item.domain;
+    if (item.direction) document.getElementById('expertDirection').value = item.direction;
+    if (item.title) document.getElementById('expertTitle').value = item.title;
+    if (item.workplace) document.getElementById('expertWorkplace').value = item.workplace;
+    if (item.titleTime) document.getElementById('expertTitleTime').value = item.titleTime;
+    if (item.years) document.getElementById('expertYears').value = item.years;
+    if (item.phone) document.getElementById('expertPhone').value = item.phone;
+    if (item.email) document.getElementById('expertEmail').value = item.email;
+    if (item.address) document.getElementById('expertAddress').value = item.address;
+    if (item.experience) document.getElementById('expertExperience').value = item.experience;
+}
+
+// 监听父页传过来的专家数据
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setExpertData' && e.data.item) {
+        loadExpertIntoForm(e.data.item);
+    }
+});
 
 function submitExpert() {
     var name = document.getElementById('expertName').value.trim();
     var orgSelect = document.getElementById('expertOrg');
     var orgId = orgSelect.value;
-    var orgName = orgId ? (orgSelect.options[orgSelect.selectedIndex] ? orgSelect.options[orgSelect.selectedIndex].text : '') : '';
-    var expertType = orgId ? '机构专家' : '独立专家';
+    // 自定义单位仅用于展示，保存时视为独立专家但保留原始单位名称
+    var orgName = '';
+    if (orgId && orgSelect.options[orgSelect.selectedIndex]) {
+        orgName = orgSelect.options[orgSelect.selectedIndex].text;
+    }
+    var expertType = (orgId && orgId !== '__CUSTOM__') ? '机构专家' : '独立专家';
     var phone = document.getElementById('expertPhone').value.trim();
     if (!name || !phone) {
         alert('请填写姓名和联系电话');
@@ -250,7 +306,7 @@ function submitExpert() {
                 gender: document.getElementById('expertGender').value,
                 birth: document.getElementById('expertBirth').value,
                 org: orgName,
-                orgId: orgId,
+                orgId: orgId === '__CUSTOM__' ? '' : orgId,
                 expertType: expertType,
                 domain: document.getElementById('expertDomain').value,
                 direction: document.getElementById('expertDirection').value,

@@ -204,6 +204,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: none; align-items: center; justify-content: center; }
 .modal-overlay.active { display: flex; }
 .modal-container { background: var(--bg-card); border-radius: 12px; width: 90%; max-width: 960px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+#auditOpinionModal { z-index: 1100; }
+#historyModal { z-index: 1100; }
 .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
 .modal-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .modal-close { width: 32px; height: 32px; border: none; background: transparent; color: var(--text-secondary); font-size: 18px; cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
@@ -218,6 +220,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .status-badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
 .status-normal { background: rgba(30,142,62,0.12); color: var(--success); }
 .status-update { background: rgba(227,116,0,0.12); color: var(--warning); }
+.status-pending { background: rgba(26,115,232,0.12); color: var(--primary); }
+.status-rejected { background: rgba(217,48,37,0.12); color: var(--danger); }
 
 /* 入库统计图表 */
 .chart-card { margin-bottom: 20px; }
@@ -310,7 +314,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">联系电话</th>
                     <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">信用评分</th>
                     <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">状态</th>
-                    <th style="padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border); width: 160px;">操作</th>
+                    <th style="padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border); width: 200px;">操作</th>
                 </tr>
             </thead>
             <tbody id="orgTableBody">
@@ -322,6 +326,52 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             <button class="page-btn" onclick="goPage(-1)" id="pagePrev">上一页</button>
             <span id="pageNumbers"></span>
             <button class="page-btn" onclick="goPage(1)" id="pageNext">下一页</button>
+        </div>
+    </div>
+</div>
+
+<!-- 独立变更历史弹窗 -->
+<div class="modal-overlay" id="historyModal" onclick="if(event.target===this) closeHistoryModal()">
+    <div class="modal-container" style="max-width: 720px;">
+        <div class="modal-header">
+            <div class="modal-title" id="historyModalTitle"><i class="fas fa-history" style="color: var(--primary);"></i> 变更历史</div>
+            <button class="modal-close" onclick="closeHistoryModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding: 20px; min-height: 300px;">
+            <div id="historyModalTimeline"></div>
+        </div>
+        <div class="form-actions" style="margin: 0 20px 20px; padding-top: 16px; justify-content: flex-end;">
+            <button class="btn btn-outline" onclick="closeHistoryModal()"><i class="fas fa-times"></i> 关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 通用审核意见弹窗（通过/驳回共用） -->
+<div class="modal-overlay" id="auditOpinionModal" onclick="if(event.target===this) closeAuditOpinionModal()">
+    <div class="modal-container" style="max-width: 540px;">
+        <div class="modal-header">
+            <div class="modal-title" id="auditOpinionTitle"><i class="fas fa-clipboard-check" style="color: var(--primary);"></i> 审核意见</div>
+            <button class="modal-close" onclick="closeAuditOpinionModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+            <div id="auditLevelInfo" style="margin-bottom: 12px; padding: 10px 12px; background: var(--primary-light); border-radius: 8px; font-size: 13px; color: var(--primary); display: none;">
+                <i class="fas fa-layer-group"></i> <span></span>
+            </div>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label>常用语</label>
+                <select id="auditPresetSelect" onchange="onAuditPresetChange(this)" style="width: 100%;">
+                    <option value="">-- 选择常用语快速填充 --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>审核意见 <span id="auditOpinionRequired" class="required">*</span></label>
+                <textarea id="auditOpinionText" rows="4" placeholder="请输入审核意见" style="width: 100%;"></textarea>
+            </div>
+        </div>
+        <div class="form-actions" style="margin: 0 20px 20px; padding-top: 16px; justify-content: flex-end; gap: 12px;">
+            <button class="btn btn-outline" onclick="closeAuditOpinionModal()"><i class="fas fa-times"></i> 取消</button>
+            <button class="btn btn-danger" id="btnConfirmReject" onclick="confirmAuditOpinion('reject')"><i class="fas fa-times-circle"></i> 驳回</button>
+            <button class="btn btn-primary" id="btnConfirmPass" onclick="confirmAuditOpinion('pass')"><i class="fas fa-check-circle"></i> 通过</button>
         </div>
     </div>
 </div>
@@ -351,9 +401,6 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     </div>
                     <div class="tab-nav-item" data-tab="tab-equipment-modal">
                         <i class="fas fa-tools"></i> 设备信息
-                    </div>
-                    <div class="tab-nav-item" data-tab="tab-history-modal" id="historyTabNav">
-                        <i class="fas fa-history"></i> 变更历史
                     </div>
                 </div>
                 <div class="tab-progress" id="tabProgressModal">
@@ -564,13 +611,6 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     <div class="form-actions-right" id="modalAuditButtons" style="display: none; gap: 10px;">
                         <button class="btn btn-danger" id="btnAuditRejectModal" onclick="auditRejectModal()"><i class="fas fa-times-circle"></i> 驳回</button>
                         <button class="btn btn-primary" id="btnAuditPassModal" onclick="auditPassModal()"><i class="fas fa-check-circle"></i> 通过</button>
-                    </div>
-                </div>
-                <!-- Tab 6: 变更历史 -->
-                <div class="tab-content" id="tab-history-modal">
-                    <div class="history-section" id="orgHistorySection" style="display: block; border-top: none; margin-top: 0;">
-                        <div class="history-title"><i class="fas fa-history"></i> 变更历史</div>
-                        <div id="orgHistoryTimeline"></div>
                     </div>
                 </div>
             </div>
@@ -828,8 +868,10 @@ function resetFormModal() {
     }
 }
 
-// 当前弹窗模式: add | view | edit
+// 当前弹窗模式: add | view | edit | audit
 var currentModalMode = 'add';
+var currentOrgId = '';
+var currentAuditDecision = ''; // 'pass' | 'reject'
 
 // 统一数据映射到弹窗数据模型
 function buildOrgDataMap(org) {
@@ -884,6 +926,26 @@ function renderOrgTable() {
         }
         var status = org.status || '正常';
         var statusClass = status === '正常' ? 'status-normal' : 'status-update';
+
+        // 多级审核进度
+        var config = getTPAuditConfig();
+        var flow = getTPAuditFlow(org.orgId);
+        var auditBadge = '';
+        if (config.mode === 'multi' && config.levels > 1) {
+            var auditStatusText = '未开始';
+            var auditBadgeClass = 'status-pending';
+            if (flow.status === 'approved') {
+                auditStatusText = '已通过';
+                auditBadgeClass = 'status-normal';
+            } else if (flow.status === 'rejected') {
+                auditStatusText = '已驳回';
+                auditBadgeClass = 'status-rejected';
+            } else if (flow.currentLevel > 0) {
+                auditStatusText = '审核中 ' + flow.currentLevel + '/' + config.levels;
+            }
+            auditBadge = '<span class="status-badge ' + auditBadgeClass + '" style="margin-left: 6px;">' + auditStatusText + '</span>';
+        }
+
         var tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid var(--border)';
         tr.innerHTML =
@@ -892,11 +954,12 @@ function renderOrgTable() {
             '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (org.legalPerson || '-') + '</td>' +
             '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (org.phone || '-') + '</td>' +
             '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (org.score || '0') + '</td>' +
-            '<td style="padding: 14px 16px;"><span class="status-badge ' + statusClass + '">' + status + '</span></td>' +
+            '<td style="padding: 14px 16px;"><span class="status-badge ' + statusClass + '">' + status + '</span>' + auditBadge + '</td>' +
             '<td style="padding: 14px 16px; text-align: center;">' +
             '<a href="#" class="table-link" onclick="viewOrg(\'' + org.orgId + '\'); return false;">查看</a>' +
             '<a href="#" class="table-link" onclick="editOrg(\'' + org.orgId + '\'); return false;">编辑</a>' +
             '<a href="#" class="table-link" onclick="auditOrg(\'' + org.orgId + '\'); return false;">审核</a>' +
+            '<a href="#" class="table-link" onclick="historyOrg(\'' + org.orgId + '\'); return false;">历史</a>' +
             '</td>';
         tbody.appendChild(tr);
     });
@@ -950,16 +1013,11 @@ function initOrgHistoryData() {
 // 打开弹窗（通用）
 function openOrgModal(mode, id) {
     currentModalMode = mode;
+    currentOrgId = id || '';
     var modal = document.getElementById('orgModal');
     var modalContainer = modal.querySelector('.modal-container');
     var titleEl = modal.querySelector('.modal-title');
     var progress = document.getElementById('tabProgressModal');
-
-    // 新增模式下隐藏“变更历史”Tab
-    var historyTabNav = document.getElementById('historyTabNav');
-    if (historyTabNav) {
-        historyTabNav.style.display = (mode === 'add') ? 'none' : 'flex';
-    }
 
     // 设置查看/编辑模式样式
     if (mode === 'view' || mode === 'audit') {
@@ -1007,13 +1065,6 @@ function openOrgModal(mode, id) {
 
     // 查看模式下生成可换行的值展示
     toggleViewModeValues(modal, isReadOnly);
-
-    // 加载并渲染变更历史（历史Tab，每次打开都刷新）
-    var historySection = document.getElementById('orgHistorySection');
-    if (historySection) {
-        historySection.style.display = 'block';
-        renderOrgHistory(id);
-    }
 
     // 设置审核按钮
     var auditButtons = document.getElementById('modalAuditButtons');
@@ -1194,6 +1245,223 @@ function deleteOrg(id) {
     }
 }
 
+// 打开独立变更历史弹窗
+function historyOrg(id) {
+    var org = getOrgById(id) || {};
+    var modal = document.getElementById('historyModal');
+    var title = document.getElementById('historyModalTitle');
+    if (title) {
+        title.innerHTML = '<i class="fas fa-history" style="color: var(--primary);"></i> ' + (org.orgName || '机构') + ' - 变更历史';
+    }
+    renderHistoryTo(modal.querySelector('#historyModalTimeline'), id);
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeHistoryModal() {
+    document.getElementById('historyModal').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+// 将变更历史渲染到指定容器
+function renderHistoryTo(container, id) {
+    if (!container) return;
+    initOrgHistoryData();
+    var data = orgDataMap[id] || {};
+    var history = data.history || [];
+    if (history.length === 0) {
+        container.innerHTML = '<div class="timeline-empty">暂无变更历史</div>';
+        return;
+    }
+    var map = {
+        '新增': 'add', '编辑': 'edit', '审核通过': 'audit', '审核驳回': 'reject',
+        '删除': 'delete', '启用': 'enable', '停用': 'disable', '提交审核': 'edit'
+    };
+    container.innerHTML = '<div class="timeline">' + history.map(function(r) {
+        var cls = map[r.action] || 'edit';
+        var diffHtml = '';
+        if (r.diff && r.diff.length) {
+            diffHtml = '<div class="timeline-diff">' + r.diff.map(function(d) {
+                return '<div class="timeline-diff-item">' + d + '</div>';
+            }).join('') + '</div>';
+        }
+        return '<div class="timeline-item">' +
+            '<div class="timeline-dot ' + cls + '"></div>' +
+            '<div class="timeline-time">' + r.time + '</div>' +
+            '<div class="timeline-title">' +
+                '<span class="timeline-badge ' + cls + '">' + r.action + '</span>' +
+            '</div>' +
+            '<div class="timeline-meta">操作人：' + (r.operator || '-') + '</div>' +
+            '<div class="timeline-remark">' + (r.remark || '') + '</div>' +
+            diffHtml +
+        '</div>';
+    }).join('') + '</div>';
+}
+
+// 添加变更历史记录
+function addOrgHistoryRecord(id, record) {
+    initOrgHistoryData();
+    var data = orgDataMap[id];
+    if (!data) return;
+    if (!data.history) data.history = [];
+    data.history.unshift(record);
+}
+
+// 获取当前时间字符串
+function getCurrentTimeString() {
+    var now = new Date();
+    var y = now.getFullYear();
+    var m = String(now.getMonth() + 1).padStart(2, '0');
+    var d = String(now.getDate()).padStart(2, '0');
+    var h = String(now.getHours()).padStart(2, '0');
+    var min = String(now.getMinutes()).padStart(2, '0');
+    return y + '-' + m + '-' + d + ' ' + h + ':' + min;
+}
+
+// 审核通过：打开通用意见弹窗
+function auditPassModal() {
+    openAuditOpinionModal('pass');
+}
+
+// 审核驳回：打开通用意见弹窗
+function auditRejectModal() {
+    openAuditOpinionModal('reject');
+}
+
+// 打开通用审核意见弹窗
+function openAuditOpinionModal(decision) {
+    currentAuditDecision = decision;
+    var modal = document.getElementById('auditOpinionModal');
+    var title = document.getElementById('auditOpinionTitle');
+    var select = document.getElementById('auditPresetSelect');
+    var textarea = document.getElementById('auditOpinionText');
+    var levelInfo = document.getElementById('auditLevelInfo');
+    var btnPass = document.getElementById('btnConfirmPass');
+    var btnReject = document.getElementById('btnConfirmReject');
+
+    var config = getTPAuditConfig();
+    var flow = getTPAuditFlow(currentOrgId);
+    var currentLevel = flow.currentLevel || 0;
+    var levelDisplay = config.mode === 'multi' ? (currentLevel + 1) : 1;
+    var totalLevels = config.levels || 1;
+    var isPass = decision === 'pass';
+
+    if (title) {
+        title.innerHTML = '<i class="fas fa-clipboard-check" style="color: ' + (isPass ? 'var(--success)' : 'var(--danger)') + ';"></i> ' +
+            (isPass ? '审核通过意见' : '审核驳回意见') + (config.mode === 'multi' ? '（第' + levelDisplay + '/' + totalLevels + '级）' : '');
+    }
+
+    if (levelInfo) {
+        levelInfo.style.display = config.mode === 'multi' ? 'block' : 'none';
+        levelInfo.querySelector('span').textContent = '当前为第 ' + levelDisplay + ' 级审核，共 ' + totalLevels + ' 级' + (isPass ? '，通过后将' + (levelDisplay >= totalLevels ? '完成终审' : '进入下一级审核') : '');
+    }
+
+    // 填充常用语
+    if (select) {
+        select.innerHTML = '<option value="">-- 选择常用语快速填充 --</option>';
+        var presets = isPass ? (config.presetPass || []) : (config.presetReject || []);
+        presets.forEach(function(p) {
+            var opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            select.appendChild(opt);
+        });
+    }
+
+    if (textarea) {
+        textarea.value = '';
+        setTimeout(function() { textarea.focus(); }, 100);
+    }
+
+    if (btnPass) btnPass.style.display = isPass ? 'inline-flex' : 'none';
+    if (btnReject) btnReject.style.display = isPass ? 'none' : 'inline-flex';
+
+    modal.classList.add('active');
+}
+
+function onAuditPresetChange(select) {
+    var textarea = document.getElementById('auditOpinionText');
+    if (select && textarea && select.value) {
+        textarea.value = select.value;
+    }
+}
+
+function closeAuditOpinionModal() {
+    document.getElementById('auditOpinionModal').classList.remove('active');
+    currentAuditDecision = '';
+}
+
+function confirmAuditOpinion(decision) {
+    var textarea = document.getElementById('auditOpinionText');
+    var opinion = textarea ? textarea.value.trim() : '';
+    var config = getTPAuditConfig();
+    if (config.requiredOpinion && !opinion) {
+        alert('请输入审核意见');
+        if (textarea) textarea.focus();
+        return;
+    }
+
+    var id = currentOrgId || '';
+    var flow = getTPAuditFlow(id);
+    var currentLevel = flow.currentLevel || 0;
+    var totalLevels = config.levels || 1;
+    var isPass = decision === 'pass';
+    var now = getCurrentTimeString();
+
+    // 记录到审核流程历史
+    if (!flow.history) flow.history = [];
+    flow.history.push({
+        level: currentLevel + 1,
+        decision: decision,
+        opinion: opinion,
+        operator: '审核员-当前用户',
+        time: now
+    });
+
+    if (isPass) {
+        if (currentLevel + 1 >= totalLevels) {
+            flow.currentLevel = totalLevels;
+            flow.status = 'approved';
+            addOrgHistoryRecord(id, {
+                action: '审核通过',
+                time: now,
+                operator: '审核员-当前用户',
+                remark: opinion || '机构审核通过，信息予以入库',
+                diff: config.mode === 'multi' ? ['完成第 ' + totalLevels + ' 级终审通过'] : []
+            });
+            alert('审核已通过' + (config.mode === 'multi' ? '（已完成终审）' : ''));
+        } else {
+            flow.currentLevel = currentLevel + 1;
+            flow.status = 'pending';
+            addOrgHistoryRecord(id, {
+                action: '审核通过',
+                time: now,
+                operator: '审核员-当前用户',
+                remark: '第 ' + (currentLevel + 1) + ' 级审核通过：' + (opinion || '进入下一级审核'),
+                diff: ['当前进度：第 ' + (currentLevel + 1) + ' / ' + totalLevels + ' 级']
+            });
+            alert('第 ' + (currentLevel + 1) + ' 级审核通过，已流转至下一级审核');
+        }
+    } else {
+        flow.status = 'rejected';
+        // 驳回后重置为初始级，允许重新提交后再次审核
+        flow.currentLevel = 0;
+        addOrgHistoryRecord(id, {
+            action: '审核驳回',
+            time: now,
+            operator: '审核员-当前用户',
+            remark: '机构审核被驳回',
+            diff: ['驳回原因：' + (opinion || '未填写')]
+        });
+        alert('审核已驳回：' + (opinion || ''));
+    }
+
+    saveTPAuditFlow(id, flow);
+    closeAuditOpinionModal();
+    closeOrgModal();
+    renderOrgTable();
+}
+
     // 根据 URL 参数自动打开对应机构弹窗
     function autoOpenOrgFromUrl() {
         var qp = getTPQueryParams();
@@ -1229,60 +1497,6 @@ function deleteOrg(id) {
         renderOrgTable();
         autoOpenOrgFromUrl();
     });
-
-
-// 审核驳回
-function auditRejectModal() {
-    var reason = prompt('请输入驳回原因：');
-    if (reason === null) return;
-    if (!reason.trim()) {
-        alert('驳回原因不能为空');
-        return;
-    }
-    alert('审核已驳回：' + reason);
-    closeOrgModal();
-}
-
-// 渲染机构变更历史
-function renderOrgHistory(id) {
-    initOrgHistoryData();
-    var data = orgDataMap[id] || {};
-    var history = data.history || [];
-    var container = document.getElementById('orgHistoryTimeline');
-    if (!container) return;
-    if (history.length === 0) {
-        container.innerHTML = '<div class="timeline-empty">暂无变更历史</div>';
-        return;
-    }
-    var map = {
-        '新增': 'add', '编辑': 'edit', '审核通过': 'audit', '审核驳回': 'reject',
-        '删除': 'delete', '启用': 'enable', '停用': 'disable', '提交审核': 'edit'
-    };
-    container.innerHTML = '<div class="timeline">' + history.map(function(r) {
-        var cls = map[r.action] || 'edit';
-        var diffHtml = '';
-        if (r.diff && r.diff.length) {
-            diffHtml = '<div class="timeline-diff">' + r.diff.map(function(d) {
-                return '<div class="timeline-diff-item">' + d + '</div>';
-            }).join('') + '</div>';
-        }
-        return '<div class="timeline-item">' +
-            '<div class="timeline-dot ' + cls + '"></div>' +
-            '<div class="timeline-time">' + r.time + '</div>' +
-            '<div class="timeline-title">' +
-                '<span class="timeline-badge ' + cls + '">' + r.action + '</span>' +
-            '</div>' +
-            '<div class="timeline-meta">操作人：' + (r.operator || '-') + '</div>' +
-            '<div class="timeline-remark">' + (r.remark || '') + '</div>' +
-            diffHtml +
-        '</div>';
-    }).join('') + '</div>';
-}
-
-// 分页跳转
-function goPage(page) {
-    alert('跳转到第 ' + page + ' 页');
-}
 
 // 入库统计 ECharts 图表
 var warehouseChartInstance = null;
