@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>高空坠物 - 智能风险研判</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+/* Theme Variables */
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e37400; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+    --modal-bg: #ffffff; --tag-bg: #f1f3f4; --tag-border: #dadce0;
+    --header-bg: rgba(0,0,0,0.02); --tree-group-bg: rgba(26,115,232,0.06);
+    --tree-row-hover: rgba(0,0,0,0.02);
+    --dot-red: #d93025; --dot-orange: #e37400; --dot-yellow: #f9ab00; --dot-blue: #1a73e8;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+    --modal-bg: #112240; --tag-bg: rgba(255,255,255,0.05); --tag-border: #1e3a5f;
+    --header-bg: rgba(0,0,0,0.2); --tree-group-bg: rgba(30,111,219,0.08);
+    --tree-row-hover: rgba(255,255,255,0.02);
+    --dot-red: #ef4444; --dot-orange: #f59e0b; --dot-yellow: #eab308; --dot-blue: #3b82f6;
+}
+
+body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: #0a1628; color: #e2e8f0; margin: 0; padding: 20px; }
+.card { background: #112240; border: 1px solid #1e3a5f; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+.card-header { padding: 16px 20px; border-bottom: 1px solid #1e3a5f; display: flex; align-items: center; justify-content: space-between; }
+.card-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 20px; }
+.page-section { display: none; }
+.page-section.active { display: block; }
+.breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-input { background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; }
+.filter-input:focus { outline: none; border-color: #1e6fdb; }
+.filter-select { background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: #94a3b8; border-bottom: 1px solid #1e3a5f; background: rgba(0,0,0,0.2); }
+.data-table td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #1e3a5f; }
+.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+.btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.3s; border: none; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: #1e6fdb; color: #fff; }
+.btn-primary:hover { background: #1557b0; }
+.btn-outline { background: transparent; border: 1px solid #1e3a5f; color: #94a3b8; }
+.btn-outline:hover { border-color: #1e6fdb; color: #1e6fdb; }
+.risk-tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.risk-tag.red { background: rgba(239,68,68,0.15); color: #ef4444; }
+.risk-tag.orange { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.risk-tag.yellow { background: rgba(234,179,8,0.15); color: #eab308; }
+.risk-tag.blue { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.status-badge { padding: 2px 10px; border-radius: 10px; font-size: 12px; }
+.status-badge.pending { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.status-badge.approved { background: rgba(16,185,129,0.15); color: #10b981; }
+.status-badge.draft { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.pagination { display: flex; justify-content: flex-end; gap: 4px; margin-top: 16px; }
+.page-btn { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; border: 1px solid #1e3a5f; background: #112240; color: #94a3b8; }
+.page-btn:hover { border-color: #1e6fdb; color: #1e6fdb; }
+.page-btn.active { background: #1e6fdb; color: #fff; border-color: #1e6fdb; }
+.measure-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.measure-card { background: rgba(255,255,255,0.02); border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px; transition: all 0.3s; }
+.measure-card:hover { border-color: #1e6fdb; transform: translateY(-2px); }
+.measure-card h4 { margin: 0 0 8px 0; font-size: 14px; }
+.measure-card p { margin: 0 0 12px 0; font-size: 12px; color: #94a3b8; line-height: 1.6; }
+.measure-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.measure-tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; background: rgba(30,111,219,0.1); color: #1e6fdb; }
+.step-indicator { display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 30px; }
+.step-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; border: 2px solid #1e3a5f; color: #94a3b8; }
+.step-circle.active { background: #1e6fdb; border-color: #1e6fdb; color: #fff; }
+.step-circle.done { background: #10b981; border-color: #10b981; color: #fff; }
+.step-label { font-size: 12px; color: #94a3b8; margin-top: 6px; text-align: center; }
+.step-line { width: 60px; height: 2px; background: #1e3a5f; margin: 0 8px; margin-bottom: 20px; }
+.step-line.done { background: #10b981; }
+.archive-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.archive-item { padding: 14px 16px; border-bottom: 1px solid #1e3a5f; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.2s; }
+.archive-item:hover { background: rgba(255,255,255,0.02); }
+.archive-item:last-child { border-bottom: none; }
+.stat-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.stat-card { background: rgba(255,255,255,0.03); border: 1px solid #1e3a5f; border-radius: 8px; padding: 16px; }
+.stat-card .number { font-size: 28px; font-weight: 700; color: #1e6fdb; }
+.stat-card .label { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.eval-card { background: rgba(255,255,255,0.02); border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+.eval-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.eval-stars { color: #f59e0b; font-size: 14px; }
+.progress-bar { height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; }
+.progress-fill.green { background: #10b981; }
+.progress-fill.orange { background: #f59e0b; }
+.progress-fill.red { background: #ef4444; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { margin-bottom: 0; }
+.form-label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+.form-control { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 10px 12px; color: #e2e8f0; font-size: 13px; box-sizing: border-box; }
+.form-control:focus { outline: none; border-color: #1e6fdb; }
+.warning-list { display: flex; flex-direction: column; gap: 12px; }
+.warning-item { padding: 16px; border-radius: 8px; border-left: 4px solid; background: rgba(255,255,255,0.02); }
+.warning-item.red { border-left-color: #ef4444; }
+.warning-item.orange { border-left-color: #f59e0b; }
+.warning-item.yellow { border-left-color: #eab308; }
+.warning-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.warning-stat { background: rgba(255,255,255,0.03); border: 1px solid #1e3a5f; border-radius: 8px; padding: 16px; text-align: center; }
+.warning-stat .num { font-size: 24px; font-weight: 700; }
+.warning-stat .lbl { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.css-chart { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding-top: 10px; }
+.chart-bar { flex: 1; border-radius: 4px 4px 0 0; position: relative; }
+.chart-bar .bar-label { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #94a3b8; white-space: nowrap; }
+.gen-form { max-width: 600px; margin: 0 auto; }
+.gen-form .form-group { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<div class="page-section active" id="section-risk-list-build">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 高空坠物</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-person-falling" style="color:#ef4444"></i> 高空坠物风险清单</div><button class="btn btn-primary"><i class="fa-solid fa-plus"></i> 新建清单</button></div><div class="card-body">
+    <div class="filter-bar">
+      <input class="filter-input" placeholder="搜索清单编号/小区名称..." style="width:220px">
+      <select class="filter-select"><option>全部等级</option><option>重大风险</option><option>较大风险</option><option>一般风险</option><option>低风险</option></select>
+      <select class="filter-select"><option>全部状态</option><option>已发布</option><option>审核中</option><option>草稿</option></select>
+      <select class="filter-select"><option>全部区域</option><option>渝中区</option><option>江北区</option><option>南岸区</option><option>沙坪坝区</option><option>九龙坡区</option></select>
+    </div>
+    <table class="data-table"><thead><tr><th>清单编号</th><th>清单名称</th><th>风险等级</th><th>所属区域</th><th>创建人</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead><tbody>
+      <tr><td>GK-2026-001</td><td>渝中区解放碑高层住宅外墙脱落风险清单</td><td><span class="risk-tag red">重大风险</span></td><td>渝中区</td><td>周明华</td><td>2026-05-31</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>GK-2026-002</td><td>江北区观音桥老旧小区空调外架坠落清单</td><td><span class="risk-tag orange">较大风险</span></td><td>江北区</td><td>刘海涛</td><td>2026-05-27</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>GK-2026-003</td><td>南岸区南山路沿线广告牌坠落隐患清单</td><td><span class="risk-tag red">重大风险</span></td><td>南岸区</td><td>陈伟杰</td><td>2026-05-22</td><td><span class="status-badge pending">审核中</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>GK-2026-004</td><td>沙坪坝区大学城高层阳台花盆坠落风险清单</td><td><span class="risk-tag yellow">一般风险</span></td><td>沙坪坝区</td><td>王志刚</td><td>2026-05-18</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>GK-2026-005</td><td>九龙坡区杨家坪商圈高空抛物监测清单</td><td><span class="risk-tag blue">低风险</span></td><td>九龙坡区</td><td>张晓峰</td><td>2026-05-14</td><td><span class="status-badge draft">草稿</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+    </tbody></table>
+    <div class="pagination"><div class="page-btn"><i class="fa-solid fa-chevron-left" style="font-size:11px"></i></div><div class="page-btn active">1</div><div class="page-btn">2</div><div class="page-btn"><i class="fa-solid fa-chevron-right" style="font-size:11px"></i></div></div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-measure">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 高空坠物</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-shield-halved" style="color:#10b981"></i> 高空坠物风险措施库</div><button class="btn btn-primary"><i class="fa-solid fa-plus"></i> 新增措施</button></div><div class="card-body">
+    <div class="measure-grid">
+      <div class="measure-card"><h4><i class="fa-solid fa-video" style="color:#1e6fdb;margin-right:6px"></i>高空抛物AI监控</h4><div class="measure-tags"><span class="measure-tag">AI识别</span><span class="measure-tag">仰拍监控</span></div><p>在高层住宅楼栋安装仰拍高清摄像头，配合AI算法自动识别高空抛物行为，追溯抛物楼层和责任人。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-building-shield" style="color:#10b981;margin-right:6px"></i>外墙安全检测加固</h4><div class="measure-tags"><span class="measure-tag">外墙检测</span><span class="measure-tag">排危加固</span></div><p>对老旧高层建筑外墙进行无人机巡查和红外热成像检测，发现空鼓、开裂等隐患及时进行排危加固处理。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-umbrella" style="color:#00b4d8;margin-right:6px"></i>防护棚及通道建设</h4><div class="measure-tags"><span class="measure-tag">防护棚</span><span class="measure-tag">安全通道</span></div><p>在高层建筑出入口、人行通道等区域搭设防护棚，设置安全警示标识，保护行人免受高空坠物伤害。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-ban" style="color:#ef4444;margin-right:6px"></i>空调支架专项整治</h4><div class="measure-tags"><span class="measure-tag">空调外机</span><span class="measure-tag">支架更换</span></div><p>对老旧小区空调外机支架进行安全排查，锈蚀严重的强制更换为不锈钢支架，规范外机安装位置。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-sign-hanging" style="color:#f59e0b;margin-right:6px"></i>户外广告牌安全整治</h4><div class="measure-tags"><span class="measure-tag">广告牌</span><span class="measure-tag">抗风检测</span></div><p>对大型户外广告牌进行结构安全检测，重点检查抗风能力和连接件腐蚀情况，汛期前完成加固或拆除。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-scale-balanced" style="color:#1e6fdb;margin-right:6px"></i>法律宣传教育</h4><div class="measure-tags"><span class="measure-tag">普法教育</span><span class="measure-tag">民法典</span></div><p>加强高空抛物危害性宣传，普及民法典关于高空抛物的法律责任规定，提高居民法律意识和安全意识。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-list-gen">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 高空坠物</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-wand-magic-sparkles" style="color:#00b4d8"></i> 高空坠物风险清单生成</div></div><div class="card-body">
+    <div class="step-indicator">
+      <div style="text-align:center"><div class="step-circle done"><i class="fa-solid fa-check"></i></div><div class="step-label">选择风险源</div></div><div class="step-line done"></div>
+      <div style="text-align:center"><div class="step-circle done"><i class="fa-solid fa-check"></i></div><div class="step-label">配置清单参数</div></div><div class="step-line done"></div>
+      <div style="text-align:center"><div class="step-circle active">3</div><div class="step-label">生成清单</div></div><div class="step-line"></div>
+      <div style="text-align:center"><div class="step-circle">4</div><div class="step-label">确认发布</div></div>
+    </div>
+    <div class="gen-form">
+      <div class="form-group"><label class="form-label">风险源类型</label><select class="form-control"><option>高空坠物 - 外墙脱落</option><option>高空坠物 - 空调外机坠落</option><option>高空坠物 - 广告牌坠落</option><option>高空坠物 - 高空抛物</option></select></div>
+      <div class="form-group"><label class="form-label">建筑类型</label><select class="form-control"><option>高层住宅</option><option>商业楼宇</option><option>老旧小区</option><option>学校医院</option></select></div>
+      <div class="form-group"><label class="form-label">清单模板</label><select class="form-control"><option>高空坠物综合排查清单</option><option>外墙安全隐患检测清单</option><option>高空抛物监控布设计划</option></select></div>
+      <div class="form-group"><label class="form-label">备注说明</label><textarea class="form-control" rows="3" placeholder="请输入备注信息..."></textarea></div>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:20px"><button class="btn btn-outline">上一步</button><button class="btn btn-primary"><i class="fa-solid fa-wand-magic-sparkles"></i> 生成清单</button></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-archive-overview">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 高空坠物</div>
+  <div class="archive-layout">
+    <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-folder-open" style="color:#1e6fdb"></i> 高空坠物风险档案列表</div></div><div style="padding:0">
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">解放碑商圈高层建筑外墙排查档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">渝中区 | 2026-01-22建档</div></div><span class="risk-tag red">重大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">观音桥老旧小区空调外机整治档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">江北区 | 2026-02-18建档</div></div><span class="risk-tag orange">较大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">南山路沿线广告牌安全检测档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">南岸区 | 2026-03-25建档</div></div><span class="risk-tag red">重大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">大学城高层住宅阳台安全巡查档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">沙坪坝区 | 2026-04-30建档</div></div><span class="risk-tag yellow">一般风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">杨家坪商圈高空抛物治理档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">九龙坡区 | 2026-05-12建档</div></div><span class="risk-tag blue">低风险</span></div>
+    </div></div>
+    <div>
+      <div class="stat-cards"><div class="stat-card"><div class="number">39</div><div class="label">档案总数</div></div><div class="stat-card"><div class="number" style="color:#ef4444">9</div><div class="label">重大风险档案</div></div><div class="stat-card"><div class="number" style="color:#f59e0b">15</div><div class="label">较大风险档案</div></div><div class="stat-card"><div class="number" style="color:#10b981">15</div><div class="label">一般/低风险档案</div></div></div>
+      <div class="card"><div class="card-header"><div class="card-title">月度档案分布</div></div><div class="card-body"><div class="css-chart"><div class="chart-bar" style="height:30%;background:#1e6fdb"><span class="bar-label">1月</span></div><div class="chart-bar" style="height:45%;background:#1e6fdb"><span class="bar-label">2月</span></div><div class="chart-bar" style="height:65%;background:#f59e0b"><span class="bar-label">3月</span></div><div class="chart-bar" style="height:80%;background:#ef4444"><span class="bar-label">4月</span></div><div class="chart-bar" style="height:90%;background:#ef4444"><span class="bar-label">5月</span></div><div class="chart-bar" style="height:60%;background:#1e6fdb"><span class="bar-label">6月</span></div></div></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="page-section" id="section-risk-archive-eval">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 高空坠物</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-chart-line" style="color:#00b4d8"></i> 高空坠物风险控制效果评估</div></div><div class="card-body">
+    <div class="eval-card"><div class="eval-header"><div><div style="font-size:14px;font-weight:600">解放碑高层建筑外墙排危治理效果</div><div style="font-size:12px;color:#94a3b8;margin-top:4px">评估周期: 2026年1月 - 5月</div></div><div class="eval-stars"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-regular fa-star"></i><span style="color:#94a3b8;margin-left:6px;font-size:12px">3.8分</span></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">隐患排查覆盖率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:92%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">排危加固完成率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill orange" style="width:75%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">坠物事故同比下降</div><div class="progress-bar"><div class="progress-fill green" style="width:68%"></div></div>
+    </div>
+    <div class="eval-card"><div class="eval-header"><div><div style="font-size:14px;font-weight:600">杨家坪商圈高空抛物治理效果</div><div style="font-size:12px;color:#94a3b8;margin-top:4px">评估周期: 2026年5月</div></div><div class="eval-stars"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><span style="color:#94a3b8;margin-left:6px;font-size:12px">4.7分</span></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">AI监控覆盖率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:100%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">抛物事件识别准确率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:95%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">抛物事件发生率下降</div><div class="progress-bar"><div class="progress-fill green" style="width:82%"></div></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-archive-project">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 高空坠物</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-person-falling" style="color:#ef4444"></i> 项目基础信息</div><button class="btn btn-primary"><i class="fa-solid fa-save"></i> 保存信息</button></div><div class="card-body">
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">项目名称</label><input class="form-control" value="渝中区高层建筑外墙安全隐患整治工程"></div>
+      <div class="form-group"><label class="form-label">项目编号</label><input class="form-control" value="GK-2026-YZ-001"></div>
+      <div class="form-group"><label class="form-label">项目地址</label><input class="form-control" value="重庆市渝中区解放碑-朝天门片区"></div>
+      <div class="form-group"><label class="form-label">管理单位</label><input class="form-control" value="渝中区住房和城乡建设委员会"></div>
+      <div class="form-group"><label class="form-label">施工单位</label><input class="form-control" value="重庆建工外墙维护工程有限公司"></div>
+      <div class="form-group"><label class="form-label">监理单位</label><input class="form-control" value="重庆市建筑科学研究院"></div>
+      <div class="form-group"><label class="form-label">开工日期</label><input class="form-control" type="date" value="2026-01-20"></div>
+      <div class="form-group"><label class="form-label">计划竣工日期</label><input class="form-control" type="date" value="2026-10-31"></div>
+      <div class="form-group"><label class="form-label">涉及建筑数量</label><input class="form-control" value="86栋"></div>
+      <div class="form-group"><label class="form-label">最高建筑层数</label><input class="form-control" value="45层"></div>
+      <div class="form-group" style="grid-column:span 2"><label class="form-label">项目简介</label><textarea class="form-control" rows="3">渝中区高层建筑外墙安全隐患整治工程，覆盖解放碑至朝天门片区86栋高层建筑，重点对外墙空鼓、瓷砖脱落、保温层开裂等隐患进行全面排查和加固处理，同步安装高空抛物AI监控系统。</textarea></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-warning-center">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 高空坠物</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-bell" style="color:#f59e0b"></i> 高空坠物预警中心</div><span style="font-size:12px;color:#94a3b8">实时监控</span></div><div class="card-body">
+    <div class="warning-stats">
+      <div class="warning-stat"><div class="num" style="color:#ef4444">2</div><div class="lbl">今日红色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#f59e0b">4</div><div class="lbl">本周橙色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#eab308">11</div><div class="lbl">本月黄色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#10b981">91%</div><div class="lbl">处置率</div></div>
+    </div>
+    <div class="warning-list">
+      <div class="warning-item red"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#ef4444"><i class="fa-solid fa-circle-exclamation" style="margin-right:6px"></i>外墙瓷砖大面积脱落预警</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">渝中区新华路128号 | 12层以上外墙瓷砖松动 | 2026-06-04 11:30</div></div><button class="btn btn-primary" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item red"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#ef4444"><i class="fa-solid fa-circle-exclamation" style="margin-right:6px"></i>高空抛物伤人事件</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">南岸区南山路社区 | 8楼抛出玻璃瓶，1人受伤 | 2026-06-04 15:42</div></div><button class="btn btn-primary" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item orange"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#f59e0b"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px"></i>空调外机支架锈蚀预警</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">江北区观音桥步行街旁 | 多台空调外机支架严重锈蚀 | 2026-06-03 14:15</div></div><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item yellow"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#eab308"><i class="fa-solid fa-circle-info" style="margin-right:6px"></i>大风天气安全提醒</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">全市范围 | 预计阵风8级，注意高空坠物防范 | 2026-06-04 07:30</div></div><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">已读</button></div></div>
+    </div>
+  </div></div>
+</div>
+
+<script>
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.action === 'switchSection') {
+        document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+        const target = document.getElementById('section-' + event.data.section);
+        if (target) target.classList.add('active');
+    }
+});
+// Theme sync
+(function(){var s=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-theme',s);})();
+window.addEventListener('message',function(e){if(e.data&&e.data.action==='setTheme'){document.documentElement.setAttribute('data-theme',e.data.theme);localStorage.setItem('theme',e.data.theme);}});
+</script>
+</body>
+</html>

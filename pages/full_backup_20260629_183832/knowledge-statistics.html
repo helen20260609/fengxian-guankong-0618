@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>风险知识统计管理</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        /* ===== Theme Variables ===== */
+        :root {
+            --primary: #1a73e8;
+            --primary-rgb: 26,115,232;
+            --primary-dark: #1557b0;
+            --primary-light: #e8f0fe;
+            --secondary: #00b4d8;
+            --accent: #7c3aed;
+            --danger: #d93025;
+            --warning: #e37400;
+            --success: #1e8e3e;
+            --bg-dark: #f0f2f5;
+            --bg-card: #ffffff;
+            --bg-hover: #e8eaed;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --text-tertiary: #80868b;
+            --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08);
+            --glow-primary: rgba(26,115,232,0.15);
+            --chart-grid: rgba(0,0,0,0.05);
+        }
+        :root[data-theme="dark"] {
+            --primary: #3b82f6;
+            --primary-rgb: 30,111,219;
+            --primary-dark: #2563eb;
+            --primary-light: #e8f1fd;
+            --secondary: #06b6d4;
+            --accent: #a78bfa;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --bg-dark: #0a1628;
+            --bg-card: #112240;
+            --bg-hover: #1a2f4a;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-tertiary: #64748b;
+            --border: #1e3a5f;
+            --shadow: rgba(0,0,0,0.35);
+            --glow-primary: rgba(59,130,246,0.2);
+            --chart-grid: rgba(148,163,184,0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            padding: 20px;
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        /* ===== Breadcrumb ===== */
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+        .breadcrumb a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .breadcrumb a:hover { color: var(--primary); }
+        .breadcrumb .current { color: var(--text-primary); font-weight: 600; }
+        .breadcrumb i { font-size: 10px; color: var(--text-tertiary); }
+
+        /* ===== Main Tabs ===== */
+        .main-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid var(--border);
+        }
+        .main-tab {
+            flex: 1;
+            min-width: 120px;
+            padding: 14px 28px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: none;
+            border-left: none;
+            border-right: none;
+            border-top: none;
+        }
+        .main-tab:hover { color: var(--primary); }
+        .main-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        .main-tab .tab-icon { font-size: 15px; }
+        .main-tab .tab-count {
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: var(--bg-hover);
+            font-size: 12px;
+        }
+        .main-tab.active .tab-count {
+            background: rgba(var(--primary-rgb), 0.15);
+            color: var(--primary);
+        }
+
+        /* ===== Filter Bar ===== */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 12px;
+        }
+        .filter-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        .filter-input {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            font-family: inherit;
+        }
+        .filter-select {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .filter-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            background: var(--primary);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        .filter-btn.secondary {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .filter-btn.secondary:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+        /* ===== Card Base ===== */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 4px 16px var(--shadow);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .icon-box {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+        }
+        .card-body { padding: 20px; }
+
+        /* ===== KPI Cards ===== */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s;
+            box-shadow: 0 4px 16px var(--shadow);
+        }
+        .kpi-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 28px var(--shadow);
+        }
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--kpi-color, var(--primary));
+            opacity: 0.8;
+        }
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            top: -40px;
+            right: -40px;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: var(--kpi-color, var(--primary));
+            opacity: 0.06;
+        }
+        .kpi-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .kpi-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .kpi-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: var(--kpi-color, var(--primary));
+            background: var(--kpi-bg, var(--glow-primary));
+        }
+        .kpi-value {
+            font-size: 30px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+        .kpi-trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: var(--kpi-bg, var(--glow-primary));
+            color: var(--kpi-color, var(--primary));
+        }
+        .kpi-trend.down { color: var(--danger); background: rgba(239,68,68,0.1); }
+
+        /* ===== Chart Grid ===== */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .chart-grid.two-col { grid-template-columns: 1fr 1fr; }
+        .chart-container {
+            position: relative;
+            height: 280px;
+        }
+        .chart-legend {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+            font-size: 12px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-secondary);
+        }
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* ===== Rankings Table ===== */
+        .rank-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .rank-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-hover);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .rank-table td {
+            padding: 14px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+        .rank-table tr:hover td { background: var(--bg-hover); }
+        .rank-table tr:last-child td { border-bottom: none; }
+        .rank-num {
+            width: 26px;
+            height: 26px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+        }
+        .rank-num.top {
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            color: #fff;
+        }
+        .rank-title {
+            font-weight: 500;
+            color: var(--text-primary);
+            max-width: 320px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .rank-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        .rank-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+        }
+        .rank-value {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* ===== Animations ===== */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-in {
+            animation: fadeUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .kpi-card:nth-child(1) { animation-delay: 0.05s; }
+        .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+        .kpi-card:nth-child(3) { animation-delay: 0.15s; }
+        .kpi-card:nth-child(4) { animation-delay: 0.2s; }
+
+        /* ===== Section Toggle ===== */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; animation: fadeUp 0.4s ease; }
+
+        /* ===== Empty / Loading ===== */
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--text-secondary);
+        }
+        .empty-state i { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 1200px) {
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .chart-grid, .chart-grid.two-col { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .kpi-grid { grid-template-columns: 1fr; }
+            .main-tabs { flex-wrap: wrap; }
+            .main-tab { flex: 1 1 calc(50% - 4px); min-width: auto; }
+            .rank-title { max-width: 180px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Page Title -->
+    <div class="page-title" style="font-size:20px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+        <i class="fas fa-chart-bar" style="color:var(--primary);"></i>
+        <span>统计管理</span>
+    </div>
+
+    <!-- Main Tabs -->
+    <div class="main-tabs" id="mainTabs">
+        <button class="main-tab active" data-category="law">
+            <i class="fas fa-gavel tab-icon"></i>
+            <span>法律法规</span>
+            <span class="tab-count">128</span>
+        </button>
+        <button class="main-tab" data-category="policy">
+            <i class="fas fa-file-contract tab-icon"></i>
+            <span>政策要求</span>
+            <span class="tab-count">96</span>
+        </button>
+        <button class="main-tab" data-category="standard">
+            <i class="fas fa-ruler-combined tab-icon"></i>
+            <span>标准规范</span>
+            <span class="tab-count">84</span>
+        </button>
+        <button class="main-tab" data-category="training">
+            <i class="fas fa-chalkboard-teacher tab-icon"></i>
+            <span>培训课件</span>
+            <span class="tab-count">64</span>
+        </button>
+        <button class="main-tab" data-category="flood">
+            <i class="fas fa-cloud-showers-heavy tab-icon"></i>
+            <span>防汛防台专题库</span>
+            <span class="tab-count">104</span>
+        </button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <div class="filter-group">
+            <span class="filter-label"><i class="fas fa-calendar-alt"></i> 时间范围</span>
+            <input type="date" class="filter-input" value="2024-01-01">
+            <span class="filter-label">至</span>
+            <input type="date" class="filter-input" value="2024-12-31">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label"><i class="fas fa-filter"></i> 维度</span>
+            <select class="filter-select" id="dimensionSelect">
+                <option value="all">全部维度</option>
+                <option value="input">录入统计</option>
+                <option value="display">展示统计</option>
+                <option value="interaction">互动统计</option>
+            </select>
+        </div>
+        <button class="filter-btn" onclick="refreshStats()">
+            <i class="fas fa-sync-alt"></i> 刷新统计
+        </button>
+        <button class="filter-btn secondary" onclick="exportReport()">
+            <i class="fas fa-download"></i> 导出报告
+        </button>
+    </div>
+
+    <!-- Tab Panels -->
+    <div class="tab-panel active" id="panel-law">
+        <div class="kpi-grid" id="kpi-law"></div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(59,130,246,0.15); color: var(--primary);">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    录入统计 · 月度新增趋势
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="trendChart-law"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="chart-grid">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(16,185,129,0.15); color: var(--success);">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        类型分布
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="typeChart-law"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(245,158,11,0.15); color: var(--warning);">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        领域分布
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="fieldChart-law"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(239,68,68,0.15); color: var(--danger);">
+                        <i class="fas fa-fire"></i>
+                    </div>
+                    热门法规排行
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="rank-table" id="rankTable-law"></table>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-panel" id="panel-policy">
+        <div class="kpi-grid" id="kpi-policy"></div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(59,130,246,0.15); color: var(--primary);">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    录入统计 · 月度新增趋势
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="trendChart-policy"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="chart-grid">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(16,185,129,0.15); color: var(--success);">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        类型分布
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="typeChart-policy"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(245,158,11,0.15); color: var(--warning);">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        领域分布
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="fieldChart-policy"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(239,68,68,0.15); color: var(--danger);">
+                        <i class="fas fa-fire"></i>
+                    </div>
+                    热门政策排行
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="rank-table" id="rankTable-policy"></table>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-panel" id="panel-standard">
+        <div class="kpi-grid" id="kpi-standard"></div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(59,130,246,0.15); color: var(--primary);">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    录入统计 · 月度新增趋势
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="trendChart-standard"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="chart-grid">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(16,185,129,0.15); color: var(--success);">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        标准层级分布
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="typeChart-standard"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(245,158,11,0.15); color: var(--warning);">
+                            <i class="fas fa-th"></i>
+                        </div>
+                        专业领域热力
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="fieldChart-standard"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(239,68,68,0.15); color: var(--danger);">
+                        <i class="fas fa-fire"></i>
+                    </div>
+                    热门标准排行
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="rank-table" id="rankTable-standard"></table>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-panel" id="panel-training">
+        <div class="kpi-grid" id="kpi-training"></div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(59,130,246,0.15); color: var(--primary);">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    录入统计 · 月度新增趋势
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="trendChart-training"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="chart-grid two-col">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(16,185,129,0.15); color: var(--success);">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        课件类型分布
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="typeChart-training"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(124,58,237,0.15); color: var(--accent);">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        学习完成率
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="fieldChart-training"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(239,68,68,0.15); color: var(--danger);">
+                        <i class="fas fa-fire"></i>
+                    </div>
+                    热门课件排行
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="rank-table" id="rankTable-training"></table>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-panel" id="panel-flood">
+        <div class="kpi-grid" id="kpi-flood"></div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(59,130,246,0.15); color: var(--primary);">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    录入统计 · 月度新增趋势
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="trendChart-flood"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="chart-grid two-col">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(16,185,129,0.15); color: var(--success);">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        专题库内容分布
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="typeChart-flood"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="icon-box" style="background: rgba(245,158,11,0.15); color: var(--warning);">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        业务领域分布
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="fieldChart-flood"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="icon-box" style="background: rgba(239,68,68,0.15); color: var(--danger);">
+                        <i class="fas fa-fire"></i>
+                    </div>
+                    热门防汛防台资源排行
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="rank-table" id="rankTable-flood"></table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== Theme Sync =====
+        (function(){
+            var s = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', s);
+        })();
+        window.addEventListener('message', function(e){
+            if (e.data && e.data.action === 'setTheme') {
+                document.documentElement.setAttribute('data-theme', e.data.theme);
+                localStorage.setItem('theme', e.data.theme);
+                updateChartsTheme();
+            }
+        });
+
+        // ===== Data Store =====
+        const categories = {
+            law: { label: '法律法规', count: 128 },
+            policy: { label: '政策要求', count: 96 },
+            standard: { label: '标准规范', count: 84 },
+            training: { label: '培训课件', count: 64 },
+            flood: { label: '防汛防台专题库', count: 104 }
+        };
+
+        const mockData = {
+            law: {
+                kpi: [
+                    { label: '新增法规', value: 128, trend: 12.5, icon: 'fa-plus-circle', color: '#3b82f6' },
+                    { label: '总浏览量', value: '45.2K', trend: 8.3, icon: 'fa-eye', color: '#10b981' },
+                    { label: '总下载量', value: '12.8K', trend: -2.1, icon: 'fa-download', color: '#f59e0b' },
+                    { label: '收藏数量', value: '3,420', trend: 15.7, icon: 'fa-star', color: '#ef4444' }
+                ],
+                trend: [8, 12, 15, 11, 18, 22, 19, 25, 21, 28, 32, 35],
+                types: { labels: ['国家法律', '行政法规', '部门规章', '地方性法规', '行业标准'], data: [28, 35, 42, 15, 8] },
+                fields: { labels: ['建筑施工', '燃气安全', '房屋安全', '交通安全', '消防安全'], data: [38, 29, 24, 18, 19] },
+                ranks: [
+                    { title: '中华人民共和国安全生产法', meta: '2021年修订', tag: '国家法律', value: '8,234', metric: '浏览' },
+                    { title: '建设工程安全生产管理条例', meta: '国务院令第393号', tag: '行政法规', value: '6,521', metric: '浏览' },
+                    { title: '危险性较大的分部分项工程安全管理规定', meta: '住建部令第37号', tag: '部门规章', value: '5,892', metric: '浏览' },
+                    { title: '建筑施工安全检查标准', meta: 'JGJ 59-2011', tag: '行业标准', value: '4,765', metric: '浏览' },
+                    { title: '城镇燃气管理条例', meta: '国务院令第583号', tag: '行政法规', value: '4,231', metric: '浏览' }
+                ]
+            },
+            policy: {
+                kpi: [
+                    { label: '新增政策', value: 96, trend: 7.2, icon: 'fa-plus-circle', color: '#3b82f6' },
+                    { label: '总浏览量', value: '32.6K', trend: 11.4, icon: 'fa-eye', color: '#10b981' },
+                    { label: '总下载量', value: '9.4K', trend: 5.6, icon: 'fa-download', color: '#f59e0b' },
+                    { label: '收藏数量', value: '2,180', trend: 9.8, icon: 'fa-star', color: '#ef4444' }
+                ],
+                trend: [5, 8, 10, 7, 12, 14, 11, 16, 13, 19, 22, 24],
+                types: { labels: ['中央政策', '地方政策', '行业政策', '通知公告', '解读文件'], data: [22, 38, 18, 12, 6] },
+                fields: { labels: ['安全监管', '应急管理', '城市建设', '环境保护', '社会治理'], data: [32, 26, 21, 9, 8] },
+                ranks: [
+                    { title: '国务院安委会关于安全生产工作的意见', meta: '安委〔2024〕1号', tag: '中央政策', value: '6,432', metric: '浏览' },
+                    { title: '城市安全风险综合监测预警平台建设指南', meta: '住建部', tag: '行业政策', value: '5,211', metric: '浏览' },
+                    { title: '关于加强房屋安全隐患排查整治的通知', meta: '住建部', tag: '通知公告', value: '4,876', metric: '浏览' },
+                    { title: '燃气安全专项整治工作方案', meta: '国务院安委会', tag: '中央政策', value: '4,123', metric: '浏览' },
+                    { title: '建筑施工安全生产标准化考评暂行办法', meta: '住建部', tag: '行业政策', value: '3,654', metric: '浏览' }
+                ]
+            },
+            standard: {
+                kpi: [
+                    { label: '新增标准', value: 84, trend: 4.5, icon: 'fa-plus-circle', color: '#3b82f6' },
+                    { label: '总浏览量', value: '28.1K', trend: 6.7, icon: 'fa-eye', color: '#10b981' },
+                    { label: '总下载量', value: '15.3K', trend: 10.2, icon: 'fa-download', color: '#f59e0b' },
+                    { label: '收藏数量', value: '1,856', trend: 3.4, icon: 'fa-star', color: '#ef4444' }
+                ],
+                trend: [4, 6, 8, 5, 9, 11, 7, 13, 10, 15, 17, 19],
+                types: { labels: ['国家标准', '行业标准', '地方标准', '团体标准', '企业标准'], data: [18, 32, 16, 12, 6] },
+                fields: { labels: ['基坑工程', '脚手架', '模板工程', '临时用电', '起重机械'], data: [22, 18, 15, 14, 15] },
+                ranks: [
+                    { title: '建筑施工高处作业安全技术规范', meta: 'JGJ 80-2016', tag: '行业标准', value: '5,678', metric: '下载' },
+                    { title: '建筑基坑支护技术规程', meta: 'JGJ 120-2012', tag: '行业标准', value: '4,987', metric: '下载' },
+                    { title: '建筑施工扣件式钢管脚手架安全技术规范', meta: 'JGJ 130-2011', tag: '行业标准', value: '4,321', metric: '下载' },
+                    { title: '建设工程施工现场消防安全技术规范', meta: 'GB 50720-2011', tag: '国家标准', value: '3,876', metric: '下载' },
+                    { title: '建筑机械使用安全技术规程', meta: 'JGJ 33-2012', tag: '行业标准', value: '3,245', metric: '下载' }
+                ]
+            },
+            training: {
+                kpi: [
+                    { label: '新增课件', value: 64, trend: 18.9, icon: 'fa-plus-circle', color: '#3b82f6' },
+                    { label: '总学习人次', value: '18.5K', trend: 22.4, icon: 'fa-users', color: '#10b981' },
+                    { label: '平均完成率', value: '78.3%', trend: 5.2, icon: 'fa-check-circle', color: '#f59e0b' },
+                    { label: '好评数量', value: '1,240', trend: 14.1, icon: 'fa-thumbs-up', color: '#ef4444' }
+                ],
+                trend: [3, 5, 4, 7, 9, 8, 12, 14, 11, 16, 19, 21],
+                types: { labels: ['视频课程', '图文教程', '案例分析', '在线测试', '文档资料'], data: [24, 16, 12, 8, 4] },
+                fields: { labels: ['已学完', '学习中', '未开始', '已过期'], data: [48, 26, 16, 10] },
+                ranks: [
+                    { title: '深基坑工程安全风险防控专题培训', meta: '视频课程 · 120分钟', tag: '热门课程', value: '3,421', metric: '学习' },
+                    { title: '燃气泄漏应急处置实操演练', meta: '视频课程 · 90分钟', tag: '热门课程', value: '2,876', metric: '学习' },
+                    { title: '高处坠落事故案例警示教育', meta: '案例分析 · 45分钟', tag: '热门课程', value: '2,345', metric: '学习' },
+                    { title: '脚手架搭设与拆除安全要点', meta: '图文教程 · 30分钟', tag: '热门课程', value: '1,987', metric: '学习' },
+                    { title: '房屋结构安全隐患识别技术指南', meta: '视频课程 · 105分钟', tag: '热门课程', value: '1,654', metric: '学习' }
+                ]
+            },
+            flood: {
+                kpi: [
+                    { label: '应急预案', value: 18, trend: 9.2, icon: 'fa-file-shield', color: '#3b82f6' },
+                    { label: '防汛手册', value: 32, trend: 14.5, icon: 'fa-book-open', color: '#10b981' },
+                    { label: '历史案例', value: 46, trend: 7.8, icon: 'fa-clock-rotate-left', color: '#f59e0b' },
+                    { label: '法规条款', value: 8, trend: 4.1, icon: 'fa-scale-balanced', color: '#ef4444' }
+                ],
+                trend: [6, 9, 11, 8, 13, 16, 14, 19, 17, 22, 25, 28],
+                types: { labels: ['应急预案', '防汛手册', '历史案例', '法规条款'], data: [18, 32, 46, 8] },
+                fields: { labels: ['建筑安全', '燃气', '交通', '玻璃幕墙', '自建房', '综合应急'], data: [42, 14, 12, 9, 15, 12] },
+                ranks: [
+                    { title: '建筑工地脚手架防风加固操作手册', meta: '防汛手册 · 图文', tag: '防汛手册', value: '1,236', metric: '查阅' },
+                    { title: '建筑工地塔吊防风操作指南', meta: '防汛手册 · 视频', tag: '防汛手册', value: '1,105', metric: '查阅' },
+                    { title: '超强台风“梅花”建筑工地应对案例', meta: '历史案例 · 2022-09', tag: '历史案例', value: '986', metric: '查阅' },
+                    { title: '燃气管道台风巡检与应急处置手册', meta: '防汛手册 · 图文', tag: '防汛手册', value: '892', metric: '查阅' },
+                    { title: '建筑工地防汛防台专项应急预案', meta: '应急预案 · Ⅱ级/Ⅲ级', tag: '应急预案', value: '756', metric: '查阅' }
+                ]
+            }
+        };
+
+        const chartInstances = {};
+        const palette = {
+            primary: ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe'],
+            success: ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#d1fae5'],
+            warning: ['#f59e0b', '#fbbf24', '#fcd34d', '#fde68a', '#fef3c7'],
+            danger: ['#ef4444', '#f87171', '#fca5a5', '#fecaca', '#fee2e2'],
+            accent: ['#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe']
+        };
+
+        // ===== Helpers =====
+        function isDark() {
+            return document.documentElement.getAttribute('data-theme') === 'dark';
+        }
+        function getTextColor() {
+            return isDark() ? '#e2e8f0' : '#202124';
+        }
+        function getGridColor() {
+            return isDark() ? 'rgba(148,163,184,0.1)' : 'rgba(0,0,0,0.05)';
+        }
+        function getTooltipBg() {
+            return isDark() ? '#112240' : '#ffffff';
+        }
+        function getTooltipBorder() {
+            return isDark() ? '#1e3a5f' : '#dadce0';
+        }
+
+        // ===== Render KPI Cards =====
+        function renderKPI(category) {
+            const container = document.getElementById('kpi-' + category);
+            const data = mockData[category].kpi;
+            container.innerHTML = data.map((k, i) => `
+                <div class="kpi-card animate-in" style="--kpi-color: ${k.color}; --kpi-bg: ${k.color}18;">
+                    <div class="kpi-header">
+                        <span class="kpi-label">${k.label}</span>
+                        <div class="kpi-icon"><i class="fas ${k.icon}"></i></div>
+                    </div>
+                    <div class="kpi-value">${k.value}</div>
+                    <span class="kpi-trend ${k.trend < 0 ? 'down' : ''}">
+                        <i class="fas fa-arrow-${k.trend < 0 ? 'down' : 'up'}"></i>
+                        ${Math.abs(k.trend)}% 较上月
+                    </span>
+                </div>
+            `).join('');
+        }
+
+        // ===== Render Rank Table =====
+        function renderRanks(category) {
+            const table = document.getElementById('rankTable-' + category);
+            const ranks = mockData[category].ranks;
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th style="width:60px">排名</th>
+                        <th>标题</th>
+                        <th style="width:120px">分类</th>
+                        <th style="width:100px">${ranks[0].metric}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${ranks.map((r, i) => `
+                        <tr>
+                            <td><div class="rank-num ${i < 3 ? 'top' : ''}">${i + 1}</div></td>
+                            <td>
+                                <div class="rank-title">${r.title}</div>
+                                <div class="rank-meta">${r.meta}</div>
+                            </td>
+                            <td><span class="rank-tag">${r.tag}</span></td>
+                            <td><span class="rank-value">${r.value}</span></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+        }
+
+        // ===== Chart Config =====
+        function commonOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: getTextColor(), font: { size: 12, family: "'Microsoft YaHei','PingFang SC',sans-serif" }, usePointStyle: true, padding: 16 }
+                    },
+                    tooltip: {
+                        backgroundColor: getTooltipBg(),
+                        titleColor: getTextColor(),
+                        bodyColor: getTextColor(),
+                        borderColor: getTooltipBorder(),
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: true,
+                        cornerRadius: 8
+                    }
+                }
+            };
+        }
+
+        function createTrendChart(category) {
+            const ctx = document.getElementById('trendChart-' + category).getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 280);
+            gradient.addColorStop(0, 'rgba(59,130,246,0.35)');
+            gradient.addColorStop(1, 'rgba(59,130,246,0.02)');
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'],
+                    datasets: [{
+                        label: '新增数量',
+                        data: mockData[category].trend,
+                        borderColor: '#3b82f6',
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#3b82f6',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    ...commonOptions(),
+                    scales: {
+                        x: { grid: { display: false, drawBorder: false }, ticks: { color: getTextColor() } },
+                        y: { grid: { color: getGridColor(), drawBorder: false }, ticks: { color: getTextColor() }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function createTypeChart(category) {
+            const colors = [palette.primary[0], palette.success[0], palette.warning[0], palette.danger[0], palette.accent[0]];
+            return new Chart(document.getElementById('typeChart-' + category), {
+                type: 'doughnut',
+                data: {
+                    labels: mockData[category].types.labels,
+                    datasets: [{
+                        data: mockData[category].types.data,
+                        backgroundColor: colors,
+                        borderWidth: 0,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    ...commonOptions(),
+                    cutout: '65%',
+                    plugins: {
+                        ...commonOptions().plugins,
+                        legend: { position: 'right', labels: { color: getTextColor(), font: { size: 12 }, usePointStyle: true, padding: 12 } }
+                    }
+                }
+            });
+        }
+
+        function createFieldChart(category) {
+            return new Chart(document.getElementById('fieldChart-' + category), {
+                type: 'bar',
+                data: {
+                    labels: mockData[category].fields.labels,
+                    datasets: [{
+                        label: '数量',
+                        data: mockData[category].fields.data,
+                        backgroundColor: category === 'training' ? palette.success[0] : palette.warning[0],
+                        borderRadius: 6,
+                        barThickness: 22
+                    }]
+                },
+                options: {
+                    ...commonOptions(),
+                    indexAxis: 'y',
+                    scales: {
+                        x: { grid: { color: getGridColor(), drawBorder: false }, ticks: { color: getTextColor() }, beginAtZero: true },
+                        y: { grid: { display: false, drawBorder: false }, ticks: { color: getTextColor() } }
+                    }
+                }
+            });
+        }
+
+        // ===== Initialize Category =====
+        function initCategory(category) {
+            if (chartInstances[category]) return;
+            renderKPI(category);
+            renderRanks(category);
+            chartInstances[category] = {
+                trend: createTrendChart(category),
+                type: createTypeChart(category),
+                field: createFieldChart(category)
+            };
+        }
+
+        // ===== Update Charts Theme =====
+        function updateChartsTheme() {
+            Object.values(chartInstances).forEach(group => {
+                Object.values(group).forEach(chart => {
+                    chart.options.plugins.legend.labels.color = getTextColor();
+                    chart.options.plugins.tooltip.backgroundColor = getTooltipBg();
+                    chart.options.plugins.tooltip.titleColor = getTextColor();
+                    chart.options.plugins.tooltip.bodyColor = getTextColor();
+                    chart.options.plugins.tooltip.borderColor = getTooltipBorder();
+                    if (chart.options.scales.x) chart.options.scales.x.ticks.color = getTextColor();
+                    if (chart.options.scales.y) chart.options.scales.y.ticks.color = getTextColor();
+                    if (chart.options.scales.x) chart.options.scales.x.grid.color = getGridColor();
+                    if (chart.options.scales.y) chart.options.scales.y.grid.color = getGridColor();
+                    chart.update();
+                });
+            });
+        }
+
+        // ===== Tab Switching =====
+        const tabs = document.querySelectorAll('.main-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const category = tab.dataset.category;
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById('panel-' + category).classList.add('active');
+                initCategory(category);
+            });
+        });
+
+        // ===== Actions =====
+        function refreshStats() {
+            const active = document.querySelector('.main-tab.active').dataset.category;
+            // Simulate refresh animation
+            document.getElementById('panel-' + active).querySelectorAll('.kpi-value').forEach(el => {
+                el.style.opacity = '0.5';
+                setTimeout(() => el.style.opacity = '1', 300);
+            });
+            setTimeout(() => updateChartsTheme(), 100);
+        }
+        function exportReport() {
+            alert('统计报告导出功能开发中，将生成 PDF / Excel 格式报告。');
+        }
+
+        // ===== Init =====
+        document.addEventListener('DOMContentLoaded', () => {
+            initCategory('law');
+        });
+    </script>
+</body>
+</html>

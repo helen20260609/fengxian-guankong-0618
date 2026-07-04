@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>城镇自建房 - 智能风险研判</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+/* Theme Variables */
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e37400; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+    --modal-bg: #ffffff; --tag-bg: #f1f3f4; --tag-border: #dadce0;
+    --header-bg: rgba(0,0,0,0.02); --tree-group-bg: rgba(26,115,232,0.06);
+    --tree-row-hover: rgba(0,0,0,0.02);
+    --dot-red: #d93025; --dot-orange: #e37400; --dot-yellow: #f9ab00; --dot-blue: #1a73e8;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+    --modal-bg: #112240; --tag-bg: rgba(255,255,255,0.05); --tag-border: #1e3a5f;
+    --header-bg: rgba(0,0,0,0.2); --tree-group-bg: rgba(30,111,219,0.08);
+    --tree-row-hover: rgba(255,255,255,0.02);
+    --dot-red: #ef4444; --dot-orange: #f59e0b; --dot-yellow: #eab308; --dot-blue: #3b82f6;
+}
+
+body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: #0a1628; color: #e2e8f0; margin: 0; padding: 20px; }
+.card { background: #112240; border: 1px solid #1e3a5f; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+.card-header { padding: 16px 20px; border-bottom: 1px solid #1e3a5f; display: flex; align-items: center; justify-content: space-between; }
+.card-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 20px; }
+.page-section { display: none; }
+.page-section.active { display: block; }
+.breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-input { background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; }
+.filter-input:focus { outline: none; border-color: #1e6fdb; }
+.filter-select { background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: #94a3b8; border-bottom: 1px solid #1e3a5f; background: rgba(0,0,0,0.2); }
+.data-table td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #1e3a5f; }
+.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+.btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.3s; border: none; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: #1e6fdb; color: #fff; }
+.btn-primary:hover { background: #1557b0; }
+.btn-outline { background: transparent; border: 1px solid #1e3a5f; color: #94a3b8; }
+.btn-outline:hover { border-color: #1e6fdb; color: #1e6fdb; }
+.risk-tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.risk-tag.red { background: rgba(239,68,68,0.15); color: #ef4444; }
+.risk-tag.orange { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.risk-tag.yellow { background: rgba(234,179,8,0.15); color: #eab308; }
+.risk-tag.blue { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.status-badge { padding: 2px 10px; border-radius: 10px; font-size: 12px; }
+.status-badge.pending { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.status-badge.approved { background: rgba(16,185,129,0.15); color: #10b981; }
+.status-badge.draft { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.pagination { display: flex; justify-content: flex-end; gap: 4px; margin-top: 16px; }
+.page-btn { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; border: 1px solid #1e3a5f; background: #112240; color: #94a3b8; }
+.page-btn:hover { border-color: #1e6fdb; color: #1e6fdb; }
+.page-btn.active { background: #1e6fdb; color: #fff; border-color: #1e6fdb; }
+.measure-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.measure-card { background: rgba(255,255,255,0.02); border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px; transition: all 0.3s; }
+.measure-card:hover { border-color: #1e6fdb; transform: translateY(-2px); }
+.measure-card h4 { margin: 0 0 8px 0; font-size: 14px; }
+.measure-card p { margin: 0 0 12px 0; font-size: 12px; color: #94a3b8; line-height: 1.6; }
+.measure-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.measure-tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; background: rgba(30,111,219,0.1); color: #1e6fdb; }
+.step-indicator { display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 30px; }
+.step-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; border: 2px solid #1e3a5f; color: #94a3b8; }
+.step-circle.active { background: #1e6fdb; border-color: #1e6fdb; color: #fff; }
+.step-circle.done { background: #10b981; border-color: #10b981; color: #fff; }
+.step-label { font-size: 12px; color: #94a3b8; margin-top: 6px; text-align: center; }
+.step-line { width: 60px; height: 2px; background: #1e3a5f; margin: 0 8px; margin-bottom: 20px; }
+.step-line.done { background: #10b981; }
+.archive-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.archive-item { padding: 14px 16px; border-bottom: 1px solid #1e3a5f; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.2s; }
+.archive-item:hover { background: rgba(255,255,255,0.02); }
+.archive-item:last-child { border-bottom: none; }
+.stat-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.stat-card { background: rgba(255,255,255,0.03); border: 1px solid #1e3a5f; border-radius: 8px; padding: 16px; }
+.stat-card .number { font-size: 28px; font-weight: 700; color: #1e6fdb; }
+.stat-card .label { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.eval-card { background: rgba(255,255,255,0.02); border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+.eval-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.eval-stars { color: #f59e0b; font-size: 14px; }
+.progress-bar { height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; }
+.progress-fill.green { background: #10b981; }
+.progress-fill.orange { background: #f59e0b; }
+.progress-fill.red { background: #ef4444; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { margin-bottom: 0; }
+.form-label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+.form-control { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 10px 12px; color: #e2e8f0; font-size: 13px; box-sizing: border-box; }
+.form-control:focus { outline: none; border-color: #1e6fdb; }
+.warning-list { display: flex; flex-direction: column; gap: 12px; }
+.warning-item { padding: 16px; border-radius: 8px; border-left: 4px solid; background: rgba(255,255,255,0.02); }
+.warning-item.red { border-left-color: #ef4444; }
+.warning-item.orange { border-left-color: #f59e0b; }
+.warning-item.yellow { border-left-color: #eab308; }
+.warning-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.warning-stat { background: rgba(255,255,255,0.03); border: 1px solid #1e3a5f; border-radius: 8px; padding: 16px; text-align: center; }
+.warning-stat .num { font-size: 24px; font-weight: 700; }
+.warning-stat .lbl { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.css-chart { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding-top: 10px; }
+.chart-bar { flex: 1; border-radius: 4px 4px 0 0; position: relative; }
+.chart-bar .bar-label { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #94a3b8; white-space: nowrap; }
+.gen-form { max-width: 600px; margin: 0 auto; }
+.gen-form .form-group { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<div class="page-section active" id="section-risk-list-build">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 城镇自建房</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-city" style="color:#1e6fdb"></i> 城镇自建房风险清单</div><button class="btn btn-primary"><i class="fa-solid fa-plus"></i> 新建清单</button></div><div class="card-body">
+    <div class="filter-bar">
+      <input class="filter-input" placeholder="搜索清单编号/房屋地址..." style="width:220px">
+      <select class="filter-select"><option>全部等级</option><option>重大风险</option><option>较大风险</option><option>一般风险</option><option>低风险</option></select>
+      <select class="filter-select"><option>全部状态</option><option>已发布</option><option>审核中</option><option>草稿</option></select>
+      <select class="filter-select"><option>全部街道</option><option>长安镇</option><option>虎门镇</option><option>厚街镇</option><option>大朗镇</option><option>塘厦镇</option></select>
+    </div>
+    <table class="data-table"><thead><tr><th>清单编号</th><th>清单名称</th><th>风险等级</th><th>所属街道</th><th>创建人</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead><tbody>
+      <tr><td>CZ-2026-001</td><td>长安镇城中村自建房结构安全排查清单</td><td><span class="risk-tag red">重大风险</span></td><td>长安镇</td><td>黄建平</td><td>2026-05-30</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>CZ-2026-002</td><td>虎门镇老旧自建房加层改造风险清单</td><td><span class="risk-tag orange">较大风险</span></td><td>虎门镇</td><td>陈志华</td><td>2026-05-26</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>CZ-2026-003</td><td>厚街镇经营性自建房消防安全隐患清单</td><td><span class="risk-tag red">重大风险</span></td><td>厚街镇</td><td>刘伟民</td><td>2026-05-22</td><td><span class="status-badge pending">审核中</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>CZ-2026-004</td><td>大朗镇自建房违规改建出租房排查清单</td><td><span class="risk-tag yellow">一般风险</span></td><td>大朗镇</td><td>张文强</td><td>2026-05-18</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>CZ-2026-005</td><td>塘厦镇新建自建房施工安全检查清单</td><td><span class="risk-tag blue">低风险</span></td><td>塘厦镇</td><td>王海波</td><td>2026-05-14</td><td><span class="status-badge draft">草稿</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+    </tbody></table>
+    <div class="pagination"><div class="page-btn"><i class="fa-solid fa-chevron-left" style="font-size:11px"></i></div><div class="page-btn active">1</div><div class="page-btn">2</div><div class="page-btn">3</div><div class="page-btn"><i class="fa-solid fa-chevron-right" style="font-size:11px"></i></div></div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-measure">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 城镇自建房</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-shield-halved" style="color:#10b981"></i> 城镇自建房风险措施库</div><button class="btn btn-primary"><i class="fa-solid fa-plus"></i> 新增措施</button></div><div class="card-body">
+    <div class="measure-grid">
+      <div class="measure-card"><h4><i class="fa-solid fa-house-crack" style="color:#ef4444;margin-right:6px"></i>结构安全鉴定</h4><div class="measure-tags"><span class="measure-tag">房屋鉴定</span><span class="measure-tag">危房排查</span></div><p>对疑似危房进行专业结构安全鉴定，依据鉴定结果评定A、B、C、D四个等级，C级以上督促整改。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-arrow-up-wide-short" style="color:#f59e0b;margin-right:6px"></i>违规加层整治</h4><div class="measure-tags"><span class="measure-tag">加层管控</span><span class="measure-tag">拆除违建</span></div><p>严厉查处未经审批擅自加层、改建行为，对超层超高、改变承重结构的违规建设依法予以整治。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-fire-extinguisher" style="color:#10b981;margin-right:6px"></i>消防安全隐患整治</h4><div class="measure-tags"><span class="measure-tag">消防通道</span><span class="measure-tag">防火分隔</span></div><p>整治经营性自建房消防通道堵塞、防火分隔不到位、电气线路老化等隐患，配备灭火器材和疏散标识。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-id-card" style="color:#1e6fdb;margin-right:6px"></i>建房审批规范管理</h4><div class="measure-tags"><span class="measure-tag">审批流程</span><span class="measure-tag">资质管理</span></div><p>规范城镇自建房审批流程，明确建房标准和技术要求，施工需具备资质的施工队伍，竣工后验收合格方可使用。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-people-roof" style="color:#00b4d8;margin-right:6px"></i>出租房安全管理</h4><div class="measure-tags"><span class="measure-tag">群租房</span><span class="measure-tag">人均面积</span></div><p>规范自建房出租行为，明确最低人均居住面积标准，禁止违规分割出租，定期检查出租房屋安全状况。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-database" style="color:#1e6fdb;margin-right:6px"></i>房屋信息数字化建档</h4><div class="measure-tags"><span class="measure-tag">一户一档</span><span class="measure-tag">动态更新</span></div><p>建立城镇自建房信息数据库，实行一户一档管理，记录房屋基本信息、安全状况、整改情况，实现动态更新。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-list-gen">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 城镇自建房</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-wand-magic-sparkles" style="color:#00b4d8"></i> 城镇自建房风险清单生成</div></div><div class="card-body">
+    <div class="step-indicator">
+      <div style="text-align:center"><div class="step-circle done"><i class="fa-solid fa-check"></i></div><div class="step-label">选择风险源</div></div><div class="step-line done"></div>
+      <div style="text-align:center"><div class="step-circle done"><i class="fa-solid fa-check"></i></div><div class="step-label">配置清单参数</div></div><div class="step-line done"></div>
+      <div style="text-align:center"><div class="step-circle done"><i class="fa-solid fa-check"></i></div><div class="step-label">生成清单</div></div><div class="step-line done"></div>
+      <div style="text-align:center"><div class="step-circle active">4</div><div class="step-label">确认发布</div></div>
+    </div>
+    <div class="gen-form">
+      <div class="form-group"><label class="form-label">风险源类型</label><select class="form-control"><option>自建房 - 结构安全</option><option>自建房 - 违规加层</option><option>自建房 - 经营用途</option><option>自建房 - 消防安全</option></select></div>
+      <div class="form-group"><label class="form-label">房屋用途</label><select class="form-control"><option>居住用途</option><option>经营用途（餐饮）</option><option>经营用途（仓储）</option><option>混合用途</option></select></div>
+      <div class="form-group"><label class="form-label">清单模板</label><select class="form-control"><option>城镇自建房安全综合排查清单</option><option>经营性自建房专项整治清单</option><option>自建房结构安全鉴定清单</option></select></div>
+      <div class="form-group"><label class="form-label">备注说明</label><textarea class="form-control" rows="3" placeholder="请输入备注信息..."></textarea></div>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:20px"><button class="btn btn-outline">上一步</button><button class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> 确认发布</button></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-archive-overview">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 城镇自建房</div>
+  <div class="archive-layout">
+    <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-folder-open" style="color:#1e6fdb"></i> 城镇自建房风险档案列表</div></div><div style="padding:0">
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">长安镇城中村自建房排查档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">长安镇 | 2026-01-15建档</div></div><span class="risk-tag red">重大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">虎门镇加层改造自建房整治档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">虎门镇 | 2026-02-20建档</div></div><span class="risk-tag orange">较大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">厚街镇经营性自建房消防档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">厚街镇 | 2026-03-18建档</div></div><span class="risk-tag red">重大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">大朗镇出租自建房安全档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">大朗镇 | 2026-04-25建档</div></div><span class="risk-tag yellow">一般风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">塘厦镇新建自建房验收档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">塘厦镇 | 2026-05-18建档</div></div><span class="risk-tag blue">低风险</span></div>
+    </div></div>
+    <div>
+      <div class="stat-cards"><div class="stat-card"><div class="number">128</div><div class="label">档案总数</div></div><div class="stat-card"><div class="number" style="color:#ef4444">32</div><div class="label">重大风险档案</div></div><div class="stat-card"><div class="number" style="color:#f59e0b">48</div><div class="label">较大风险档案</div></div><div class="stat-card"><div class="number" style="color:#10b981">48</div><div class="label">一般/低风险档案</div></div></div>
+      <div class="card"><div class="card-header"><div class="card-title">月度档案分布</div></div><div class="card-body"><div class="css-chart"><div class="chart-bar" style="height:55%;background:#1e6fdb"><span class="bar-label">1月</span></div><div class="chart-bar" style="height:70%;background:#f59e0b"><span class="bar-label">2月</span></div><div class="chart-bar" style="height:85%;background:#ef4444"><span class="bar-label">3月</span></div><div class="chart-bar" style="height:95%;background:#ef4444"><span class="bar-label">4月</span></div><div class="chart-bar" style="height:100%;background:#ef4444"><span class="bar-label">5月</span></div><div class="chart-bar" style="height:75%;background:#f59e0b"><span class="bar-label">6月</span></div></div></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="page-section" id="section-risk-archive-eval">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 城镇自建房</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-chart-line" style="color:#00b4d8"></i> 城镇自建房风险控制效果评估</div></div><div class="card-body">
+    <div class="eval-card"><div class="eval-header"><div><div style="font-size:14px;font-weight:600">长安镇城中村自建房整治效果</div><div style="font-size:12px;color:#94a3b8;margin-top:4px">评估周期: 2026年1月 - 5月</div></div><div class="eval-stars"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-regular fa-star"></i><i class="fa-regular fa-star"></i><span style="color:#94a3b8;margin-left:6px;font-size:12px">3.2分</span></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">危房鉴定完成率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:88%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">D级危房搬离率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill orange" style="width:65%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">隐患整改达标率</div><div class="progress-bar"><div class="progress-fill orange" style="width:72%"></div></div>
+    </div>
+    <div class="eval-card"><div class="eval-header"><div><div style="font-size:14px;font-weight:600">厚街镇经营性自建房安全整治</div><div style="font-size:12px;color:#94a3b8;margin-top:4px">评估周期: 2026年3月 - 5月</div></div><div class="eval-stars"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-regular fa-star"></i><span style="color:#94a3b8;margin-left:6px;font-size:12px">3.9分</span></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">消防设施配备率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:95%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">经营许可证合规率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:82%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">安全培训覆盖率</div><div class="progress-bar"><div class="progress-fill green" style="width:90%"></div></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-archive-project">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 城镇自建房</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-city" style="color:#1e6fdb"></i> 项目基础信息</div><button class="btn btn-primary"><i class="fa-solid fa-save"></i> 保存信息</button></div><div class="card-body">
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">项目名称</label><input class="form-control" value="长安镇城中村自建房安全隐患排查整治项目"></div>
+      <div class="form-group"><label class="form-label">项目编号</label><input class="form-control" value="CZ-2026-CA-001"></div>
+      <div class="form-group"><label class="form-label">项目地址</label><input class="form-control" value="东莞市长安镇锦厦社区、霄边社区"></div>
+      <div class="form-group"><label class="form-label">管理单位</label><input class="form-control" value="长安镇住房和城乡建设局"></div>
+      <div class="form-group"><label class="form-label">技术支持单位</label><input class="form-control" value="广东省建筑科学研究院"></div>
+      <div class="form-group"><label class="form-label">街道办事处</label><input class="form-control" value="锦厦社区居委会、霄边社区居委会"></div>
+      <div class="form-group"><label class="form-label">排查开始日期</label><input class="form-control" type="date" value="2026-01-10"></div>
+      <div class="form-group"><label class="form-label">计划完成日期</label><input class="form-control" type="date" value="2026-09-30"></div>
+      <div class="form-group"><label class="form-label">涉及自建房数量</label><input class="form-control" value="2,350栋"></div>
+      <div class="form-group"><label class="form-label">排查人员数量</label><input class="form-control" value="45人"></div>
+      <div class="form-group" style="grid-column:span 2"><label class="form-label">项目简介</label><textarea class="form-control" rows="3">长安镇城中村自建房安全隐患排查整治项目，覆盖锦厦社区和霄边社区共2,350栋自建房，重点排查违规加层、改变承重结构、消防通道堵塞、电气线路老化等安全隐患，建立一户一档台账，分类推进整治。</textarea></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-warning-center">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 城镇自建房</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-bell" style="color:#f59e0b"></i> 城镇自建房预警中心</div><span style="font-size:12px;color:#94a3b8">实时监控</span></div><div class="card-body">
+    <div class="warning-stats">
+      <div class="warning-stat"><div class="num" style="color:#ef4444">3</div><div class="lbl">今日红色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#f59e0b">8</div><div class="lbl">本周橙色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#eab308">20</div><div class="lbl">本月黄色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#10b981">86%</div><div class="lbl">处置率</div></div>
+    </div>
+    <div class="warning-list">
+      <div class="warning-item red"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#ef4444"><i class="fa-solid fa-circle-exclamation" style="margin-right:6px"></i>D级危房人员未搬离预警</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">长安镇锦厦社区振兴路18号 | D级危房仍有3户居住 | 2026-06-04 09:15</div></div><button class="btn btn-primary" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item red"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#ef4444"><i class="fa-solid fa-circle-exclamation" style="margin-right:6px"></i>自建房在建工程坍塌预警</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">厚街镇桥头社区 | 4层在建自建房支撑体系变形 | 2026-06-04 14:30</div></div><button class="btn btn-primary" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item orange"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#f59e0b"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px"></i>违规加层施工预警</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">虎门镇南栅社区 | 2栋自建房擅自从3层加建至6层 | 2026-06-03 16:20</div></div><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item yellow"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#eab308"><i class="fa-solid fa-circle-info" style="margin-right:6px"></i>汛期自建房安全巡查提醒</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">全市各镇街 | 汛期来临，加强低洼地带自建房巡查 | 2026-06-01 08:00</div></div><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">已读</button></div></div>
+    </div>
+  </div></div>
+</div>
+
+<script>
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.action === 'switchSection') {
+        document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+        const target = document.getElementById('section-' + event.data.section);
+        if (target) target.classList.add('active');
+    }
+});
+// Theme sync
+(function(){var s=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-theme',s);})();
+window.addEventListener('message',function(e){if(e.data&&e.data.action==='setTheme'){document.documentElement.setAttribute('data-theme',e.data.theme);localStorage.setItem('theme',e.data.theme);}});
+</script>
+</body>
+</html>

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交通 - 智能风险研判</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+/* Theme Variables */
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e37400; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+    --modal-bg: #ffffff; --tag-bg: #f1f3f4; --tag-border: #dadce0;
+    --header-bg: rgba(0,0,0,0.02); --tree-group-bg: rgba(26,115,232,0.06);
+    --tree-row-hover: rgba(0,0,0,0.02);
+    --dot-red: #d93025; --dot-orange: #e37400; --dot-yellow: #f9ab00; --dot-blue: #1a73e8;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+    --modal-bg: #112240; --tag-bg: rgba(255,255,255,0.05); --tag-border: #1e3a5f;
+    --header-bg: rgba(0,0,0,0.2); --tree-group-bg: rgba(30,111,219,0.08);
+    --tree-row-hover: rgba(255,255,255,0.02);
+    --dot-red: #ef4444; --dot-orange: #f59e0b; --dot-yellow: #eab308; --dot-blue: #3b82f6;
+}
+
+body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: #0a1628; color: #e2e8f0; margin: 0; padding: 20px; }
+.card { background: #112240; border: 1px solid #1e3a5f; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+.card-header { padding: 16px 20px; border-bottom: 1px solid #1e3a5f; display: flex; align-items: center; justify-content: space-between; }
+.card-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 20px; }
+.page-section { display: none; }
+.page-section.active { display: block; }
+.breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-input { background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; }
+.filter-input:focus { outline: none; border-color: #1e6fdb; }
+.filter-select { background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: #94a3b8; border-bottom: 1px solid #1e3a5f; background: rgba(0,0,0,0.2); }
+.data-table td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #1e3a5f; }
+.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+.btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.3s; border: none; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: #1e6fdb; color: #fff; }
+.btn-primary:hover { background: #1557b0; }
+.btn-outline { background: transparent; border: 1px solid #1e3a5f; color: #94a3b8; }
+.btn-outline:hover { border-color: #1e6fdb; color: #1e6fdb; }
+.risk-tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.risk-tag.red { background: rgba(239,68,68,0.15); color: #ef4444; }
+.risk-tag.orange { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.risk-tag.yellow { background: rgba(234,179,8,0.15); color: #eab308; }
+.risk-tag.blue { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.status-badge { padding: 2px 10px; border-radius: 10px; font-size: 12px; }
+.status-badge.pending { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.status-badge.approved { background: rgba(16,185,129,0.15); color: #10b981; }
+.status-badge.draft { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.pagination { display: flex; justify-content: flex-end; gap: 4px; margin-top: 16px; }
+.page-btn { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; border: 1px solid #1e3a5f; background: #112240; color: #94a3b8; }
+.page-btn:hover { border-color: #1e6fdb; color: #1e6fdb; }
+.page-btn.active { background: #1e6fdb; color: #fff; border-color: #1e6fdb; }
+.icon-box { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.measure-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.measure-card { background: rgba(255,255,255,0.02); border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px; transition: all 0.3s; }
+.measure-card:hover { border-color: #1e6fdb; transform: translateY(-2px); }
+.measure-card h4 { margin: 0 0 8px 0; font-size: 14px; }
+.measure-card p { margin: 0 0 12px 0; font-size: 12px; color: #94a3b8; line-height: 1.6; }
+.measure-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.measure-tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; background: rgba(30,111,219,0.1); color: #1e6fdb; }
+.step-indicator { display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 30px; }
+.step { display: flex; align-items: center; gap: 0; }
+.step-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; border: 2px solid #1e3a5f; color: #94a3b8; }
+.step-circle.active { background: #1e6fdb; border-color: #1e6fdb; color: #fff; }
+.step-circle.done { background: #10b981; border-color: #10b981; color: #fff; }
+.step-label { font-size: 12px; color: #94a3b8; margin-top: 6px; text-align: center; }
+.step-line { width: 60px; height: 2px; background: #1e3a5f; margin: 0 8px; margin-bottom: 20px; }
+.step-line.done { background: #10b981; }
+.archive-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.archive-item { padding: 14px 16px; border-bottom: 1px solid #1e3a5f; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.2s; }
+.archive-item:hover { background: rgba(255,255,255,0.02); }
+.archive-item:last-child { border-bottom: none; }
+.stat-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.stat-card { background: rgba(255,255,255,0.03); border: 1px solid #1e3a5f; border-radius: 8px; padding: 16px; }
+.stat-card .number { font-size: 28px; font-weight: 700; color: #1e6fdb; }
+.stat-card .label { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.eval-card { background: rgba(255,255,255,0.02); border: 1px solid #1e3a5f; border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+.eval-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.eval-stars { color: #f59e0b; font-size: 14px; }
+.progress-bar { height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+.progress-fill.green { background: #10b981; }
+.progress-fill.orange { background: #f59e0b; }
+.progress-fill.red { background: #ef4444; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { margin-bottom: 0; }
+.form-label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+.form-control { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid #1e3a5f; border-radius: 6px; padding: 10px 12px; color: #e2e8f0; font-size: 13px; box-sizing: border-box; }
+.form-control:focus { outline: none; border-color: #1e6fdb; }
+.warning-list { display: flex; flex-direction: column; gap: 12px; }
+.warning-item { padding: 16px; border-radius: 8px; border-left: 4px solid; background: rgba(255,255,255,0.02); }
+.warning-item.red { border-left-color: #ef4444; }
+.warning-item.orange { border-left-color: #f59e0b; }
+.warning-item.yellow { border-left-color: #eab308; }
+.warning-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.warning-stat { background: rgba(255,255,255,0.03); border: 1px solid #1e3a5f; border-radius: 8px; padding: 16px; text-align: center; }
+.warning-stat .num { font-size: 24px; font-weight: 700; }
+.warning-stat .lbl { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.css-chart { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding-top: 10px; }
+.chart-bar { flex: 1; border-radius: 4px 4px 0 0; transition: height 0.5s; position: relative; }
+.chart-bar .bar-label { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #94a3b8; white-space: nowrap; }
+.gen-form { max-width: 600px; margin: 0 auto; }
+.gen-form .form-group { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<div class="page-section active" id="section-risk-list-build">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 交通</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-traffic-light" style="color:#1e6fdb"></i> 交通安全风险清单</div><button class="btn btn-primary"><i class="fa-solid fa-plus"></i> 新建清单</button></div><div class="card-body">
+    <div class="filter-bar">
+      <input class="filter-input" placeholder="搜索清单编号/名称..." style="width:220px">
+      <select class="filter-select"><option>全部等级</option><option>重大风险</option><option>较大风险</option><option>一般风险</option><option>低风险</option></select>
+      <select class="filter-select"><option>全部状态</option><option>已发布</option><option>审核中</option><option>草稿</option></select>
+      <select class="filter-select"><option>全部路段</option><option>天河路</option><option>环城高速</option><option>中山大道</option><option>解放路</option><option>滨江路</option></select>
+    </div>
+    <table class="data-table"><thead><tr><th>清单编号</th><th>清单名称</th><th>风险等级</th><th>所属路段</th><th>创建人</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead><tbody>
+      <tr><td>JT-2026-001</td><td>天河路-体育西路口拥堵安全风险清单</td><td><span class="risk-tag red">重大风险</span></td><td>天河路</td><td>刘志远</td><td>2026-05-29</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>JT-2026-002</td><td>环城高速K23-K28段团雾风险清单</td><td><span class="risk-tag red">重大风险</span></td><td>环城高速</td><td>黄伟明</td><td>2026-05-26</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>JT-2026-003</td><td>中山大道施工围挡路段通行风险清单</td><td><span class="risk-tag orange">较大风险</span></td><td>中山大道</td><td>林志刚</td><td>2026-05-23</td><td><span class="status-badge pending">审核中</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>JT-2026-004</td><td>解放路-人民路口信号灯故障风险清单</td><td><span class="risk-tag yellow">一般风险</span></td><td>解放路</td><td>杨秀芳</td><td>2026-05-20</td><td><span class="status-badge approved">已发布</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+      <tr><td>JT-2026-005</td><td>滨江路沿江护栏损毁隐患排查清单</td><td><span class="risk-tag blue">低风险</span></td><td>滨江路</td><td>马国栋</td><td>2026-05-16</td><td><span class="status-badge draft">草稿</span></td><td><button class="btn btn-outline" style="padding:4px 10px;font-size:12px">查看</button></td></tr>
+    </tbody></table>
+    <div class="pagination"><div class="page-btn"><i class="fa-solid fa-chevron-left" style="font-size:11px"></i></div><div class="page-btn active">1</div><div class="page-btn">2</div><div class="page-btn"><i class="fa-solid fa-chevron-right" style="font-size:11px"></i></div></div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-measure">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 交通</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-shield-halved" style="color:#10b981"></i> 交通安全风险措施库</div><button class="btn btn-primary"><i class="fa-solid fa-plus"></i> 新增措施</button></div><div class="card-body">
+    <div class="measure-grid">
+      <div class="measure-card"><h4><i class="fa-solid fa-traffic-light" style="color:#ef4444;margin-right:6px"></i>智能信号灯管控</h4><div class="measure-tags"><span class="measure-tag">信号优化</span><span class="measure-tag">AI调度</span></div><p>部署AI驱动的自适应信号灯控制系统，根据实时车流量动态调整信号配时，减少路口拥堵和冲突。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-road" style="color:#1e6fdb;margin-right:6px"></i>路面隐患排查修复</h4><div class="measure-tags"><span class="measure-tag">路面检测</span><span class="measure-tag">坑槽修复</span></div><p>定期开展路面病害巡查，对坑槽、裂缝、井盖缺失等隐患建立台账，限时修复，消除行车安全隐患。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-cloud-sun-rain" style="color:#00b4d8;margin-right:6px"></i>恶劣天气应急保障</h4><div class="measure-tags"><span class="measure-tag">暴雨应对</span><span class="measure-tag">团雾预警</span></div><p>建立暴雨、团雾、冰雪等恶劣天气交通应急预案，及时发布路况信息，部署应急疏导力量。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-car-burst" style="color:#f59e0b;margin-right:6px"></i>事故多发路段治理</h4><div class="measure-tags"><span class="measure-tag">事故分析</span><span class="measure-tag">安全改造</span></div><p>对交通事故多发路段进行成因分析，针对性实施增设减速带、完善标志标线、改善视距等工程措施。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-person-walking" style="color:#10b981;margin-right:6px"></i>行人过街安全设施</h4><div class="measure-tags"><span class="measure-tag">斑马线</span><span class="measure-tag">过街天桥</span></div><p>在人流密集区域增设智能斑马线、行人过街信号灯，完善人行天桥和地下通道，保障行人通行安全。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+      <div class="measure-card"><h4><i class="fa-solid fa-camera" style="color:#1e6fdb;margin-right:6px"></i>电子警察全覆盖</h4><div class="measure-tags"><span class="measure-tag">超速抓拍</span><span class="measure-tag">违法监测</span></div><p>在重点路段安装电子警察系统，实现超速、闯红灯、违停等违法行为自动抓拍，提升执法覆盖率。</p><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">查看详情</button></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-list-gen">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 交通</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-wand-magic-sparkles" style="color:#00b4d8"></i> 交通安全风险清单生成</div></div><div class="card-body">
+    <div class="step-indicator">
+      <div class="step"><div><div class="step-circle done"><i class="fa-solid fa-check"></i></div><div class="step-label">选择风险源</div></div></div><div class="step-line done"></div>
+      <div class="step"><div><div class="step-circle done"><i class="fa-solid fa-check"></i></div><div class="step-label">配置清单参数</div></div></div><div class="step-line done"></div>
+      <div class="step"><div><div class="step-circle done"><i class="fa-solid fa-check"></i></div><div class="step-label">生成清单</div></div></div><div class="step-line done"></div>
+      <div class="step"><div><div class="step-circle active">4</div><div class="step-label">确认发布</div></div></div>
+    </div>
+    <div class="gen-form">
+      <div class="form-group"><label class="form-label">风险源类型</label><select class="form-control"><option>交通 - 路口拥堵</option><option>交通 - 路面病害</option><option>交通 - 事故多发</option><option>交通 - 信号设施</option></select></div>
+      <div class="form-group"><label class="form-label">适用路段</label><select class="form-control"><option>天河路</option><option>环城高速</option><option>全部路段</option></select></div>
+      <div class="form-group"><label class="form-label">风险清单模板</label><select class="form-control"><option>道路交通安全综合检查清单</option><option>恶劣天气交通应急清单</option><option>事故多发路段治理清单</option></select></div>
+      <div class="form-group"><label class="form-label">备注说明</label><textarea class="form-control" rows="3" placeholder="请输入备注信息..."></textarea></div>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:20px"><button class="btn btn-outline">上一步</button><button class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> 确认发布</button></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-archive-overview">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 交通</div>
+  <div class="archive-layout">
+    <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-folder-open" style="color:#1e6fdb"></i> 交通安全风险档案列表</div></div><div style="padding:0">
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">天河路商圈交通综合治理档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">天河路 | 2026-02-10建档</div></div><span class="risk-tag red">重大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">环城高速团雾路段安全档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">环城高速 | 2026-03-05建档</div></div><span class="risk-tag red">重大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">中山大道施工期交通疏导档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">中山大道 | 2026-04-18建档</div></div><span class="risk-tag orange">较大风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">解放路信号设施隐患排查档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">解放路 | 2026-05-02建档</div></div><span class="risk-tag yellow">一般风险</span></div>
+      <div class="archive-item"><div><div style="font-size:13px;font-weight:600">滨江路沿江步道安全巡查档案</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">滨江路 | 2026-05-20建档</div></div><span class="risk-tag blue">低风险</span></div>
+    </div></div>
+    <div>
+      <div class="stat-cards"><div class="stat-card"><div class="number">52</div><div class="label">档案总数</div></div><div class="stat-card"><div class="number" style="color:#ef4444">14</div><div class="label">重大风险档案</div></div><div class="stat-card"><div class="number" style="color:#f59e0b">20</div><div class="label">较大风险档案</div></div><div class="stat-card"><div class="number" style="color:#10b981">18</div><div class="label">一般/低风险档案</div></div></div>
+      <div class="card"><div class="card-header"><div class="card-title">月度档案分布</div></div><div class="card-body"><div class="css-chart"><div class="chart-bar" style="height:45%;background:#1e6fdb"><span class="bar-label">1月</span></div><div class="chart-bar" style="height:60%;background:#1e6fdb"><span class="bar-label">2月</span></div><div class="chart-bar" style="height:65%;background:#f59e0b"><span class="bar-label">3月</span></div><div class="chart-bar" style="height:80%;background:#f59e0b"><span class="bar-label">4月</span></div><div class="chart-bar" style="height:100%;background:#ef4444"><span class="bar-label">5月</span></div><div class="chart-bar" style="height:70%;background:#1e6fdb"><span class="bar-label">6月</span></div></div></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="page-section" id="section-risk-archive-eval">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 交通</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-chart-line" style="color:#00b4d8"></i> 交通安全风险控制效果评估</div></div><div class="card-body">
+    <div class="eval-card"><div class="eval-header"><div><div style="font-size:14px;font-weight:600">天河路商圈交通拥堵治理效果</div><div style="font-size:12px;color:#94a3b8;margin-top:4px">评估周期: 2026年3月 - 5月</div></div><div class="eval-stars"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-regular fa-star"></i><span style="color:#94a3b8;margin-left:6px;font-size:12px">3.8分</span></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">信号灯配时优化率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:90%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">路口通行效率提升</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:82%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">交通事故下降率</div><div class="progress-bar"><div class="progress-fill orange" style="width:65%"></div></div>
+    </div>
+    <div class="eval-card"><div class="eval-header"><div><div style="font-size:14px;font-weight:600">环城高速团雾路段治理效果</div><div style="font-size:12px;color:#94a3b8;margin-top:4px">评估周期: 2026年4月 - 5月</div></div><div class="eval-stars"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><span style="color:#94a3b8;margin-left:6px;font-size:12px">4.8分</span></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">雾区引导设施完好率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:98%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">限速管控执行率</div><div class="progress-bar" style="margin-bottom:12px"><div class="progress-fill green" style="width:95%"></div></div>
+      <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">事故发生降低率</div><div class="progress-bar"><div class="progress-fill green" style="width:88%"></div></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-risk-archive-project">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 交通</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-traffic-light" style="color:#1e6fdb"></i> 项目基础信息</div><button class="btn btn-primary"><i class="fa-solid fa-save"></i> 保存信息</button></div><div class="card-body">
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">项目名称</label><input class="form-control" value="天河路商圈智慧交通综合治理工程"></div>
+      <div class="form-group"><label class="form-label">项目编号</label><input class="form-control" value="JT-2026-TH-001"></div>
+      <div class="form-group"><label class="form-label">项目地址</label><input class="form-control" value="广州市天河区天河路（天河立交-岗顶段）"></div>
+      <div class="form-group"><label class="form-label">管理单位</label><input class="form-control" value="广州市公安交警支队天河大队"></div>
+      <div class="form-group"><label class="form-label">设计单位</label><input class="form-control" value="广州市交通规划研究院"></div>
+      <div class="form-group"><label class="form-label">施工单位</label><input class="form-control" value="广州交通工程建设有限公司"></div>
+      <div class="form-group"><label class="form-label">开工日期</label><input class="form-control" type="date" value="2026-02-15"></div>
+      <div class="form-group"><label class="form-label">计划竣工日期</label><input class="form-control" type="date" value="2026-11-30"></div>
+      <div class="form-group"><label class="form-label">治理路段长度（km）</label><input class="form-control" value="3.8"></div>
+      <div class="form-group"><label class="form-label">涉及路口数</label><input class="form-control" value="12"></div>
+      <div class="form-group" style="grid-column:span 2"><label class="form-label">项目简介</label><textarea class="form-control" rows="3">天河路商圈智慧交通综合治理工程，治理范围东起天河立交、西至岗顶，全长3.8公里，涉及12个信号控制路口。项目内容包括智能信号灯改造、路面修复、标志标线更新、电子警察部署及行人过街设施完善。</textarea></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="page-section" id="section-warning-center">
+  <div class="breadcrumb"><i class="fa-solid fa-house" style="font-size:12px"></i> 首页 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 智能风险研判 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i> 交通</div>
+  <div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-bell" style="color:#f59e0b"></i> 交通安全预警中心</div><span style="font-size:12px;color:#94a3b8">实时监控</span></div><div class="card-body">
+    <div class="warning-stats">
+      <div class="warning-stat"><div class="num" style="color:#ef4444">4</div><div class="lbl">今日红色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#f59e0b">9</div><div class="lbl">本周橙色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#eab308">22</div><div class="lbl">本月黄色预警</div></div>
+      <div class="warning-stat"><div class="num" style="color:#10b981">95%</div><div class="lbl">处置率</div></div>
+    </div>
+    <div class="warning-list">
+      <div class="warning-item red"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#ef4444"><i class="fa-solid fa-circle-exclamation" style="margin-right:6px"></i>环城高速能见度极低预警</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">环城高速K23-K28段 | 能见度不足50m | 2026-06-04 06:15</div></div><button class="btn btn-primary" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item red"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#ef4444"><i class="fa-solid fa-circle-exclamation" style="margin-right:6px"></i>多车追尾事故预警</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">中山大道与解放路口 | 涉及5辆车，交通中断 | 2026-06-04 08:42</div></div><button class="btn btn-primary" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item orange"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#f59e0b"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px"></i>信号灯系统故障预警</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">解放路-人民路口 | 信号灯全部闪烁黄灯 | 2026-06-04 07:30</div></div><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">处置</button></div></div>
+      <div class="warning-item yellow"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:14px;font-weight:600;color:#eab308"><i class="fa-solid fa-circle-info" style="margin-right:6px"></i>周末商圈大客流交通提醒</div><div style="font-size:12px;color:#94a3b8;margin-top:6px">天河路商圈 | 预计客流增长40%，建议限流 | 2026-06-04 09:00</div></div><button class="btn btn-outline" style="padding:4px 12px;font-size:12px">已读</button></div></div>
+    </div>
+  </div></div>
+</div>
+
+<script>
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.action === 'switchSection') {
+        document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active'));
+        const target = document.getElementById('section-' + event.data.section);
+        if (target) target.classList.add('active');
+    }
+});
+// Theme sync
+(function(){var s=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-theme',s);})();
+window.addEventListener('message',function(e){if(e.data&&e.data.action==='setTheme'){document.documentElement.setAttribute('data-theme',e.data.theme);localStorage.setItem('theme',e.data.theme);}});
+</script>
+</body>
+</html>

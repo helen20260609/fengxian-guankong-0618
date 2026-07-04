@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>机构总览看板 - 第三方服务机构</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+:root {
+    --primary: #1a73e8;
+    --primary-dark: #1557b0;
+    --primary-light: #e8f0fe;
+    --secondary: #0097a7;
+    --danger: #d93025;
+    --warning: #e37400;
+    --success: #1e8e3e;
+    --bg-dark: #f0f2f5;
+    --bg-card: #ffffff;
+    --bg-hover: #e8eaed;
+    --text-primary: #202124;
+    --text-secondary: #5f6368;
+    --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08);
+    --input-bg: #ffffff;
+    --input-border: #dadce0;
+    --header-bg: rgba(0,0,0,0.02);
+    --tree-row-hover: rgba(0,0,0,0.02);
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb;
+    --primary-dark: #1557b0;
+    --primary-light: #e8f1fd;
+    --secondary: #00b4d8;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --success: #10b981;
+    --bg-dark: #0a1628;
+    --bg-card: #112240;
+    --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3);
+    --input-bg: rgba(255,255,255,0.05);
+    --input-border: #1e3a5f;
+    --header-bg: rgba(0,0,0,0.2);
+    --tree-row-hover: rgba(255,255,255,0.02);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: var(--bg-dark); color: var(--text-primary); margin: 0; padding: 20px; }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 1px 3px var(--shadow); }
+.card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.card-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 20px; }
+.breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+
+/* 统计卡片 */
+.stat-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 20px; }
+.stat-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; align-items: center; gap: 16px; transition: all 0.3s; }
+.stat-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+.stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.stat-icon.blue { background: rgba(26,115,232,0.12); color: var(--primary); }
+.stat-icon.green { background: rgba(30,142,62,0.12); color: var(--success); }
+.stat-icon.orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+.stat-icon.red { background: rgba(217,48,37,0.12); color: var(--danger); }
+.stat-icon.purple { background: rgba(156,39,176,0.12); color: #9c27b0; }
+.stat-icon.cyan { background: rgba(0,188,212,0.12); color: #00bcd4; }
+.stat-info { display: flex; flex-direction: column; }
+.stat-number { font-size: 28px; font-weight: 700; color: var(--text-primary); line-height: 1; }
+.stat-label { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+
+/* 图表区域 */
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.chart-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.chart-title { font-size: 15px; font-weight: 600; }
+.chart-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.chart-body { padding: 40px 20px 20px; height: 340px; position: relative; }
+
+/* 柱状图 */
+.bar-chart { display: flex; align-items: flex-end; justify-content: space-around; height: 240px; padding: 20px 10px 0; }
+.bar-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.bar-value { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.bar-rect { width: 40px; background: var(--primary); border-radius: 4px 4px 0 0; transition: all 0.3s; min-height: 4px; }
+.bar-rect:hover { opacity: 0.8; }
+.bar-label { font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+
+/* 饼图/环形图 */
+.pie-chart { display: flex; align-items: center; justify-content: center; height: 100%; }
+.pie-container { position: relative; width: 200px; height: 200px; }
+.pie-legend { margin-left: 40px; display: flex; flex-direction: column; gap: 12px; }
+.legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+.legend-value { color: var(--text-secondary); margin-left: 4px; }
+
+/* 折线图 */
+.line-chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.line-chart-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.line-chart-title { font-size: 15px; font-weight: 600; }
+.line-chart-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.line-chart-body { padding: 20px; height: 320px; position: relative; }
+.line-chart { position: relative; width: 100%; height: 100%; }
+.line-chart-svg { width: 100%; height: 100%; }
+.line-chart-tooltip { position: absolute; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; box-shadow: 0 4px 12px var(--shadow); pointer-events: none; opacity: 0; transition: opacity 0.2s; font-size: 13px; z-index: 10; }
+.line-chart-tooltip.show { opacity: 1; }
+.line-chart-tooltip-month { color: var(--text-secondary); margin-bottom: 4px; }
+.line-chart-tooltip-value { color: var(--primary); font-weight: 600; font-size: 16px; }
+
+/* 响应式 */
+@media (max-width: 1200px) {
+    .stat-row { grid-template-columns: repeat(3, 1fr); }
+    .chart-row { grid-template-columns: 1fr; }
+    .filter-bar { flex-wrap: wrap; }
+}
+@media (max-width: 768px) {
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+    .filter-bar { flex-direction: column; align-items: stretch; }
+    .filter-group { width: 100%; }
+    .filter-group select { flex: 1; }
+}
+
+/* 周期报表 */
+.report-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.report-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.report-title { font-size: 15px; font-weight: 600; }
+.report-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.report-body { padding: 20px; }
+
+/* 筛选栏 */
+.filter-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-group { display: flex; align-items: center; gap: 8px; }
+.filter-group label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.filter-group select { padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; min-width: 120px; }
+.filter-group select:focus { border-color: var(--primary); }
+.filter-actions { display: flex; gap: 8px; margin-left: auto; }
+.btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { opacity: 0.9; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-primary); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+/* 数据表格 */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead th { padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); background: var(--header-bg); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.data-table tbody td { padding: 14px 16px; font-size: 13px; color: var(--text-primary); border-bottom: 1px solid var(--border); }
+.data-table tbody tr:hover { background: var(--tree-row-hover); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.td-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.badge-blue { background: rgba(26,115,232,0.12); color: var(--primary); }
+.badge-green { background: rgba(30,142,62,0.12); color: var(--success); }
+.badge-orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+.badge-purple { background: rgba(156,39,176,0.12); color: #9c27b0; }
+.badge-cyan { background: rgba(0,188,212,0.12); color: #00bcd4; }
+.td-progress { display: flex; align-items: center; gap: 8px; }
+.progress-bar { width: 80px; height: 6px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; }
+.progress-fill.blue { background: var(--primary); }
+.progress-fill.green { background: var(--success); }
+.progress-fill.orange { background: var(--warning); }
+.progress-fill.purple { background: #9c27b0; }
+.progress-fill.cyan { background: #00bcd4; }
+
+/* 折线图 */
+.line-chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.line-chart-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.line-chart-title { font-size: 15px; font-weight: 600; }
+.line-chart-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.line-chart-body { padding: 20px; height: 320px; position: relative; }
+.line-chart { position: relative; width: 100%; height: 100%; }
+.line-chart-svg { width: 100%; height: 100%; }
+.line-chart-tooltip { position: absolute; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; box-shadow: 0 4px 12px var(--shadow); pointer-events: none; opacity: 0; transition: opacity 0.2s; font-size: 13px; z-index: 10; }
+.line-chart-tooltip.show { opacity: 1; }
+.line-chart-tooltip-month { color: var(--text-secondary); margin-bottom: 4px; }
+.line-chart-tooltip-value { color: var(--primary); font-weight: 600; font-size: 16px; }
+</style>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+
+<!-- 面包屑 -->
+
+
+<!-- 统计卡片 -->
+<div class="stat-row">
+    <div class="stat-item">
+        <div class="stat-icon blue"><i class="fas fa-building"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">128</div>
+            <div class="stat-label">机构总数</div>
+        </div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-icon green"><i class="fas fa-layer-group"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">8</div>
+            <div class="stat-label">专业领域</div>
+        </div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-icon orange"><i class="fas fa-calendar-plus"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">8</div>
+            <div class="stat-label">本月新增</div>
+        </div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-icon red"><i class="fas fa-clock"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">12</div>
+            <div class="stat-label">待审核</div>
+        </div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-icon purple"><i class="fas fa-file-contract"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">47</div>
+            <div class="stat-label">合同总数</div>
+        </div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-icon cyan"><i class="fas fa-star"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">AAA</div>
+            <div class="stat-label">最高信用</div>
+        </div>
+    </div>
+</div>
+
+<!-- 图表区域 -->
+<div class="chart-row">
+    <!-- 业务分布 -->
+    <div class="chart-card">
+        <div class="chart-header">
+            <div class="chart-title">业务分布 <span>按风险领域（点击柱状图下钻查看明细）</span></div>
+        </div>
+        <div class="chart-body" style="padding: 20px; height: 340px;">
+            <div id="businessBarChart" style="width: 100%; height: 100%;"></div>
+        </div>
+    </div>
+
+    <!-- 机构类型占比 -->
+    <div class="chart-card">
+        <div class="chart-header">
+            <div class="chart-title">机构类型 <span>占比</span></div>
+        </div>
+        <div class="chart-body">
+            <div class="pie-chart">
+                <div class="pie-container">
+                    <svg viewBox="0 0 200 200" width="200" height="200">
+                        <!-- 环形图背景 -->
+                        <circle cx="100" cy="100" r="80" fill="none" stroke="var(--border)" stroke-width="30"/>
+                        <!-- 检测机构 40.63% -->
+                        <circle cx="100" cy="100" r="80" fill="none" stroke="#1a73e8" stroke-width="30"
+                            stroke-dasharray="204.2 297.8" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
+                        <!-- 评估机构 29.69% -->
+                        <circle cx="100" cy="100" r="80" fill="none" stroke="#10b981" stroke-width="30"
+                            stroke-dasharray="149.4 352.6" stroke-dashoffset="-204.2" transform="rotate(-90 100 100)"/>
+                        <!-- 咨询机构 21.87% -->
+                        <circle cx="100" cy="100" r="80" fill="none" stroke="#f59e0b" stroke-width="30"
+                            stroke-dasharray="110.0 392.0" stroke-dashoffset="-353.6" transform="rotate(-90 100 100)"/>
+                        <!-- 其他 7.81% -->
+                        <circle cx="100" cy="100" r="80" fill="none" stroke="#9c27b0" stroke-width="30"
+                            stroke-dasharray="39.2 462.8" stroke-dashoffset="-463.6" transform="rotate(-90 100 100)"/>
+                        <!-- 中心空白 -->
+                        <circle cx="100" cy="100" r="55" fill="var(--bg-card)"/>
+                    </svg>
+                </div>
+                <div class="pie-legend">
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#1a73e8"></div>
+                        <span>检测机构</span>
+                        <span class="legend-value">40.63%</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#10b981"></div>
+                        <span>评估机构</span>
+                        <span class="legend-value">29.69%</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#f59e0b"></div>
+                        <span>咨询机构</span>
+                        <span class="legend-value">21.87%</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#9c27b0"></div>
+                        <span>其他</span>
+                        <span class="legend-value">7.81%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 多维分析：近12个月业绩趋势 -->
+<div class="line-chart-card">
+    <div class="line-chart-header">
+        <div class="line-chart-title">多维分析 <span>近12个月业绩趋势</span></div>
+    </div>
+    <div class="line-chart-body">
+        <div class="line-chart" id="trendChart">
+            <svg class="line-chart-svg" viewBox="0 0 800 280" preserveAspectRatio="none">
+                <!-- 背景网格线 -->
+                <g class="grid-lines">
+                    <line x1="60" y1="20" x2="780" y2="20" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,2"/>
+                    <line x1="60" y1="70" x2="780" y2="70" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,2"/>
+                    <line x1="60" y1="120" x2="780" y2="120" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,2"/>
+                    <line x1="60" y1="170" x2="780" y2="170" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,2"/>
+                    <line x1="60" y1="220" x2="780" y2="220" stroke="var(--border)" stroke-width="1" stroke-dasharray="2,2"/>
+                </g>
+                <!-- Y轴标签 -->
+                <g class="y-labels" style="font-size:11px; fill: var(--text-secondary);">
+                    <text x="50" y="25" text-anchor="end">35</text>
+                    <text x="50" y="75" text-anchor="end">30</text>
+                    <text x="50" y="125" text-anchor="end">25</text>
+                    <text x="50" y="175" text-anchor="end">20</text>
+                    <text x="50" y="225" text-anchor="end">15</text>
+                    <text x="50" y="255" text-anchor="end" style="font-size:10px;">项目数</text>
+                </g>
+                <!-- X轴标签 -->
+                <g class="x-labels" style="font-size:12px; fill: var(--text-secondary);">
+                    <text x="60" y="250" text-anchor="middle">1月</text>
+                    <text x="180" y="250" text-anchor="middle">2月</text>
+                    <text x="300" y="250" text-anchor="middle">3月</text>
+                    <text x="420" y="250" text-anchor="middle">4月</text>
+                    <text x="540" y="250" text-anchor="middle">5月</text>
+                    <text x="660" y="250" text-anchor="middle">6月</text>
+                    <text x="780" y="250" text-anchor="middle">7月</text>
+                </g>
+                <!-- 渐变填充区域 -->
+                <defs>
+                    <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="rgba(26,115,232,0.2)"/>
+                        <stop offset="100%" stop-color="rgba(26,115,232,0.02)"/>
+                    </linearGradient>
+                </defs>
+                <!-- 填充区域 -->
+                <path d="M 60,180 L 180,150 L 300,140 L 420,190 L 540,100 L 660,110 L 780,60 L 780,240 L 60,240 Z" 
+                      fill="url(#areaGradient)" stroke="none"/>
+                <!-- 折线 -->
+                <path d="M 60,180 L 180,150 L 300,140 L 420,190 L 540,100 L 660,110 L 780,60" 
+                      fill="none" stroke="#1a73e8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- 数据点 -->
+                <circle cx="60" cy="180" r="5" fill="#1a73e8" stroke="#fff" stroke-width="2"/>
+                <circle cx="180" cy="150" r="5" fill="#1a73e8" stroke="#fff" stroke-width="2"/>
+                <circle cx="300" cy="140" r="5" fill="#1a73e8" stroke="#fff" stroke-width="2"/>
+                <circle cx="420" cy="190" r="5" fill="#1a73e8" stroke="#fff" stroke-width="2"/>
+                <circle cx="540" cy="100" r="5" fill="#1a73e8" stroke="#fff" stroke-width="2"/>
+                <circle cx="660" cy="110" r="5" fill="#1a73e8" stroke="#fff" stroke-width="2"/>
+                <circle cx="780" cy="60" r="5" fill="#1a73e8" stroke="#fff" stroke-width="2"/>
+            </svg>
+            <!-- Tooltip -->
+            <div class="line-chart-tooltip" id="chartTooltip">
+                <div class="line-chart-tooltip-month">1月</div>
+                <div class="line-chart-tooltip-value">22</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 截图展示：周期报表配置与导出 -->
+<div class="line-chart-card">
+    <div class="line-chart-header">
+        <div class="line-chart-title">周期报表 <span>配置与导出</span></div>
+    </div>
+    <div class="report-body" style="padding: 20px;">
+        <!-- 筛选栏 -->
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label>统计周期</label>
+                <select>
+                    <option>月报</option>
+                    <option>季报</option>
+                    <option>年报</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>时间范围</label>
+                <select>
+                    <option>2026-05</option>
+                    <option>2026-04</option>
+                    <option>2026-03</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>统计维度</label>
+                <select>
+                    <option>按专业领域</option>
+                    <option>按机构类型</option>
+                    <option>按地区分布</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>图表类型</label>
+                <select>
+                    <option>折线图</option>
+                    <option>柱状图</option>
+                    <option>饼图</option>
+                </select>
+            </div>
+            <div class="filter-actions">
+                <button class="btn btn-primary"><i class="fas fa-play"></i> 生成</button>
+                <button class="btn btn-success"><i class="fas fa-download"></i> 导出</button>
+                <button class="btn btn-outline"><i class="fas fa-share-alt"></i> 分享</button>
+            </div>
+        </div>
+        <!-- 数据表格 -->
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>专业领域</th>
+                    <th>机构数</th>
+                    <th>合同数</th>
+                    <th>合格率</th>
+                    <th>平均满意度</th>
+                    <th>信用均分</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="td-badge badge-blue">消防安全评估</span></td>
+                    <td>34</td>
+                    <td>112</td>
+                    <td>97.2%</td>
+                    <td>4.72</td>
+                    <td>86.4</td>
+                </tr>
+                <tr>
+                    <td><span class="td-badge badge-green">环境风险评估</span></td>
+                    <td>28</td>
+                    <td>76</td>
+                    <td>94.8%</td>
+                    <td>4.58</td>
+                    <td>82.1</td>
+                </tr>
+                <tr>
+                    <td><span class="td-badge badge-orange">建设工程检测</span></td>
+                    <td>22</td>
+                    <td>58</td>
+                    <td>96.1%</td>
+                    <td>4.63</td>
+                    <td>84.7</td>
+                </tr>
+                <tr>
+                    <td><span class="td-badge badge-purple">职业卫生评价</span></td>
+                    <td>19</td>
+                    <td>43</td>
+                    <td>93.5%</td>
+                    <td>4.45</td>
+                    <td>79.8</td>
+                </tr>
+                <tr>
+                    <td><span class="td-badge badge-cyan">安全生产标准化</span></td>
+                    <td>25</td>
+                    <td>53</td>
+                    <td>95.6%</td>
+                    <td>4.51</td>
+                    <td>81.3</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 机构名录查询 -->
+<div class="line-chart-card">
+    <div class="line-chart-header" style="display: flex; align-items: center; justify-content: space-between;">
+        <div class="line-chart-title" style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-list-ul" style="color: var(--primary);"></i> 机构名录查询</div>
+        <button class="btn btn-outline" style="font-size: 13px; padding: 6px 14px;"><i class="fas fa-download"></i> 导出名录</button>
+    </div>
+    <div class="report-body" style="padding: 20px;">
+        <!-- 查询筛选栏 -->
+        <div class="filter-bar" style="margin-bottom: 16px; background: var(--header-bg); padding: 16px; border-radius: 8px;">
+            <div class="filter-group">
+                <select style="min-width: 140px;">
+                    <option>全部专业领域</option>
+                    <option>消防安全评估</option>
+                    <option>环境风险评估</option>
+                    <option>建设工程检测</option>
+                    <option>职业卫生评价</option>
+                    <option>安全生产标准化</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <select style="min-width: 140px;">
+                    <option>全部信用等级</option>
+                    <option>AAA</option>
+                    <option>AA</option>
+                    <option>A</option>
+                    <option>B</option>
+                    <option>C</option>
+                </select>
+            </div>
+            <div class="filter-group" style="flex: 1; max-width: 300px;">
+                <input type="text" placeholder="机构名称 / 统一代码" style="padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; width: 100%;">
+            </div>
+            <div class="filter-group">
+                <button class="btn btn-primary"><i class="fas fa-search"></i> 查询</button>
+            </div>
+        </div>
+        <!-- 机构表格 -->
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>机构名称</th>
+                    <th>统一社会信用代码</th>
+                    <th>法人代表</th>
+                    <th>信用评分</th>
+                    <th>状态</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>中科检测技术有限公司</td>
+                    <td>91440101MA5XXXXXX</td>
+                    <td>张明</td>
+                    <td><span class="credit-badge credit-aaa">AAA</span> <span style="color: var(--text-secondary); font-size: 12px;">92.6</span></td>
+                    <td><span class="status-badge status-in">已入库</span></td>
+                </tr>
+                <tr>
+                    <td>华安风险评估中心</td>
+                    <td>91440106MA7XXXXXX</td>
+                    <td>李华</td>
+                    <td><span class="credit-badge credit-aa">AA</span> <span style="color: var(--text-secondary); font-size: 12px;">85.3</span></td>
+                    <td><span class="status-badge status-in">已入库</span></td>
+                </tr>
+                <tr>
+                    <td>南方应急管理研究院</td>
+                    <td>91440111MA9XXXXXX</td>
+                    <td>王强</td>
+                    <td><span class="credit-badge credit-a">A</span> <span style="color: var(--text-secondary); font-size: 12px;">78.9</span></td>
+                    <td><span class="status-badge status-pending">待复核</span></td>
+                </tr>
+                <tr>
+                    <td>安信消防技术公司</td>
+                    <td>91440101MA3XXXXXX</td>
+                    <td>陈静</td>
+                    <td><span class="credit-badge credit-b">B</span> <span style="color: var(--text-secondary); font-size: 12px;">65.2</span></td>
+                    <td><span class="status-badge status-abnormal">异常</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+/* 信用等级徽章 */
+.credit-badge { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 20px; border-radius: 10px; font-size: 11px; font-weight: 700; color: #fff; margin-right: 6px; }
+.credit-aaa { background: #1e8e3e; }
+.credit-aa { background: #34a853; }
+.credit-a { background: #00bcd4; }
+.credit-b { background: #f59e0b; }
+.credit-c { background: #d93025; }
+/* 状态徽章 */
+.status-badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.status-in { background: rgba(30,142,62,0.12); color: var(--success); }
+.status-pending { background: rgba(227,116,0,0.12); color: var(--warning); }
+.status-abnormal { background: rgba(217,48,37,0.12); color: var(--danger); }
+</style>
+
+<script>
+(function(){
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') {
+        document.documentElement.setAttribute('data-theme', e.data.theme);
+        localStorage.setItem('theme', e.data.theme);
+    }
+});
+
+// ECharts 业务分布柱状图
+document.addEventListener('DOMContentLoaded', function() {
+    var businessChart = echarts.init(document.getElementById('businessBarChart'));
+    var categoryData = [
+        { name: '建筑工地', value: 45, color: '#1a73e8' },
+        { name: '基坑', value: 32, color: '#34a853' },
+        { name: '交通', value: 28, color: '#f59e0b' },
+        { name: '玻璃幕墙', value: 24, color: '#9c27b0' },
+        { name: '燃气', value: 38, color: '#00bcd4' },
+        { name: '高空坠物', value: 20, color: '#e37400' },
+        { name: '城镇自建房', value: 35, color: '#1e8e3e' },
+        { name: '农村自建房', value: 30, color: '#7c4dff' }
+    ];
+    
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var textColor = isDark ? '#e2e8f0' : '#202124';
+    var secondaryTextColor = isDark ? '#94a3b8' : '#5f6368';
+    
+    var businessOption = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            backgroundColor: isDark ? '#112240' : '#ffffff',
+            borderColor: isDark ? '#1e3a5f' : '#dadce0',
+            textStyle: { color: textColor },
+            formatter: function(params) {
+                var data = categoryData[params[0].dataIndex];
+                return '<div style="font-weight:600">' + data.name + '</div>' +
+                       '<div>机构数量: <span style="color:' + data.color + ';font-weight:700">' + data.value + '</span></div>' +
+                       '<div style="font-size:12px;color:' + secondaryTextColor + ';margin-top:4px">点击查看该领域机构明细</div>';
+            }
+        },
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            top: '10%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'category',
+            data: categoryData.map(function(item) { return item.name; }),
+            axisLine: { lineStyle: { color: isDark ? '#1e3a5f' : '#dadce0' } },
+            axisLabel: { 
+                color: secondaryTextColor,
+                fontSize: 12,
+                interval: 0,
+                rotate: 0
+            },
+            axisTick: { show: false }
+        },
+        yAxis: {
+            type: 'value',
+            axisLine: { show: false },
+            axisTick: { show: false },
+            splitLine: { 
+                lineStyle: { 
+                    color: isDark ? '#1e3a5f' : '#e8eaed',
+                    type: 'dashed'
+                } 
+            },
+            axisLabel: { color: secondaryTextColor }
+        },
+        series: [{
+            type: 'bar',
+            data: categoryData.map(function(item) {
+                return {
+                    value: item.value,
+                    itemStyle: {
+                        color: item.color,
+                        borderRadius: [6, 6, 0, 0]
+                    }
+                };
+            }),
+            barWidth: '50%',
+            emphasis: {
+                itemStyle: {
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(0,0,0,0.3)'
+                }
+            }
+        }]
+    };
+    
+    businessChart.setOption(businessOption);
+    
+    // 点击下钻事件
+    businessChart.on('click', function(params) {
+        var category = categoryData[params.dataIndex];
+        showDrillDownModal(category.name, category.value, category.color);
+    });
+    
+    // 响应式调整
+    window.addEventListener('resize', function() {
+        businessChart.resize();
+    });
+    
+    // 主题切换时更新图表
+    window.addEventListener('message', function(e) {
+        if (e.data && e.data.action === 'setTheme') {
+            var newIsDark = e.data.theme === 'dark';
+            var newTextColor = newIsDark ? '#e2e8f0' : '#202124';
+            var newSecondaryTextColor = newIsDark ? '#94a3b8' : '#5f6368';
+            businessChart.setOption({
+                tooltip: {
+                    backgroundColor: newIsDark ? '#112240' : '#ffffff',
+                    borderColor: newIsDark ? '#1e3a5f' : '#dadce0',
+                    textStyle: { color: newTextColor }
+                },
+                xAxis: {
+                    axisLine: { lineStyle: { color: newIsDark ? '#1e3a5f' : '#dadce0' } },
+                    axisLabel: { color: newSecondaryTextColor }
+                },
+                yAxis: {
+                    splitLine: { lineStyle: { color: newIsDark ? '#1e3a5f' : '#e8eaed' } },
+                    axisLabel: { color: newSecondaryTextColor }
+                }
+            });
+        }
+    });
+    
+    // 下钻弹窗函数
+    function showDrillDownModal(categoryName, count, color) {
+        // 移除已存在的弹窗
+        var existingModal = document.getElementById('drillDownModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // 模拟该领域的机构数据
+        var orgData = generateOrgData(categoryName, count);
+        
+        var modal = document.createElement('div');
+        modal.id = 'drillDownModal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;';
+        
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var bgColor = isDark ? '#112240' : '#ffffff';
+        var borderColor = isDark ? '#1e3a5f' : '#dadce0';
+        var textColor = isDark ? '#e2e8f0' : '#202124';
+        var secondaryColor = isDark ? '#94a3b8' : '#5f6368';
+        
+        var rowsHtml = orgData.map(function(org, index) {
+            return '<tr style="border-bottom: 1px solid ' + borderColor + '">' +
+                '<td style="padding: 12px 16px; font-size: 13px; color: ' + textColor + '">' + (index + 1) + '</td>' +
+                '<td style="padding: 12px 16px; font-size: 13px; color: ' + textColor + '; font-weight: 500">' + org.name + '</td>' +
+                '<td style="padding: 12px 16px; font-size: 13px; color: ' + secondaryColor + '">' + org.code + '</td>' +
+                '<td style="padding: 12px 16px; font-size: 13px; color: ' + secondaryColor + '">' + org.type + '</td>' +
+                '<td style="padding: 12px 16px; font-size: 13px;"><span style="display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; background: ' + color + '20; color: ' + color + '">' + org.credit + '</span></td>' +
+                '<td style="padding: 12px 16px; font-size: 13px;"><span style="display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; ' + (org.status === '已入库' ? 'background: rgba(30,142,62,0.12); color: #1e8e3e;' : 'background: rgba(227,116,0,0.12); color: #e37400;') + '">' + org.status + '</span></td>' +
+                '</tr>';
+        }).join('');
+        
+        modal.innerHTML = '<div style="background: ' + bgColor + '; border: 1px solid ' + borderColor + '; border-radius: 12px; width: 90%; max-width: 900px; max-height: 80vh; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); display: flex; flex-direction: column;">' +
+            '<div style="padding: 20px 24px; border-bottom: 1px solid ' + borderColor + '; display: flex; align-items: center; justify-content: space-between;">' +
+                '<div style="display: flex; align-items: center; gap: 12px;">' +
+                    '<div style="width: 40px; height: 40px; border-radius: 10px; background: ' + color + '20; display: flex; align-items: center; justify-content: center; color: ' + color + '; font-size: 18px;"><i class="fas fa-building"></i></div>' +
+                    '<div>' +
+                        '<div style="font-size: 16px; font-weight: 600; color: ' + textColor + '">' + categoryName + ' - 机构明细</div>' +
+                        '<div style="font-size: 13px; color: ' + secondaryColor + '; margin-top: 2px;">共 ' + count + ' 家服务机构</div>' +
+                    '</div>' +
+                '</div>' +
+                '<button onclick="document.getElementById(\'drillDownModal\').remove()" style="background: none; border: none; color: ' + secondaryColor + '; font-size: 20px; cursor: pointer; padding: 4px; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"><i class="fas fa-times"></i></button>' +
+            '</div>' +
+            '<div style="padding: 0; overflow-y: auto; flex: 1;">' +
+                '<table style="width: 100%; border-collapse: collapse;">' +
+                    '<thead>' +
+                        '<tr style="background: ' + (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.02)') + ';">' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">序号</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">机构名称</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">统一社会信用代码</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">机构类型</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">信用等级</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">状态</th>' +
+                        '</tr>' +
+                    '</thead>' +
+                    '<tbody>' + rowsHtml + '</tbody>' +
+                '</table>' +
+            '</div>' +
+            '<div style="padding: 16px 24px; border-top: 1px solid ' + borderColor + '; display: flex; justify-content: flex-end; gap: 8px;">' +
+                '<button onclick="document.getElementById(\'drillDownModal\').remove()" style="padding: 8px 20px; border: 1px solid ' + borderColor + '; background: transparent; color: ' + textColor + '; border-radius: 6px; font-size: 13px; cursor: pointer;">关闭</button>' +
+                '<button style="padding: 8px 20px; border: none; background: ' + color + '; color: #fff; border-radius: 6px; font-size: 13px; cursor: pointer;"><i class="fas fa-download"></i> 导出名录</button>' +
+            '</div>' +
+        '</div>';
+        
+        document.body.appendChild(modal);
+        
+        // 点击遮罩关闭
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+    
+    // 生成模拟机构数据
+    function generateOrgData(category, count) {
+        var types = ['检测机构', '评估机构', '咨询机构'];
+        var credits = ['AAA', 'AA', 'A', 'B'];
+        var statuses = ['已入库', '已入库', '已入库', '待复核'];
+        var orgs = [];
+        
+        for (var i = 0; i < Math.min(count, 20); i++) {
+            orgs.push({
+                name: category + '服务机构' + (i + 1),
+                code: '91440101MA' + (5 + i) + 'XXXXXX',
+                type: types[Math.floor(Math.random() * types.length)],
+                credit: credits[Math.floor(Math.random() * credits.length)],
+                status: statuses[Math.floor(Math.random() * statuses.length)]
+            });
+        }
+        return orgs;
+    }
+});
+
+// 折线图交互
+document.addEventListener('DOMContentLoaded', function() {
+    var chart = document.getElementById('trendChart');
+    var tooltip = document.getElementById('chartTooltip');
+    var dataPoints = [
+        { x: 60, y: 180, month: '1月', value: 22 },
+        { x: 180, y: 150, month: '2月', value: 26 },
+        { x: 300, y: 140, month: '3月', value: 27 },
+        { x: 420, y: 190, month: '4月', value: 20 },
+        { x: 540, y: 100, month: '5月', value: 30 },
+        { x: 660, y: 110, month: '6月', value: 28 },
+        { x: 780, y: 60, month: '7月', value: 33 }
+    ];
+    
+    chart.addEventListener('mousemove', function(e) {
+        var rect = chart.getBoundingClientRect();
+        var mouseX = e.clientX - rect.left;
+        var scaleX = 800 / rect.width;
+        var svgX = mouseX * scaleX;
+        
+        var closest = dataPoints[0];
+        var minDist = Math.abs(svgX - closest.x);
+        
+        for (var i = 1; i < dataPoints.length; i++) {
+            var dist = Math.abs(svgX - dataPoints[i].x);
+            if (dist < minDist) {
+                minDist = dist;
+                closest = dataPoints[i];
+            }
+        }
+        
+        if (minDist < 60) {
+            tooltip.querySelector('.line-chart-tooltip-month').textContent = closest.month;
+            tooltip.querySelector('.line-chart-tooltip-value').textContent = closest.value;
+            tooltip.style.left = (closest.x / 800 * rect.width - 30) + 'px';
+            tooltip.style.top = (closest.y / 280 * rect.height - 60) + 'px';
+            tooltip.classList.add('show');
+        } else {
+            tooltip.classList.remove('show');
+        }
+    });
+    
+    chart.addEventListener('mouseleave', function() {
+        tooltip.classList.remove('show');
+    });
+});
+</script>
+</body>
+</html>
