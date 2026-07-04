@@ -1,8 +1,8 @@
-# 风险管控项目全量备份脚本
-# 功能：
-#   1. 自动提交当前所有改动
-#   2. 打 Git 标签并推送到 GitHub
-#   3. 生成本地 zip 压缩包到 backups/ 目录
+# Risk Control Project Full Backup Script
+# Steps:
+#   1. Auto commit current changes
+#   2. Create and push Git tag to GitHub
+#   3. Generate local zip archive in backups/ folder
 
 param(
     [string]$TagPrefix = "backup"
@@ -16,62 +16,62 @@ Set-Location $projectRoot
 $dateStr = Get-Date -Format "yyyy-MM-dd"
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $tagName = "$TagPrefix-$dateStr"
-$commitMessage = "backup: $timestamp 全量备份"
+$commitMessage = "backup: $timestamp full backup"
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  风险管控项目全量备份" -ForegroundColor Cyan
-Write-Host "  项目路径: $projectRoot" -ForegroundColor Cyan
-Write-Host "  备份时间: $timestamp" -ForegroundColor Cyan
+Write-Host "  Risk Control Project Full Backup" -ForegroundColor Cyan
+Write-Host "  Project: $projectRoot" -ForegroundColor Cyan
+Write-Host "  Time: $timestamp" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-# 1. 检查 Git 仓库
+# 1. Check Git repository
 if (-not (Test-Path ".git")) {
-    throw "当前目录不是 Git 仓库，请先初始化 Git。"
+    throw "Current directory is not a Git repository. Please init Git first."
 }
 
-# 2. 检查远程仓库
+# 2. Check remote repository
 $remotes = git remote -v 2>$null
 if (-not $remotes) {
-    throw "未配置远程仓库，请先关联 GitHub。"
+    throw "Remote repository not configured. Please link GitHub first."
 }
 
-# 3. 提交当前所有改动（如果有）
+# 3. Commit current changes if any
 $status = git status --short
 if ($status) {
-    Write-Host "检测到未提交改动，正在自动提交..." -ForegroundColor Yellow
+    Write-Host "Uncommitted changes detected, auto committing..." -ForegroundColor Yellow
     git add -A
     git commit -m "$commitMessage" 2>&1 | ForEach-Object { Write-Host $_ }
 } else {
-    Write-Host "工作区干净，没有需要提交的改动。" -ForegroundColor Green
+    Write-Host "Working tree clean. No changes to commit." -ForegroundColor Green
 }
 
-# 4. 打 Git 标签（如果已存在则先删除）
+# 4. Create Git tag (replace if exists)
 $existingTag = git tag -l $tagName
 if ($existingTag) {
-    Write-Host "标签 $tagName 已存在，删除旧标签..." -ForegroundColor Yellow
+    Write-Host "Tag $tagName already exists, replacing old tag..." -ForegroundColor Yellow
     git tag -d $tagName | ForEach-Object { Write-Host $_ }
     git push origin --delete $tagName 2>$null | ForEach-Object { Write-Host $_ }
 }
 
-Write-Host "正在创建 Git 标签: $tagName" -ForegroundColor Cyan
-git tag -a $tagName -m "全备 $dateStr" | ForEach-Object { Write-Host $_ }
+Write-Host "Creating Git tag: $tagName" -ForegroundColor Cyan
+git tag -a $tagName -m "Full backup $dateStr" | ForEach-Object { Write-Host $_ }
 
-# 5. 推送到远程
-Write-Host "正在推送到 GitHub..." -ForegroundColor Cyan
+# 5. Push to remote
+Write-Host "Pushing to GitHub..." -ForegroundColor Cyan
 git push origin master | ForEach-Object { Write-Host $_ }
 git push origin $tagName | ForEach-Object { Write-Host $_ }
 
-# 6. 生成本地 zip 压缩包
+# 6. Generate local zip archive
 $backupDir = Join-Path $projectRoot "backups"
 New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 $zipPath = Join-Path $backupDir "full_backup_$timestamp.zip"
 
-Write-Host "正在生成本地压缩包: $zipPath" -ForegroundColor Cyan
+Write-Host "Generating local zip archive: $zipPath" -ForegroundColor Cyan
 $itemsToBackup = @("index.html", "server.js", "pages", "js", "tools", "data", ".gitignore")
 Compress-Archive -Path $itemsToBackup -DestinationPath $zipPath -Force
 
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "  全量备份完成！" -ForegroundColor Green
-Write-Host "  Git 标签: $tagName" -ForegroundColor Green
-Write-Host "  本地压缩: $zipPath" -ForegroundColor Green
+Write-Host "  Full backup completed!" -ForegroundColor Green
+Write-Host "  Git tag: $tagName" -ForegroundColor Green
+Write-Host "  Local zip: $zipPath" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
