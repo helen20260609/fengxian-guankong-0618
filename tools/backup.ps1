@@ -50,7 +50,15 @@ $existingTag = git tag -l $tagName
 if ($existingTag) {
     Write-Host "Tag $tagName already exists, replacing old tag..." -ForegroundColor Yellow
     git tag -d $tagName | ForEach-Object { Write-Host $_ }
-    git push origin --delete $tagName 2>$null | ForEach-Object { Write-Host $_ }
+    try {
+        git push origin --delete $tagName 2>&1 | Out-Null
+    } catch {
+        Write-Host "Remote tag delete skipped (may not exist or no permission)." -ForegroundColor Yellow
+   
+        git push origin --delete $tagName 2>&1 | Out-Null
+    } catch {
+        Write-Host "Remote tag delete skipped (may not exist or no permission)." -ForegroundColor Yellow
+    }
 }
 
 Write-Host "Creating Git tag: $tagName" -ForegroundColor Cyan
