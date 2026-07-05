@@ -304,6 +304,29 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             </div>
         </div>
 
+        <!-- 待审在线申请 -->
+        <div id="pendingApplicationsSection" style="margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);"><i class="fas fa-inbox" style="color: var(--primary); margin-right: 8px;"></i>待审在线申请</div>
+                <span id="pendingApplicationsCount" style="font-size: 13px; color: var(--text-secondary);">0 条</span>
+            </div>
+            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: var(--header-bg);">
+                        <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">申请编号</th>
+                        <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">机构名称</th>
+                        <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">统一代码</th>
+                        <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">法人代表</th>
+                        <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">联系电话</th>
+                        <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">提交时间</th>
+                        <th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);">状态</th>
+                        <th style="padding: 12px 16px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border); width: 160px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="pendingApplicationsBody"></tbody>
+            </table>
+        </div>
+
         <!-- 数据表格 -->
         <table class="data-table" style="width: 100%; border-collapse: collapse;">
             <thead>
@@ -462,6 +485,27 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                             <div class="form-group">
                                 <label>注册资本 (万元) <span class="required">*</span></label>
                                 <input type="number" placeholder="请输入注册资本">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>服务区域 <span class="required">*</span></label>
+                                <select id="serviceAreaModal">
+                                    <option value="">请选择服务区域</option>
+                                    <option>黄浦区</option>
+                                    <option>静安区</option>
+                                    <option>徐汇区</option>
+                                    <option>长宁区</option>
+                                    <option>浦东新区</option>
+                                    <option>杨浦区</option>
+                                    <option>虹口区</option>
+                                    <option>闵行区</option>
+                                    <option>奉贤区</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>所属行业</label>
+                                <input type="text" placeholder="请输入所属行业">
                             </div>
                         </div>
                         <div class="form-row">
@@ -871,6 +915,7 @@ function resetFormModal() {
 // 当前弹窗模式: add | view | edit | audit
 var currentModalMode = 'add';
 var currentOrgId = '';
+var currentApplicationId = '';
 var currentAuditDecision = ''; // 'pass' | 'reject'
 
 // 统一数据映射到弹窗数据模型
@@ -883,11 +928,36 @@ function buildOrgDataMap(org) {
         enterpriseName: org.orgName || '-',
         creditCode: org.orgCode || '-',
         address: org.region || '-',
+        serviceArea: org.region ? org.region.replace('上海市', '') : '',
         establishDate: org.established || '',
         capital: '',
         businessScope: org.field || '',
         personnel: [],
         qualifications: [],
+        equipment: []
+    };
+}
+
+// 将在线申请数据映射到弹窗数据模型
+function buildOrgDataMapFromApplication(app) {
+    var basic = app.basic || {};
+    return {
+        legalName: basic.legalName || '',
+        idCard: basic.legalIdCard || '',
+        phone: basic.legalPhone || '',
+        creditScore: 75,
+        enterpriseName: basic.enterpriseName || '',
+        creditCode: basic.creditCode || '',
+        address: basic.address || '',
+        serviceArea: basic.serviceArea || '',
+        establishDate: basic.establishDate || '',
+        capital: basic.capital || '',
+        businessScope: basic.businessScope || '',
+        industry: basic.field || '',
+        personnel: [],
+        qualifications: (app.qualifications || []).map(function(q) {
+            return { name: q.name || '', certNo: q.code || '', issuer: q.issuer || '', start: '', end: q.end || '' };
+        }),
         equipment: []
     };
 }
@@ -908,6 +978,50 @@ function initOrgDataMap() {
 var orgTablePage = 1;
 var orgTablePageSize = 10;
 var allOrgRows = [];
+
+// 渲染待审在线申请列表
+function renderPendingApplications() {
+    var apps = getAllOrgApplications().filter(function(a) {
+        return a.status !== '已通过';
+    });
+    var tbody = document.getElementById('pendingApplicationsBody');
+    var count = document.getElementById('pendingApplicationsCount');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (count) count.textContent = apps.length + ' 条';
+
+    if (apps.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 13px;">暂无待审在线申请</td></tr>';
+        return;
+    }
+
+    var config = getTPAuditConfig();
+    apps.forEach(function(app) {
+        var basic = app.basic || {};
+        var status = app.status || '待审核';
+        var statusClass = status === '审核中' ? 'status-pending' : (status === '已驳回' ? 'status-rejected' : 'status-pending');
+        var levelBadge = '';
+        if (config.mode === 'multi' && config.levels > 1 && app.flowState) {
+            var lv = app.flowState.currentLevel || 0;
+            levelBadge = '<span class="status-badge status-pending" style="margin-left: 6px;">第 ' + (lv + 1) + '/' + config.levels + ' 级</span>';
+        }
+        var tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--border)';
+        tr.innerHTML =
+            '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (app.applicationId || '-') + '</td>' +
+            '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (basic.enterpriseName || '-') + '</td>' +
+            '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (basic.creditCode || '-') + '</td>' +
+            '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (basic.legalName || '-') + '</td>' +
+            '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (basic.legalPhone || '-') + '</td>' +
+            '<td style="padding: 14px 16px; font-size: 13px; color: var(--text-primary);">' + (app.submitTime || '-') + '</td>' +
+            '<td style="padding: 14px 16px;"><span class="status-badge ' + statusClass + '">' + status + '</span>' + levelBadge + '</td>' +
+            '<td style="padding: 14px 16px; text-align: center;">' +
+            '<a href="#" class="table-link" onclick="viewOrg(\'' + app.applicationId + '\'); return false;">查看</a>' +
+            '<a href="#" class="table-link" onclick="auditOrg(\'' + app.applicationId + '\'); return false;">审核</a>' +
+            '</td>';
+        tbody.appendChild(tr);
+    });
+}
 
 function renderOrgTable() {
     var orgs = getAllOrgs();
@@ -1034,10 +1148,10 @@ function openOrgModal(mode, id) {
         titleEl.innerHTML = '<i class="fas fa-edit" style="color: var(--primary);"></i> 编辑机构信息';
         if (progress) progress.style.display = 'none';
     } else if (mode === 'audit') {
-        titleEl.innerHTML = '<i class="fas fa-clipboard-check" style="color: var(--primary);"></i> 审核机构信息';
+        titleEl.innerHTML = '<i class="fas fa-clipboard-check" style="color: var(--primary);"></i> ' + (getOrgApplicationById(id) ? '审核机构申请' : '审核机构信息');
         if (progress) progress.style.display = 'none';
     } else {
-        titleEl.innerHTML = '<i class="fas fa-eye" style="color: var(--primary);"></i> 查看机构信息';
+        titleEl.innerHTML = '<i class="fas fa-eye" style="color: var(--primary);"></i> ' + (getOrgApplicationById(id) ? '查看机构申请' : '查看机构信息');
         if (progress) progress.style.display = 'none';
     }
 
@@ -1113,24 +1227,33 @@ function toggleViewModeValues(modal, enable) {
 
 // 填充表单数据
 function fillOrgForm(id) {
-    var data = orgDataMap[id] || {};
+    var data = {};
+    var app = getOrgApplicationById(id);
     var org = getOrgById(id);
-    if (org) {
-        data = {
-            legalName: org.legalPerson || data.legalName || '',
-            idCard: data.idCard || '',
-            phone: org.phone || data.phone || '',
-            creditScore: org.score || data.creditScore || 0,
-            enterpriseName: org.orgName || data.enterpriseName || '',
-            creditCode: org.orgCode || data.creditCode || '',
-            address: org.region || data.address || '',
-            establishDate: org.established || data.establishDate || '',
-            capital: data.capital || '',
-            businessScope: org.field || data.businessScope || '',
-            personnel: data.personnel || [],
-            qualifications: data.qualifications || [],
-            equipment: data.equipment || []
-        };
+    if (app) {
+        currentApplicationId = id;
+        data = buildOrgDataMapFromApplication(app);
+    } else {
+        currentApplicationId = '';
+        data = orgDataMap[id] || {};
+        if (org) {
+            data = {
+                legalName: org.legalPerson || data.legalName || '',
+                idCard: data.idCard || '',
+                phone: org.phone || data.phone || '',
+                creditScore: org.score || data.creditScore || 0,
+                enterpriseName: org.orgName || data.enterpriseName || '',
+                creditCode: org.orgCode || data.creditCode || '',
+                address: org.region || data.address || '',
+                serviceArea: data.serviceArea || (org.region ? org.region.replace('上海市', '') : ''),
+                establishDate: org.established || data.establishDate || '',
+                capital: data.capital || '',
+                businessScope: org.field || data.businessScope || '',
+                personnel: data.personnel || [],
+                qualifications: data.qualifications || [],
+                equipment: data.equipment || []
+            };
+        }
     }
 
     // 法人信息
@@ -1144,7 +1267,11 @@ function fillOrgForm(id) {
     setInputValue('#tab-enterprise-modal input:nth-of-type(3)', data.address || '');
     setInputValue('#tab-enterprise-modal input:nth-of-type(4)', data.establishDate || '');
     setInputValue('#tab-enterprise-modal input:nth-of-type(5)', data.capital || '');
+    setInputValue('#tab-enterprise-modal input:nth-of-type(6)', data.industry || '');
     setInputValue('#tab-enterprise-modal textarea', data.businessScope || '');
+
+    var serviceAreaSelect = document.getElementById('serviceAreaModal');
+    if (serviceAreaSelect) serviceAreaSelect.value = data.serviceArea || '';
 
     // 人员信息
     fillDynamicRows('personnelListModal', data.personnel || [], function(p) {
@@ -1401,6 +1528,35 @@ function confirmAuditOpinion(decision) {
         return;
     }
 
+    // 优先处理在线机构申请审核
+    if (currentApplicationId) {
+        var app = getOrgApplicationById(currentApplicationId);
+        if (!app) {
+            alert('未找到该在线申请记录');
+            return;
+        }
+        var cfg = getTPAuditConfig();
+        var nextLevel = (app.flowState && app.flowState.currentLevel || 0) + 1;
+        var totalLevels = cfg.levels || 1;
+        var operator = '审核员-当前用户';
+        var now = getCurrentTimeString();
+        auditOrgApplication(currentApplicationId, nextLevel, operator, opinion, decision);
+        if (decision === 'pass') {
+            if (nextLevel >= totalLevels) {
+                alert('审核已通过，机构已自动入库');
+            } else {
+                alert('第 ' + nextLevel + ' 级审核通过，已流转至下一级审核');
+            }
+        } else {
+            alert('审核已驳回：' + (opinion || ''));
+        }
+        closeAuditOpinionModal();
+        closeOrgModal();
+        renderPendingApplications();
+        renderOrgTable();
+        return;
+    }
+
     var id = currentOrgId || '';
     var flow = getTPAuditFlow(id);
     var currentLevel = flow.currentLevel || 0;
@@ -1477,6 +1633,7 @@ function confirmAuditOpinion(decision) {
                     enterpriseName: org.orgName,
                     creditCode: org.orgCode || '',
                     address: org.region || '',
+                    serviceArea: org.region ? org.region.replace('上海市', '') : '',
                     establishDate: org.established || '',
                     capital: '',
                     businessScope: org.field || '',
@@ -1495,6 +1652,7 @@ function confirmAuditOpinion(decision) {
     document.addEventListener('DOMContentLoaded', function() {
         initOrgDataMap();
         renderOrgTable();
+        renderPendingApplications();
         autoOpenOrgFromUrl();
     });
 

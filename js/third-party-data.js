@@ -146,6 +146,7 @@ function migrateTPData(data) {
         data.version = 4;
         saveTPData(data);
     }
+    if (!data.orgApplications) data.orgApplications = [];
     return data;
 }
 
@@ -158,10 +159,26 @@ function getTPData() {
     }
     try {
         var parsed = JSON.parse(raw);
-        if (!parsed || !parsed.experts || parsed.experts.length === 0) {
+        if (!parsed || typeof parsed !== 'object') {
             const data = createDefaultData();
             localStorage.setItem(TP_STORAGE_KEY, JSON.stringify(data));
             return data;
+        }
+        // 仅当核心结构完全缺失时补充默认数据，避免覆盖已有的在线申请等用户数据
+        if (!parsed.experts || parsed.experts.length === 0) {
+            const defaults = createDefaultData();
+            parsed.experts = defaults.experts;
+            if (!parsed.orgs) parsed.orgs = defaults.orgs;
+            if (!parsed.contracts) parsed.contracts = defaults.contracts;
+            if (!parsed.performances) parsed.performances = defaults.performances;
+            if (!parsed.credit) parsed.credit = defaults.credit;
+            if (!parsed.auditConfig) parsed.auditConfig = defaults.auditConfig;
+            if (!parsed.auditFlow) parsed.auditFlow = defaults.auditFlow;
+            if (!Array.isArray(parsed.orgApplications)) parsed.orgApplications = [];
+            if (!parsed.creditRules) parsed.creditRules = defaults.creditRules;
+            if (!parsed.creditRuleVersion) parsed.creditRuleVersion = defaults.creditRuleVersion;
+            parsed.version = 4;
+            saveTPData(parsed);
         }
         return migrateTPData(parsed);
     } catch (e) {
@@ -240,6 +257,131 @@ function resetTPAuditFlow(orgId) {
     if (!data.auditFlow) data.auditFlow = {};
     data.auditFlow[orgId] = { currentLevel: 0, status: 'pending', history: [] };
     saveTPData(data);
+}
+
+// ---------- 机构在线申请 ----------
+function getAllOrgApplications() { return (getTPData().orgApplications || []).slice(); }
+function getOrgApplicationById(applicationId) { return getAllOrgApplications().find(a => a.applicationId === applicationId); }
+function getOrgApplicationByCode(creditCode) { return getAllOrgApplications().find(a => a.basic && a.basic.creditCode === creditCode); }
+function getOrgApplicationsByName(orgName) {
+    var n = (orgName || '').toLowerCase();
+    return getAllOrgApplications().filter(a => a.basic && (a.basic.enterpriseName || '').toLowerCase().indexOf(n) !== -1);
+}
+function queryOrgApplicationProgress(query) {
+    var name = (query && query.orgName || '').trim().toLowerCase();
+    var code = (query && query.orgCode || '').trim().toLowerCase();
+    var apps = getAllOrgApplications();
+    return apps.filter(function(a) {
+        var basic = a.basic || {};
+        var matchName = name && (basic.enterpriseName || '').toLowerCase().indexOf(name) !== -1;
+        var matchCode = code && (basic.creditCode || '').toLowerCase() === code;
+        return name && code ? (matchName && matchCode) : (matchName || matchCode);
+    });
+}
+function queryOrgApplicationProgress(query) {
+    var name = (query && query.orgName || '').trim().toLowerCase();
+    var code = (query && query.orgCode || '').trim().toLowerCase();
+    var apps = getAllOrgApplications();
+    return apps.filter(function(a) {
+        var basic = a.basic || {};
+        var matchName = name && (basic.enterpriseName || '').toLowerCase().indexOf(name) !== -1;
+        var matchCode = code && (basic.creditCode || '').toLowerCase() === code;
+        return name && code ? (matchName && matchCode) : (matchName || matchCode);
+    });
+}
+function submitOrgApplication(application) {
+    const data = getTPData();
+    if (!data.orgApplications) data.orgApplications = [];
+    const basic = application.basic || {};
+    const creditCode = basic.creditCode || '';
+    if (creditCode) {
+        const exists = data.orgApplications.some(a => a.basic && a.basic.creditCode === creditCode && a.status !== '已驳回');
+        if (exists) throw new Error('该统一社会信用代码已有正在审核或已通过的申请，请勿重复提交。');
+    }
+    application.applicationId = application.applicationId || ('TPA-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100));
+    application.status = application.status || '待审核';
+    application.submitTime = application.submitTime || nowStr();
+    if (!application.auditHistory) application.auditHistory = [];
+    if (!application.flowState) {
+        const config = getTPAuditConfig();
+        application.flowState = {
+            mode: config.mode || 'single',
+            levels: parseInt(config.levels || 1, 10),
+            currentLevel: 0,
+            status: 'pending'
+        };
+    }
+    data.orgApplications.push(application);
+    saveTPData(data);
+    return application;
+}
+function updateOrgApplication(application) {
+    const data = getTPData();
+    if (!data.orgApplications) data.orgApplications = [];
+    const idx = data.orgApplications.findIndex(a => a.applicationId === application.applicationId);
+    if (idx >= 0) data.orgApplications[idx] = application;
+    else data.orgApplications.push(application);
+    saveTPData(data);
+    return application;
+}
+function approveOrgApplication(applicationId, level, operator, opinion) {
+    return auditOrgApplication(applicationId, level, operator, opinion, 'pass');
+}
+function rejectOrgApplication(applicationId, level, operator, opinion) {
+    return auditOrgApplication(applicationId, level, operator, opinion, 'reject');
+}
+function auditOrgApplication(applicationId, level, operator, opinion, decision) {
+    var app = getOrgApplicationById(applicationId);
+    if (!app) return null;
+    if (!app.auditHistory) app.auditHistory = [];
+    if (!app.flowState) app.flowState = { mode: 'single', levels: 1, currentLevel: 0, status: 'pending' };
+    const lv = parseInt(level || 1, 10);
+    const cfg = getTPAuditConfig();
+    const maxLevel = parseInt(cfg.levels || 1, 10);
+    app.auditHistory.push({ level: lv, decision: decision, operator: operator, opinion: opinion, time: nowStr() });
+    app.flowState.currentLevel = lv;
+    if (decision === 'reject') {
+        app.status = '已驳回';
+        app.flowState.status = 'rejected';
+    } else if (decision === 'pass') {
+        if (lv >= maxLevel) {
+            app.status = '已通过';
+            app.flowState.status = 'approved';
+            app.approveTime = nowStr();
+            promoteApplicationToOrg(app);
+        } else {
+            app.status = '审核中';
+            app.flowState.status = 'auditing';
+        }
+    }
+    updateOrgApplication(app);
+    return app;
+}
+function promoteApplicationToOrg(app) {
+    if (!app || !app.basic) return;
+    const basic = app.basic;
+    const data = getTPData();
+    const existing = data.orgs.find(o => o.orgCode === basic.creditCode);
+    if (existing) return existing;
+    const orgId = 'ORG-' + (data.orgs.length + 1).toString().padStart(5, '0');
+    const newOrg = {
+        orgId: orgId,
+        orgName: basic.enterpriseName || '',
+        orgCode: basic.creditCode || '',
+        legalPerson: basic.legalName || app.legal && app.legal.legalName || '',
+        phone: basic.phone || (app.legal && app.legal.phone) || '',
+        region: basic.address || basic.serviceArea || '',
+        field: basic.field || basic.businessScope || '',
+        orgType: basic.orgType || '服务机构',
+        qual: (app.qualifications && app.qualifications[0] && app.qualifications[0].level) || '乙级',
+        status: '正常',
+        creditLevel: 'A',
+        score: 75,
+        established: basic.establishDate || ''
+    };
+    data.orgs.push(newOrg);
+    saveTPData(data);
+    return newOrg;
 }
 
 // ---------- 项目组 ----------

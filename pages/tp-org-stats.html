@@ -86,13 +86,21 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .stat-trend.up { color: var(--success); }
 .stat-trend.down { color: var(--danger); }
 
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; animation: fadeUp 0.4s ease; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* 图表区域 */
 .chart-row { display: flex; flex-direction: row; gap: var(--gap); }
 .chart-row + .chart-row { margin-top: var(--gap); }
 .chart-card { min-width: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .chart-card.wide { flex: 2 1 0; }
-.chart-card.narrow { flex: 1 1 0; }
-.chart-card.full { flex: 1 1 100%; }
+.chart-card.narrow { flex: 1 1 0; min-width: 0; }
+.chart-card.full { flex: 1 1 100%; min-width: 0; }
 .chart-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
 .chart-title { font-size: 15px; font-weight: 600; }
 .chart-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
@@ -226,7 +234,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 </div>
 
 <!-- 统计概览 Tab -->
-<div id="tab-overview" class="tab-panel">
+<div id="tab-overview" class="tab-panel active">
     <!-- 统计卡片 -->
     <div class="stat-row" id="statCards">
         <div class="stat-item" data-drill="orgCount" onclick="setDrill('orgCount')">
@@ -337,8 +345,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     </div>
 
     <!-- 图表区域 -->
-    <div class="chart-row">
-        <div class="chart-card wide">
+    <div class="chart-row" style="display:flex !important;flex-direction:row !important;gap:var(--gap);">
+        <div class="chart-card wide" style="flex:2 1 0;min-width:0;">
             <div class="chart-header">
                 <div class="chart-title" id="mainChartTitle">机构类型分布 <span>按第三方服务机构类型统计</span></div>
                 <div class="chart-actions">
@@ -351,7 +359,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 <div id="mainChart" style="width:100%;height:100%;"></div>
             </div>
         </div>
-        <div class="chart-card narrow">
+        <div class="chart-card narrow" style="flex:1 1 0;min-width:0;">
             <div class="chart-header">
                 <div class="chart-title">关键指标占比</div>
             </div>
@@ -373,7 +381,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     </div>
 
     <!-- 明细表格 -->
-    <div class="panel">
+    <div class="panel" style="margin-top: 32px;">
         <div class="panel-header">
             <div class="panel-title"><i class="fas fa-table"></i> 机构统计明细</div>
             <div class="filter-actions">
@@ -395,7 +403,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 </div>
 
 <!-- 自定义报表 Tab -->
-<div id="tab-report" class="tab-panel" style="display:none;">
+<div id="tab-report" class="tab-panel">
     <div class="panel">
         <div class="panel-header">
             <div class="panel-title"><i class="fas fa-sliders-h"></i> 报表配置</div>
@@ -518,7 +526,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 </div>
 
 <!-- 报告中心 Tab -->
-<div id="tab-reports" class="tab-panel" style="display:none;">
+<div id="tab-reports" class="tab-panel">
     <div class="panel">
         <div class="panel-header">
             <div class="panel-title"><i class="fas fa-history"></i> 已生成报告</div>
@@ -715,12 +723,17 @@ var reportConfig = {
 function switchTab(tab) {
     document.querySelectorAll('.page-tab').forEach(function(el) { el.classList.remove('active'); });
     document.querySelector('.page-tab[data-tab="' + tab + '"]').classList.add('active');
-    document.querySelectorAll('.tab-panel').forEach(function(el) { el.style.display = 'none'; });
-    document.getElementById('tab-' + tab).style.display = 'block';
+    document.querySelectorAll('.tab-panel').forEach(function(el) { el.classList.remove('active'); });
+    document.getElementById('tab-' + tab).classList.add('active');
     if (tab === 'overview') {
-        refreshOverview();
+        setTimeout(function() {
+            chartInstances.main && chartInstances.main.resize();
+            chartInstances.sub && chartInstances.sub.resize();
+            chartInstances.trend && chartInstances.trend.resize();
+        }, 200);
     } else if (tab === 'report') {
         renderTemplates();
+        renderReportPreview();
     } else if (tab === 'reports') {
         renderReports();
     }
@@ -819,9 +832,11 @@ function switchChartType(type) {
 function refreshOverview() {
     applyFilters();
     renderStatCards();
-    renderMainChart();
-    renderSubChart();
-    renderTrendChart();
+    setTimeout(function() {
+        renderMainChart();
+        renderSubChart();
+        renderTrendChart();
+    }, 100);
     renderStatsTable();
 }
 
@@ -1200,6 +1215,7 @@ function renderReportChart(type, containerId) {
         };
     }
     chart.setOption(option);
+    chart.resize();
 }
 
 function getReportDataByDimension(dimension, indicator) {
@@ -1319,6 +1335,7 @@ function generateReport() {
     var report = { id: Date.now(), name: name, period: periodText, createTime: formatNow(), indicators: reportConfig.indicators.slice() };
     reports.unshift(report);
     localStorage.setItem('orgReports', JSON.stringify(reports));
+    renderReportPreview();
 }
 
 function generateAutoReport(period) {

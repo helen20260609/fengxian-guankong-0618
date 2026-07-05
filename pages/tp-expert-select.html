@@ -345,9 +345,13 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             <button class="btn btn-outline" style="width: 100%; justify-content: center;" onclick="clearSelected()">
                 <i class="fas fa-trash-alt"></i> 清空列表
             </button>
-            <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="confirmGroup()">
+            <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="confirmGroup()" id="btnConfirmGroup">
                 <i class="fas fa-check"></i> 确认选择
             </button>
+            <button class="btn btn-outline" style="width: 100%; justify-content: center;" onclick="closeSelectPage()">
+                <i class="fas fa-times"></i> 关闭
+            </button>
+            <div id="saveResult" style="display:none; text-align:center; font-size:12px; padding:6px; border-radius:6px; margin-top:6px;"></div>
         </div>
     </div>
 
@@ -400,6 +404,12 @@ window.addEventListener('message', function(e) {
 });
 
 const STORAGE_KEY = 'expertSelectedGroup';
+
+// 全局错误监听，便于排查“点击无反应”
+window.addEventListener('error', function(e) {
+    console.error('[tp-expert-select] global error:', e.message, 'at', e.filename + ':' + e.lineno);
+});
+
 const avatarColors = ['#1a73e8', '#7c4dff', '#e37400', '#0097a7', '#34a853', '#9333ea', '#ea580c', '#16a34a'];
 
 var allExperts = [];
@@ -608,7 +618,151 @@ function toggleExpert(expertId) {
     }
 }
 
+function confirmGroup() {
+    try {
+        console.log('[tp-expert-select] confirmGroup start, selected=' + selectedExperts.length);
+
+        var btn = document.getElementById('btnConfirmGroup');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 保存中...';
+            btn.style.opacity = '0.7';
+        }
+
+        if (selectedExperts.length === 0) {
+            if (!confirm('尚未选择任何专家，是否直接关闭选择窗口？')) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-check"></i> 确认选择';
+                    btn.style.opacity = '1';
+                }
+                return;
+            }
+        }
+
+        // 保存最终选择结果
+        saveSelectedExperts();
+        console.log('[tp-expert-select] selected experts saved to localStorage');
+
+        var params = getTPQueryParams();
+        var projectId = params.projectId;
+        console.log('[tp-expert-select] projectId=' + projectId);
+
+        if (projectId && typeof getProjectGroupById === 'function') {
+            var project = getProjectGroupById(projectId);
+            if (project) {
+                project.experts = selectedExperts.map(function(s) {
+                    return {
+                        expertId: s.expertId,
+                        name: s.name,
+                        orgName: s.orgName,
+                        domain: s.domain,
+                        title: s.title,
+                        expertType: s.expertType
+                    };
+                });
+                if (typeof updateProjectGroup === 'function') {
+                    updateProjectGroup(project);
+                    console.log('[tp-expert-select] project group updated');
+                }
+            } else {
+                console.warn('[tp-expert-select] project not found: ' + projectId);
+            }
+        }
+
+        var payload = {
+            action: 'expertSelected',
+            list: selectedExperts,
+            count: selectedExperts.length,
+            source: 'tp-expert-select',
+            projectId: projectId || ''
+        };
+
+        try {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage(payload, '*');
+                console.log('[tp-expert-select] notified parent');
+            } else if (window.opener) {
+                window.opener.postMessage(payload, '*');
+                console.log('[tp-expert-select] notified opener');
+            }
+        } catch (e) {
+            console.error('[tp-expert-select] postMessage error:', e);
+        }
+
+        // 方案 A：保存后停留在当前页，提示成功
+        showSaveResult('success', '已保存 ' + selectedExperts.length + ' 位专家选择');
+        console.log('[tp-expert-select] saved, stay on page');
+
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> 确认选择';
+            btn.style.opacity = '1';
+        }
+
+    } catch (err) {
+        console.error('[tp-expert-select] confirmGroup fatal error:', err);
+        showSaveResult('error', '保存失败：' + err.message);
+        var btn = document.getElementById('btnConfirmGroup');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> 确认选择';
+            btn.style.opacity = '1';
+        }
+    }
+}
+
+function showSaveResult(type, text) {
+    var el = document.getElementById('saveResult');
+    if (!el) return;
+    el.style.display = 'block';
+    el.textContent = text;
+    if (type === 'success') {
+        el.style.color = 'var(--success)';
+        el.style.background = 'rgba(30, 142, 62, 0.08)';
+    } else {
+        el.style.color = 'var(--danger)';
+        el.style.background = 'rgba(217, 48, 37, 0.08)';
+    }
+    setTimeout(function() {
+        el.style.display = 'none';
+    }, 3000);
+}
+
+function closeSelectPage() {
+    var params = getTPQueryParams();
+    var projectId = params.projectId;
+    try {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ action: 'closeExpertModal', projectId: projectId || '' }, '*');
+            console.log('[tp-expert-select] closeSelectPage sent to parent');
+        } else if (window.opener) {
+            window.close();
+            console.log('[tp-expert-select] closeSelectPage closing window');
+        } else if (projectId) {
+            location.href = 'tp-contract.html?projectId=' + encodeURIComponent(projectId);
+        } else if (history.length > 1) {
+            history.back();
+        } else {
+            alert('请返回原页面。');
+        }
+    } catch (e) {
+        console.error('[tp-expert-select] closeSelectPage error:', e);
+    }
+}
+
 initData();
+
+// 额外绑定确认按钮，防止某些浏览器/框架下 onclick 失效
+document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.getElementById('btnConfirmGroup');
+    if (btn) {
+        btn.addEventListener('click', function(e) {
+            console.log('[tp-expert-select] confirm button clicked (addEventListener)');
+            confirmGroup();
+        });
+    }
+});
 </script>
 
 </body>
