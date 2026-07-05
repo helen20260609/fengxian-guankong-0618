@@ -255,13 +255,6 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             <div class="stat-label">待审核</div>
         </div>
     </div>
-    <div class="stat-item">
-        <div class="stat-icon purple"><i class="fas fa-file-contract"></i></div>
-        <div class="stat-info">
-            <div class="stat-number">47</div>
-            <div class="stat-label">合同总数</div>
-        </div>
-    </div>
     <div class="stat-item" style="cursor:pointer;" onclick="location.href='tp-expert-select.html'" title="管理项目专家组">
         <div class="stat-icon cyan"><i class="fas fa-users"></i></div>
         <div class="stat-info">
@@ -404,10 +397,6 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                         <option>奉贤区</option>
                     </select>
                 </div>
-
-                <div class="filter-item" style="flex:1; min-width:200px; max-width:300px;">
-                    <input id="orgFilterKeyword" type="text" placeholder="机构名称" oninput="renderOrgList()">
-                </div>
                 <div class="filter-actions">
                     <button class="list-btn list-btn-primary" onclick="renderOrgList()"><i class="fas fa-search"></i> 查询</button>
                     <button class="list-btn list-btn-outline" onclick="resetOrgFilter()"><i class="fas fa-undo"></i> 重置</button>
@@ -441,7 +430,76 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 </div>
 
 <style>
-/* 信用等级徽章 */
+/* 机构名录查询筛选栏 */
+.filter-card { width: 100%; }
+.filter-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: nowrap;
+}
+.filter-row .filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    min-width: auto;
+}
+.filter-row .filter-item label {
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.filter-row .filter-item select,
+.filter-row .filter-item input {
+    padding: 8px 12px;
+    border: 1px solid var(--input-border, #dadce0);
+    border-radius: 6px;
+    background: var(--input-bg, #fff);
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    min-width: 120px;
+    height: 36px;
+}
+.filter-row .filter-item:last-of-type {
+    flex: 1 1 auto;
+    min-width: 180px;
+    max-width: 260px;
+}
+.filter-row .filter-item:last-of-type input {
+    width: 100%;
+}
+.filter-row .filter-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+    align-items: center;
+    flex: 0 0 auto;
+}
+.filter-row .filter-actions .list-btn {
+    height: 36px;
+    white-space: nowrap;
+}
+@media (max-width: 1200px) {
+    .filter-row { flex-wrap: wrap; }
+    .filter-row .filter-item:last-of-type { flex: 1 1 200px; max-width: none; }
+    .filter-row .filter-actions { margin-left: 0; }
+}
+@media (max-width: 768px) {
+    .filter-row { flex-direction: column; align-items: stretch; }
+    .filter-row .filter-item,
+    .filter-row .filter-item:last-of-type {
+        flex: 1 1 100%;
+        max-width: none;
+        min-width: auto;
+    }
+    .filter-row .filter-item select,
+    .filter-row .filter-item input { width: 100%; }
+    .filter-row .filter-actions { margin-left: 0; width: 100%; }
+    .filter-row .filter-actions .list-btn { flex: 1; }
+}
+
 .credit-badge { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 20px; border-radius: 10px; font-size: 11px; font-weight: 700; color: #fff; margin-right: 6px; }
 .credit-aaa { background: #1e8e3e; }
 .credit-aa { background: #34a853; }
@@ -588,7 +646,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         legend: {
             orient: 'vertical',
-            right: '2%',
+            right: '4%',
             top: 'middle',
             itemGap: 14,
             itemWidth: 12,
@@ -619,7 +677,7 @@ document.addEventListener('DOMContentLoaded', function() {
         series: [{
             type: 'pie',
             radius: ['48%', '72%'],
-            center: ['32%', '50%'],
+            center: ['36%', '50%'],
             avoidLabelOverlap: false,
             itemStyle: {
                 borderRadius: 6,
@@ -1062,7 +1120,8 @@ function getOrgFilteredList() {
     var qual = document.getElementById('orgFilterQual').value;
     var credit = document.getElementById('orgFilterCredit').value;
     var region = document.getElementById('orgFilterRegion').value;
-    var keyword = document.getElementById('orgFilterKeyword').value.trim().toLowerCase();
+    var keywordEl = document.getElementById('orgFilterKeyword');
+    var keyword = keywordEl ? keywordEl.value.trim().toLowerCase() : '';
     var list = orgListData.slice();
     // 如果统一数据层存在，合并真实机构数据（去重）
     if (typeof getAllOrgs === 'function') {
@@ -1162,7 +1221,6 @@ function resetOrgFilter() {
     document.getElementById('orgFilterQual').value = '';
     document.getElementById('orgFilterCredit').value = '';
     document.getElementById('orgFilterRegion').value = '';
-    document.getElementById('orgFilterKeyword').value = '';
     renderOrgList();
 }
 
@@ -1206,22 +1264,25 @@ function exportOrgList(type) {
         headers.push(th.textContent.trim());
     });
     var data = filteredOrgList.map(function(org) {
-        return [org.name, org.code, org.legal, org.phone, org.credit + ' / ' + org.score, org.established, org.status];
+        return [org.name, org.field, org.qual, org.credit, org.code, org.legal, org.phone, org.score, org.established, org.region, org.status];
     });
 
     if (type === 'excel') {
         var csv = '\uFEFF' + headers.join(',') + '\n';
         data.forEach(function(row) {
             csv += row.map(function(cell) {
-                return '"' + cell.replace(/"/g, '""') + '"';
+                return '"' + String(cell).replace(/"/g, '""') + '"';
             }).join(',') + '\n';
         });
         var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
         var link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
+        link.href = url;
         link.download = '机构名录_' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(link);
         link.click();
-        URL.revokeObjectURL(link.href);
+        document.body.removeChild(link);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 100);
     } else if (type === 'pdf') {
         var printHtml = [
             '\u003chtml\u003e\u003chead\u003e\u003ctitle\u003e机构名录\u003c/title\u003e\u003cstyle\u003e',
