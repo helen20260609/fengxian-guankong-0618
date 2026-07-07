@@ -25,6 +25,9 @@ function getExpertList() {
                     phone: e.phone || '',
                     email: e.email || '',
                     address: e.address || '',
+                    emergencyPosition: e.emergencyPosition || '',
+                    originalDepartment: e.originalDepartment || '',
+                    emergencySpecialty: e.emergencySpecialty || '',
                     workplace: e.workplace || e.orgName || '',
                     status: e.status === '正常' ? '启用' : (e.status || '启用'),
                     history: e.history && e.history.length ? e.history : [
@@ -43,7 +46,7 @@ function getExpertList() {
 }
 function getFallbackList() {
     return [
-        { name: '张奉贤', gender: '男', birth: '1978-05', org: '上海市奉贤区建设工程安全质量监督站', domain: '建筑施工安全', direction: '隐患排查', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2018-11', years: '22', phone: '138-1678-9523', email: 'zhangfengxian@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '启用', history: [
+        { name: '张奉贤', gender: '男', birth: '1978-05', org: '上海市奉贤区建设工程安全质量监督站', domain: '建筑施工安全', direction: '隐患排查', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2018-11', years: '22', phone: '138-1678-9523', email: 'zhangfengxian@example.com', address: '上海市奉贤区南桥镇解放东路23号', emergencyPosition: '安全评估组组长', originalDepartment: '工程质量监督科', emergencySpecialty: '建筑工地事故应急、坍塌救援技术指导', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-18 14:30:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-18 15:10:00', action: '审核通过', operator: '审核员', remark: '资料齐全，同意入库' }
         ] },
@@ -154,6 +157,9 @@ function render() {
         ['联系电话', item.phone],
         ['电子邮箱', item.email],
         ['通讯地址', item.address],
+        ['应急管理职务', item.emergencyPosition || '—'],
+        ['原单位部门', item.originalDepartment || '—'],
+        ['应急管理特长', item.emergencySpecialty || '—'],
         ['状态', '<span class="tag ' + statusClass + '">' + item.status + '</span>']
     ];
     document.getElementById('infoTable').innerHTML = rows.map(function(r) {

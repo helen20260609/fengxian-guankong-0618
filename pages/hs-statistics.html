@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房屋建筑统计分析</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="../js/echarts.min.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --primary-light: #e8f0fe;
+            --danger: #d93025;
+            --warning: #e37400;
+            --success: #1e8e3e;
+            --info: #00b4d8;
+            --bg-dark: #f0f2f5;
+            --bg-card: #ffffff;
+            --bg-hover: #e8eaed;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+        .page-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 16px;
+            gap: 16px;
+        }
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-card);
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px var(--shadow);
+        }
+        .page-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .page-header-left i {
+            font-size: 20px;
+            color: var(--primary);
+        }
+        .page-header-left h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .page-header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .filter-group select {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--text-primary);
+            background: #fff;
+            outline: none;
+        }
+        .btn-export {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border: 1px solid var(--primary);
+            border-radius: 4px;
+            background: var(--primary);
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .btn-export:hover {
+            background: var(--primary-dark);
+        }
+        .summary-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+        .summary-card {
+            background: var(--bg-card);
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .summary-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .summary-icon.blue { background: var(--primary-light); color: var(--primary); }
+        .summary-icon.red { background: rgba(217,48,37,0.12); color: var(--danger); }
+        .summary-icon.orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+        .summary-icon.cyan { background: rgba(0,180,216,0.12); color: var(--info); }
+        .summary-info { flex: 1; }
+        .summary-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+        .summary-value { font-size: 22px; font-weight: 600; color: var(--text-primary); }
+        .summary-unit { font-size: 13px; color: var(--text-secondary); margin-left: 2px; }
+        .charts-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 16px;
+            min-height: 0;
+        }
+        @media (max-width: 860px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: none;
+                overflow-y: auto;
+            }
+            .chart-card { min-height: 240px; }
+        }
+        .chart-card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            box-shadow: 0 1px 4px var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 200px;
+        }
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chart-body {
+            flex: 1;
+            padding: 6px 10px 10px;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .table-wrap {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .data-table th, .data-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        .data-table th {
+            background: #fafbfc;
+            color: var(--text-secondary);
+            font-weight: 500;
+            position: sticky;
+            top: 0;
+        }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table td { color: var(--text-primary); }
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        .tag-danger { background: rgba(217,48,37,0.12); color: var(--danger); }
+        .tag-warning { background: rgba(227,116,0,0.12); color: var(--warning); }
+        .tag-safe { background: rgba(30,142,62,0.12); color: var(--success); }
+        .tag-info { background: rgba(0,180,216,0.12); color: var(--info); }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <div class="page-header">
+            <div class="page-header-left">
+                <i class="fas fa-chart-pie"></i>
+                <h2>房屋建筑统计分析</h2>
+            </div>
+            <div class="page-header-right">
+                <div class="filter-group">
+                    <span>街镇：</span>
+                    <select id="streetFilter">
+                        <option value="">全部街镇</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <span>风险等级：</span>
+                    <select id="riskFilter">
+                        <option value="">全部等级</option>
+                        <option value="danger">重大</option>
+                        <option value="major">较大</option>
+                        <option value="warning">一般</option>
+                        <option value="safe">低</option>
+                    </select>
+                </div>
+                <button class="btn-export" onclick="exportData()"><i class="fas fa-download"></i> 导出数据</button>
+            </div>
+        </div>
+
+        <div class="summary-bar">
+            <div class="summary-card">
+                <div class="summary-icon blue"><i class="fas fa-home"></i></div>
+                <div class="summary-info">
+                    <div class="summary-label">房屋总数</div>
+                    <div><span class="summary-value" id="totalCount">0</span><span class="summary-unit">栋</span></div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon red"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="summary-info">
+                    <div class="summary-label">重大风险</div>
+                    <div><span class="summary-value" id="dangerCount">0</span><span class="summary-unit">栋</span></div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon orange"><i class="fas fa-exclamation-circle"></i></div>
+                <div class="summary-info">
+                    <div class="summary-label">较大/一般风险</div>
+                    <div><span class="summary-value" id="warningCount">0</span><span class="summary-unit">栋</span></div>
+                </div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-icon cyan"><i class="fas fa-shield-alt"></i></div>
+                <div class="summary-info">
+                    <div class="summary-label">低风险</div>
+                    <div><span class="summary-value" id="safeCount">0</span><span class="summary-unit">栋</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title"><i class="fas fa-map-marker-alt"></i> 按区域（街镇）分布</div>
+                </div>
+                <div class="chart-body" id="chartStreet"></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title"><i class="fas fa-cubes"></i> 按结构类型分布</div>
+                </div>
+                <div class="chart-body" id="chartStructure"></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title"><i class="fas fa-calendar-alt"></i> 按建筑年代分布</div>
+                </div>
+                <div class="chart-body" id="chartYear"></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div class="chart-title"><i class="fas fa-exclamation-triangle"></i> 风险等级明细</div>
+                </div>
+                <div class="chart-body">
+                    <div class="table-wrap">
+                        <table class="data-table" id="riskTable">
+                            <thead>
+                                <tr><th>风险等级</th><th>数量</th><th>占比</th><th>状态</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const baseData = [
+            { no: 'FX-NQ-001', name: '南桥镇·张翁庙村5组12号', street: '南桥镇', address: '上海市奉贤区南桥镇张翁庙村5组12号', category: '砖混', year: 1978, risk: 'danger', lat: 30.918, lng: 121.472, owner: '张建国' },
+            { no: 'FX-FC-002', name: '奉城镇·洪庙村2组8号', street: '奉城镇', address: '上海市奉贤区奉城镇洪庙村2组8号', category: '砖木', year: 1985, risk: 'major', lat: 30.953, lng: 121.553, owner: '李秀英' },
+            { no: 'FX-ST-003', name: '四团镇·五四村7组3号', street: '四团镇', address: '上海市奉贤区四团镇五四村7组3号', category: '砖混', year: 1992, risk: 'danger', lat: 30.849, lng: 121.723, owner: '王志强' },
+            { no: 'FX-ZL-004', name: '柘林镇·新寺村1组6号', street: '柘林镇', address: '上海市奉贤区柘林镇新寺村1组6号', category: '框架', year: 2001, risk: 'safe', lat: 30.814, lng: 121.422, owner: '陈美华' },
+            { no: 'FX-ZX-005', name: '庄行镇·潘垫村3组15号', street: '庄行镇', address: '上海市奉贤区庄行镇潘垫村3组15号', category: '砖混', year: 1988, risk: 'warning', lat: 30.895, lng: 121.381, owner: '刘大海' },
+            { no: 'FX-JH-006', name: '金汇镇·明星村9组7号', street: '金汇镇', address: '上海市奉贤区金汇镇明星村9组7号', category: '砖木', year: 1975, risk: 'danger', lat: 30.976, lng: 121.491, owner: '赵桂花' },
+            { no: 'FX-QC-007', name: '青村镇·李窑村6组9号', street: '青村镇', address: '上海市奉贤区青村镇李窑村6组9号', category: '砖混', year: 1996, risk: 'major', lat: 30.867, lng: 121.583, owner: '孙明华' },
+            { no: 'FX-HW-008', name: '海湾镇·星火村2组11号', street: '海湾镇', address: '上海市奉贤区海湾镇星火村2组11号', category: '砖混', year: 1982, risk: 'danger', lat: 30.804, lng: 121.512, owner: '周志军' },
+            { no: 'FX-NQ-009', name: '南桥镇·杨王村1组3号', street: '南桥镇', address: '上海市奉贤区南桥镇杨王村1组3号', category: '框架', year: 2005, risk: 'safe', lat: 30.936, lng: 121.458, owner: '吴秀英' },
+            { no: 'FX-FC-010', name: '奉城镇·久茂村9组5号', street: '奉城镇', address: '上海市奉贤区奉城镇久茂村9组5号', category: '砖木', year: 1990, risk: 'warning', lat: 30.962, lng: 121.568, owner: '郑国良' },
+            { no: 'FX-ST-011', name: '四团镇·三坎村4组2号', street: '四团镇', address: '上海市奉贤区四团镇三坎村4组2号', category: '砖混', year: 1986, risk: 'major', lat: 30.871, lng: 121.701, owner: '杨建华' },
+            { no: 'FX-ZL-012', name: '柘林镇·营房村8组4号', street: '柘林镇', address: '上海市奉贤区柘林镇营房村8组4号', category: '框架', year: 1998, risk: 'safe', lat: 30.827, lng: 121.439, owner: '何翠兰' }
+        ];
+
+        const riskMap = {
+            danger: { label: '重大', color: '#d93025' },
+            major: { label: '较大', color: '#f57c00' },
+            warning: { label: '一般', color: '#f9ab00' },
+            safe: { label: '低', color: '#1a73e8' }
+        };
+
+        const categoryMap = {
+            '砖混': '砖混结构',
+            '砖木': '砖木结构',
+            '框架': '框架结构'
+        };
+
+        let charts = {};
+
+        function getYearGroup(year) {
+            if (year < 1980) return '1980年以前';
+            if (year < 1990) return '1980-1989年';
+            if (year < 2000) return '1990-1999年';
+            return '2000年以后';
+        }
+
+        function groupBy(data, keyFn) {
+            const map = {};
+            data.forEach(item => {
+                const key = keyFn(item);
+                map[key] = (map[key] || 0) + 1;
+            });
+            return map;
+        }
+
+        function initFilters() {
+            const streetSet = new Set(baseData.map(i => i.street));
+            const streetSelect = document.getElementById('streetFilter');
+            streetSet.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                streetSelect.appendChild(opt);
+            });
+            streetSelect.addEventListener('change', updateStats);
+            document.getElementById('riskFilter').addEventListener('change', updateStats);
+        }
+
+        function getFilteredData() {
+            const street = document.getElementById('streetFilter').value;
+            const risk = document.getElementById('riskFilter').value;
+            return baseData.filter(item => {
+                return (!street || item.street === street) && (!risk || item.risk === risk);
+            });
+        }
+
+        function updateSummary(data) {
+            document.getElementById('totalCount').textContent = data.length;
+            document.getElementById('dangerCount').textContent = data.filter(i => i.risk === 'danger').length;
+            document.getElementById('warningCount').textContent = data.filter(i => i.risk === 'major' || i.risk === 'warning').length;
+            document.getElementById('safeCount').textContent = data.filter(i => i.risk === 'safe').length;
+        }
+
+        function renderStreetChart(data) {
+            const map = groupBy(data, i => i.street);
+            const x = Object.keys(map);
+            const y = Object.values(map);
+            const option = {
+                tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+                xAxis: { type: 'category', data: x, axisLabel: { rotate: 25, fontSize: 11, interval: 0 } },
+                yAxis: { type: 'value', minInterval: 1 },
+                series: [{
+                    data: y,
+                    type: 'bar',
+                    itemStyle: { color: '#1a73e8', borderRadius: [4, 4, 0, 0] },
+                    label: { show: true, position: 'top', fontSize: 11 }
+                }]
+            };
+            charts.street.setOption(option);
+        }
+
+        function renderStructureChart(data) {
+            const map = groupBy(data, i => categoryMap[i.category] || i.category);
+            const option = {
+                tooltip: { trigger: 'item' },
+                legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } },
+                series: [{
+                    type: 'pie',
+                    radius: ['35%', '60%'],
+                    center: ['50%', '42%'],
+                    data: Object.entries(map).map(([name, value]) => ({ name, value })),
+                    label: { formatter: '{b}\n{c}栋', fontSize: 11, lineHeight: 14 },
+                    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 }
+                }]
+            };
+            charts.structure.setOption(option);
+        }
+
+        function renderYearChart(data) {
+            const order = ['1980年以前', '1980-1989年', '1990-1999年', '2000年以后'];
+            const map = groupBy(data, i => getYearGroup(i.year));
+            const x = order.filter(k => map[k] !== undefined);
+            const y = x.map(k => map[k]);
+            const option = {
+                tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+                xAxis: { type: 'category', data: x, axisLabel: { interval: 0, fontSize: 11 } },
+                yAxis: { type: 'value', minInterval: 1 },
+                series: [{
+                    data: y,
+                    type: 'line',
+                    smooth: true,
+                    areaStyle: { color: 'rgba(26,115,232,0.15)' },
+                    itemStyle: { color: '#1a73e8' },
+                    label: { show: true, position: 'top', fontSize: 11 }
+                }]
+            };
+            charts.year.setOption(option);
+        }
+
+        function renderRiskTable(data) {
+            const total = data.length || 1;
+            const order = ['danger', 'major', 'warning', 'safe'];
+            const tbody = document.querySelector('#riskTable tbody');
+            tbody.innerHTML = order.map(risk => {
+                const count = data.filter(i => i.risk === risk).length;
+                const pct = ((count / total) * 100).toFixed(1) + '%';
+                const tagClass = risk === 'danger' ? 'tag-danger' : risk === 'major' ? 'tag-warning' : risk === 'warning' ? 'tag-warning' : 'tag-safe';
+                return `<tr><td>${riskMap[risk].label}</td><td>${count}</td><td>${pct}</td><td><span class="tag ${tagClass}">${riskMap[risk].label}</span></td></tr>`;
+            }).join('');
+        }
+
+        function updateStats() {
+            const data = getFilteredData();
+            updateSummary(data);
+            renderStreetChart(data);
+            renderStructureChart(data);
+            renderYearChart(data);
+            renderRiskTable(data);
+        }
+
+        function exportData() {
+            const data = getFilteredData();
+            const headers = ['编号', '名称', '街镇', '地址', '结构类型', '建成年代', '风险等级', '产权人'];
+            const rows = data.map(i => [i.no, i.name, i.street, i.address, categoryMap[i.category], i.year, riskMap[i.risk].label, i.owner]);
+            const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = '房屋建筑统计.csv';
+            link.click();
+        }
+
+        function init() {
+            charts.street = echarts.init(document.getElementById('chartStreet'));
+            charts.structure = echarts.init(document.getElementById('chartStructure'));
+            charts.year = echarts.init(document.getElementById('chartYear'));
+            initFilters();
+            updateStats();
+            window.addEventListener('resize', () => {
+                Object.values(charts).forEach(c => c.resize());
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>

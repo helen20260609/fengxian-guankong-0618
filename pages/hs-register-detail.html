@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房屋建筑“一房一档” - 房屋安全管理</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --primary-light: #e8f0fe;
+            --danger: #d93025;
+            --major: #f57c00;
+            --warning: #f9ab00;
+            --safe: #1a73e8;
+            --bg-dark: #f0f2f5;
+            --bg-card: #ffffff;
+            --bg-hover: #e8eaed;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+        .page-container { display: flex; height: 100vh; }
+        .left-panel {
+            width: 360px; min-width: 360px; background: var(--bg-card);
+            border-right: 1px solid var(--border); display: flex; flex-direction: column;
+        }
+        .search-box { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+        .search-input-wrap {
+            display: flex; align-items: center; gap: 8px; border: 1px solid var(--border);
+            border-radius: 4px; padding: 0 12px; height: 38px; background: #fff;
+        }
+        .search-input-wrap i { color: var(--text-secondary); font-size: 13px; }
+        .search-input-wrap input { flex: 1; border: none; outline: none; font-size: 13px; color: var(--text-primary); }
+        .search-input-wrap input::placeholder { color: #b8bcc4; }
+        .search-btn { width: 38px; height: 30px; background: var(--primary); color: #fff; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .search-btn i { color: #fff; font-size: 13px; }
+        .filter-tags { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px 6px; }
+        .filter-tag { display: flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 14px; font-size: 12px; border: 1px solid var(--border); background: #fff; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+        .filter-tag:hover, .filter-tag.active { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+        .filter-tag i { font-size: 11px; }
+        .house-list { flex: 1; overflow-y: auto; padding: 8px 12px; }
+        .house-card { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; }
+        .house-card:hover, .house-card.active { border-color: var(--primary); box-shadow: 0 2px 8px rgba(26,115,232,0.12); }
+        .house-card.active { background: var(--primary-light); }
+        .house-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+        .house-name { font-size: 14px; font-weight: 600; color: var(--text-primary); line-height: 1.4; }
+        .house-code { font-size: 11px; color: var(--text-secondary); background: var(--bg-dark); padding: 2px 6px; border-radius: 4px; white-space: nowrap; margin-left: 8px; }
+        .house-address { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+        .house-tags { display: flex; gap: 6px; }
+        .risk-tag { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+        .risk-tag.danger { background: rgba(217,48,37,0.12); color: var(--danger); }
+        .risk-tag.major { background: rgba(245,124,0,0.12); color: var(--major); }
+        .risk-tag.warning { background: rgba(249,171,0,0.12); color: var(--warning); }
+        .risk-tag.safe { background: rgba(26,115,232,0.12); color: var(--safe); }
+        .year-tag { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: rgba(95,99,104,0.1); color: var(--text-secondary); }
+        .list-footer { padding: 10px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); text-align: center; }
+        .right-map { flex: 1; position: relative; background: #e5e7eb; }
+        #map { width: 100%; height: 100%; }
+        .map-legend { position: absolute; bottom: 20px; right: 20px; background: rgba(255,255,255,0.95); border-radius: 8px; padding: 12px 16px; box-shadow: 0 2px 8px var(--shadow); z-index: 1000; font-size: 12px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .legend-item:last-child { margin-bottom: 0; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .legend-dot.danger { background: var(--danger); }
+        .legend-dot.major { background: var(--major); }
+        .legend-dot.warning { background: var(--warning); }
+        .legend-dot.safe { background: var(--safe); }
+
+        /* 房屋档案弹窗 */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 5000;
+            display: none; align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .arch-modal {
+            width: 900px; max-width: 94vw; height: 86vh; background: #fff; border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden;
+        }
+        .arch-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 20px; border-bottom: 1px solid var(--border); background: #fafbfc;
+        }
+        .arch-modal-title { display: flex; align-items: center; gap: 12px; }
+        .arch-modal-title h2 { font-size: 17px; font-weight: 600; }
+        .arch-modal-sub { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-secondary); }
+        .arch-tag { background: var(--bg-dark); padding: 3px 8px; border-radius: 4px; font-size: 11px; }
+        .arch-actions { display: flex; align-items: center; gap: 10px; }
+        .arch-btn {
+            display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px;
+            font-size: 13px; cursor: pointer; border: 1px solid var(--border); background: #fff; color: var(--text-primary);
+            transition: all 0.2s;
+        }
+        .arch-btn:hover { background: var(--bg-dark); }
+        .arch-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .arch-btn.primary:hover { background: var(--primary-dark); }
+        .arch-btn.close { border: none; font-size: 18px; color: var(--text-secondary); padding: 4px 8px; }
+        .arch-btn.close:hover { background: var(--bg-dark); color: var(--text-primary); }
+        .arch-modal-body { flex: 1; display: flex; overflow: hidden; }
+        .arch-menu {
+            width: 190px; min-width: 190px; border-right: 1px solid var(--border); background: #fafbfc; padding: 12px 0;
+        }
+        .arch-menu-item {
+            display: flex; align-items: center; justify-content: space-between; padding: 10px 16px;
+            font-size: 13px; color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
+        }
+        .arch-menu-item:hover { background: var(--primary-light); color: var(--primary); }
+        .arch-menu-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+        .arch-menu-item-left { display: flex; align-items: center; gap: 10px; }
+        .arch-menu-badge {
+            font-size: 11px; padding: 2px 8px; border-radius: 10px;
+            background: var(--bg-dark); color: var(--text-secondary);
+        }
+
+        /* 时间轴样式 */
+        .timeline-wrap { padding: 10px 6px; }
+        .timeline-item { display: flex; gap: 16px; padding: 14px 0; position: relative; }
+        .timeline-left { width: 150px; flex-shrink: 0; text-align: right; }
+        .timeline-time { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+        .timeline-operator { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .timeline-line { position: relative; width: 14px; flex-shrink: 0; display: flex; justify-content: center; }
+        .timeline-line::before {
+            content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px;
+            background: var(--border); transform: translateX(-50%);
+        }
+        .timeline-item:first-child .timeline-line::before { top: 24px; }
+        .timeline-item:last-child .timeline-line::before { bottom: auto; height: 24px; }
+        .timeline-dot { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid var(--primary);
+            margin-top: 4px; z-index: 1;
+        }
+        .timeline-dot.create { border-color: #34a853; }
+        .timeline-dot.update { border-color: #1a73e8; }
+        .timeline-dot.delete { border-color: #ea4335; }
+        .timeline-right { flex: 1; background: var(--bg-light); border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 16px; transition: all 0.2s;
+        }
+        .timeline-item:hover .timeline-right { border-color: var(--primary); box-shadow: 0 2px 8px rgba(26,115,232,0.12); }
+        .timeline-summary { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 10px; }
+        .timeline-diff-preview { display: flex; flex-direction: column; gap: 8px; }
+        .diff-row { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+        .diff-label { color: var(--text-secondary); min-width: 80px; }
+        .diff-before { color: #ea4335; background: rgba(234,67,53,0.08); padding: 2px 8px; border-radius: 4px; text-decoration: line-through; }
+        .diff-after  { color: #34a853; background: rgba(52,168,83,0.08); padding: 2px 8px; border-radius: 4px; }
+        .diff-row .fa-arrow-right { color: var(--text-secondary); font-size: 11px; }
+
+        .arch-menu-badge {
+            font-size: 11px; color: #fff; background: var(--text-secondary); padding: 1px 6px; border-radius: 8px;
+        }
+        .arch-content {
+            flex: 1; padding: 20px 24px; overflow-y: auto;
+        }
+        .arch-section-title {
+            display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+        .arch-section-title i { color: var(--primary); }
+        .arch-info-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 24px; margin-bottom: 24px;
+        }
+        .arch-info-item { display: flex; flex-direction: column; gap: 5px; }
+        .arch-info-label { font-size: 12px; color: var(--text-secondary); }
+        .arch-info-value { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+        .arch-info-value.danger { color: var(--danger); font-weight: 600; }
+        .arch-divider { height: 1px; background: var(--border); margin: 20px 0; }
+        .arch-table-wrap { width: 100%; overflow-x: auto; }
+        .arch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .arch-table th, .arch-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+        .arch-table th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+        .arch-table td { color: var(--text-primary); }
+        .arch-table tr:last-child td { border-bottom: none; }
+
+        .leaflet-popup-content button.archive-btn {
+            margin-top: 8px; padding: 4px 10px; border: 1px solid var(--primary); border-radius: 4px;
+            background: var(--primary); color: #fff; font-size: 12px; cursor: pointer;
+        }
+        .leaflet-popup-content button.archive-btn:hover { background: var(--primary-dark); }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <div class="left-panel">
+            <div class="search-box">
+                <div class="search-input-wrap">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchInput" placeholder="可按房屋编号、地址、产权人等快速定位">
+                    <button class="search-btn" id="searchBtn"><i class="fas fa-search"></i></button>
+                </div>
+            </div>
+            <div class="filter-tags">
+                <div class="filter-tag active" data-filter="all"><i class="fas fa-home"></i> 全部</div>
+                <div class="filter-tag" data-filter="danger"><i class="fas fa-exclamation-triangle"></i> 重大</div>
+                <div class="filter-tag" data-filter="major"><i class="fas fa-exclamation-circle"></i> 较大</div>
+                <div class="filter-tag" data-filter="warning"><i class="fas fa-exclamation"></i> 一般</div>
+            </div>
+            <div class="house-list" id="houseList"></div>
+            <div class="list-footer" id="listFooter">共 0 条</div>
+        </div>
+        <div class="right-map">
+            <div id="map"></div>
+            <div class="map-legend">
+                <div class="legend-item"><span class="legend-dot danger"></span> 重大风险</div>
+                <div class="legend-item"><span class="legend-dot major"></span> 较大风险</div>
+                <div class="legend-item"><span class="legend-dot warning"></span> 一般风险</div>
+                <div class="legend-item"><span class="legend-dot safe"></span> 低风险</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 房屋档案弹窗 -->
+    <div class="modal-overlay" id="archiveModal">
+        <div class="arch-modal">
+            <div class="arch-modal-header">
+                <div class="arch-modal-title">
+                    <h2 id="archTitle">南桥镇·张翁庙村5组12号</h2>
+                    <div class="arch-modal-sub">
+                        <span class="arch-tag" id="archNo">FX-NQ-001</span>
+                        <span id="archAddress">上海市奉贤区南桥镇张翁庙村5组12号</span>
+                    </div>
+                </div>
+                <div class="arch-actions">
+                    <button class="arch-btn"><i class="fas fa-print"></i> 打印</button>
+                    <button class="arch-btn primary"><i class="fas fa-file-pdf"></i> 导出PDF</button>
+                    <button class="arch-btn close" id="archClose"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+            <div class="arch-modal-body">
+                <div class="arch-menu">
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-id-card"></i> 基础信息</div></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-drafting-compass"></i> 设计施工信息</div></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-cubes"></i> 结构特点</div></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-hammer"></i> 建筑材料</div></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-tools"></i> 维修记录</div><span class="arch-menu-badge">2</span></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-wrench"></i> 改造记录</div><span class="arch-menu-badge">2</span></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-search"></i> 安全隐患排查</div><span class="arch-menu-badge">3</span></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-clipboard-check"></i> 整治记录</div><span class="arch-menu-badge">1</span></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-check-circle"></i> 消险记录</div><span class="arch-menu-badge">0</span></div>
+                    <div class="arch-menu-item"><div class="arch-menu-item-left"><i class="fas fa-history"></i> 档案变更履历</div><span class="arch-menu-badge">4</span></div>
+                </div>
+                <div class="arch-content">
+                    <div class="arch-section-title"><i class="fas fa-id-card"></i> 基础信息</div>
+                    <div class="arch-info-grid">
+                        <div class="arch-info-item"><div class="arch-info-label">房屋编号</div><div class="arch-info-value" id="archInfoNo">FX-NQ-001</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">房屋名称</div><div class="arch-info-value" id="archInfoName">南桥镇·张翁庙村5组12号</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">所属街镇</div><div class="arch-info-value" id="archInfoStreet">南桥镇</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">社区/村</div><div class="arch-info-value" id="archInfoVillage">张翁庙村</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">详细地址</div><div class="arch-info-value" id="archInfoFullAddr">上海市奉贤区南桥镇张翁庙村5组12号</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">建成年代</div><div class="arch-info-value" id="archInfoYear">1982年</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">建筑层数</div><div class="arch-info-value">2层</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">建筑面积</div><div class="arch-info-value">186㎡</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">结构类型</div><div class="arch-info-value" id="archInfoCategory">砖混结构</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">房屋用途</div><div class="arch-info-value">农村住宅</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">产权单位/人</div><div class="arch-info-value">张建国</div></div>
+                        <div class="arch-info-item"><div class="arch-info-label">使用人</div><div class="arch-info-value">张建国一家4口</div></div>
+                    </div>
+                    <div class="arch-divider"></div>
+                    <div class="arch-info-item">
+                        <div class="arch-info-label">隐患等级</div>
+                        <div class="arch-info-value danger" id="archInfoRisk">重大</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const baseData = [
+            { no: 'FX-NQ-001', name: '南桥镇·张翁庙村5组12号', street: '南桥镇', address: '上海市奉贤区南桥镇张翁庙村5组12号', category: '砖混', year: 1978, risk: 'danger', owner: '张建国', lat: 30.918, lng: 121.456 },
+            { no: 'FX-FC-002', name: '奉城镇·洪庙村2组8号', street: '奉城镇', address: '上海市奉贤区奉城镇洪庙村2组8号', category: '砖木', year: 1985, risk: 'major', owner: '李秀英', lat: 30.942, lng: 121.512 },
+            { no: 'FX-ST-003', name: '四团镇·五四村7组3号', street: '四团镇', address: '上海市奉贤区四团镇五四村7组3号', category: '砖混', year: 1975, risk: 'danger', owner: '王志强', lat: 30.965, lng: 121.548 },
+            { no: 'FX-ZL-004', name: '柘林镇·新寺村1组6号', street: '柘林镇', address: '上海市奉贤区柘林镇新寺村1组6号', category: '框架', year: 1992, risk: 'safe', owner: '陈美华', lat: 30.884, lng: 121.493 },
+            { no: 'FX-ZX-005', name: '庄行镇·潘垫村3组15号', street: '庄行镇', address: '上海市奉贤区庄行镇潘垫村3组15号', category: '砖木', year: 1980, risk: 'warning', owner: '刘大海', lat: 30.930, lng: 121.405 },
+            { no: 'FX-JH-006', name: '金汇镇·明星村9组7号', street: '金汇镇', address: '上海市奉贤区金汇镇明星村9组7号', category: '砖混', year: 1972, risk: 'danger', owner: '赵桂花', lat: 30.950, lng: 121.468 },
+            { no: 'FX-QC-007', name: '青村镇·李窑村6组9号', street: '青村镇', address: '上海市奉贤区青村镇李窑村6组9号', category: '框架', year: 1988, risk: 'major', owner: '孙明华', lat: 30.920, lng: 121.535 },
+            { no: 'FX-HW-008', name: '海湾镇·星火村2组11号', street: '海湾镇', address: '上海市奉贤区海湾镇星火村2组11号', category: '砖混', year: 1976, risk: 'danger', owner: '周志军', lat: 30.855, lng: 121.520 },
+            { no: 'FX-NQ-009', name: '南桥镇·杨王村1组3号', street: '南桥镇', address: '上海市奉贤区南桥镇杨王村1组3号', category: '框架', year: 1995, risk: 'safe', owner: '吴秀英', lat: 30.912, lng: 121.462 },
+            { no: 'FX-FC-010', name: '奉城镇·久茂村9组5号', street: '奉城镇', address: '上海市奉贤区奉城镇久茂村9组5号', category: '砖木', year: 1983, risk: 'warning', owner: '郑国良', lat: 30.938, lng: 121.518 },
+            { no: 'FX-ST-011', name: '四团镇·三坎村4组2号', street: '四团镇', address: '上海市奉贤区四团镇三坎村4组2号', category: '砖混', year: 1979, risk: 'major', owner: '杨建华', lat: 30.970, lng: 121.555 },
+            { no: 'FX-ZL-012', name: '柘林镇·营房村8组4号', street: '柘林镇', address: '上海市奉贤区柘林镇营房村8组4号', category: '砖木', year: 1986, risk: 'safe', owner: '何翠兰', lat: 30.890, lng: 121.500 }
+        ];
+
+        let filteredData = [...baseData];
+        let activeFilter = 'all';
+        let activeIndex = -1;
+        let map, markers = [];
+
+        const fengxianBoundary = [
+            [30.993, 121.401], [30.960, 121.370], [30.900, 121.385],
+            [30.850, 121.435], [30.860, 121.580], [30.940, 121.600],
+            [30.990, 121.570], [31.010, 121.480], [30.993, 121.401]
+        ];
+
+        function initMap() {
+            map = L.map('map').setView([30.920, 121.500], 11);
+            L.tileLayer('https://map.geoq.cn/arcgis/rest/services/ChinaOnlineStreetPurplishBlue/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '© GeoQ',
+                maxZoom: 18
+            }).addTo(map);
+
+            L.polygon(fengxianBoundary, {
+                color: '#1a73e8',
+                weight: 2,
+                fillColor: '#1a73e8',
+                fillOpacity: 0.08,
+                dashArray: '5, 5'
+            }).addTo(map).bindPopup('上海奉贤区范围');
+
+            renderMarkers();
+        }
+
+        function getRiskColor(risk) { return risk === 'danger' ? '#d93025' : risk === 'warning' ? '#e37400' : '#1e8e3e'; }
+        function getRiskText(risk) { return risk === 'danger' ? '重大' : risk === 'warning' ? '一般' : '安全'; }
+        function renderMarkers() {
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            filteredData.forEach((item, idx) => {
+                const color = getRiskColor(item.risk);
+                const marker = L.circleMarker([item.lat, item.lng], {
+                    radius: 8, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.95
+                }).addTo(map);
+                const popupContent = '<b>' + item.name + '</b><br/>编号：' + item.no + '<br/>地址：' + item.address + '<br/>风险等级：' + getRiskText(item.risk);
+                marker.bindPopup(popupContent);
+                marker.on('click', function() { selectHouse(idx); });
+                marker.on('dblclick', function() { openArchive(idx); });
+                markers.push(marker);
+            });
+        }
+
+        function renderList() {
+            const listEl = document.getElementById('houseList');
+            listEl.innerHTML = filteredData.map((item, idx) => `
+                <div class="house-item" data-idx="${idx}" onclick="selectHouse(${idx})">
+                    <div class="house-header">
+                        <div class="house-name"><i class="fas fa-home"></i> ${item.name}</div>
+                        <span class="risk-tag ${getRiskClass(item.risk)}">${getRiskText(item.risk)}</span>
+                    </div>
+                    <div class="house-info"><i class="fas fa-map-marker-alt"></i> ${item.address}</div>
+                    <div class="house-meta">
+                        <span><i class="fas fa-building"></i> ${getCategoryText(item.category)}</span>
+                        <span><i class="fas fa-calendar-alt"></i> ${item.year}年</span>
+                    </div>
+                    <button class="archive-btn" onclick="event.stopPropagation(); openArchive(${idx})"><i class="fas fa-folder-open"></i> 房屋档案</button>
+                </div>
+            `).join('');
+            document.querySelector('.count-bar').textContent = '共 ' + filteredData.length + ' 条';
+        }
+
+        function selectHouse(idx) {
+            const item = filteredData[idx];
+            if (!item) return;
+            document.querySelectorAll('.house-item').forEach(el => el.classList.remove('active'));
+            const activeEl = document.querySelector('.house-item[data-idx="' + idx + '"]');
+            if (activeEl) activeEl.classList.add('active');
+            map.setView([item.lat, item.lng], 16, { animate: true });
+            markers[idx].openPopup();
+        }
+
+        function getRiskColor(risk) { return risk === 'danger' ? '#d93025' : risk === 'major' ? '#f57c00' : risk === 'warning' ? '#f9ab00' : '#1a73e8'; }
+        function getRiskText(risk) { return risk === 'danger' ? '重大' : risk === 'major' ? '较大' : risk === 'warning' ? '一般' : '低'; }
+        function getRiskClass(risk) { return risk === 'danger' ? 'danger' : risk === 'major' ? 'major' : risk === 'warning' ? 'warning' : 'safe'; }
+        function getCategoryText(cat) { return cat === '砖混' ? '砖混结构' : cat === '砖木' ? '砖木结构' : '框架结构'; }
+
+        function openArchive(idx) {
+            const item = filteredData[idx];
+            const modal = document.getElementById('archiveModal');
+            modal.dataset.index = idx;
+            document.getElementById('archTitle').textContent = item.name;
+            document.getElementById('archNo').textContent = item.no;
+            document.getElementById('archAddress').textContent = item.address;
+            switchTab('basic');
+            modal.classList.add('active');
+        }
+
+        function closeArchive() {
+            document.getElementById('archiveModal').classList.remove('active');
+        }
+
+        document.getElementById('archClose').addEventListener('click', closeArchive);
+        document.getElementById('archiveModal').addEventListener('click', function(e) {
+            if (e.target === this) closeArchive();
+        });
+
+        // 房屋档案：每个菜单对应的内容
+        const archiveTabData = {
+            basic: {
+                title: '基础信息',
+                icon: 'fa-id-card',
+                rows: [
+                    ['房屋编号', 'archInfoNo'],
+                    ['房屋名称', 'archInfoName'],
+                    ['所属街镇', 'archInfoStreet'],
+                    ['社区/村', 'archInfoVillage'],
+                    ['详细地址', 'archInfoFullAddr'],
+                    ['建成年代', 'archInfoYear'],
+                    ['建筑层数', '2层'],
+                    ['建筑面积', '186㎡'],
+                    ['结构类型', 'archInfoCategory'],
+                    ['房屋用途', '农村住宅'],
+                    ['产权单位/人', '张建国'],
+                    ['使用人', '张建国一家4口']
+                ]
+            },
+            design: {
+                title: '设计施工信息',
+                icon: 'fa-drafting-compass',
+                rows: [
+                    ['设计单位', '奉贤区乡镇建筑设计所'],
+                    ['施工单位', '南桥镇第三建筑队'],
+                    ['设计图纸', '<a href="#" style="color:var(--primary);text-decoration:none;"><i class="fas fa-file-pdf"></i> FX-NQ-001-图纸-1982.pdf</a>'],
+                    ['竣工时间', '1982-12-15'],
+                    ['改建扩建记录', '2005年北侧扩建厨房一间（约15㎡），2015年东侧加建阳光房（约8㎡）']
+                ]
+            },
+            structure: {
+                title: '结构特点',
+                icon: 'fa-cubes',
+                rows: [
+                    ['基础形式', '条形基础'],
+                    ['承重体系', '砖混结构，承重墙承重'],
+                    ['楼盖形式', '预制空心板'],
+                    ['屋面形式', '坡屋面，瓦屋面']
+                ]
+            },
+            material: {
+                title: '建筑材料',
+                icon: 'fa-hammer',
+                rows: [
+                    ['材料类型', '烧结普通砖、混合砂浆'],
+                    ['强度等级', 'C20'],
+                    ['生产厂家', '奉贤区建材厂']
+                ]
+            },
+            repair: {
+                title: '维修记录',
+                icon: 'fa-tools',
+                columns: ['维修时间', '维修内容', '维修单位', '维修费用'],
+                rows: [
+                    ['2023-05', '屋面补漏，更换破损瓦片', '南桥镇修缮队', '¥8,500'],
+                    ['2020-11', '外墙裂缝修补，重新粉刷', '奉贤区建筑维修中心', '¥12,000']
+                ]
+            },
+            renovate: {
+                title: '改造记录',
+                icon: 'fa-wrench',
+                columns: ['改造时间', '改造内容', '改造单位', '审批文件'],
+                rows: [
+                    ['2015-06', '东侧加建阳光房（约8㎡）', '南桥镇村镇建设管理办', '南桥改审〔2015〕18号'],
+                    ['2005-03', '北侧扩建厨房一间（约15㎡）', '奉贤区住房保障和房屋管理局', '沪奉房改〔2005〕032号']
+                ]
+            },
+            hazard: {
+                title: '安全隐患排查',
+                icon: 'fa-search',
+                columns: ['排查时间', '排查单位', '隐患描述', '隐患等级', '现场照片'],
+                rows: [
+                    ['2024-06-12', '南桥镇房屋安全排查组', '东侧承重墙纵向裂缝长约1.2m，缝宽约2mm', '一般风险', 'photo_wall.jpg'],
+                    ['2024-06-12', '南桥镇房屋安全排查组', '地基无明显不均匀沉降', '低风险', 'photo_foundation.jpg'],
+                    ['2024-06-12', '南桥镇房屋安全排查组', '雨季屋面局部渗漏', '一般风险', 'photo_roof.jpg'],
+                    ['2024-06-12', '奉贤区消防检查队', '缺失灭火器及应急照明', '较大风险', 'photo_fire.jpg']
+                ]
+            },
+            rectification: {
+                title: '整治记录',
+                icon: 'fa-clipboard-check',
+                columns: ['整治时间', '整治措施', '整治单位', '验收结论'],
+                rows: [
+                    ['2024-09', '承重墙裂缝灌浆加固，屋面防水重做', '奉贤区房屋修缮工程公司', '验收合格，建议定期复查'],
+                    ['2024-08', '增设灭火器及应急照明', '南桥镇消防维保单位', '验收合格']
+                ]
+            },
+            eliminate: {
+                title: '消险记录',
+                icon: 'fa-check-circle',
+                columns: ['销号时间', '销号依据', '审核人'],
+                rows: [
+                    ['2025-01-20', '《南桥镇农村房屋安全隐患整治验收表》编号 FX-NQ-001-ZG-2025', '王建军（南桥镇村镇建设管理办）'],
+                    ['2024-12-18', '《消防设施整改复核单》编号 FX-NQ-001-XF-2024', '李明（奉贤区消防大队）']
+                ]
+            },
+            history: {
+                title: '档案变更履历',
+                icon: 'fa-history',
+                timeline: [
+                    {
+                        time: '2024-01-15 09:32:00',
+                        operator: '王建军',
+                        action: 'UPDATE',
+                        summary: '隐患等级调整',
+                        diff: [
+                            { label: '隐患等级', before: '一般', after: '重大' }
+                        ]
+                    },
+                    {
+                        time: '2022-08-20 14:10:00',
+                        operator: '李明',
+                        action: 'UPDATE',
+                        summary: '补充维修记录',
+                        diff: [
+                            { label: '维修记录', before: '无', after: '2020-11 外墙裂缝修补' }
+                        ]
+                    },
+                    {
+                        time: '2019-04-08 11:05:00',
+                        operator: '张华',
+                        action: 'UPDATE',
+                        summary: '更新产权人信息',
+                        diff: [
+                            { label: '产权人', before: '张建国（原登记）', after: '张建国' }
+                        ]
+                    },
+                    {
+                        time: '2016-07-03 16:45:00',
+                        operator: '陈刚',
+                        action: 'CREATE',
+                        summary: '新增东侧阳光房改造记录',
+                        diff: [
+                            { label: '改造记录', before: '无', after: '2015-06 东侧加建阳光房（约8㎡）' }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        const archiveTabOrder = ['basic', 'design', 'structure', 'material', 'repair', 'renovate', 'hazard', 'rectification', 'eliminate', 'history'];
+        const archiveTabLabels = {
+            basic: '基础信息',
+            design: '设计施工信息',
+            structure: '结构特点',
+            material: '建筑材料',
+            repair: '维修记录',
+            renovate: '改造记录',
+            hazard: '安全隐患排查',
+            rectification: '整治记录',
+            eliminate: '消险记录',
+            history: '档案变更履历'
+        };
+
+        function switchTab(tab) {
+            const modal = document.getElementById('archiveModal');
+            const idx = parseInt(modal.dataset.index || 0);
+            const item = filteredData[idx];
+            const data = archiveTabData[tab];
+
+            document.querySelectorAll('.arch-menu-item').forEach((el, i) => {
+                el.classList.toggle('active', archiveTabOrder[i] === tab);
+            });
+
+            const content = document.querySelector('.arch-content');
+            let html = '<div class="arch-section-title"><i class="fas ' + data.icon + '"></i> ' + data.title + '</div>';
+
+            if (tab === 'basic') {
+                html += '<div class="arch-info-grid">';
+                const basicRows = [
+                    ['房屋编号', item.no],
+                    ['房屋名称', item.name],
+                    ['所属街镇', item.street],
+                    ['社区/村', (item.address.match(/上海市奉贤区[^镇]+镇([^村]+村)/) || [])[1] || '-'],
+                    ['详细地址', item.address],
+                    ['建成年代', item.year + '年'],
+                    ['建筑层数', '2层'],
+                    ['建筑面积', '186㎡'],
+                    ['结构类型', getCategoryText(item.category)],
+                    ['房屋用途', '农村住宅'],
+                    ['产权单位/人', '张建国'],
+                    ['使用人', '张建国一家4口'],
+                    ['隐患等级', getRiskText(item.risk)]
+                ];
+                basicRows.forEach(function(r) {
+                    const cls = r[0] === '隐患等级' ? ' class="arch-info-value ' + getRiskClass(item.risk) + '"' : ' class="arch-info-value"';
+                    html += '<div class="arch-info-item"><div class="arch-info-label">' + r[0] + '</div><div ' + cls + '>' + r[1] + '</div></div>';
+                });
+                html += '</div>';
+            } else if (tab === 'design' || tab === 'structure' || tab === 'material') {
+                html += '<div class="arch-info-grid">';
+                data.rows.forEach(function(r) {
+                    html += '<div class="arch-info-item"><div class="arch-info-label">' + r[0] + '</div><div class="arch-info-value">' + r[1] + '</div></div>';
+                });
+                html += '</div>';
+            } else if (tab === 'hazard') {
+                html += '<div class="arch-table-wrap">' +
+                    '<table class="arch-table"><thead><tr><th style="width:120px;">排查时间</th><th style="width:160px;">排查单位</th><th>隐患描述</th><th style="width:100px;">隐患等级</th><th style="width:120px;">现场照片</th></tr></thead><tbody>';
+                data.rows.forEach(function(r) {
+                    html += '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td><td>' + r[4] + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else if (tab === 'repair') {
+                html += '<div class="arch-table-wrap">' +
+                    '<table class="arch-table"><thead><tr><th style="width:120px;">维修时间</th><th>维修内容</th><th style="width:160px;">维修单位</th><th style="width:100px;">维修费用</th></tr></thead><tbody>';
+                data.rows.forEach(function(r) {
+                    html += '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else if (tab === 'renovate') {
+                html += '<div class="arch-table-wrap">' +
+                    '<table class="arch-table"><thead><tr><th style="width:120px;">改造时间</th><th>改造内容</th><th style="width:180px;">改造单位</th><th style="width:140px;">审批文件</th></tr></thead><tbody>';
+                data.rows.forEach(function(r) {
+                    html += '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else if (tab === 'rectification') {
+                html += '<div class="arch-table-wrap">' +
+                    '<table class="arch-table"><thead><tr><th style="width:100px;">整治时间</th><th style="width:180px;">整治措施</th><th style="width:180px;">整治单位</th><th>验收结论</th></tr></thead><tbody>';
+                data.rows.forEach(function(r) {
+                    html += '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td><td>' + r[3] + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else if (tab === 'eliminate') {
+                html += '<div class="arch-table-wrap">' +
+                    '<table class="arch-table"><thead><tr><th style="width:120px;">销号时间</th><th style="width:260px;">销号依据</th><th>审核人</th></tr></thead><tbody>';
+                data.rows.forEach(function(r) {
+                    html += '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            } else if (tab === 'history') {
+                html += '<div class="timeline-wrap">';
+                data.timeline.forEach(function(item, i) {
+                    const actionText = item.action === 'CREATE' ? '新增' : (item.action === 'DELETE' ? '删除' : '更新');
+                    const actionClass = item.action === 'CREATE' ? 'create' : (item.action === 'DELETE' ? 'delete' : 'update');
+                    html += '<div class="timeline-item" data-index="' + i + '" style="cursor:pointer;">' +
+                        '<div class="timeline-left">' +
+                            '<div class="timeline-time">' + item.time + '</div>' +
+                            '<div class="timeline-operator"><i class="fas fa-user"></i> ' + item.operator + '</div>' +
+                        '</div>' +
+                        '<div class="timeline-line"><div class="timeline-dot ' + actionClass + '" title="' + actionText + '"></div></div>' +
+                        '<div class="timeline-right">' +
+                            '<div class="timeline-summary">' + item.summary + '</div>' +
+                            '<div class="timeline-diff-preview">';
+                    item.diff.forEach(function(d) {
+                        html += '<div class="diff-row">' +
+                            '<span class="diff-label">' + d.label + '</span>' +
+                            '<span class="diff-before">' + d.before + '</span>' +
+                            '<i class="fas fa-arrow-right"></i>' +
+                            '<span class="diff-after">' + d.after + '</span>' +
+                            '</div>';
+                    });
+                    html += '</div></div></div>';
+                });
+                html += '</div>';
+            }
+
+            content.innerHTML = html;
+        }
+
+        document.querySelectorAll('.arch-menu-item').forEach((el, i) => {
+            el.addEventListener('click', function() {
+                switchTab(archiveTabOrder[i]);
+            });
+        });
+
+        function renderList() {
+            const list = document.getElementById('houseList');
+            list.innerHTML = filteredData.map((item, idx) => {
+                return '<div class="house-card ' + (idx === activeIndex ? 'active' : '') + '" data-index="' + idx + '">' +
+                    '<div class="house-card-header"><div class="house-name">' + item.name + '</div><div class="house-code">' + item.no + '</div></div>' +
+                    '<div class="house-address"><i class="fas fa-map-marker-alt"></i> ' + item.address + '</div>' +
+                    '<div class="house-address"><i class="fas fa-user"></i> ' + (item.owner || '-') + '</div>' +
+                    '<div class="house-tags">' +
+                    '<span class="risk-tag ' + item.risk + '"><i class="fas fa-exclamation-circle"></i> ' + getRiskText(item.risk) + '</span>' +
+                    '<span class="year-tag" style="margin-left:auto;" onclick="event.stopPropagation();openArchive(' + idx + ')"><i class="fas fa-folder-open"></i> 房屋档案</span>' +
+                    '</div></div>';
+            }).join('');
+            document.getElementById('listFooter').textContent = '共 ' + filteredData.length + ' 条';
+
+            list.querySelectorAll('.house-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    selectHouse(parseInt(card.dataset.index));
+                });
+            });
+        }
+
+        function selectHouse(idx) {
+            activeIndex = idx;
+            const item = filteredData[idx];
+            renderList();
+            map.setView([item.lat, item.lng], 15);
+            markers[idx].openPopup();
+        }
+
+        function applyFilter() {
+            const keyword = document.getElementById('searchInput').value.trim();
+            filteredData = baseData.filter(function(item) {
+                const kw = keyword.toLowerCase();
+                const matchKeyword = !keyword ||
+                    item.name.toLowerCase().includes(kw) ||
+                    item.address.toLowerCase().includes(kw) ||
+                    item.no.toLowerCase().includes(kw) ||
+                    (item.owner && item.owner.toLowerCase().includes(kw));
+                let matchFilter = true;
+                if (activeFilter === 'danger') matchFilter = item.risk === 'danger';
+                else if (activeFilter === 'major') matchFilter = item.risk === 'major';
+                else if (activeFilter === 'warning') matchFilter = item.risk === 'warning';
+                return matchKeyword && matchFilter;
+            });
+            activeIndex = -1;
+            renderList();
+            renderMarkers();
+            if (filteredData.length) {
+                const group = L.featureGroup(markers);
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+
+        document.querySelectorAll('.filter-tag').forEach(tag => {
+            tag.addEventListener('click', function() {
+                document.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
+                tag.classList.add('active');
+                activeFilter = tag.dataset.filter;
+                applyFilter();
+            });
+        });
+
+        document.getElementById('searchBtn').addEventListener('click', applyFilter);
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') applyFilter();
+        });
+
+        initMap();
+        renderList();
+    </script>
+</body>
+</html>
