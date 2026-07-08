@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>机构总览看板 - 第三方服务机构</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="tp-common.css">
+<style>
+:root {
+    --primary: #1a73e8;
+    --primary-dark: #1557b0;
+    --primary-light: #e8f0fe;
+    --secondary: #0097a7;
+    --danger: #d93025;
+    --warning: #e37400;
+    --success: #1e8e3e;
+    --bg-dark: #f0f2f5;
+    --bg-card: #ffffff;
+    --bg-hover: #e8eaed;
+    --text-primary: #202124;
+    --text-secondary: #5f6368;
+    --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08);
+    --input-bg: #ffffff;
+    --input-border: #dadce0;
+    --header-bg: rgba(0,0,0,0.02);
+    --tree-row-hover: rgba(0,0,0,0.02);
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb;
+    --primary-dark: #1557b0;
+    --primary-light: #e8f1fd;
+    --secondary: #00b4d8;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --success: #10b981;
+    --bg-dark: #0a1628;
+    --bg-card: #112240;
+    --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3);
+    --input-bg: rgba(255,255,255,0.05);
+    --input-border: #1e3a5f;
+    --header-bg: rgba(0,0,0,0.2);
+    --tree-row-hover: rgba(255,255,255,0.02);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: var(--bg-dark); color: var(--text-primary); margin: 0; padding: 20px; }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 1px 3px var(--shadow); }
+.card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.card-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.card-body { padding: 20px; }
+.breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+
+/* 统计卡片 */
+.stat-row { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: nowrap; }
+.stat-item { flex: 1 1 0; min-width: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 12px; transition: all 0.3s; }
+.stat-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+.stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.stat-icon.blue { background: rgba(26,115,232,0.12); color: var(--primary); }
+.stat-icon.green { background: rgba(30,142,62,0.12); color: var(--success); }
+.stat-icon.orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+.stat-icon.red { background: rgba(217,48,37,0.12); color: var(--danger); }
+.stat-icon.purple { background: rgba(156,39,176,0.12); color: #9c27b0; }
+.stat-icon.cyan { background: rgba(0,188,212,0.12); color: #00bcd4; }
+.stat-info { display: flex; flex-direction: column; }
+.stat-number { font-size: 28px; font-weight: 700; color: var(--text-primary); line-height: 1; }
+.stat-label { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+
+/* 图表区域 */
+.chart-row { display: flex !important; flex-direction: row !important; gap: 16px; margin-bottom: 20px; height: 400px; }
+.chart-card { flex: 1 1 0; min-width: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.chart-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.chart-title { font-size: 15px; font-weight: 600; }
+.chart-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.chart-body { padding: 20px; flex: 1 1 auto; min-height: 0; position: relative; }
+
+/* 图表 TAB 切换 */
+.chart-tabs { display: flex; gap: 8px; }
+.chart-tab { padding: 6px 16px; border-radius: 16px; font-size: 13px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); transition: all 0.2s; }
+.chart-tab:hover { border-color: var(--primary); color: var(--primary); }
+.chart-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.chart-panel { display: none; height: 100%; }
+.chart-panel.active { display: block; }
+.chart-panel > div { width: 100%; height: 100%; }
+.chart-panel > div { width: 100%; height: 100%; }
+.bar-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.bar-value { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.bar-rect { width: 40px; background: var(--primary); border-radius: 4px 4px 0 0; transition: all 0.3s; min-height: 4px; }
+.bar-rect:hover { opacity: 0.8; }
+.bar-label { font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+
+/* 饼图/环形图 */
+.pie-chart { display: flex; align-items: center; justify-content: center; height: 100%; }
+.pie-container { position: relative; width: 200px; height: 200px; }
+.pie-legend { margin-left: 40px; display: flex; flex-direction: column; gap: 12px; }
+.legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+.legend-value { color: var(--text-secondary); margin-left: 4px; }
+
+/* 资质等级分布 */
+.qual-row { display: flex; gap: 16px; margin-bottom: 20px; }
+.qual-card { flex: 1 1 0; min-width: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.qual-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.qual-title { font-size: 15px; font-weight: 600; }
+.qual-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.qual-body { padding: 20px; height: 320px; position: relative; }
+
+/* 折线图 */
+.line-chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.line-chart-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.line-chart-title { font-size: 15px; font-weight: 600; }
+.line-chart-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.line-chart-body { padding: 20px; height: 320px; position: relative; }
+.line-chart { position: relative; width: 100%; height: 100%; }
+.line-chart-svg { width: 100%; height: 100%; }
+.line-chart-tooltip { position: absolute; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; box-shadow: 0 4px 12px var(--shadow); pointer-events: none; opacity: 0; transition: opacity 0.2s; font-size: 13px; z-index: 10; }
+.line-chart-tooltip.show { opacity: 1; }
+.line-chart-tooltip-month { color: var(--text-secondary); margin-bottom: 4px; }
+.line-chart-tooltip-value { color: var(--primary); font-weight: 600; font-size: 16px; }
+
+/* 响应式 */
+@media (max-width: 1200px) {
+    .chart-row { flex-direction: column; }
+    .filter-bar { flex-wrap: wrap; }
+}
+@media (max-width: 992px) {
+    .chart-row { flex-direction: column; }
+    .stat-row { flex-wrap: wrap; }
+    .stat-item { flex: 1 1 calc(33.333% - 11px); }
+}
+@media (max-width: 768px) {
+    .stat-item { flex: 1 1 calc(50% - 8px); }
+    .filter-bar { flex-direction: column; align-items: stretch; }
+    .filter-group { width: 100%; }
+    .filter-group select { flex: 1; }
+}
+
+/* 周期报表 */
+.report-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.report-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.report-title { font-size: 15px; font-weight: 600; }
+.report-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.report-body { padding: 20px; }
+
+/* 筛选栏 */
+.filter-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-group { display: flex; align-items: center; gap: 8px; }
+.filter-group label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.filter-group select { padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; min-width: 120px; }
+.filter-group select:focus { border-color: var(--primary); }
+.filter-actions { display: flex; gap: 8px; margin-left: auto; }
+.btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { opacity: 0.9; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-primary); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+/* 数据表格 */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead th { padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); background: var(--header-bg); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.data-table tbody td { padding: 14px 16px; font-size: 13px; color: var(--text-primary); border-bottom: 1px solid var(--border); }
+.data-table tbody tr:hover { background: var(--tree-row-hover); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.td-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.badge-blue { background: rgba(26,115,232,0.12); color: var(--primary); }
+.badge-green { background: rgba(30,142,62,0.12); color: var(--success); }
+.badge-orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+.badge-purple { background: rgba(156,39,176,0.12); color: #9c27b0; }
+.badge-cyan { background: rgba(0,188,212,0.12); color: #00bcd4; }
+.td-progress { display: flex; align-items: center; gap: 8px; }
+.progress-bar { width: 80px; height: 6px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; }
+.progress-fill.blue { background: var(--primary); }
+.progress-fill.green { background: var(--success); }
+.progress-fill.orange { background: var(--warning); }
+.progress-fill.purple { background: #9c27b0; }
+.progress-fill.cyan { background: #00bcd4; }
+
+/* 折线图 */
+.line-chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.line-chart-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.line-chart-title { font-size: 15px; font-weight: 600; }
+.line-chart-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.line-chart-body { padding: 20px; height: 320px; position: relative; }
+.line-chart { position: relative; width: 100%; height: 100%; }
+.line-chart-svg { width: 100%; height: 100%; }
+.line-chart-tooltip { position: absolute; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; box-shadow: 0 4px 12px var(--shadow); pointer-events: none; opacity: 0; transition: opacity 0.2s; font-size: 13px; z-index: 10; }
+.line-chart-tooltip.show { opacity: 1; }
+.line-chart-tooltip-month { color: var(--text-secondary); margin-bottom: 4px; }
+.line-chart-tooltip-value { color: var(--primary); font-weight: 600; font-size: 16px; }
+
+/* 服务范围分析地图 */
+.map-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.map-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.map-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.map-title span { font-size: 13px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.map-body { display: grid; grid-template-columns: 1fr; gap: 16px; padding: 20px; height: 500px; min-height: 0; box-sizing: border-box; }
+.map-container { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #eef6ff; min-width: 0; min-height: 0; }
+.map-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; opacity: 0.85; pointer-events: none; z-index: 0; }
+.amap-embed { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; display: flex; }
+.amap-embed iframe { width: 100%; height: 100%; min-height: 100%; border: none; display: block; }
+.map-region { position: absolute; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; font-weight: 600; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.25); z-index: 1; border: 2px solid rgba(255,255,255,0.7); width: 56px; height: 56px; padding: 4px 8px; transform: translate(-50%, -50%); }
+.map-region:hover { transform: translate(-50%, -50%) scale(1.1); z-index: 10; box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+.map-region .region-name { font-size: 12px; line-height: 1.2; white-space: nowrap; }
+.map-region .region-count { font-size: 10px; font-weight: 400; opacity: 0.95; margin-top: 2px; line-height: 1.2; white-space: nowrap; }
+.map-legend { position: absolute; top: 12px; right: 12px; width: auto; max-width: 150px; background: rgba(255,255,255,0.92); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; z-index: 5; box-shadow: 0 2px 8px var(--shadow); }
+.map-legend-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.map-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.map-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.map-tooltip { position: absolute; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; box-shadow: 0 4px 12px var(--shadow); pointer-events: none; opacity: 0; transition: opacity 0.2s; font-size: 13px; z-index: 20; max-width: 220px; }
+.map-tooltip.show { opacity: 1; }
+.map-tooltip-title { font-weight: 600; margin-bottom: 6px; }
+.map-tooltip-item { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; margin-bottom: 4px; }
+.map-empty { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--text-secondary); font-size: 14px; }
+
+@media (max-width: 768px) {
+    .map-body { height: auto; }
+    .map-legend { right: 8px; top: 8px; padding: 8px 10px; }
+}
+</style>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="../js/third-party-data.js"></script>
+</head>
+<body>
+
+<!-- 面包屑 -->
+
+
+<!-- 统计卡片 -->
+<div class="stat-row">
+    <div class="stat-item">
+        <div class="stat-icon blue"><i class="fas fa-building"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">128</div>
+            <div class="stat-label">机构总数</div>
+        </div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-icon orange"><i class="fas fa-calendar-plus"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">8</div>
+            <div class="stat-label">本月新增</div>
+        </div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-icon red"><i class="fas fa-clock"></i></div>
+        <div class="stat-info">
+            <div class="stat-number">12</div>
+            <div class="stat-label">待审核</div>
+        </div>
+    </div>
+    <div class="stat-item" style="cursor:pointer;" onclick="location.href='tp-expert-select.html'" title="管理项目专家组">
+        <div class="stat-icon cyan"><i class="fas fa-users"></i></div>
+        <div class="stat-info">
+            <div class="stat-number" id="projectGroupCount">0</div>
+            <div class="stat-label">项目专家组</div>
+        </div>
+    </div>
+</div>
+
+<!-- 图表区域 -->
+<div class="chart-row">
+    <div class="chart-card">
+        <div class="chart-header">
+            <div class="chart-title">机构统计 <span>多维度分析</span></div>
+            <div class="chart-tabs">
+                <div class="chart-tab active" data-target="businessPanel" onclick="switchChartTab(this)">业务分布</div>
+                <div class="chart-tab" data-target="typePanel" onclick="switchChartTab(this)">机构类型</div>
+                <div class="chart-tab" data-target="qualPanel" onclick="switchChartTab(this)">资质等级</div>
+            </div>
+        </div>
+        <div class="chart-body" style="padding: 20px;">
+            <div class="chart-panel active" id="businessPanel">
+                <div id="businessBarChart"></div>
+            </div>
+            <div class="chart-panel" id="typePanel">
+                <div id="orgTypePieChart"></div>
+            </div>
+            <div class="chart-panel" id="qualPanel">
+                <div id="qualLevelChart"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 服务范围分析 -->
+<div class="map-card">
+    <div class="map-header">
+        <div class="map-title"><i class="fas fa-map-marked-alt" style="color: var(--primary);"></i> 服务范围分析 <span>上海市奉贤区 · 按街镇展示机构服务覆盖情况</span></div>
+        <div class="filter-group">
+            <label style="font-size: 13px; color: var(--text-secondary);">专业领域</label>
+            <select id="mapFilterField" style="min-width: 140px;" onchange="renderServiceMap()">
+                <option value="">全部领域</option>
+                <option>建筑工地</option>
+                <option>基坑</option>
+                <option>交通</option>
+                <option>玻璃幕墙</option>
+                <option>燃气</option>
+                <option>高空坠物</option>
+                <option>城镇自建房</option>
+                <option>农村自建房</option>
+            </select>
+        </div>
+    </div>
+    <div class="map-body">
+        <div class="map-container" id="serviceMapContainer">
+            <div class="amap-embed" id="amapEmbed">
+                <iframe
+                    id="amapIframe"
+                    src="https://map.baidu.com/search/%E4%B8%8A%E6%B5%B7%E5%B8%82%E5%A5%89%E8%B4%A4%E5%8C%BA"
+                    width="100%"
+                    height="100%"
+                    frameborder="0"
+                    scrolling="no"
+                    allowfullscreen>
+                </iframe>
+            </div>
+            <div class="map-tooltip" id="mapTooltip">
+                <div class="map-tooltip-title" id="mapTooltipTitle"></div>
+                <div id="mapTooltipContent"></div>
+            </div>
+            <div class="map-legend">
+                <div class="map-legend-title">覆盖机构数量</div>
+                <div class="map-legend-item"><div class="map-legend-dot" style="background: #1a73e8;"></div> 高（≥35家）</div>
+                <div class="map-legend-item"><div class="map-legend-dot" style="background: #34a853;"></div> 中（20-34家）</div>
+                <div class="map-legend-item"><div class="map-legend-dot" style="background: #f59e0b;"></div> 低（10-19家）</div>
+                <div class="map-legend-item"><div class="map-legend-dot" style="background: #9c27b0;"></div> 较少（＜10家）</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 机构名录查询 -->
+<div class="list-card">
+    <div class="list-header">
+        <div class="list-title"><i class="fas fa-list-ul"></i> 机构名录查询</div>
+        <div class="filter-actions">
+            <button class="list-btn list-btn-success" onclick="exportOrgList('excel')"><i class="fas fa-file-excel"></i> 导出 Excel</button>
+            <button class="list-btn list-btn-outline" onclick="exportOrgList('pdf')"><i class="fas fa-file-pdf"></i> 导出 PDF</button>
+        </div>
+    </div>
+    <div class="list-body">
+        <div class="filter-card">
+            <div class="filter-row">
+                <div class="filter-item">
+                    <label>专业领域</label>
+                    <select id="orgFilterField" onchange="renderOrgList()">
+                        <option value="">全部</option>
+                        <option>建筑工地</option>
+                        <option>基坑</option>
+                        <option>交通</option>
+                        <option>玻璃幕墙</option>
+                        <option>燃气</option>
+                        <option>高空坠物</option>
+                        <option>城镇自建房</option>
+                        <option>农村自建房</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label>资质等级</label>
+                    <select id="orgFilterQual" onchange="renderOrgList()">
+                        <option value="">全部</option>
+                        <option>甲级</option>
+                        <option>乙级</option>
+                        <option>丙级</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label>信用等级</label>
+                    <select id="orgFilterCredit" onchange="renderOrgList()">
+                        <option value="">全部</option>
+                        <option>AAA</option>
+                        <option>AA</option>
+                        <option>A</option>
+                        <option>B</option>
+                        <option>C</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label>服务区域</label>
+                    <select id="orgFilterRegion" onchange="renderOrgList()">
+                        <option value="">全部</option>
+                        <option>黄浦区</option>
+                        <option>静安区</option>
+                        <option>徐汇区</option>
+                        <option>长宁区</option>
+                        <option>浦东新区</option>
+                        <option>杨浦区</option>
+                        <option>虹口区</option>
+                        <option>闵行区</option>
+                        <option>奉贤区</option>
+                    </select>
+                </div>
+                <div class="filter-actions">
+                    <button class="list-btn list-btn-primary" onclick="renderOrgList()"><i class="fas fa-search"></i> 查询</button>
+                    <button class="list-btn list-btn-outline" onclick="resetOrgFilter()"><i class="fas fa-undo"></i> 重置</button>
+                </div>
+            </div>
+        </div>
+        <div id="orgListCount" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; display: none;"></div>
+        <div class="table-wrapper" style="width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;">
+        <table class="list-table" id="orgListTable">
+            <thead>
+                <tr>
+                    <th>机构名称</th>
+                    <th>专业领域</th>
+                    <th>资质等级</th>
+                    <th>信用等级</th>
+                    <th>统一社会信用代码</th>
+                    <th>法人代表</th>
+                    <th>联系电话</th>
+                    <th class="sortable" data-field="score" data-type="number" onclick="sortOrgList('score')">信用评分</th>
+                    <th class="sortable" data-field="established" data-type="date" onclick="sortOrgList('established')">成立时间</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="orgListTbody">
+            </tbody>
+        </table>
+        </div>
+        <div class="list-pagination" id="orgPagination"></div>
+    </div>
+</div>
+
+<style>
+/* 机构名录查询筛选栏 */
+.filter-card { width: 100%; }
+.filter-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: nowrap;
+}
+.filter-row .filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    min-width: auto;
+}
+.filter-row .filter-item label {
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.filter-row .filter-item select,
+.filter-row .filter-item input {
+    padding: 8px 12px;
+    border: 1px solid var(--input-border, #dadce0);
+    border-radius: 6px;
+    background: var(--input-bg, #fff);
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    min-width: 120px;
+    height: 36px;
+}
+.filter-row .filter-item:last-of-type {
+    flex: 1 1 auto;
+    min-width: 180px;
+    max-width: 260px;
+}
+.filter-row .filter-item:last-of-type input {
+    width: 100%;
+}
+.filter-row .filter-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+    align-items: center;
+    flex: 0 0 auto;
+}
+.filter-row .filter-actions .list-btn {
+    height: 36px;
+    white-space: nowrap;
+}
+@media (max-width: 1200px) {
+    .filter-row { flex-wrap: wrap; }
+    .filter-row .filter-item:last-of-type { flex: 1 1 200px; max-width: none; }
+    .filter-row .filter-actions { margin-left: 0; }
+}
+@media (max-width: 768px) {
+    .filter-row { flex-direction: column; align-items: stretch; }
+    .filter-row .filter-item,
+    .filter-row .filter-item:last-of-type {
+        flex: 1 1 100%;
+        max-width: none;
+        min-width: auto;
+    }
+    .filter-row .filter-item select,
+    .filter-row .filter-item input { width: 100%; }
+    .filter-row .filter-actions { margin-left: 0; width: 100%; }
+    .filter-row .filter-actions .list-btn { flex: 1; }
+}
+
+.credit-badge { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 20px; border-radius: 10px; font-size: 11px; font-weight: 700; color: #fff; margin-right: 6px; }
+.credit-aaa { background: #1e8e3e; }
+.credit-aa { background: #34a853; }
+.credit-a { background: #00bcd4; }
+.credit-b { background: #f59e0b; }
+.credit-c { background: #d93025; }
+/* 排序表头 */
+.list-table thead th.sortable { cursor: pointer; user-select: none; }
+.list-table thead th.sortable .sort-icon { margin-left: 6px; font-size: 12px; color: var(--primary, #1a73e8); }
+.list-table thead th.sortable.sort-asc,
+.list-table thead th.sortable.sort-desc { color: var(--primary, #1a73e8); background: rgba(26,115,232,0.06); }
+
+/* 状态徽章 */
+.status-badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.status-in { background: rgba(30,142,62,0.12); color: var(--success); }
+.status-pending { background: rgba(227,116,0,0.12); color: var(--warning); }
+.status-abnormal { background: rgba(217,48,37,0.12); color: var(--danger); }
+</style>
+
+<script>
+(function(){
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') {
+        document.documentElement.setAttribute('data-theme', e.data.theme);
+        localStorage.setItem('theme', e.data.theme);
+    }
+});
+
+// ECharts 业务分布柱状图
+var businessChart, orgTypeChart, qualLevelChart;
+document.addEventListener('DOMContentLoaded', function() {
+    businessChart = echarts.init(document.getElementById('businessBarChart'));
+    var categoryData = [
+        { name: '建筑工地', value: 45, color: '#1a73e8' },
+        { name: '基坑', value: 32, color: '#34a853' },
+        { name: '交通', value: 28, color: '#f59e0b' },
+        { name: '玻璃幕墙', value: 24, color: '#9c27b0' },
+        { name: '燃气', value: 38, color: '#00bcd4' },
+        { name: '高空坠物', value: 20, color: '#e37400' },
+        { name: '城镇自建房', value: 35, color: '#1e8e3e' },
+        { name: '农村自建房', value: 30, color: '#7c4dff' }
+    ];
+    
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var textColor = isDark ? '#e2e8f0' : '#202124';
+    var secondaryTextColor = isDark ? '#94a3b8' : '#5f6368';
+    
+    var businessOption = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            backgroundColor: isDark ? '#112240' : '#ffffff',
+            borderColor: isDark ? '#1e3a5f' : '#dadce0',
+            textStyle: { color: textColor },
+            formatter: function(params) {
+                var data = categoryData[params[0].dataIndex];
+                return '<div style="font-weight:600">' + data.name + '</div>' +
+                       '<div>机构数量: <span style="color:' + data.color + ';font-weight:700">' + data.value + '</span></div>' +
+                       '<div style="font-size:12px;color:' + secondaryTextColor + ';margin-top:4px">点击查看该领域机构明细</div>';
+            }
+        },
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: 30,
+            top: '10%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'category',
+            data: categoryData.map(function(item) { return item.name; }),
+            axisLine: { lineStyle: { color: isDark ? '#1e3a5f' : '#dadce0' } },
+            axisLabel: { 
+                color: secondaryTextColor,
+                fontSize: 12,
+                interval: 0,
+                rotate: 0
+            },
+            axisTick: { show: false }
+        },
+        yAxis: {
+            type: 'value',
+            axisLine: { show: false },
+            axisTick: { show: false },
+            splitLine: { 
+                lineStyle: { 
+                    color: isDark ? '#1e3a5f' : '#e8eaed',
+                    type: 'dashed'
+                } 
+            },
+            axisLabel: { color: secondaryTextColor }
+        },
+        series: [{
+            type: 'bar',
+            data: categoryData.map(function(item) {
+                return {
+                    value: item.value,
+                    itemStyle: {
+                        color: item.color,
+                        borderRadius: [6, 6, 0, 0]
+                    }
+                };
+            }),
+            barWidth: '50%',
+            emphasis: {
+                itemStyle: {
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(0,0,0,0.3)'
+                }
+            }
+        }]
+    };
+    
+    businessChart.setOption(businessOption);
+    
+    // 点击下钻事件
+    businessChart.on('click', function(params) {
+        var category = categoryData[params.dataIndex];
+        showDrillDownModal(category.name, category.value, category.color);
+    });
+    
+    // 机构类型占比 ECharts 饼图
+    orgTypeChart = echarts.init(document.getElementById('orgTypePieChart'));
+    var orgTypeData = [
+        { name: '检测机构', value: 52, color: '#1a73e8' },
+        { name: '评估机构', value: 38, color: '#10b981' },
+        { name: '咨询机构', value: 28, color: '#f59e0b' },
+        { name: '其他', value: 10, color: '#9c27b0' }
+    ];
+    var orgTypeOption = {
+        tooltip: {
+            trigger: 'item',
+            backgroundColor: isDark ? '#112240' : '#ffffff',
+            borderColor: isDark ? '#1e3a5f' : '#dadce0',
+            textStyle: { color: textColor },
+            formatter: function(params) {
+                return '<div style="font-weight:600">' + params.name + '</div>' +
+                       '<div>机构数量: <span style="color:' + params.color + ';font-weight:700">' + params.value + '</span></div>' +
+                       '<div>占比: <span style="font-weight:700">' + params.percent + '%</span></div>';
+            }
+        },
+        legend: {
+            orient: 'vertical',
+            right: '4%',
+            top: 'middle',
+            itemGap: 14,
+            itemWidth: 12,
+            itemHeight: 12,
+            textStyle: {
+                color: secondaryTextColor,
+                fontSize: 12,
+                lineHeight: 18,
+                rich: {
+                    name: {
+                        width: 56,
+                        align: 'left'
+                    },
+                    percent: {
+                        width: 48,
+                        align: 'right',
+                        fontWeight: 'bold'
+                    }
+                }
+            },
+            formatter: function(name) {
+                var item = orgTypeData.find(function(d) { return d.name === name; });
+                var total = orgTypeData.reduce(function(sum, d) { return sum + d.value; }, 0);
+                var percent = ((item.value / total) * 100).toFixed(2);
+                return '{name|' + name + '} {percent|' + percent + '%}';
+            }
+        },
+        series: [{
+            type: 'pie',
+            radius: ['48%', '72%'],
+            center: ['36%', '50%'],
+            avoidLabelOverlap: false,
+            itemStyle: {
+                borderRadius: 6,
+                borderColor: isDark ? '#112240' : '#ffffff',
+                borderWidth: 2
+            },
+            label: {
+                show: false
+            },
+            emphasis: {
+                label: {
+                    show: true,
+                    formatter: '{b}\n{d}%',
+                    fontSize: 13,
+                    fontWeight: 'bold',
+                    color: textColor
+                },
+                itemStyle: {
+                    shadowBlur: 10,
+                    shadowOffsetX: 0,
+                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                }
+            },
+            data: orgTypeData.map(function(item) {
+                return {
+                    name: item.name,
+                    value: item.value,
+                    itemStyle: { color: item.color }
+                };
+            })
+        }]
+    };
+    orgTypeChart.setOption(orgTypeOption);
+
+    // 资质等级分布 ECharts 柱状图
+    qualLevelChart = echarts.init(document.getElementById('qualLevelChart'));
+    var qualLevelData = [
+        { name: '甲级', value: 48, color: '#1a73e8' },
+        { name: '乙级', value: 52, color: '#34a853' },
+        { name: '丙级', value: 28, color: '#f59e0b' }
+    ];
+    var qualLevelOption = {
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            backgroundColor: isDark ? '#112240' : '#ffffff',
+            borderColor: isDark ? '#1e3a5f' : '#dadce0',
+            textStyle: { color: textColor },
+            formatter: function(params) {
+                var data = qualLevelData[params[0].dataIndex];
+                return '<div style="font-weight:600">' + data.name + '</div>' +
+                       '<div>机构数量: <span style="color:' + data.color + ';font-weight:700">' + data.value + '</span></div>';
+            }
+        },
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: 30,
+            top: '10%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'category',
+            data: qualLevelData.map(function(item) { return item.name; }),
+            axisLine: { lineStyle: { color: isDark ? '#1e3a5f' : '#dadce0' } },
+            axisLabel: { color: secondaryTextColor, fontSize: 13 },
+            axisTick: { show: false }
+        },
+        yAxis: {
+            type: 'value',
+            axisLine: { show: false },
+            axisTick: { show: false },
+            splitLine: {
+                lineStyle: {
+                    color: isDark ? '#1e3a5f' : '#e8eaed',
+                    type: 'dashed'
+                }
+            },
+            axisLabel: { color: secondaryTextColor }
+        },
+        series: [{
+            type: 'bar',
+            data: qualLevelData.map(function(item) {
+                return {
+                    value: item.value,
+                    itemStyle: {
+                        color: item.color,
+                        borderRadius: [6, 6, 0, 0]
+                    }
+                };
+            }),
+            barWidth: '40%',
+            label: {
+                show: true,
+                position: 'top',
+                color: textColor,
+                fontWeight: 'bold'
+            },
+            emphasis: {
+                itemStyle: {
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(0,0,0,0.3)'
+                }
+            }
+        }]
+    };
+    qualLevelChart.setOption(qualLevelOption);
+    
+    // 响应式调整
+    window.addEventListener('resize', function() {
+        businessChart.resize();
+        orgTypeChart.resize();
+        if (typeof qualLevelChart !== 'undefined') qualLevelChart.resize();
+
+        // 窗口变化后同步三个图表容器高度
+        var card = document.querySelector('.chart-card');
+        var body = card.querySelector('.chart-body');
+        var bodyHeight = body.offsetHeight;
+        ['businessBarChart', 'orgTypePieChart', 'qualLevelChart'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) { el.style.height = bodyHeight + 'px'; }
+        });
+    });
+
+    // TAB 切换
+    window.switchChartTab = function(tabEl) {
+        var target = tabEl.getAttribute('data-target');
+        var card = tabEl.closest('.chart-card');
+        card.querySelectorAll('.chart-tab').forEach(function(t) { t.classList.remove('active'); });
+        card.querySelectorAll('.chart-panel').forEach(function(p) { p.classList.remove('active'); });
+        tabEl.classList.add('active');
+        document.getElementById(target).classList.add('active');
+
+        // 确保所有图表容器高度与可用区域一致（隐藏面板 ECharts 初始化时高度为 0）
+        var body = card.querySelector('.chart-body');
+        var bodyHeight = body.offsetHeight;
+        ['businessBarChart', 'orgTypePieChart', 'qualLevelChart'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) { el.style.height = bodyHeight + 'px'; }
+        });
+
+        setTimeout(function() {
+            if (target === 'businessPanel' && typeof businessChart !== 'undefined') businessChart.resize();
+            if (target === 'typePanel' && typeof orgTypeChart !== 'undefined') orgTypeChart.resize();
+            if (target === 'qualPanel' && typeof qualLevelChart !== 'undefined') qualLevelChart.resize();
+        }, 50);
+    };
+
+    // 主题切换时更新图表
+    window.addEventListener('message', function(e) {
+        if (e.data && e.data.action === 'setTheme') {
+            var newIsDark = e.data.theme === 'dark';
+            var newTextColor = newIsDark ? '#e2e8f0' : '#202124';
+            var newSecondaryTextColor = newIsDark ? '#94a3b8' : '#5f6368';
+            businessChart.setOption({
+                tooltip: {
+                    backgroundColor: newIsDark ? '#112240' : '#ffffff',
+                    borderColor: newIsDark ? '#1e3a5f' : '#dadce0',
+                    textStyle: { color: newTextColor }
+                },
+                xAxis: {
+                    axisLine: { lineStyle: { color: newIsDark ? '#1e3a5f' : '#dadce0' } },
+                    axisLabel: { color: newSecondaryTextColor }
+                },
+                yAxis: {
+                    splitLine: { lineStyle: { color: newIsDark ? '#1e3a5f' : '#e8eaed' } },
+                    axisLabel: { color: newSecondaryTextColor }
+                }
+            });
+            orgTypeChart.setOption({
+                tooltip: {
+                    backgroundColor: newIsDark ? '#112240' : '#ffffff',
+                    borderColor: newIsDark ? '#1e3a5f' : '#dadce0',
+                    textStyle: { color: newTextColor }
+                },
+                legend: {
+                    textStyle: { color: newSecondaryTextColor }
+                },
+                series: [{
+                    itemStyle: {
+                        borderColor: newIsDark ? '#112240' : '#ffffff'
+                    },
+                    label: {
+                        color: newTextColor
+                    }
+                }]
+            });
+            if (typeof qualLevelChart !== 'undefined') {
+                qualLevelChart.setOption({
+                    tooltip: {
+                        backgroundColor: newIsDark ? '#112240' : '#ffffff',
+                        borderColor: newIsDark ? '#1e3a5f' : '#dadce0',
+                        textStyle: { color: newTextColor }
+                    },
+                    legend: {
+                        textStyle: { color: newSecondaryTextColor }
+                    },
+                    xAxis: {
+                        axisLine: { lineStyle: { color: newIsDark ? '#1e3a5f' : '#dadce0' } },
+                        axisLabel: { color: newSecondaryTextColor }
+                    },
+                    yAxis: {
+                        splitLine: { lineStyle: { color: newIsDark ? '#1e3a5f' : '#e8eaed' } },
+                        axisLabel: { color: newSecondaryTextColor }
+                    }
+                });
+            }
+        }
+    });
+    
+    // 下钻弹窗函数
+    function showDrillDownModal(categoryName, count, color) {
+        // 移除已存在的弹窗
+        var existingModal = document.getElementById('drillDownModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // 模拟该领域的机构数据
+        var orgData = generateOrgData(categoryName, count);
+        
+        var modal = document.createElement('div');
+        modal.id = 'drillDownModal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;';
+        
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var bgColor = isDark ? '#112240' : '#ffffff';
+        var borderColor = isDark ? '#1e3a5f' : '#dadce0';
+        var textColor = isDark ? '#e2e8f0' : '#202124';
+        var secondaryColor = isDark ? '#94a3b8' : '#5f6368';
+        
+        var rowsHtml = orgData.map(function(org, index) {
+            return '<tr style="border-bottom: 1px solid ' + borderColor + '">' +
+                '<td style="padding: 12px 16px; font-size: 13px; color: ' + textColor + '">' + (index + 1) + '</td>' +
+                '<td style="padding: 12px 16px; font-size: 13px; color: ' + textColor + '; font-weight: 500">' + org.name + '</td>' +
+                '<td style="padding: 12px 16px; font-size: 13px; color: ' + secondaryColor + '">' + org.code + '</td>' +
+                '<td style="padding: 12px 16px; font-size: 13px; color: ' + secondaryColor + '">' + org.type + '</td>' +
+                '<td style="padding: 12px 16px; font-size: 13px;"><span style="display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; background: ' + color + '20; color: ' + color + '">' + org.credit + '</span></td>' +
+                '<td style="padding: 12px 16px; font-size: 13px;"><span style="display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; ' + (org.status === '已入库' ? 'background: rgba(30,142,62,0.12); color: #1e8e3e;' : 'background: rgba(227,116,0,0.12); color: #e37400;') + '">' + org.status + '</span></td>' +
+                '</tr>';
+        }).join('');
+        
+        modal.innerHTML = '<div style="background: ' + bgColor + '; border: 1px solid ' + borderColor + '; border-radius: 12px; width: 90%; max-width: 900px; max-height: 80vh; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3); display: flex; flex-direction: column;">' +
+            '<div style="padding: 20px 24px; border-bottom: 1px solid ' + borderColor + '; display: flex; align-items: center; justify-content: space-between;">' +
+                '<div style="display: flex; align-items: center; gap: 12px;">' +
+                    '<div style="width: 40px; height: 40px; border-radius: 10px; background: ' + color + '20; display: flex; align-items: center; justify-content: center; color: ' + color + '; font-size: 18px;"><i class="fas fa-building"></i></div>' +
+                    '<div>' +
+                        '<div style="font-size: 16px; font-weight: 600; color: ' + textColor + '">' + categoryName + ' - 机构明细</div>' +
+                        '<div style="font-size: 13px; color: ' + secondaryColor + '; margin-top: 2px;">共 ' + count + ' 家服务机构</div>' +
+                    '</div>' +
+                '</div>' +
+                '<button onclick="document.getElementById(\'drillDownModal\').remove()" style="background: none; border: none; color: ' + secondaryColor + '; font-size: 20px; cursor: pointer; padding: 4px; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"><i class="fas fa-times"></i></button>' +
+            '</div>' +
+            '<div style="padding: 0; overflow-y: auto; flex: 1;">' +
+                '<table style="width: 100%; border-collapse: collapse;">' +
+                    '<thead>' +
+                        '<tr style="background: ' + (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.02)') + ';">' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">序号</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">机构名称</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">统一社会信用代码</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">机构类型</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">信用等级</th>' +
+                            '<th style="padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: ' + secondaryColor + '; border-bottom: 1px solid ' + borderColor + '">状态</th>' +
+                        '</tr>' +
+                    '</thead>' +
+                    '<tbody>' + rowsHtml + '</tbody>' +
+                '</table>' +
+            '</div>' +
+            '<div style="padding: 16px 24px; border-top: 1px solid ' + borderColor + '; display: flex; justify-content: flex-end; gap: 8px;">' +
+                '<button onclick="document.getElementById(\'drillDownModal\').remove()" style="padding: 8px 20px; border: 1px solid ' + borderColor + '; background: transparent; color: ' + textColor + '; border-radius: 6px; font-size: 13px; cursor: pointer;">关闭</button>' +
+                '<button style="padding: 8px 20px; border: none; background: ' + color + '; color: #fff; border-radius: 6px; font-size: 13px; cursor: pointer;"><i class="fas fa-download"></i> 导出名录</button>' +
+            '</div>' +
+        '</div>';
+        
+        document.body.appendChild(modal);
+        
+        // 点击遮罩关闭
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    }
+    
+    // 生成模拟机构数据
+    function generateOrgData(category, count) {
+        var types = ['检测机构', '评估机构', '咨询机构'];
+        var credits = ['AAA', 'AA', 'A', 'B'];
+        var statuses = ['已入库', '已入库', '已入库', '待复核'];
+        var orgs = [];
+        
+        for (var i = 0; i < Math.min(count, 20); i++) {
+            orgs.push({
+                name: category + '服务机构' + (i + 1),
+                code: '91440101MA' + (5 + i) + 'XXXXXX',
+                type: types[Math.floor(Math.random() * types.length)],
+                credit: credits[Math.floor(Math.random() * credits.length)],
+                status: statuses[Math.floor(Math.random() * statuses.length)]
+            });
+        }
+        return orgs;
+    }
+});
+
+// 折线图交互
+document.addEventListener('DOMContentLoaded', function() {
+    var chart = document.getElementById('trendChart');
+    var tooltip = document.getElementById('chartTooltip');
+    if (!chart || !tooltip) return;
+    var dataPoints = [
+        { x: 60, y: 180, month: '1月', value: 22 },
+        { x: 180, y: 150, month: '2月', value: 26 },
+        { x: 300, y: 140, month: '3月', value: 27 },
+        { x: 420, y: 190, month: '4月', value: 20 },
+        { x: 540, y: 100, month: '5月', value: 30 },
+        { x: 660, y: 110, month: '6月', value: 28 },
+        { x: 780, y: 60, month: '7月', value: 33 }
+    ];
+    
+    chart.addEventListener('mousemove', function(e) {
+        var rect = chart.getBoundingClientRect();
+        var mouseX = e.clientX - rect.left;
+        var scaleX = 800 / rect.width;
+        var svgX = mouseX * scaleX;
+        
+        var closest = dataPoints[0];
+        var minDist = Math.abs(svgX - closest.x);
+        
+        for (var i = 1; i < dataPoints.length; i++) {
+            var dist = Math.abs(svgX - dataPoints[i].x);
+            if (dist < minDist) {
+                minDist = dist;
+                closest = dataPoints[i];
+            }
+        }
+        
+        if (minDist < 60) {
+            tooltip.querySelector('.line-chart-tooltip-month').textContent = closest.month;
+            tooltip.querySelector('.line-chart-tooltip-value').textContent = closest.value;
+            tooltip.style.left = (closest.x / 800 * rect.width - 30) + 'px';
+            tooltip.style.top = (closest.y / 280 * rect.height - 60) + 'px';
+            tooltip.classList.add('show');
+        } else {
+            tooltip.classList.remove('show');
+        }
+    });
+    
+    chart.addEventListener('mouseleave', function() {
+        tooltip.classList.remove('show');
+    });
+});
+
+// 机构名录查询数据与筛选
+var orgPage = 1;
+var orgPageSize = 10;
+var filteredOrgList = [];
+var orgSort = { field: '', dir: '' };
+
+function buildOrgListData() {
+    if (typeof getAllOrgs !== 'function') return [];
+    return getAllOrgs().map(function(o) {
+        return {
+            name: o.orgName,
+            code: o.orgCode,
+            legal: o.legalPerson || '-',
+            phone: o.phone || '-',
+            credit: o.creditLevel,
+            score: o.score,
+            status: o.status === '正常' ? '已入库' : '待复核',
+            field: o.field,
+            qual: o.qual,
+            region: o.region ? o.region.replace('上海市', '') : '',
+            established: o.established,
+            orgId: o.orgId
+        };
+    });
+}
+
+var orgListData = buildOrgListData();
+
+function renderOrgList(reset) {
+    if (reset !== false) {
+        filteredOrgList = getOrgFilteredList();
+        orgPage = 1;
+    }
+    var total = filteredOrgList.length;
+    var totalPages = Math.ceil(total / orgPageSize) || 1;
+    var start = (orgPage - 1) * orgPageSize;
+    var end = start + orgPageSize;
+    var pageData = filteredOrgList.slice(start, end);
+
+    var tbody = document.getElementById('orgListTbody');
+    if (total === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-secondary);padding:24px;">暂无符合条件的数据</td></tr>';
+        renderOrgPagination(0);
+        document.getElementById('orgListCount').textContent = '共 0 条记录';
+        document.getElementById('orgListCount').style.display = 'none';
+        return;
+    }
+    tbody.innerHTML = pageData.map(function(org) {
+        var orgName = org.name || org.orgName || '';
+        var code = org.code || org.orgCode || '';
+        var credit = org.credit || org.creditLevel || 'A';
+        var score = org.score || '0';
+        var orgId = org.orgId || '';
+        var field = org.field || '-';
+        var qual = org.qual || '-';
+        var actionBtns = orgId ?
+            '<button class="btn btn-outline" onclick="goToTPOrg(\'' + escapeHtml(orgId) + '\')">详情</button>' +
+            '<button class="btn btn-outline" onclick="goToTPContract(\'' + escapeHtml(orgId) + '\')">合同</button>' +
+            '<button class="btn btn-outline" onclick="goToTPPerformance(\'' + escapeHtml(orgId) + '\')">业绩</button>' +
+            '<button class="btn btn-outline" onclick="goToTPCredit(\'' + escapeHtml(orgId) + '\')">信用</button>' : '';
+        return '<tr>' +
+            '<td>' + orgName + '</td>' +
+            '<td>' + field + '</td>' +
+            '<td>' + qual + '</td>' +
+            '<td><span class="credit-badge ' + getCreditClass(credit) + '">' + credit + '</span></td>' +
+            '<td>' + code + '</td>' +
+            '<td>' + org.legal + '</td>' +
+            '<td>' + org.phone + '</td>' +
+            '<td><span style="color: var(--text-secondary); font-size: 12px;">' + score + '</span></td>' +
+            '<td>' + org.established + '</td>' +
+            '<td><span class="status-badge ' + getStatusClass(org.status) + '">' + org.status + '</span></td>' +
+            '<td>' + actionBtns + '</td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('orgListCount').textContent = '共 ' + total + ' 条记录';
+    document.getElementById('orgListCount').style.display = 'none';
+    renderOrgPagination(totalPages);
+    updateSortHeaders();
+}
+
+function escapeHtml(text) {
+    if (text == null) return '';
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function getOrgFilteredList() {
+    var field = document.getElementById('orgFilterField').value;
+    var qual = document.getElementById('orgFilterQual').value;
+    var credit = document.getElementById('orgFilterCredit').value;
+    var region = document.getElementById('orgFilterRegion').value;
+    var keywordEl = document.getElementById('orgFilterKeyword');
+    var keyword = keywordEl ? keywordEl.value.trim().toLowerCase() : '';
+    var list = orgListData.slice();
+    // 如果统一数据层存在，合并真实机构数据（去重）
+    if (typeof getAllOrgs === 'function') {
+        try {
+            var tpOrgs = getAllOrgs();
+            tpOrgs.forEach(function(o) {
+                var found = list.find(function(x) { return x.code === o.orgCode || x.name === o.orgName; });
+                if (!found) {
+                    list.push({
+                        name: o.orgName,
+                        code: o.orgCode,
+                        legal: o.legalPerson || '-',
+                        phone: o.phone || '-',
+                        credit: o.creditLevel,
+                        score: o.score,
+                        status: o.status,
+                        field: o.field,
+                        qual: o.qual,
+                        region: o.region ? o.region.replace('上海市', '') : '',
+                        established: o.established,
+                        orgId: o.orgId
+                    });
+                }
+            });
+        } catch (e) { console.error('加载统一机构数据失败', e); }
+    }
+    var result = list.filter(function(org) {
+        var orgField = org.field || '';
+        var orgQual = org.qual || '';
+        var orgCredit = org.credit || org.creditLevel || '';
+        var orgRegion = org.region || (org.regionRaw ? org.regionRaw.replace('上海市', '') : '');
+        var orgName = org.name || org.orgName || '';
+        if (field && orgField !== field) return false;
+        if (qual && orgQual !== qual) return false;
+        if (credit && orgCredit !== credit) return false;
+        if (region && orgRegion.indexOf(region) === -1) return false;
+        if (keyword && orgName.toLowerCase().indexOf(keyword) === -1) return false;
+        return true;
+    });
+    // 排序
+    if (orgSort.field && orgSort.dir) {
+        result.sort(function(a, b) {
+            var va, vb;
+            if (orgSort.field === 'score') {
+                va = parseFloat(a.score) || 0;
+                vb = parseFloat(b.score) || 0;
+            } else if (orgSort.field === 'established') {
+                va = a.established ? new Date(a.established).getTime() : 0;
+                vb = b.established ? new Date(b.established).getTime() : 0;
+            } else {
+                return 0;
+            }
+            return orgSort.dir === 'asc' ? va - vb : vb - va;
+        });
+    }
+    return result;
+}
+
+function sortOrgList(field) {
+    if (orgSort.field === field) {
+        orgSort.dir = orgSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        orgSort.field = field;
+        orgSort.dir = 'desc';
+    }
+    updateSortHeaders();
+    renderOrgList();
+}
+
+function updateSortHeaders() {
+    document.querySelectorAll('#orgListTable thead th.sortable').forEach(function(th) {
+        th.classList.remove('sort-asc', 'sort-desc');
+        var icon = th.querySelector('.sort-icon');
+        if (icon) icon.remove();
+        if (th.getAttribute('data-field') === orgSort.field) {
+            th.classList.add(orgSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+            th.innerHTML += ' <span class="sort-icon" title="当前排序：' + (orgSort.dir === 'asc' ? '升序' : '降序') + '">' + (orgSort.dir === 'asc' ? '↑' : '↓') + '</span>';
+        } else {
+            th.innerHTML += ' <span class="sort-icon" title="点击可排序">⇅</span>';
+        }
+    });
+}
+
+function getCreditClass(credit) {
+    return 'credit-' + (credit || 'A').toLowerCase();
+}
+
+function getStatusClass(status) {
+    if (status === '已入库' || status === '正常') return 'status-in';
+    if (status === '待复核') return 'status-pending';
+    return 'status-abnormal';
+}
+
+
+function resetOrgFilter() {
+    document.getElementById('orgFilterField').value = '';
+    document.getElementById('orgFilterQual').value = '';
+    document.getElementById('orgFilterCredit').value = '';
+    document.getElementById('orgFilterRegion').value = '';
+    renderOrgList();
+}
+
+function goOrgPage(page) {
+    var totalPages = Math.ceil(filteredOrgList.length / orgPageSize) || 1;
+    if (page < 1 || page > totalPages) return;
+    orgPage = page;
+    renderOrgList(false);
+}
+
+function renderOrgPagination(totalPages) {
+    var container = document.getElementById('orgPagination');
+    if (!container) return;
+    if (totalPages <= 0) { container.innerHTML = ''; return; }
+    var total = filteredOrgList.length;
+    var html = '<span class="page-info">共 ' + total + ' 条</span>';
+    html += '<button class="page-btn" ' + (orgPage === 1 ? 'disabled' : '') + ' onclick="goOrgPage(' + (orgPage - 1) + ')">上一页</button>';
+    for (var i = 1; i <= totalPages; i++) {
+        html += '<button class="page-btn ' + (i === orgPage ? 'active' : '') + '" onclick="goOrgPage(' + i + ')" ' + (i === orgPage ? 'disabled' : '') + '>' + i + '</button>';
+    }
+    html += '<button class="page-btn" ' + (orgPage === totalPages ? 'disabled' : '') + ' onclick="goOrgPage(' + (orgPage + 1) + ')">下一页</button>';
+    container.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    renderOrgList();
+    renderProjectGroupCount();
+});
+
+function renderProjectGroupCount() {
+    var el = document.getElementById('projectGroupCount');
+    if (!el) return;
+    var count = (typeof getAllProjectGroups === 'function') ? getAllProjectGroups().length : 0;
+    el.textContent = count;
+}
+
+// 机构名录查询导出功能
+function exportOrgList(type) {
+    var headers = [];
+    document.querySelectorAll('#orgListTable thead th').forEach(function(th) {
+        headers.push(th.textContent.trim());
+    });
+    var data = filteredOrgList.map(function(org) {
+        return [org.name, org.field, org.qual, org.credit, org.code, org.legal, org.phone, org.score, org.established, org.region, org.status];
+    });
+
+    if (type === 'excel') {
+        var csv = '\uFEFF' + headers.join(',') + '\n';
+        data.forEach(function(row) {
+            csv += row.map(function(cell) {
+                return '"' + String(cell).replace(/"/g, '""') + '"';
+            }).join(',') + '\n';
+        });
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = '机构名录_' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 100);
+    } else if (type === 'pdf') {
+        var printHtml = [
+            '\u003chtml\u003e\u003chead\u003e\u003ctitle\u003e机构名录\u003c/title\u003e\u003cstyle\u003e',
+            'body{font-family:"Microsoft YaHei",sans-serif;padding:20px;color:#202124}',
+            'h2{text-align:center;margin-bottom:20px}',
+            'table{width:100%;border-collapse:collapse;font-size:13px}',
+            'th,td{padding:10px;border:1px solid #dadce0;text-align:left}',
+            'th{background:#f0f2f5}',
+            '\u003c/style\u003e\u003c/head\u003e\u003cbody\u003e',
+            '\u003ch2\u003e机构名录\u003c/h2\u003e',
+            '\u003ctable\u003e\u003cthead\u003e\u003ctr\u003e',
+            headers.map(function(h) { return '\u003cth\u003e' + h + '\u003c/th\u003e'; }).join(''),
+            '\u003c/tr\u003e\u003c/thead\u003e\u003ctbody\u003e',
+            data.map(function(row) {
+                return '\u003ctr\u003e' + row.map(function(cell) { return '\u003ctd\u003e' + cell + '\u003c/td\u003e'; }).join('') + '\u003c/tr\u003e';
+            }).join(''),
+            '\u003c/tbody\u003e\u003c/table\u003e\u003c/body\u003e\u003c/html\u003e'
+        ].join('');
+        var printWin = window.open('', '_blank');
+        printWin.document.write(printHtml);
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(function() {
+            printWin.print();
+        }, 300);
+    }
+}
+
+// 服务范围分析地图数据与渲染
+var serviceMapData = [
+    { name: '南桥街道', top: '44%', left: '42%', width: '13%', height: '13%', orgs: { '建筑工地': 18, '基坑': 12, '交通': 10, '玻璃幕墙': 8, '燃气': 14, '高空坠物': 7, '城镇自建房': 11, '农村自建房': 5 } },
+    { name: '奉浦街道', top: '40%', left: '54%', width: '12%', height: '12%', orgs: { '建筑工地': 14, '基坑': 9, '交通': 8, '玻璃幕墙': 6, '燃气': 10, '高空坠物': 5, '城镇自建房': 8, '农村自建房': 3 } },
+    { name: '金海街道', top: '54%', left: '56%', width: '12%', height: '12%', orgs: { '建筑工地': 12, '基坑': 7, '交通': 9, '玻璃幕墙': 5, '燃气': 8, '高空坠物': 4, '城镇自建房': 7, '农村自建房': 2 } },
+    { name: '奉城镇', top: '22%', left: '64%', width: '18%', height: '18%', orgs: { '建筑工地': 16, '基坑': 10, '交通': 11, '玻璃幕墙': 7, '燃气': 12, '高空坠物': 6, '城镇自建房': 13, '农村自建房': 8 } },
+    { name: '庄行镇', top: '36%', left: '18%', width: '16%', height: '16%', orgs: { '建筑工地': 11, '基坑': 8, '交通': 6, '玻璃幕墙': 5, '燃气': 9, '高空坠物': 7, '城镇自建房': 10, '农村自建房': 6 } },
+    { name: '金汇镇', top: '16%', left: '44%', width: '16%', height: '16%', orgs: { '建筑工地': 15, '基坑': 9, '交通': 8, '玻璃幕墙': 6, '燃气': 11, '高空坠物': 5, '城镇自建房': 9, '农村自建房': 7 } },
+    { name: '青村镇', top: '58%', left: '72%', width: '16%', height: '16%', orgs: { '建筑工地': 10, '基坑': 6, '交通': 7, '玻璃幕墙': 4, '燃气': 8, '高空坠物': 3, '城镇自建房': 8, '农村自建房': 9 } },
+    { name: '柘林镇', top: '74%', left: '30%', width: '18%', height: '14%', orgs: { '建筑工地': 9, '基坑': 5, '交通': 6, '玻璃幕墙': 4, '燃气': 7, '高空坠物': 4, '城镇自建房': 6, '农村自建房': 8 } },
+    { name: '四团镇', top: '12%', left: '74%', width: '18%', height: '18%', orgs: { '建筑工地': 8, '基坑': 5, '交通': 9, '玻璃幕墙': 3, '燃气': 6, '高空坠物': 2, '城镇自建房': 7, '农村自建房': 10 } },
+    { name: '海湾镇', top: '78%', left: '58%', width: '14%', height: '12%', orgs: { '建筑工地': 6, '基坑': 3, '交通': 4, '玻璃幕墙': 2, '燃气': 5, '高空坠物': 2, '城镇自建房': 3, '农村自建房': 4 } },
+    { name: '西渡镇', top: '52%', left: '28%', width: '13%', height: '13%', orgs: { '建筑工地': 13, '基坑': 8, '交通': 7, '玻璃幕墙': 6, '燃气': 9, '高空坠物': 6, '城镇自建房': 8, '农村自建房': 4 } }
+];
+
+function getRegionColor(count) {
+    if (count >= 35) return '#1a73e8';
+    if (count >= 20) return '#34a853';
+    if (count >= 10) return '#f59e0b';
+    return '#9c27b0';
+}
+
+function renderServiceMap() {
+    var container = document.getElementById('serviceMapContainer');
+    var field = document.getElementById('mapFilterField').value;
+    var tooltip = document.getElementById('mapTooltip');
+    var embed = document.getElementById('amapEmbed');
+    var iframe = document.getElementById('amapIframe');
+    var mapBody = document.querySelector('.map-body');
+    
+    // 强制修复布局：确保地图容器和覆盖层正确渲染
+    if (mapBody) {
+        mapBody.style.display = 'grid';
+        mapBody.style.gridTemplateColumns = '1fr';
+        mapBody.style.gap = '0';
+        mapBody.style.padding = '20px';
+        mapBody.style.height = '500px';
+        mapBody.style.minHeight = '0';
+        mapBody.style.boxSizing = 'border-box';
+    }
+    if (container) {
+        container.style.position = 'relative';
+        container.style.width = '100%';
+        container.style.height = '100%';
+        container.style.borderRadius = '8px';
+        container.style.overflow = 'hidden';
+        container.style.border = '1px solid var(--border)';
+        container.style.background = '#eef6ff';
+        container.style.minWidth = '0';
+        container.style.minHeight = '0';
+    }
+    if (embed) {
+        embed.style.position = 'absolute';
+        embed.style.top = '0';
+        embed.style.right = '0';
+        embed.style.bottom = '0';
+        embed.style.left = '0';
+        embed.style.width = '100%';
+        embed.style.height = '100%';
+        embed.style.zIndex = '0';
+    }
+    if (iframe) {
+        iframe.style.position = 'absolute';
+        iframe.style.top = '0';
+        iframe.style.left = '0';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.minHeight = '100%';
+        iframe.style.border = 'none';
+        iframe.style.display = 'block';
+    }
+    var legend = container ? container.querySelector('.map-legend') : document.querySelector('.map-legend');
+    if (legend) {
+        legend.style.position = 'absolute';
+        legend.style.top = '12px';
+        legend.style.right = '12px';
+        legend.style.width = 'auto';
+        legend.style.minWidth = '120px';
+        legend.style.maxWidth = '150px';
+        legend.style.minHeight = '0';
+        legend.style.zIndex = '5';
+    }
+    
+    // 移除旧的区域块（保留 tooltip）
+    var oldRegions = container.querySelectorAll('.map-region');
+    oldRegions.forEach(function(el) { el.remove(); });
+    
+    serviceMapData.forEach(function(region) {
+        var count = 0;
+        var details = [];
+        if (field) {
+            count = region.orgs[field] || 0;
+            details.push({ name: field, value: count });
+        } else {
+            for (var key in region.orgs) {
+                count += region.orgs[key];
+                details.push({ name: key, value: region.orgs[key] });
+            }
+        }
+        
+        var el = document.createElement('div');
+        el.className = 'map-region';
+        el.style.position = 'absolute';
+        el.style.top = region.top;
+        el.style.left = region.left;
+        el.style.width = '56px';
+        el.style.height = '56px';
+        el.style.background = getRegionColor(count);
+        el.style.borderRadius = '50%';
+        el.style.display = 'flex';
+        el.style.flexDirection = 'column';
+        el.style.alignItems = 'center';
+        el.style.justifyContent = 'center';
+        el.style.color = '#fff';
+        el.style.fontWeight = '600';
+        el.style.cursor = 'pointer';
+        el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.25)';
+        el.style.zIndex = '1';
+        el.style.border = '2px solid rgba(255,255,255,0.7)';
+        el.style.padding = '4px 8px';
+        el.style.transform = 'translate(-50%, -50%)';
+        el.innerHTML = '<span class="region-name">' + region.name + '</span><span class="region-count">' + count + '家</span>';
+        
+        el.addEventListener('mouseenter', function(e) {
+            var title = field ? region.name + ' · ' + field : region.name;
+            document.getElementById('mapTooltipTitle').textContent = title;
+            var contentHtml = details.map(function(item) {
+                return '<div class="map-tooltip-item"><span>' + item.name + '</span><span>' + item.value + ' 家</span></div>';
+            }).join('');
+            document.getElementById('mapTooltipContent').innerHTML = contentHtml;
+            tooltip.classList.add('show');
+        });
+        
+        el.addEventListener('mousemove', function(e) {
+            var rect = container.getBoundingClientRect();
+            tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+            tooltip.style.top = (e.clientY - rect.top + 12) + 'px';
+        });
+        
+        el.addEventListener('mouseleave', function() {
+            tooltip.classList.remove('show');
+        });
+        
+        container.appendChild(el);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    renderServiceMap();
+});
+</script>
+</body>
+</html>

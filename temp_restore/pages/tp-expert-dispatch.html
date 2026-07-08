@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>专家调度 - 第三方服务机构</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="../js/third-party-data.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --primary-light: #e8f0fe;
+            --success: #1e8e3e;
+            --danger: #d93025;
+            --warning: #e37400;
+            --bg-dark: #f0f2f5;
+            --bg-card: #ffffff;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08);
+            --radius: 8px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            padding: 16px;
+            font-size: 14px;
+        }
+        .page-container { max-width: 1200px; margin: 0 auto; }
+        .page-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 0 1px 4px var(--shadow);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(0,0,0,0.02);
+        }
+        .card-body { padding: 16px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .form-row-full { display: grid; grid-template-columns: 1fr; margin-bottom: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+        .form-group label .required { color: var(--danger); margin-left: 2px; }
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+            background: #fff;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+        .form-group textarea { resize: vertical; min-height: 72px; }
+        .btn {
+            padding: 9px 20px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { background: #fff; border: 1px solid var(--border); color: var(--text-primary); }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-success:hover { filter: brightness(0.95); }
+        .btn-sm { padding: 6px 12px; font-size: 13px; }
+        .filter-bar {
+            display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .filter-bar .form-group { flex: 1; min-width: 160px; margin-bottom: 0; }
+        .list-table {
+            width: 100%; border-collapse: collapse; font-size: 13px;
+        }
+        .list-table th, .list-table td {
+            padding: 12px 14px; border-bottom: 1px solid var(--border); text-align: left;
+        }
+        .list-table thead th {
+            background: rgba(0,0,0,0.02); font-weight: 600; color: var(--text-secondary); white-space: nowrap;
+        }
+        .list-table tbody tr:hover { background: rgba(26,115,232,0.04); }
+        .tag {
+            display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; white-space: nowrap;
+        }
+        .tag-primary { background: var(--primary-light); color: var(--primary); }
+        .tag-success { background: rgba(30,142,62,0.12); color: var(--success); }
+        .tag-warning { background: rgba(227,116,0,0.12); color: var(--warning); }
+        .tag-danger { background: rgba(217,48,37,0.12); color: var(--danger); }
+        .empty-tip { text-align: center; color: var(--text-secondary); padding: 32px 0; }
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+            display: none; align-items: center; justify-content: center; z-index: 1000;
+            padding: 20px;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: var(--bg-card); border-radius: var(--radius); width: 100%; max-width: 640px;
+            max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;
+        }
+        .modal-header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
+        .modal-body { padding: 16px; overflow-y: auto; }
+        .modal-footer { padding: 14px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+        .expert-card {
+            border: 1px solid var(--border); border-radius: var(--radius); padding: 12px;
+            margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .expert-card:hover { border-color: var(--primary); background: var(--primary-light); }
+        .expert-card.selected { border-color: var(--primary); background: var(--primary-light); box-shadow: 0 0 0 2px var(--primary); }
+        .expert-info { flex: 1; }
+        .expert-name { font-weight: 600; margin-bottom: 4px; }
+        .expert-meta { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+        .expert-check { font-size: 18px; color: var(--primary); margin-left: 8px; }
+        .selected-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .selected-chip {
+            background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary);
+            border-radius: 16px; padding: 4px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .selected-chip .remove { cursor: pointer; font-weight: bold; }
+        .status-pending { color: var(--warning); }
+        .status-assigned { color: var(--success); }
+        .status-rejected { color: var(--danger); }
+        @media (max-width: 768px) {
+            .form-row { grid-template-columns: 1fr; }
+            .filter-bar { flex-direction: column; }
+            .filter-bar .form-group { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<div class="page-container">
+    <div class="page-header">
+        <div class="page-title"><i class="fas fa-user-clock" style="color:var(--primary)"></i> 专家调度</div>
+        <button class="btn btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> 新建调度需求</button>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><i class="fas fa-filter"></i> 筛选</div>
+        <div class="card-body">
+            <div class="filter-bar">
+                <div class="form-group">
+                    <label>需求编号</label>
+                    <input type="text" id="filterCode" placeholder="请输入需求编号">
+                </div>
+                <div class="form-group">
+                    <label>需求状态</label>
+                    <select id="filterStatus">
+                        <option value="">全部</option>
+                        <option value="pending">待分派</option>
+                        <option value="assigned">已分派</option>
+                        <option value="rejected">已驳回</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>专业领域</label>
+                    <select id="filterDomain">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="renderTaskList()"><i class="fas fa-search"></i> 查询</button>
+                <button class="btn btn-outline" onclick="resetFilter()"><i class="fas fa-undo"></i> 重置</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><i class="fas fa-list"></i> 调度记录</div>
+        <div class="card-body" style="padding:0;">
+            <table class="list-table">
+                <thead>
+                    <tr>
+                        <th>需求编号</th>
+                        <th>需求名称</th>
+                        <th>专业领域</th>
+                        <th>所需人数</th>
+                        <th>已选专家</th>
+                        <th>状态</th>
+                        <th>提交时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="taskTable"></tbody>
+            </table>
+            <div id="emptyTip" class="empty-tip" style="display:none;">暂无调度需求</div>
+        </div>
+    </div>
+</div>
+
+<!-- 新建/编辑调度需求弹窗 -->
+<div class="modal-overlay" id="taskModal">
+    <div class="modal">
+        <div class="modal-header" id="taskModalTitle">新建调度需求</div>
+        <div class="modal-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>需求名称 <span class="required">*</span></label>
+                    <input type="text" id="taskName" placeholder="例如：南桥镇自建房安全评估">
+                </div>
+                <div class="form-group">
+                    <label>所需人数 <span class="required">*</span></label>
+                    <input type="number" id="taskCount" min="1" value="1">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>专业领域 <span class="required">*</span></label>
+                    <select id="taskDomain"></select>
+                </div>
+                <div class="form-group">
+                    <label>从事方向</label>
+                    <select id="taskDirection">
+                        <option value="">不限</option>
+                        <option>安全评估</option>
+                        <option>隐患排查</option>
+                        <option>检测检验</option>
+                        <option>应急咨询</option>
+                        <option>事故调查</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>需求说明</label>
+                    <textarea id="taskRemark" placeholder="请输入任务背景、工作地点、时间安排等"></textarea>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>选择专家 <span class="required">*</span></label>
+                    <button class="btn btn-outline btn-sm" onclick="openExpertPicker()"><i class="fas fa-user-plus"></i> 选择专家</button>
+                    <div class="selected-list" id="selectedExperts"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeTaskModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveTask()">保存为待分派</button>
+            <button class="btn btn-success" onclick="assignTask()">确认分派</button>
+        </div>
+    </div>
+</div>
+
+<!-- 选择专家弹窗 -->
+<div class="modal-overlay" id="expertModal">
+    <div class="modal">
+        <div class="modal-header"><i class="fas fa-user-tie"></i> 选择专家</div>
+        <div class="modal-body">
+            <div class="filter-bar" style="margin-bottom:12px;">
+                <div class="form-group" style="flex:1;">
+                    <input type="text" id="expertKeyword" placeholder="搜索姓名、单位、职称" style="width:100%;">
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="renderExpertCandidates()"><i class="fas fa-search"></i> 搜索</button>
+            </div>
+            <div id="expertCandidateList"></div>
+        </div>
+        <div class="modal-footer">
+            <span style="flex:1;color:var(--text-secondary);font-size:13px;">已选 <span id="selectedExpertCount">0</span> 人</span>
+            <button class="btn btn-outline" onclick="closeExpertModal()">取消</button>
+            <button class="btn btn-primary" onclick="confirmExpertPick()">确定</button>
+        </div>
+    </div>
+</div>
+
+<!-- 查看结果弹窗 -->
+<div class="modal-overlay" id="resultModal">
+    <div class="modal">
+        <div class="modal-header"><i class="fas fa-eye"></i> 调度结果</div>
+        <div class="modal-body" id="resultBody"></div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeResultModal()">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    var taskList = [];
+    var currentTaskId = null;
+    var tempSelectedExperts = [];
+    var STORAGE_KEY = 'expertDispatchTasks';
+
+    function loadTasks() {
+        try {
+            var saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) taskList = JSON.parse(saved);
+        } catch(e) {}
+    }
+
+    function saveTasks() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(taskList));
+        } catch(e) {}
+    }
+
+    function getExpertList() {
+        if (typeof getAllExperts === 'function') {
+            return getAllExperts().map(function(e) {
+                return {
+                    name: e.name,
+                    gender: e.gender || '',
+                    org: e.orgName || e.org || '',
+                    domain: e.domain || '',
+                    direction: e.direction || '',
+                    title: e.title || '',
+                    phone: e.phone || '',
+                    workplace: e.workplace || ''
+                };
+            });
+        }
+        return [];
+    }
+
+    function getDomainOptions() {
+        var experts = getExpertList();
+        var domains = [];
+        experts.forEach(function(e) {
+            if (e.domain && !domains.includes(e.domain)) domains.push(e.domain);
+        });
+        if (!domains.length) domains = ['建筑工地','基坑','交通','玻璃幕墙','燃气','高空坠物','城镇自建房','农村自建房','建筑结构','岩土工程','市政工程','电气自动化'];
+        return domains;
+    }
+
+    function fillSelect(id, options) {
+        var select = document.getElementById(id);
+        if (!select) return;
+        select.innerHTML = (id === 'taskDomain' ? '<option value="">请选择</option>' : '') + options.map(function(o) {
+            return '<option value="' + o + '">' + o + '</option>';
+        }).join('');
+    }
+
+    function generateCode() {
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = String(now.getMonth() + 1).padStart(2, '0');
+        var d = String(now.getDate()).padStart(2, '0');
+        var seq = String(taskList.length + 1).padStart(3, '0');
+        return 'EXP-' + y + m + d + '-' + seq;
+    }
+
+    function openCreateModal() {
+        currentTaskId = null;
+        document.getElementById('taskModalTitle').textContent = '新建调度需求';
+        document.getElementById('taskName').value = '';
+        document.getElementById('taskCount').value = 1;
+        document.getElementById('taskDomain').value = '';
+        document.getElementById('taskDirection').value = '';
+        document.getElementById('taskRemark').value = '';
+        tempSelectedExperts = [];
+        renderSelectedExperts();
+        document.getElementById('taskModal').classList.add('show');
+    }
+
+    function editTask(id) {
+        var task = taskList.find(function(t) { return t.id === id; });
+        if (!task) return;
+        currentTaskId = id;
+        document.getElementById('taskModalTitle').textContent = '编辑调度需求';
+        document.getElementById('taskName').value = task.name;
+        document.getElementById('taskCount').value = task.count;
+        document.getElementById('taskDomain').value = task.domain;
+        document.getElementById('taskDirection').value = task.direction || '';
+        document.getElementById('taskRemark').value = task.remark || '';
+        tempSelectedExperts = (task.experts || []).slice();
+        renderSelectedExperts();
+        document.getElementById('taskModal').classList.add('show');
+    }
+
+    function closeTaskModal() {
+        document.getElementById('taskModal').classList.remove('show');
+    }
+
+    function validateTask() {
+        var name = document.getElementById('taskName').value.trim();
+        var count = parseInt(document.getElementById('taskCount').value, 10);
+        var domain = document.getElementById('taskDomain').value;
+        if (!name) { alert('请输入需求名称'); return false; }
+        if (!count || count < 1) { alert('请输入所需人数'); return false; }
+        if (!domain) { alert('请选择专业领域'); return false; }
+        if (!tempSelectedExperts.length) { alert('请选择专家'); return false; }
+        if (tempSelectedExperts.length < count) {
+            alert('已选专家人数少于所需人数 ' + count);
+            return false;
+        }
+        return true;
+    }
+
+    function buildTask(status) {
+        var now = new Date().toISOString().slice(0,19).replace('T',' ');
+        return {
+            id: currentTaskId || generateCode(),
+            code: currentTaskId ? (taskList.find(function(t){return t.id===currentTaskId}) || {}).code : generateCode(),
+            name: document.getElementById('taskName').value.trim(),
+            count: parseInt(document.getElementById('taskCount').value, 10),
+            domain: document.getElementById('taskDomain').value,
+            direction: document.getElementById('taskDirection').value,
+            remark: document.getElementById('taskRemark').value.trim(),
+            experts: tempSelectedExperts.slice(),
+            status: status,
+            createTime: currentTaskId ? (taskList.find(function(t){return t.id===currentTaskId}) || {}).createTime : now,
+            updateTime: now
+        };
+    }
+
+    function saveTask() {
+        if (!validateTask()) return;
+        var task = buildTask('pending');
+        if (currentTaskId) {
+            var idx = taskList.findIndex(function(t) { return t.id === currentTaskId; });
+            if (idx >= 0) taskList[idx] = task;
+        } else {
+            taskList.unshift(task);
+        }
+        saveTasks();
+        closeTaskModal();
+        renderTaskList();
+        alert('已保存为待分派');
+    }
+
+    function assignTask() {
+        if (!validateTask()) return;
+        var task = buildTask('assigned');
+        if (currentTaskId) {
+            var idx = taskList.findIndex(function(t) { return t.id === currentTaskId; });
+            if (idx >= 0) taskList[idx] = task;
+        } else {
+            taskList.unshift(task);
+        }
+        saveTasks();
+        closeTaskModal();
+        renderTaskList();
+        alert('专家已分派，结果已生成可查看记录');
+    }
+
+    function rejectTask(id) {
+        if (!confirm('确认驳回该调度需求？')) return;
+        var task = taskList.find(function(t) { return t.id === id; });
+        if (!task) return;
+        task.status = 'rejected';
+        task.updateTime = new Date().toISOString().slice(0,19).replace('T',' ');
+        saveTasks();
+        renderTaskList();
+    }
+
+    function openExpertPicker() {
+        var domain = document.getElementById('taskDomain').value;
+        document.getElementById('expertKeyword').value = domain || '';
+        renderExpertCandidates();
+        document.getElementById('expertModal').classList.add('show');
+    }
+
+    function closeExpertModal() {
+        document.getElementById('expertModal').classList.remove('show');
+    }
+
+    function renderExpertCandidates() {
+        var keyword = document.getElementById('expertKeyword').value.trim();
+        var domain = document.getElementById('taskDomain').value;
+        var direction = document.getElementById('taskDirection').value;
+        var experts = getExpertList().filter(function(e) {
+            if (domain && e.domain !== domain) return false;
+            if (direction && e.direction !== direction) return false;
+            if (!keyword) return true;
+            var lower = keyword.toLowerCase();
+            return (e.name || '').toLowerCase().includes(lower) ||
+                   (e.org || '').toLowerCase().includes(lower) ||
+                   (e.title || '').toLowerCase().includes(lower);
+        });
+        var container = document.getElementById('expertCandidateList');
+        if (!experts.length) {
+            container.innerHTML = '<div class="empty-tip">未找到符合条件的专家</div>';
+            return;
+        }
+        container.innerHTML = experts.map(function(e) {
+            var selected = tempSelectedExperts.some(function(s) { return s.name === e.name; });
+            return '<div class="expert-card ' + (selected ? 'selected' : '') + '" onclick="toggleExpert(\'' + encodeName(e.name) + '\')">' +
+                '<div class="expert-info">' +
+                    '<div class="expert-name">' + e.name + ' <span class="tag tag-primary">' + e.title + '</span></div>' +
+                    '<div class="expert-meta">' + e.org + ' · ' + e.domain + ' · ' + e.direction + ' · ' + e.phone + '</div>' +
+                '</div>' +
+                '<div class="expert-check">' + (selected ? '<i class="fas fa-check-circle"></i>' : '<i class="far fa-circle"></i>') + '</div>' +
+            '</div>';
+        }).join('');
+        updateSelectedCount();
+    }
+
+    function encodeName(name) {
+        return name.replace(/'/g, "\\'");
+    }
+
+    function toggleExpert(name) {
+        var idx = tempSelectedExperts.findIndex(function(s) { return s.name === name; });
+        if (idx >= 0) {
+            tempSelectedExperts.splice(idx, 1);
+        } else {
+            var expert = getExpertList().find(function(e) { return e.name === name; });
+            if (expert) tempSelectedExperts.push(expert);
+        }
+        renderExpertCandidates();
+        updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+        document.getElementById('selectedExpertCount').textContent = tempSelectedExperts.length;
+    }
+
+    function confirmExpertPick() {
+        renderSelectedExperts();
+        closeExpertModal();
+    }
+
+    function renderSelectedExperts() {
+        var container = document.getElementById('selectedExperts');
+        if (!tempSelectedExperts.length) {
+            container.innerHTML = '';
+            return;
+        }
+        container.innerHTML = tempSelectedExperts.map(function(e) {
+            return '<span class="selected-chip">' + e.name + ' <span class="remove" onclick="removeSelectedExpert(\'' + encodeName(e.name) + '\')">×</span></span>';
+        }).join('');
+    }
+
+    function removeSelectedExpert(name) {
+        tempSelectedExperts = tempSelectedExperts.filter(function(s) { return s.name !== name; });
+        renderSelectedExperts();
+    }
+
+    function renderTaskList() {
+        var code = document.getElementById('filterCode').value.trim();
+        var status = document.getElementById('filterStatus').value;
+        var domain = document.getElementById('filterDomain').value;
+        var filtered = taskList.filter(function(t) {
+            if (code && !(t.code || '').includes(code)) return false;
+            if (status && t.status !== status) return false;
+            if (domain && t.domain !== domain) return false;
+            return true;
+        });
+        var tbody = document.getElementById('taskTable');
+        var empty = document.getElementById('emptyTip');
+        if (!filtered.length) {
+            tbody.innerHTML = '';
+            empty.style.display = 'block';
+            return;
+        }
+        empty.style.display = 'none';
+        tbody.innerHTML = filtered.map(function(t) {
+            var statusText = { pending: '待分派', assigned: '已分派', rejected: '已驳回' }[t.status] || t.status;
+            var statusClass = { pending: 'tag-warning', assigned: 'tag-success', rejected: 'tag-danger' }[t.status] || 'tag-warning';
+            return '<tr>' +
+                '<td>' + (t.code || t.id) + '</td>' +
+                '<td>' + t.name + '</td>' +
+                '<td>' + t.domain + '</td>' +
+                '<td>' + t.count + '</td>' +
+                '<td>' + (t.experts || []).map(function(e){ return e.name; }).join('、') + '</td>' +
+                '<td><span class="tag ' + statusClass + '">' + statusText + '</span></td>' +
+                '<td>' + t.createTime + '</td>' +
+                '<td>' +
+                    '<button class="btn btn-sm btn-outline" onclick="viewResult(\'' + t.id + '\')">查看结果</button> ' +
+                    (t.status !== 'assigned' ? '<button class="btn btn-sm btn-outline" onclick="editTask(\'' + t.id + '\')">编辑</button> ' : '') +
+                    (t.status === 'pending' ? '<button class="btn btn-sm btn-outline" onclick="rejectTask(\'' + t.id + '\')">驳回</button>' : '') +
+                '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    function viewResult(id) {
+        var task = taskList.find(function(t) { return t.id === id; });
+        if (!task) return;
+        var statusText = { pending: '待分派', assigned: '已分派', rejected: '已驳回' }[task.status] || task.status;
+        var html = '<div class="form-row"><div class="form-group"><label>需求编号</label><div class="value">' + (task.code || task.id) + '</div></div><div class="form-group"><label>状态</label><div class="value">' + statusText + '</div></div></div>' +
+            '<div class="form-row"><div class="form-group"><label>需求名称</label><div class="value">' + task.name + '</div></div><div class="form-group"><label>所需人数</label><div class="value">' + task.count + '</div></div></div>' +
+            '<div class="form-row"><div class="form-group"><label>专业领域</label><div class="value">' + task.domain + '</div></div><div class="form-group"><label>从事方向</label><div class="value">' + (task.direction || '不限') + '</div></div></div>' +
+            '<div class="form-row-full"><div class="form-group"><label>需求说明</label><div class="value">' + (task.remark || '—') + '</div></div></div>' +
+            '<div class="form-row-full"><div class="form-group"><label>已选专家</label><div class="selected-list">' + (task.experts || []).map(function(e) {
+                return '<span class="selected-chip">' + e.name + '（' + e.title + '）</span>';
+            }).join('') + '</div></div></div>';
+        document.getElementById('resultBody').innerHTML = html;
+        document.getElementById('resultModal').classList.add('show');
+    }
+
+    function closeResultModal() {
+        document.getElementById('resultModal').classList.remove('show');
+    }
+
+    function resetFilter() {
+        document.getElementById('filterCode').value = '';
+        document.getElementById('filterStatus').value = '';
+        document.getElementById('filterDomain').value = '';
+        renderTaskList();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadTasks();
+        var domains = getDomainOptions();
+        fillSelect('taskDomain', domains);
+        fillSelect('filterDomain', domains);
+        renderTaskList();
+    });
+
+    // 接收外部传入的调度需求（其他模块通过 postMessage 发送）
+    window.addEventListener('message', function(e) {
+        if (e.data && e.data.action === 'createExpertDispatch') {
+            var payload = e.data.payload || {};
+            document.getElementById('taskName').value = payload.name || '';
+            document.getElementById('taskDomain').value = payload.domain || '';
+            document.getElementById('taskDirection').value = payload.direction || '';
+            document.getElementById('taskCount').value = payload.count || 1;
+            document.getElementById('taskRemark').value = payload.remark || '';
+            tempSelectedExperts = [];
+            renderSelectedExperts();
+            document.getElementById('taskModal').classList.add('show');
+        }
+    });
+</script>
+</body>
+</html>

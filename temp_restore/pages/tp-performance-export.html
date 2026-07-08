@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>业绩证明导出预览</title>
+<link rel="stylesheet" href="tp-common.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: var(--bg-dark); color: var(--text-primary); margin: 0; padding: 20px; }
+.export-page { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; max-width: 900px; margin: 0 auto; padding: 32px; }
+.export-header { text-align: center; margin-bottom: 24px; }
+.export-header h1 { font-size: 22px; margin-bottom: 16px; color: var(--text-primary); }
+.org-info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: left; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.org-info-item { font-size: 13px; }
+.org-info-item .label { color: var(--text-secondary); margin-right: 8px; }
+.summary-line { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+.export-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 24px; }
+.export-table th, .export-table td { padding: 10px 8px; border: 1px solid var(--border); text-align: left; }
+.export-table th { background: var(--header-bg); color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+.section-title { font-size: 15px; font-weight: 600; margin: 24px 0 12px 0; color: var(--text-primary); }
+.proof-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.proof-item { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg-card); }
+.proof-img { width: 100%; height: 120px; object-fit: cover; display: block; }
+.proof-name { padding: 8px; font-size: 11px; color: var(--text-secondary); word-break: break-all; }
+.no-proof { color: var(--text-secondary); font-size: 13px; }
+.export-actions { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
+.btn { padding: 10px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-primary); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+@media print { .export-actions { display: none; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<div class="export-page" id="exportPage">
+    <div class="export-header">
+        <h1>第三方服务机构业绩证明</h1>
+        <div class="org-info">
+            <div class="org-info-item"><span class="label">机构名称：</span><span id="orgName">上海建科咨询有限公司</span></div>
+            <div class="org-info-item"><span class="label">统一社会信用代码：</span><span id="orgCreditCode">91310120XXXXXXXXXX</span></div>
+            <div class="org-info-item"><span class="label">资质等级：</span><span id="orgLevel">甲级</span></div>
+            <div class="org-info-item"><span class="label">生成日期：</span><span id="genDate">2026-07-03</span></div>
+        </div>
+    </div>
+    <div class="summary-line" id="summaryLine">当前共筛选出 0 条业绩记录</div>
+    <table class="export-table" id="exportTable">
+        <thead>
+            <tr>
+                <th style="width:40px;">序号</th>
+                <th>项目名称</th>
+                <th>服务领域</th>
+                <th>服务类型</th>
+                <th>机构名称</th>
+                <th>委托单位</th>
+                <th>服务时间</th>
+                <th>合同金额</th>
+                <th>验收结论</th>
+                <th>审核状态</th>
+            </tr>
+        </thead>
+        <tbody id="exportTableBody"></tbody>
+    </table>
+    <div class="section-title">证明材料</div>
+    <div class="proof-grid" id="proofGrid"></div>
+    <div class="export-actions">
+        <button class="btn btn-primary" onclick="generatePDF()"><i class="fas fa-file-pdf"></i> 生成PDF并下载</button>
+        <button class="btn btn-outline" onclick="closeSelf()"><i class="fas fa-times"></i> 关闭</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+<script>
+(function(){
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') {
+        document.documentElement.setAttribute('data-theme', e.data.theme);
+        localStorage.setItem('theme', e.data.theme);
+    }
+});
+
+function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function getOrgInfo() {
+    var orgName = '上海建科咨询有限公司';
+    var creditCode = '91310120XXXXXXXXXX';
+    var level = '甲级';
+    var raw = localStorage.getItem('orgInfo');
+    if (raw) {
+        try {
+            var info = JSON.parse(raw);
+            if (info.name) orgName = info.name;
+            if (info.code) creditCode = info.code;
+            if (info.level) level = info.level;
+        } catch (e) {}
+    }
+    document.getElementById('orgName').textContent = orgName;
+    document.getElementById('orgCreditCode').textContent = creditCode;
+    document.getElementById('orgLevel').textContent = level;
+    document.getElementById('genDate').textContent = new Date().toISOString().slice(0, 10);
+}
+
+function getExportData() {
+    var data = [];
+    var raw = localStorage.getItem('performanceExportData');
+    if (raw) {
+        try { data = JSON.parse(raw); } catch (e) { data = []; }
+    }
+    if (!Array.isArray(data) || data.length === 0) {
+        raw = localStorage.getItem('performanceData');
+        if (raw) {
+            try { data = JSON.parse(raw); } catch (e) { data = []; }
+        }
+    }
+    return data;
+}
+
+function getConclusionClass(conclusion) {
+    if (conclusion === '合格') return 'success';
+    if (conclusion === '基本合格') return 'warning';
+    if (conclusion === '不合格') return 'danger';
+    return 'info';
+}
+
+function getAuditStatusClass(status) {
+    if (status === '已通过') return 'success';
+    if (status === '已退回') return 'danger';
+    if (status === '待审核') return 'warning';
+    return 'grey';
+}
+
+function renderTable(data) {
+    var tbody = document.getElementById('exportTableBody');
+    tbody.innerHTML = '';
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-secondary);padding:16px;">暂无数据</td></tr>';
+        return;
+    }
+    data.forEach(function(item, idx) {
+        var orgName = item.orgName || document.getElementById('orgName').textContent;
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td>' + (idx + 1) + '</td>' +
+            '<td>' + escapeHtml(item.projectName) + '</td>' +
+            '<td>' + escapeHtml(item.domain) + '</td>' +
+            '<td>' + escapeHtml(item.serviceType) + '</td>' +
+            '<td>' + escapeHtml(orgName) + '</td>' +
+            '<td>' + escapeHtml(item.client) + '</td>' +
+            '<td>' + escapeHtml(item.serviceTime) + '</td>' +
+            '<td>' + item.amount.toFixed(1) + ' 万</td>' +
+            '<td>' + escapeHtml(item.conclusion) + '</td>' +
+            '<td>' + escapeHtml(item.auditStatus || '待审核') + '</td>';
+        tbody.appendChild(tr);
+    });
+}
+
+function renderProofs(data) {
+    var grid = document.getElementById('proofGrid');
+    grid.innerHTML = '';
+    var allFiles = [];
+    data.forEach(function(item) {
+        if (item.proofFiles && item.proofFiles.length > 0) {
+            item.proofFiles.forEach(function(f) {
+                allFiles.push({ item: item, file: f });
+            });
+        }
+    });
+    if (allFiles.length === 0) {
+        grid.innerHTML = '<div class="no-proof">当前筛选记录未上传证明材料</div>';
+        return;
+    }
+    allFiles.forEach(function(obj) {
+        var f = obj.file;
+        var isImg = /^data:image\//.test(f.data) || /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(f.name);
+        var div = document.createElement('div');
+        div.className = 'proof-item';
+        if (isImg) {
+            div.innerHTML = '<img class="proof-img" src="' + f.data + '" alt="' + escapeHtml(f.name) + '">' +
+                '<div class="proof-name">' + escapeHtml(f.name) + '</div>';
+        } else {
+            div.innerHTML = '<div style="padding:12px;text-align:center;"><i class="fas fa-file" style="font-size:36px;color:var(--primary);"></i></div>' +
+                '<div class="proof-name">' + escapeHtml(f.name) + '</div>';
+        }
+        grid.appendChild(div);
+    });
+}
+
+function renderSummary(data) {
+    document.getElementById('summaryLine').textContent = '当前共筛选出 ' + data.length + ' 条业绩记录';
+}
+
+function generatePDF() {
+    var btn = document.querySelector('.export-actions');
+    if (btn) btn.style.display = 'none';
+    var element = document.getElementById('exportPage');
+    html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: getComputedStyle(element).backgroundColor || '#ffffff'
+    }).then(function(canvas) {
+        if (btn) btn.style.display = 'flex';
+        var imgData = canvas.toDataURL('image/png');
+        var { jsPDF } = window.jspdf;
+        var pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+        var pdfWidth = pdf.internal.pageSize.getWidth();
+        var pdfHeight = pdf.internal.pageSize.getHeight();
+        var imgWidth = canvas.width;
+        var imgHeight = canvas.height;
+        var ratio = pdfWidth / imgWidth;
+        var scaledWidth = imgWidth * ratio;
+        var scaledHeight = imgHeight * ratio;
+        var position = 0;
+        var heightLeft = scaledHeight;
+
+        pdf.addImage(imgData, 'PNG', 0, position, scaledWidth, scaledHeight);
+        heightLeft -= pdfHeight;
+
+        while (heightLeft > 0) {
+            position = heightLeft - scaledHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, position, scaledWidth, scaledHeight);
+            heightLeft -= pdfHeight;
+        }
+
+        pdf.save('业绩证明_' + document.getElementById('orgName').textContent + '_' + document.getElementById('genDate').textContent + '.pdf');
+    }).catch(function(err) {
+        if (btn) btn.style.display = 'flex';
+        console.error('PDF生成失败', err);
+        alert('PDF生成失败：' + (err.message || err));
+    });
+}
+
+function closeSelf() {
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ action: 'closeModal' }, '*');
+    } else {
+        window.close();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    getOrgInfo();
+    var data = getExportData();
+    renderSummary(data);
+    renderTable(data);
+    renderProofs(data);
+});
+</script>
+</body>
+</html>

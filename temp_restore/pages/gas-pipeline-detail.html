@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>燃气管线档案详情</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+/* ===== Theme Variables ===== */
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+    --tree-row-hover: rgba(0,0,0,0.02);
+    --dot-red: #d93025; --dot-orange: #e65100; --dot-yellow: #f9c846; --dot-blue: #1a73e8;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+    --tree-row-hover: rgba(255,255,255,0.02);
+    --dot-red: #ef4444; --dot-orange: #f97316; --dot-yellow: #facc15; --dot-blue: #3b82f6;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    padding: 20px;
+    min-height: 100vh;
+}
+
+/* ===== Breadcrumb & Title ===== */
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.breadcrumb {
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.breadcrumb a {
+    color: var(--primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb-sep { color: var(--text-secondary); opacity: 0.5; }
+.page-title {
+    font-size: 18px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.page-title i { color: var(--primary); }
+
+/* ===== Top Global Card ===== */
+.global-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.global-icon {
+    width: 48px; height: 48px;
+    border-radius: 10px;
+    background: var(--primary-light);
+    color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+}
+.global-info { flex: 1; }
+.global-name {
+    font-size: 16px; font-weight: 700;
+    margin-bottom: 4px;
+}
+.global-meta {
+    font-size: 12px; color: var(--text-secondary);
+    display: flex; gap: 16px;
+}
+.global-tags {
+    display: flex; gap: 8px;
+}
+.tag {
+    padding: 3px 10px; border-radius: 4px;
+    font-size: 12px; font-weight: 600;
+}
+.tag.red { background: rgba(217,48,37,0.12); color: var(--danger); }
+.tag.orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+.tag.blue { background: rgba(26,115,232,0.12); color: var(--primary); }
+
+/* ===== Main Layout: 70% + 30% ===== */
+.main-layout {
+    display: flex;
+    gap: 16px;
+    min-height: calc(100vh - 200px);
+}
+.data-canvas {
+    width: 70%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.event-stream {
+    width: 30%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ===== Card Component ===== */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px var(--shadow);
+    overflow: hidden;
+}
+.card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.card-title {
+    font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+}
+.card-title i { color: var(--primary); font-size: 13px; }
+.card-body {
+    padding: 16px;
+    min-height: 120px;
+}
+
+/* ===== Event Timeline ===== */
+.timeline {
+    position: relative;
+    padding-left: 20px;
+}
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 5px; top: 4px; bottom: 4px;
+    width: 2px;
+    background: var(--border);
+}
+.timeline-item {
+    position: relative;
+    padding-bottom: 16px;
+}
+.timeline-item:last-child { padding-bottom: 0; }
+.timeline-dot {
+    position: absolute;
+    left: -20px; top: 2px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--primary);
+}
+.timeline-dot.red { border-color: var(--danger); }
+.timeline-dot.orange { border-color: var(--warning); }
+.timeline-dot.blue { border-color: var(--primary); }
+.timeline-dot.green { border-color: var(--success); }
+.timeline-time {
+    font-size: 11px; color: var(--text-secondary);
+    margin-bottom: 2px;
+}
+.timeline-content {
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* ===== Info Grid ===== */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.info-label {
+    font-size: 12px; color: var(--text-secondary);
+}
+.info-value {
+    font-size: 13px; font-weight: 600;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 1200px) {
+    .main-layout { flex-direction: column; }
+    .data-canvas, .event-stream { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a onclick="goArchive()"><i class="fa-solid fa-arrow-left"></i> 返回档案列表</a>
+            <span class="breadcrumb-sep">/</span>
+            <span>燃气管线档案详情</span>
+        </div>
+        <div class="page-title" style="margin-top:8px">
+            <i class="fa-solid fa-route"></i>
+            <span id="pipelineName">GX-2026-001</span>
+        </div>
+    </div>
+</div>
+
+<!-- Top Global Card -->
+<div class="global-card">
+    <div class="global-icon"><i class="fa-solid fa-route"></i></div>
+    <div class="global-info">
+        <div class="global-name" id="globalName">GX-2026-001</div>
+        <div class="global-meta">
+            <span><i class="fa-solid fa-road" style="font-size:11px"></i> 解放东路（环城东路～望园路）</span>
+            <span><i class="fa-solid fa-ruler" style="font-size:11px"></i> 长度 3,200m</span>
+            <span><i class="fa-solid fa-building" style="font-size:11px"></i> 上海海贤能源股份有限公司</span>
+        </div>
+    </div>
+    <div class="global-tags">
+        <span class="tag orange">较大风险</span>
+        <span class="tag blue">钢管 DN400</span>
+        <span class="tag blue">高压 4.0MPa</span>
+    </div>
+</div>
+
+<!-- Main Layout: 70% Data Canvas + 30% Event Stream -->
+<div class="main-layout">
+
+    <!-- Left: Data Canvas (70%) -->
+    <div class="data-canvas">
+
+        <!-- Basic Info -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-circle-info"></i> 基础信息</div>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">管线唯一码</span>
+                        <span class="info-value">GX-2026-001</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">路名</span>
+                        <span class="info-value">解放东路（环城东路～望园路）</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">长度</span>
+                        <span class="info-value">3,200m</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">管径</span>
+                        <span class="info-value">DN400</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">管材</span>
+                        <span class="info-value">钢管</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">防腐材料</span>
+                        <span class="info-value">环氧煤沥青</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">运行压力</span>
+                        <span class="info-value">高压（4.0MPa）</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">敷设年代</span>
+                        <span class="info-value">2015</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">所属企业</span>
+                        <span class="info-value">上海海贤能源股份有限公司</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">最高风险等级</span>
+                        <span class="info-value" style="color:var(--warning)">较大风险</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GIS Map Placeholder -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-map-location-dot"></i> 管线走向图</div>
+            </div>
+            <div class="card-body">
+                <!-- TODO: GIS地图 -->
+            </div>
+        </div>
+
+        <!-- Hazard Stats -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-triangle-exclamation"></i> 隐患统计</div>
+            </div>
+            <div class="card-body">
+                <!-- TODO: 隐患统计图表 -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Right: Event Stream (30%) -->
+    <div class="event-stream">
+
+        <!-- Closed-loop Event Flow -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> 闭环事件流</div>
+            </div>
+            <div class="card-body">
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-dot red"></div>
+                        <div class="timeline-time">2026-06-01 14:32</div>
+                        <div class="timeline-content">巡查发现较大隐患：管线防腐层破损，需立即修复</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot orange"></div>
+                        <div class="timeline-time">2026-06-02 09:15</div>
+                        <div class="timeline-content">派发整改通知单，限期15日内完成修复</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot blue"></div>
+                        <div class="timeline-time">2026-06-03 16:45</div>
+                        <div class="timeline-content">企业提交整改方案，采用三层PE防腐修复</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot green"></div>
+                        <div class="timeline-time">2026-06-05 11:20</div>
+                        <div class="timeline-content">整改完成，现场复核通过，隐患销号</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Inspection -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-clipboard-check"></i> 最近巡查</div>
+            </div>
+            <div class="card-body">
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-dot blue"></div>
+                        <div class="timeline-time">2026-06-04</div>
+                        <div class="timeline-content">例行巡查，管线运行正常</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot orange"></div>
+                        <div class="timeline-time">2026-05-28</div>
+                        <div class="timeline-content">专项巡查，发现防腐层破损隐患</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot blue"></div>
+                        <div class="timeline-time">2026-05-15</div>
+                        <div class="timeline-content">例行巡查，管线运行正常</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+// ===== Navigation =====
+function goArchive() {
+    window.location.href = 'gas-archive.html';
+}
+
+// ===== Theme Sync =====
+(function() {
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') {
+        document.documentElement.setAttribute('data-theme', e.data.theme);
+        localStorage.setItem('theme', e.data.theme);
+    }
+});
+</script>
+</body>
+</html>

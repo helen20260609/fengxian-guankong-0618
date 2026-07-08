@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审核进度查询 - 第三方服务机构</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="../js/third-party-data.js"></script>
+<style>
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e37400; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0; --shadow: rgba(0,0,0,0.08);
+    --input-bg: #ffffff; --input-border: #dadce0;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f; --shadow: rgba(0,0,0,0.3);
+    --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: var(--bg-dark); color: var(--text-primary); margin: 0; padding: 20px; }
+.page-header { max-width: 900px; margin: 0 auto 20px; }
+.page-title { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.page-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+.form-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; max-width: 900px; margin: 0 auto 20px; overflow: hidden; }
+.form-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.form-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.form-body { padding: 20px; }
+.filter-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.filter-item { display: flex; align-items: center; gap: 8px; }
+.filter-item label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.filter-item input, .filter-item select { padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; width: 220px; }
+.btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-primary); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+/* 进度条 */
+.progress-track { display: flex; align-items: center; justify-content: space-between; position: relative; margin: 30px 0 20px; }
+.progress-line { position: absolute; top: 14px; left: 10%; right: 10%; height: 2px; background: var(--border); z-index: 1; }
+.progress-line-fill { height: 100%; background: var(--primary); transition: width 0.4s; }
+.progress-step { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.progress-dot { width: 30px; height: 30px; border-radius: 50%; background: var(--bg-hover); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.progress-step.done { color: var(--primary); font-weight: 600; }
+.progress-step.done .progress-dot { background: var(--primary); color: #fff; }
+.progress-step.current { color: var(--primary); font-weight: 600; }
+.progress-step.current .progress-dot { background: var(--primary-light); color: var(--primary); border: 2px solid var(--primary); }
+
+/* 时间轴 */
+.timeline { position: relative; padding-left: 24px; margin-top: 16px; }
+.timeline::before { content: ''; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+.timeline-item { position: relative; margin-bottom: 16px; }
+.timeline-item:last-child { margin-bottom: 0; }
+.timeline-dot { position: absolute; left: -20px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--primary); border: 2px solid var(--bg-card); box-shadow: 0 0 0 2px var(--border); }
+.timeline-time { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.timeline-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.timeline-opinion { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.timeline-empty { text-align: center; color: var(--text-secondary); padding: 40px 0; font-size: 13px; }
+
+.status-badge { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.status-pending { background: rgba(26,115,232,0.12); color: var(--primary); }
+.status-approved { background: rgba(30,142,62,0.12); color: var(--success); }
+.status-rejected { background: rgba(217,48,37,0.12); color: var(--danger); }
+
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.info-item { background: var(--bg-dark); border-radius: 8px; padding: 12px 16px; }
+.info-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.info-value { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+</style>
+</head>
+<body>
+<div class="page-header">
+    <div class="page-title"><i class="fas fa-search" style="color: var(--primary);"></i> 审核进度查询</div>
+    <div class="page-subtitle">输入机构名称或统一社会信用代码，查询入库审核进度。</div>
+</div>
+
+<div class="form-card">
+    <div class="form-header">
+        <div class="form-title"><i class="fas fa-filter" style="color: var(--primary);"></i> 查询条件</div>
+    </div>
+    <div class="form-body">
+        <div class="filter-row">
+            <div class="filter-item">
+                <label>机构名称</label>
+                <input type="text" id="queryOrgName" placeholder="请输入机构名称">
+            </div>
+            <div class="filter-item">
+                <label>统一社会信用代码</label>
+                <input type="text" id="queryOrgCode" placeholder="请输入统一社会信用代码">
+            </div>
+            <div class="filter-actions" style="display:flex; gap:10px; margin-left:auto;">
+                <button class="btn btn-primary" onclick="queryProgress()"><i class="fas fa-search"></i> 查询</button>
+                <button class="btn btn-outline" onclick="resetQuery()"><i class="fas fa-undo"></i> 重置</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="form-card" id="resultCard" style="display:none;">
+    <div class="form-header">
+        <div class="form-title"><i class="fas fa-clipboard-check" style="color: var(--primary);"></i> 查询结果</div>
+        <span class="status-badge" id="resultStatus"></span>
+    </div>
+    <div class="form-body">
+        <div class="info-grid">
+            <div class="info-item"><div class="info-label">申请编号</div><div class="info-value" id="resultApplicationId">-</div></div>
+            <div class="info-item"><div class="info-label">提交时间</div><div class="info-value" id="resultSubmitTime">-</div></div>
+            <div class="info-item"><div class="info-label">机构名称</div><div class="info-value" id="resultOrgName">-</div></div>
+            <div class="info-item"><div class="info-label">统一社会信用代码</div><div class="info-value" id="resultOrgCode">-</div></div>
+            <div class="info-item"><div class="info-label">服务区域</div><div class="info-value" id="resultServiceArea">-</div></div>
+            <div class="info-item"><div class="info-label">专业领域</div><div class="info-value" id="resultField">-</div></div>
+        </div>
+
+        <div id="progressTrackWrapper"></div>
+
+        <div style="margin-top:20px;">
+            <div class="form-title" style="margin-bottom:12px;"><i class="fas fa-history" style="color: var(--primary);"></i> 审核记录</div>
+            <div id="timelineContainer"></div>
+        </div>
+    </div>
+</div>
+
+<div class="form-card" id="emptyCard" style="display:none;">
+    <div class="form-body">
+        <div class="timeline-empty"><i class="fas fa-inbox" style="font-size:24px; display:block; margin-bottom:8px;"></i>未查询到相关申请记录</div>
+    </div>
+</div>
+
+<script>
+(function(){
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') { document.documentElement.setAttribute('data-theme', e.data.theme); localStorage.setItem('theme', e.data.theme); }
+});
+
+function getApplications() {
+    if (typeof getAllOrgApplications === 'function') return getAllOrgApplications();
+    var data = JSON.parse(localStorage.getItem('thirdPartyData') || '{}');
+    return data.orgApplications || [];
+}
+
+function queryProgress() {
+    var name = document.getElementById('queryOrgName').value.trim().toLowerCase();
+    var code = document.getElementById('queryOrgCode').value.trim().toLowerCase();
+    if (!name && !code) { alert('请输入机构名称或统一社会信用代码'); return; }
+
+    var apps = getApplications();
+    var found = apps.find(function(a) {
+        var basic = a.basic || {};
+        var matchName = name && (basic.enterpriseName || '').toLowerCase().indexOf(name) !== -1;
+        var matchCode = code && (basic.creditCode || '').toLowerCase() === code;
+        return name && code ? (matchName && matchCode) : (matchName || matchCode);
+    });
+
+    if (!found) {
+        document.getElementById('resultCard').style.display = 'none';
+        document.getElementById('emptyCard').style.display = 'block';
+        return;
+    }
+
+    document.getElementById('resultCard').style.display = 'block';
+    document.getElementById('emptyCard').style.display = 'none';
+    var basic = found.basic || {};
+    document.getElementById('resultApplicationId').textContent = found.applicationId || '-';
+    document.getElementById('resultSubmitTime').textContent = found.submitTime || '-';
+    document.getElementById('resultOrgName').textContent = basic.enterpriseName || '-';
+    document.getElementById('resultOrgCode').textContent = basic.creditCode || '-';
+    document.getElementById('resultServiceArea').textContent = basic.serviceArea || '-';
+    document.getElementById('resultField').textContent = basic.field || '-';
+
+    var statusEl = document.getElementById('resultStatus');
+    if (found.status === '已通过') { statusEl.className = 'status-badge status-approved'; statusEl.textContent = '已通过'; }
+    else if (found.status === '已驳回') { statusEl.className = 'status-badge status-rejected'; statusEl.textContent = '已驳回'; }
+    else if (found.status === '审核中') { statusEl.className = 'status-badge status-pending'; statusEl.textContent = '审核中'; }
+    else { statusEl.className = 'status-badge status-pending'; statusEl.textContent = found.status || '待审核'; }
+
+    renderProgressTrack(found);
+    renderTimeline(found);
+}
+
+function renderProgressTrack(app) {
+    var wrapper = document.getElementById('progressTrackWrapper');
+    var flow = app.flowState || { mode: 'single', levels: 1, currentLevel: 0, status: 'pending' };
+    var levels = parseInt(flow.levels || 1, 10);
+    var currentLevel = parseInt(flow.currentLevel || 0, 10);
+    var status = flow.status || 'pending';
+    var totalSteps = levels + 2; // 提交 + 各级审核 + 完成
+
+    var steps = [];
+    steps.push({ icon: 'fa-edit', label: '提交申请' });
+    for (var i = 1; i <= levels; i++) {
+        steps.push({ icon: 'fa-user-check', label: '第' + i + '级审核' });
+    }
+    steps.push({ icon: 'fa-check', label: '审核完成' });
+
+    var doneIndex = 0;
+    if (status === 'approved') doneIndex = totalSteps - 1;
+    else if (status === 'rejected') doneIndex = currentLevel;
+    else if (currentLevel > 0) doneIndex = currentLevel;
+
+    var currentIndex = doneIndex;
+    if (status !== 'approved' && status !== 'rejected') currentIndex = Math.min(doneIndex + 1, totalSteps - 1);
+
+    var html = '<div class="progress-track" id="progressTrack">' +
+        '<div class="progress-line"><div class="progress-line-fill" id="progressLineFill" style="width:' + (doneIndex / (totalSteps - 1) * 100) + '%"></div></div>';
+    steps.forEach(function(s, idx) {
+        var cls = 'progress-step';
+        if (idx <= doneIndex) cls += ' done';
+        else if (idx === currentIndex) cls += ' current';
+        html += '<div class="' + cls + '" data-step="' + idx + '">' +
+            '<div class="progress-dot"><i class="fas ' + s.icon + '"></i></div><span>' + s.label + '</span></div>';
+    });
+    html += '</div>';
+    wrapper.innerHTML = html;
+}
+
+function renderTimeline(app) {
+    var container = document.getElementById('timelineContainer');
+    var history = app.auditHistory || [];
+    var rows = [];
+    rows.push({ time: app.submitTime, title: '提交申请', opinion: '机构资料已提交，等待审核。', cls: '' });
+    history.forEach(function(h) {
+        var title = h.decision === 'pass' ? '审核通过' : (h.decision === 'reject' ? '审核驳回' : '审核处理');
+        if (h.level) title += '（第 ' + h.level + ' 级）';
+        var cls = h.decision === 'reject' ? 'rejected' : (h.decision === 'pass' ? 'approved' : '');
+        rows.push({ time: h.time, title: title, opinion: (h.opinion || '无意见') + ' — 操作人：' + (h.operator || '-'), cls: cls });
+    });
+    if (app.status === '已通过') {
+        rows.push({ time: app.approveTime || '', title: '完成入库', opinion: '审核已通过，机构信息已入库。', cls: 'approved' });
+    } else if (app.status === '已驳回') {
+        rows.push({ time: '', title: '申请被驳回', opinion: '请根据审核意见补充资料后重新提交。', cls: 'rejected' });
+    }
+    container.innerHTML = rows.map(function(r) {
+        var dotStyle = r.cls === 'rejected' ? 'background:var(--danger);' : (r.cls === 'approved' ? 'background:var(--success);' : '');
+        return '<div class="timeline-item">' +
+            '<div class="timeline-dot" style="' + dotStyle + '"></div>' +
+            '<div class="timeline-time">' + (r.time || '当前') + '</div>' +
+            '<div class="timeline-title">' + r.title + '</div>' +
+            '<div class="timeline-opinion">' + r.opinion + '</div>' +
+            '</div>';
+    }).join('');
+}
+
+function resetQuery() {
+    document.getElementById('queryOrgName').value = '';
+    document.getElementById('queryOrgCode').value = '';
+    document.getElementById('resultCard').style.display = 'none';
+    document.getElementById('emptyCard').style.display = 'none';
+}
+
+// URL 参数自动查询
+(function() {
+    var params = new URLSearchParams(location.search);
+    var name = params.get('orgName') || '';
+    var code = params.get('orgCode') || '';
+    if (name) document.getElementById('queryOrgName').value = name;
+    if (code) document.getElementById('queryOrgCode').value = code;
+    if (name || code) queryProgress();
+})();
+</script>
+</body>
+</html>
