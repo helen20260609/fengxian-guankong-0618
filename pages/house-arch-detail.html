@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房屋建筑档案 - 房屋安全管理</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --primary-light: #e8f0fe;
+            --danger: #d93025;
+            --major: #f57c00;
+            --warning: #f9ab00;
+            --safe: #1e8e3e;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --border: #e8eaed;
+            --bg-dark: #f5f7fa;
+            --bg-card: #ffffff;
+            --bg-hover: #f0f2f5;
+            --shadow: rgba(0,0,0,0.06);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .page-wrapper { max-width: 1280px; margin: 0 auto; padding: 16px; }
+
+        /* 顶部紧凑标题栏 */
+        .topbar {
+            background: #fff; border-radius: 8px; padding: 12px 16px;
+            box-shadow: 0 2px 8px var(--shadow); margin-bottom: 12px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .topbar-left { display: flex; align-items: center; gap: 12px; }
+        .topbar-back {
+            display: flex; align-items: center; gap: 4px; padding: 6px 12px;
+            border: 1px solid var(--border); border-radius: 4px; background: #fff;
+            color: var(--text-primary); font-size: 13px; cursor: pointer; transition: all 0.2s;
+        }
+        .topbar-back:hover { background: var(--bg-hover); }
+        .topbar-title { font-size: 16px; font-weight: 600; }
+        .topbar-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .topbar-actions { display: flex; gap: 8px; }
+        .topbar-btn {
+            display: flex; align-items: center; gap: 4px; padding: 6px 12px;
+            border-radius: 4px; font-size: 12px; cursor: pointer; border: 1px solid var(--border);
+            background: #fff; color: var(--text-primary); transition: all 0.2s;
+        }
+        .topbar-btn:hover { background: var(--bg-hover); }
+        .topbar-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .topbar-btn.primary:hover { background: var(--primary-dark); }
+
+        /* 状态/审批/进度信息卡 */
+        .status-panel {
+            background: #fff; border-radius: 8px; padding: 16px 20px;
+            box-shadow: 0 2px 8px var(--shadow); margin-bottom: 12px;
+            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        }
+        .status-cell { display: flex; flex-direction: column; gap: 6px; min-width: 120px; }
+        .status-cell.full { flex: 1; }
+        .status-label { font-size: 12px; color: var(--text-secondary); }
+        .status-value { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px;
+            font-size: 12px; font-weight: 500; width: fit-content;
+        }
+        .status-badge.major { background: #fff3e0; color: var(--major); }
+        .status-badge.danger { background: #fce8e6; color: var(--danger); }
+        .status-badge.warning { background: #fff8e1; color: #f9a825; }
+        .status-badge.safe { background: #e6f4ea; color: var(--safe); }
+        .status-badge.info { background: var(--primary-light); color: var(--primary); }
+        .status-measure { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+        .progress-wrap { display: flex; align-items: center; gap: 10px; }
+        .progress-bar { width: 100px; height: 8px; background: #e8eaed; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); border-radius: 4px; }
+        .progress-text { font-size: 14px; font-weight: 600; color: var(--primary); }
+
+        /* 主内容区：左右布局 */
+        .main-body { display: flex; gap: 12px; align-items: flex-start; }
+        .sidebar {
+            width: 230px; flex-shrink: 0; background: #fff; border-radius: 8px;
+            box-shadow: 0 2px 8px var(--shadow); overflow: hidden; position: sticky; top: 16px; align-self: flex-start;
+        }
+        .sidebar-header {
+            padding: 14px 16px; font-size: 14px; font-weight: 600; color: var(--text-primary);
+            border-bottom: 1px solid var(--border); background: #fafbfc;
+        }
+        .sidebar-menu { padding: 8px; }
+        .sidebar-item {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: 10px 12px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
+            margin-bottom: 4px; font-size: 13px; color: var(--text-primary);
+        }
+        .sidebar-item:hover { background: var(--primary-light); color: var(--primary); }
+        .sidebar-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+        .sidebar-item-left { display: flex; align-items: center; gap: 8px; }
+        .sidebar-item i { width: 16px; text-align: center; color: inherit; }
+        .sidebar-tag {
+            font-size: 11px; padding: 2px 7px; border-radius: 10px; white-space: nowrap;
+            background: #f0f2f5; color: var(--text-secondary);
+        }
+        .sidebar-item.active .sidebar-tag { background: rgba(26,115,232,0.12); color: var(--primary); }
+
+        .content-area { flex: 1; min-width: 0; }
+        .content-card {
+            background: #fff; border-radius: 8px; box-shadow: 0 2px 8px var(--shadow); overflow: hidden;
+            margin-bottom: 12px;
+        }
+        .content-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 20px; border-bottom: 1px solid var(--border); background: #fafbfc;
+        }
+        .content-card-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+        .content-card-title i { color: var(--primary); }
+        .content-card-meta { display: flex; align-items: center; gap: 10px; }
+        .meta-badge { font-size: 12px; color: var(--text-secondary); padding: 3px 10px; background: #f0f2f5; border-radius: 12px; }
+        .meta-status { font-size: 12px; padding: 3px 10px; border-radius: 12px; background: #e6f4ea; color: var(--safe); }
+
+        .content-tabs {
+            display: flex; gap: 8px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: #fff; flex-wrap: wrap;
+        }
+        .content-tab {
+            display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+            font-size: 13px; color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
+            border-radius: 6px 6px 0 0; border: 1px solid transparent; border-bottom: none; background: transparent;
+            margin-bottom: -1px;
+        }
+        .content-tab:hover { color: var(--primary); background: var(--primary-light); }
+        .content-tab.active { color: var(--primary); font-weight: 500; background: #fff; border-color: var(--border); border-bottom-color: #fff; }
+        .content-tab-count {
+            font-size: 11px; padding: 1px 7px; border-radius: 10px;
+            background: #f0f2f5; color: var(--text-secondary); margin-left: 4px;
+        }
+        .content-tab.active .content-tab-count { background: var(--primary-light); color: var(--primary); }
+
+        .content-body { padding: 18px 20px; }
+        .info-section-title { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; margin-bottom: 14px; color: var(--text-primary); }
+        .info-section-title i { color: var(--primary); }
+        .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 20px; }
+        .info-item { display: flex; flex-direction: column; gap: 6px; }
+        .info-label { font-size: 12px; color: var(--text-secondary); }
+        .info-value { font-size: 14px; color: var(--text-primary); font-weight: 500; line-height: 1.4; }
+        .info-value.empty { color: #bdc1c6; }
+
+        .table-wrap { width: 100%; overflow-x: auto; }
+        .arch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .arch-table th, .arch-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+        .arch-table th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; font-size: 12px; white-space: nowrap; }
+        .arch-table td { color: var(--text-primary); }
+        .arch-table td .photo-btn { padding: 4px 10px; border: 1px solid var(--primary); border-radius: 4px; background: var(--primary); color: #fff; font-size: 12px; cursor: pointer; }
+        .arch-table tr:last-child td { border-bottom: none; }
+
+        .bottom-bar {
+            background: #fff; border-radius: 8px; padding: 12px 16px;
+            box-shadow: 0 2px 8px var(--shadow); margin-top: 12px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .bottom-info { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+        .bottom-node { font-weight: 600; color: var(--text-primary); }
+        .bottom-actions { display: flex; gap: 8px; }
+        .bottom-btn {
+            display: flex; align-items: center; gap: 4px; padding: 6px 14px;
+            border-radius: 4px; font-size: 12px; cursor: pointer; border: 1px solid var(--border);
+            background: #fff; color: var(--text-primary); transition: all 0.2s;
+        }
+        .bottom-btn:hover { background: var(--bg-hover); }
+        .bottom-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .bottom-btn.primary:hover { background: var(--primary-dark); }
+
+        @media (max-width: 900px) {
+            .main-body { flex-direction: column; }
+            .sidebar { width: 100%; position: static; }
+            .info-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-wrapper">
+        <div class="topbar">
+            <div class="topbar-left">
+                <div>
+                    <div class="topbar-title" id="topbarTitle">陈连明自住民居</div>
+                    <div class="topbar-sub" id="topbarSub">编号：NF-2025-00123 | 奉贤区西渡街道 · 灯塔村</div>
+                </div>
+            </div>
+            <div class="topbar-actions">
+                <button class="topbar-btn"><i class="fas fa-print"></i> 打印</button>
+                <button class="topbar-btn primary"><i class="fas fa-file-pdf"></i> 导出PDF</button>
+                <button class="topbar-btn" onclick="window.close()" title="关闭"><i class="fas fa-times"></i> 关闭</button>
+            </div>
+        </div>
+
+        <div class="status-panel">
+            <div class="status-cell">
+                <div class="status-label">隐患等级</div>
+                <div class="status-badge danger">重大</div>
+            </div>
+            <div class="status-cell">
+                <div class="status-label">治理状态</div>
+                <div class="status-badge warning">整治中</div>
+            </div>
+            <div class="status-cell full">
+                <div class="status-label">当前措施</div>
+                <div class="status-measure">管理措施（停止使用） + 工程措施（维修加固）</div>
+            </div>
+            <div class="status-cell">
+                <div class="status-label">责任人</div>
+                <div class="status-value">李志强 <span style="font-weight:400;color:var(--text-secondary);font-size:12px;">138****1234</span></div>
+            </div>
+            <div class="status-cell">
+                <div class="status-label">进度</div>
+                <div class="progress-wrap">
+                    <div class="progress-bar"><div class="progress-fill" style="width: 20%;"></div></div>
+                    <div class="progress-text">20%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-body">
+            <div class="sidebar" id="sidebar">
+                <div class="sidebar-header">工作流节点</div>
+                <div class="sidebar-menu" id="sidebarMenu"></div>
+            </div>
+            <div class="content-area" id="contentArea"></div>
+        </div>
+    </div>
+
+    <script>
+        const sidebarItems = [
+            { key: 'basic', icon: 'fa-id-card', title: '基础信息', tag: '静态档案' },
+            { key: 'survey', icon: 'fa-search', title: '排查信息', tag: '动态录入' },
+            { key: 'assessment', icon: 'fa-clipboard-check', title: '安全鉴定', tag: '动态录入' },
+            { key: 'plan', icon: 'fa-calendar-alt', title: '整治计划', tag: '方案制定' },
+            { key: 'measure', icon: 'fa-tools', title: '整治措施', tag: '措施实施' },
+            { key: 'control', icon: 'fa-shield-alt', title: '隐患控制情况', tag: '过程跟踪' },
+            { key: 'accept', icon: 'fa-clipboard-check', title: '阶段性验收', tag: '过程验收' },
+            { key: 'close', icon: 'fa-check-circle', title: '验收销项', tag: '闭环完成' },
+            { key: 'record', icon: 'fa-history', title: '隐患动态记录', tag: '全程贯穿' },
+            { key: 'archive', icon: 'fa-folder', title: '整治档案', tag: '归档总结' }
+        ];
+
+        const basicSubTabs = [
+            { key: 'jbxx', title: '基本信息', icon: 'fa-id-card', count: 12 },
+            { key: 'cqsy', title: '产权使用', icon: 'fa-user', count: 6 },
+            { key: 'jssg', title: '建设施工', icon: 'fa-hard-hat', count: 8 },
+            { key: 'zjd', title: '宅基地', icon: 'fa-map', count: 5 },
+            { key: 'jgxx', title: '结构信息', icon: 'fa-cubes', count: 5 },
+            { key: 'xzxk', title: '行政许可', icon: 'fa-file-alt', count: 3 }
+        ];
+
+        const basicData = {
+            jbxx: [
+                ['房屋编号', 'NF-2025-00123'],
+                ['房屋名称', '陈连明自住民居'],
+                ['所属乡镇/街道', '奉贤区西渡街道'],
+                ['所属行政村', '灯塔村村委会'],
+                ['自然村/组', '—'],
+                ['详细地址', '西闸公路二一三九弄35号'],
+                ['所在区域属性', '建制镇'],
+                ['建成区', '2001-2010年'],
+                ['具体建成年份', '2007年'],
+                ['建筑层数', '3层'],
+                ['建筑面积', '237.3㎡'],
+                ['估算面积', '0.00㎡']
+            ],
+            cqsy: [
+                ['产权人/使用人', '陈连明'],
+                ['身份证号码', '31022619680714051X'],
+                ['户主联系方式', '138****1234'],
+                ['土地大类', '集体土地'],
+                ['土地细分类型', '宅基地'],
+                ['家庭成员信息', '户主陈连明（58岁）、配偶张秀英（56岁）']
+            ],
+            jssg: [
+                ['设计方式', '有专业设计'],
+                ['建造方式', '有资质施工队伍'],
+                ['结构类型', '砌体结构'],
+                ['楼屋盖', '现浇板'],
+                ['是否改扩建', '否'],
+                ['是否装修', '否'],
+                ['建造工匠', '正规持证施工单位'],
+                ['原始建造年份', '2007年']
+            ],
+            zjd: [
+                ['宅基地面积', '132㎡'],
+                ['审批情况', '自然资源部门审批通过'],
+                ['权属证明编号', 'ZD-20070419'],
+                ['违法建设和审批', '否'],
+                ['已取得的行政许可', '宅基地批准书']
+            ],
+            jgxx: [
+                ['主体结构', '砌体结构'],
+                ['基础形式', '红砖条形基础'],
+                ['屋面结构', '现浇钢筋混凝土屋面板'],
+                ['承重构件', '烧结砖承重墙、现浇楼盖'],
+                ['使用人数超10人', '否']
+            ],
+            xzxk: [
+                ['已取得的行政许可', '宅基地批准书'],
+                ['审批状态', '审批通过'],
+                ['审批部门', '奉贤区自然资源局']
+            ]
+        };
+
+        const tableData = {
+            survey: { title: '排查信息', columns: ['排查时间', '排查单位', '隐患部位', '隐患类型', '隐患等级', '隐患描述'], rows: [
+                ['2024-06-12', '西渡街道房屋安全排查组', '东侧承重墙', '结构裂缝', '重大', '东侧承重墙纵向裂缝长约1.2m，缝宽约2mm']
+            ]},
+            assessment: { title: '安全鉴定', columns: ['鉴定时间', '鉴定机构', '鉴定结论', '处理建议'], rows: [
+                ['2024-06-20', '奉贤区房屋安全鉴定中心', 'C级（局部危险）', '立即停止使用，对承重墙进行加固处理']
+            ]},
+            plan: { title: '整治计划', columns: ['计划编号', '制定时间', '计划内容', '计划状态'], rows: [
+                ['NF-2024-00001-FA', '2024-07-05', '承重墙裂缝灌浆加固、屋面防水重做', '已审核']
+            ]},
+            measure: { title: '整治措施', columns: ['措施类型', '措施内容', '实施单位', '实施状态'], rows: [
+                ['管理措施', '停止使用、设置警示标识', '西渡街道村镇建设管理办', '已实施'],
+                ['工程措施', '承重墙裂缝灌浆加固、屋面防水重做', '奉贤区房屋修缮工程公司', '实施中']
+            ]},
+            control: { title: '隐患控制情况', columns: ['跟踪时间', '跟踪人', '控制情况', '风险状态'], rows: [
+                ['2024-08-05', '王建军', '房屋已停用，设置围挡警示', '风险可控']
+            ]},
+            accept: { title: '阶段性验收', columns: ['验收时间', '验收单位', '验收内容', '验收结论'], rows: [
+                ['-', '-', '待整治完成后验收', '待验收']
+            ]},
+            close: { title: '验收销项', columns: ['销号时间', '销号依据', '审核人', '销号状态'], rows: [
+                ['-', '-', '-', '待销号']
+            ]},
+            record: { title: '隐患动态记录', columns: ['记录时间', '记录人', '动态类型', '记录内容'], rows: [
+                ['2024-06-12 09:30', '张华', '隐患发现', '东侧承重墙纵向裂缝长约1.2m'],
+                ['2024-07-05 14:20', '李志强', '方案制定', '制定管理措施+工程措施治理方案'],
+                ['2024-08-01 08:00', '王建军', '实施跟踪', '工程队进场，完成进度20%']
+            ]},
+            archive: { title: '整治档案', columns: ['档案类型', '档案编号', '归档时间', '归档状态'], rows: [
+                ['整治方案', 'NF-2024-00001-FA', '2024-07-08', '已归档'],
+                ['实施记录', 'NF-2024-00001-SG', '-', '待归档'],
+                ['验收材料', 'NF-2024-00001-YS', '-', '待归档']
+            ]}
+        };
+
+        let currentSidebar = 'basic';
+        let currentSubTab = 'jbxx';
+
+        function renderSidebar() {
+            const menu = document.getElementById('sidebarMenu');
+            menu.innerHTML = sidebarItems.map(item => {
+                const active = item.key === currentSidebar ? 'active' : '';
+                return '<div class="sidebar-item ' + active + '" data-key="' + item.key + '">' +
+                    '<div class="sidebar-item-left"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div>' +
+                    '<span class="sidebar-tag">' + item.tag + '</span>' +
+                    '</div>';
+            }).join('');
+            menu.querySelectorAll('.sidebar-item').forEach(el => {
+                el.addEventListener('click', function() {
+                    currentSidebar = el.dataset.key;
+                    renderSidebar();
+                    renderContent();
+                });
+            });
+        }
+
+        function renderContent() {
+            const area = document.getElementById('contentArea');
+            if (currentSidebar === 'basic') {
+                area.innerHTML = renderBasicContent();
+                bindSubTabs();
+            } else {
+                area.innerHTML = renderTableContent(currentSidebar);
+            }
+        }
+
+        function renderBasicContent() {
+            const tabsHtml = basicSubTabs.map(tab => {
+                const active = tab.key === currentSubTab ? 'active' : '';
+                return '<div class="content-tab ' + active + '" data-key="' + tab.key + '">' +
+                    '<i class="fas ' + tab.icon + '"></i> ' + tab.title +
+                    '<span class="content-tab-count">' + tab.count + '</span>' +
+                    '</div>';
+            }).join('');
+
+            const rows = basicData[currentSubTab] || [];
+            const gridHtml = rows.map(r => {
+                return '<div class="info-item">' +
+                    '<div class="info-label">' + r[0] + '</div>' +
+                    '<div class="info-value ' + (r[1] ? '' : 'empty') + '">' + (r[1] || '--') + '</div>' +
+                    '</div>';
+            }).join('');
+
+            const sub = basicSubTabs.find(t => t.key === currentSubTab);
+
+            return '<div class="content-card">' +
+                '<div class="content-card-header">' +
+                    '<div class="content-card-title"><i class="fas fa-id-card"></i> 基础信息</div>' +
+                    '<div class="content-card-meta">' +
+                        '<span class="meta-badge">共 39 个字段</span>' +
+                        '<span class="meta-status"><i class="fas fa-check-circle"></i> 已完成</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="content-tabs">' + tabsHtml + '</div>' +
+                '<div class="content-body">' +
+                    '<div class="info-section-title"><i class="fas ' + sub.icon + '"></i> ' + sub.title + '</div>' +
+                    '<div class="info-grid">' + gridHtml + '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="bottom-bar">' +
+                '<div class="bottom-info">' +
+                    '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                    '当前节点：<span class="bottom-node">基础信息</span> | <i class="far fa-eye"></i> 查看/编辑' +
+                '</div>' +
+                '<div class="bottom-actions">' +
+                    '<button class="bottom-btn primary"><i class="fas fa-edit"></i> 编辑基础信息</button>' +
+                    '<button class="bottom-btn"><i class="fas fa-file-export"></i> 导出</button>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function bindSubTabs() {
+            document.querySelectorAll('.content-tab').forEach(el => {
+                el.addEventListener('click', function() {
+                    currentSubTab = el.dataset.key;
+                    renderContent();
+                });
+            });
+        }
+
+        function renderTableContent(key) {
+            const data = tableData[key];
+            const item = sidebarItems.find(i => i.key === key);
+            let html = '<div class="content-card">' +
+                '<div class="content-card-header">' +
+                    '<div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + data.title + '</div>' +
+                '</div>' +
+                '<div class="content-body">' +
+                    '<div class="table-wrap"><table class="arch-table"><thead><tr>';
+            data.columns.forEach(c => html += '<th>' + c + '</th>');
+            html += '</tr></thead><tbody>';
+            data.rows.forEach(r => {
+                html += '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>';
+            });
+            html += '</tbody></table></div></div></div>';
+            html += '<div class="bottom-bar">' +
+                '<div class="bottom-info">' +
+                    '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                    '当前节点：<span class="bottom-node">' + item.title + '</span> | <i class="far fa-eye"></i> 查看/编辑' +
+                '</div>' +
+                '<div class="bottom-actions">' +
+                    '<button class="bottom-btn primary"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>' +
+                    '<button class="bottom-btn"><i class="fas fa-file-export"></i> 导出</button>' +
+                '</div>' +
+            '</div>';
+            return html;
+        }
+
+        renderSidebar();
+        renderContent();
+    </script>
+</body>
+</html>
