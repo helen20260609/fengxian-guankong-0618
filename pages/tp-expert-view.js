@@ -114,10 +114,10 @@ function getFallbackList() {
 function formatDateDisplay(dateStr) {
     if (!dateStr) return '';
     var s = String(dateStr).trim();
-    if (/^\\d{4}-\\d{2}$/.test(s)) return s + '-01';
-    if (/^\\d{4}\\/\\d{2}$/.test(s)) return s.replace(/\\//g, '-') + '-01';
-    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;
-    var d = new Date(s.replace(/\\//g, '-'));
+    if (/^[0-9]{4}-[0-9]{2}$/.test(s)) return s + '-01';
+    if (/^[0-9]{4}\/[0-9]{2}$/.test(s)) return s.split('/').join('-') + '-01';
+    if (/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(s)) return s;
+    var d = new Date(s.split('/').join('-'));
     if (!isNaN(d.getTime())) {
         var y = d.getFullYear();
         var m = ('0' + (d.getMonth() + 1)).slice(-2);
@@ -172,14 +172,14 @@ function render() {
     var rows = [
         ['姓名', item.name],
         ['性别', item.gender],
-        ['出生年月', formatDateDisplay(item.birth)],
+        ['出生年月', item.birth],
         ['工作单位', orgHtml],
         ['专业领域', item.domain],
         ['专业方向', item.direction],
         ['职称', item.title],
-        ['评定机构', item.titleOrg],
-        ['评定时间', formatDateDisplay(item.titleTime)],
         ['工作地点', item.workplace || ''],
+        ['发证机构', item.titleOrg],
+        ['取得时间', item.titleTime],
         ['工作年限', item.years + ' 年'],
         ['联系电话', item.phone],
         ['电子邮箱', item.email],
