@@ -143,7 +143,18 @@
         .selected-chip .remove { cursor: pointer; font-weight: bold; }
         .status-pending { color: var(--warning); }
         .status-assigned { color: var(--success); }
+        .status-feedback { color: var(--primary); }
         .status-rejected { color: var(--danger); }
+        .value {
+            padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+            background: #f8f9fa; color: var(--text-primary); min-height: 38px; line-height: 1.4;
+        }
+        .feedback-log {
+            background: #f8f9fa; border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 10px 12px; font-size: 13px; color: var(--text-secondary); line-height: 1.6;
+            margin-top: 8px;
+        }
+        .feedback-log-title { font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
         @media (max-width: 768px) {
             .form-row { grid-template-columns: 1fr; }
             .filter-bar { flex-direction: column; }
@@ -248,6 +259,30 @@
                     <textarea id="taskRemark" placeholder="请输入任务背景、工作地点、时间安排等"></textarea>
                 </div>
             </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>请求来源</label>
+                    <input type="text" id="taskRequestSource" placeholder="例如：风险研判系统 / 房屋安全排查模块">
+                </div>
+                <div class="form-group">
+                    <label>请求人 / 单位</label>
+                    <input type="text" id="taskRequester" placeholder="请输入请求人姓名或单位">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>请求方联系方式</label>
+                    <input type="text" id="taskContact" placeholder="电话 / 邮箱 / 系统账号">
+                </div>
+                <div class="form-group">
+                    <label>结果反馈方式</label>
+                    <select id="taskCallbackType">
+                        <option value="postMessage">站内消息回传（iframe/弹窗）</option>
+                        <option value="copy">复制结果文本</option>
+                        <option value="link">生成结果链接</option>
+                    </select>
+                </div>
+            </div>
             <div class="form-row-full">
                 <div class="form-group">
                     <label>选择专家 <span class="required">*</span></label>
@@ -285,13 +320,48 @@
     </div>
 </div>
 
-<!-- 查看结果弹窗 -->
-<div class="modal-overlay" id="resultModal">
-    <div class="modal">
-        <div class="modal-header"><i class="fas fa-eye"></i> 调度结果</div>
-        <div class="modal-body" id="resultBody"></div>
+<!-- 反馈结果弹窗 -->
+<div class="modal-overlay" id="feedbackModal">
+    <div class="modal" style="max-width:720px;">
+        <div class="modal-header"><i class="fas fa-paper-plane"></i> 反馈专家调度结果</div>
+        <div class="modal-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>反馈方式 <span class="required">*</span></label>
+                    <select id="feedbackType">
+                        <option value="postMessage">站内消息回传（iframe/弹窗）</option>
+                        <option value="copy">复制结果文本</option>
+                        <option value="link">生成结果链接</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>接收方</label>
+                    <input type="text" id="feedbackReceiver" placeholder="例如：风险研判系统 / 请求人姓名">
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>反馈备注</label>
+                    <textarea id="feedbackRemark" placeholder="请输入反馈说明，例如：已按要求安排专家，请查收"></textarea>
+                </div>
+            </div>
+            <div class="form-row-full" id="feedbackLinkWrap" style="display:none;">
+                <div class="form-group">
+                    <label>结果链接</label>
+                    <div class="value" id="feedbackLink"></div>
+                </div>
+            </div>
+            <div class="form-row-full" id="feedbackCopyWrap" style="display:none;">
+                <div class="form-group">
+                    <label>结果文本</label>
+                    <textarea id="feedbackCopyText" readonly style="min-height:120px;background:#f8f9fa;"></textarea>
+                </div>
+            </div>
+        </div>
         <div class="modal-footer">
-            <button class="btn btn-outline" onclick="closeResultModal()">关闭</button>
+            <button class="btn btn-outline" onclick="closeFeedbackModal()">取消</button>
+            <button class="btn btn-primary" onclick="previewFeedback()">预览结果</button>
+            <button class="btn btn-success" onclick="submitFeedback()">确认反馈</button>
         </div>
     </div>
 </div>
@@ -300,6 +370,7 @@
     var taskList = [];
     var currentTaskId = null;
     var tempSelectedExperts = [];
+    var feedbackTaskId = null;
     var STORAGE_KEY = 'expertDispatchTasks';
 
     function loadTasks() {
@@ -362,6 +433,10 @@
         document.getElementById('taskDomain').value = '';
         document.getElementById('taskDirection').value = '';
         document.getElementById('taskRemark').value = '';
+        document.getElementById('taskRequestSource').value = '';
+        document.getElementById('taskRequester').value = '';
+        document.getElementById('taskContact').value = '';
+        document.getElementById('taskCallbackType').value = 'postMessage';
         tempSelectedExperts = [];
         renderSelectedExperts();
         document.getElementById('taskModal').classList.add('show');
@@ -377,6 +452,10 @@
         document.getElementById('taskDomain').value = task.domain;
         document.getElementById('taskDirection').value = task.direction || '';
         document.getElementById('taskRemark').value = task.remark || '';
+        document.getElementById('taskRequestSource').value = task.requestSource || '';
+        document.getElementById('taskRequester').value = task.requester || '';
+        document.getElementById('taskContact').value = task.contact || '';
+        document.getElementById('taskCallbackType').value = task.callbackType || 'postMessage';
         tempSelectedExperts = (task.experts || []).slice();
         renderSelectedExperts();
         document.getElementById('taskModal').classList.add('show');
@@ -403,9 +482,10 @@
 
     function buildTask(status) {
         var now = new Date().toISOString().slice(0,19).replace('T',' ');
+        var existing = currentTaskId ? (taskList.find(function(t){return t.id===currentTaskId}) || {}) : {};
         return {
             id: currentTaskId || generateCode(),
-            code: currentTaskId ? (taskList.find(function(t){return t.id===currentTaskId}) || {}).code : generateCode(),
+            code: existing.code || generateCode(),
             name: document.getElementById('taskName').value.trim(),
             count: parseInt(document.getElementById('taskCount').value, 10),
             domain: document.getElementById('taskDomain').value,
@@ -413,8 +493,13 @@
             remark: document.getElementById('taskRemark').value.trim(),
             experts: tempSelectedExperts.slice(),
             status: status,
-            createTime: currentTaskId ? (taskList.find(function(t){return t.id===currentTaskId}) || {}).createTime : now,
-            updateTime: now
+            requestSource: document.getElementById('taskRequestSource').value.trim() || existing.requestSource || '',
+            requester: document.getElementById('taskRequester').value.trim() || existing.requester || '',
+            contact: document.getElementById('taskContact').value.trim() || existing.contact || '',
+            callbackType: document.getElementById('taskCallbackType').value || existing.callbackType || 'postMessage',
+            createTime: existing.createTime || now,
+            updateTime: now,
+            feedback: existing.feedback || null
         };
     }
 
@@ -460,7 +545,12 @@
 
     function openExpertPicker() {
         var domain = document.getElementById('taskDomain').value;
-        document.getElementById('expertKeyword').value = domain || '';
+        if (!domain) {
+            alert('请先选择专业领域，再选择专家');
+            document.getElementById('taskDomain').focus();
+            return;
+        }
+        document.getElementById('expertKeyword').value = '';
         renderExpertCandidates();
         document.getElementById('expertModal').classList.add('show');
     }
@@ -541,6 +631,16 @@
         renderSelectedExperts();
     }
 
+    function clearExpertsByDomainChange() {
+        var domain = document.getElementById('taskDomain').value;
+        if (!domain) {
+            tempSelectedExperts = [];
+        } else {
+            tempSelectedExperts = tempSelectedExperts.filter(function(s) { return s.domain === domain; });
+        }
+        renderSelectedExperts();
+    }
+
     function renderTaskList() {
         var code = document.getElementById('filterCode').value.trim();
         var status = document.getElementById('filterStatus').value;
@@ -560,8 +660,8 @@
         }
         empty.style.display = 'none';
         tbody.innerHTML = filtered.map(function(t) {
-            var statusText = { pending: '待分派', assigned: '已分派', rejected: '已驳回' }[t.status] || t.status;
-            var statusClass = { pending: 'tag-warning', assigned: 'tag-success', rejected: 'tag-danger' }[t.status] || 'tag-warning';
+            var statusText = { pending: '待分派', assigned: '已分派', feedback: '已反馈', rejected: '已驳回' }[t.status] || t.status;
+            var statusClass = { pending: 'tag-warning', assigned: 'tag-success', feedback: 'tag-primary', rejected: 'tag-danger' }[t.status] || 'tag-warning';
             return '<tr>' +
                 '<td>' + (t.code || t.id) + '</td>' +
                 '<td>' + t.name + '</td>' +
@@ -572,8 +672,9 @@
                 '<td>' + t.createTime + '</td>' +
                 '<td>' +
                     '<button class="btn btn-sm btn-outline" onclick="viewResult(\'' + t.id + '\')">查看结果</button> ' +
-                    (t.status !== 'assigned' ? '<button class="btn btn-sm btn-outline" onclick="editTask(\'' + t.id + '\')">编辑</button> ' : '') +
-                    (t.status === 'pending' ? '<button class="btn btn-sm btn-outline" onclick="rejectTask(\'' + t.id + '\')">驳回</button>' : '') +
+                    (t.status !== 'assigned' && t.status !== 'feedback' ? '<button class="btn btn-sm btn-outline" onclick="editTask(\'' + t.id + '\')">编辑</button> ' : '') +
+                    (t.status === 'pending' ? '<button class="btn btn-sm btn-outline" onclick="rejectTask(\'' + t.id + '\')">驳回</button> ' : '') +
+                    (t.status === 'assigned' ? '<button class="btn btn-sm btn-primary" onclick="openFeedbackModal(\'' + t.id + '\')">反馈结果</button>' : '') +
                 '</td>' +
             '</tr>';
         }).join('');
@@ -582,15 +683,30 @@
     function viewResult(id) {
         var task = taskList.find(function(t) { return t.id === id; });
         if (!task) return;
-        var statusText = { pending: '待分派', assigned: '已分派', rejected: '已驳回' }[task.status] || task.status;
+        var statusText = { pending: '待分派', assigned: '已分派', feedback: '已反馈', rejected: '已驳回' }[task.status] || task.status;
         var html = '<div class="form-row"><div class="form-group"><label>需求编号</label><div class="value">' + (task.code || task.id) + '</div></div><div class="form-group"><label>状态</label><div class="value">' + statusText + '</div></div></div>' +
             '<div class="form-row"><div class="form-group"><label>需求名称</label><div class="value">' + task.name + '</div></div><div class="form-group"><label>所需人数</label><div class="value">' + task.count + '</div></div></div>' +
             '<div class="form-row"><div class="form-group"><label>专业领域</label><div class="value">' + task.domain + '</div></div><div class="form-group"><label>从事方向</label><div class="value">' + (task.direction || '不限') + '</div></div></div>' +
+            '<div class="form-row"><div class="form-group"><label>请求来源</label><div class="value">' + (task.requestSource || '—') + '</div></div><div class="form-group"><label>请求人 / 单位</label><div class="value">' + (task.requester || '—') + '</div></div></div>' +
+            '<div class="form-row"><div class="form-group"><label>请求方联系方式</label><div class="value">' + (task.contact || '—') + '</div></div><div class="form-group"><label>结果反馈方式</label><div class="value">' + ({ postMessage: '站内消息回传', copy: '复制结果文本', link: '生成结果链接' }[task.callbackType] || '—') + '</div></div></div>' +
             '<div class="form-row-full"><div class="form-group"><label>需求说明</label><div class="value">' + (task.remark || '—') + '</div></div></div>' +
             '<div class="form-row-full"><div class="form-group"><label>已选专家</label><div class="selected-list">' + (task.experts || []).map(function(e) {
                 return '<span class="selected-chip">' + e.name + '（' + e.title + '）</span>';
             }).join('') + '</div></div></div>';
+        if (task.feedback) {
+            html += '<div class="feedback-log"><div class="feedback-log-title"><i class="fas fa-paper-plane"></i> 反馈记录</div>' +
+                '<div>反馈时间：' + task.feedback.time + '</div>' +
+                '<div>反馈方式：' + ({ postMessage: '站内消息回传', copy: '复制结果文本', link: '生成结果链接' }[task.feedback.type] || '—') + '</div>' +
+                '<div>接收方：' + (task.feedback.receiver || '—') + '</div>' +
+                '<div>备注：' + (task.feedback.remark || '—') + '</div>' +
+                '</div>';
+        }
         document.getElementById('resultBody').innerHTML = html;
+        var footerHtml = '<button class="btn btn-outline" onclick="closeResultModal()">关闭</button>';
+        if (task.status === 'assigned') {
+            footerHtml += '<button class="btn btn-primary" onclick="closeResultModal();openFeedbackModal(\'' + task.id + '\')"><i class="fas fa-paper-plane"></i> 反馈结果</button>';
+        }
+        document.getElementById('resultFooter').innerHTML = footerHtml;
         document.getElementById('resultModal').classList.add('show');
     }
 
@@ -600,9 +716,115 @@
 
     function resetFilter() {
         document.getElementById('filterCode').value = '';
-        document.getElementById('filterStatus').value = '';
+        document.getElementById('filterStatus').innerHTML = '<option value="">全部</option><option value="pending">待分派</option><option value="assigned">已分派</option><option value="feedback">已反馈</option><option value="rejected">已驳回</option>';
         document.getElementById('filterDomain').value = '';
         renderTaskList();
+    }
+
+    document.getElementById('feedbackType').addEventListener('change', function() {
+        document.getElementById('feedbackLinkWrap').style.display = 'none';
+        document.getElementById('feedbackCopyWrap').style.display = 'none';
+    });
+
+    function getFeedbackResultText(task) {
+        var lines = [];
+        lines.push('专家调度结果');
+        lines.push('需求编号：' + (task.code || task.id));
+        lines.push('需求名称：' + task.name);
+        lines.push('专业领域：' + task.domain);
+        lines.push('从事方向：' + (task.direction || '不限'));
+        lines.push('所需人数：' + task.count);
+        lines.push('派遣专家：');
+        (task.experts || []).forEach(function(e, i) {
+            lines.push('  ' + (i + 1) + '. ' + e.name + '（' + e.title + '）' + '，' + e.org + '，' + e.phone);
+        });
+        lines.push('派遣时间：' + task.updateTime);
+        lines.push('备注：' + (task.remark || '无'));
+        return lines.join('\n');
+    }
+
+    function openFeedbackModal(id) {
+        feedbackTaskId = id;
+        var task = taskList.find(function(t) { return t.id === id; });
+        document.getElementById('feedbackType').value = task.callbackType || 'postMessage';
+        document.getElementById('feedbackReceiver').value = task.requester || '';
+        document.getElementById('feedbackRemark').value = '';
+        document.getElementById('feedbackLinkWrap').style.display = 'none';
+        document.getElementById('feedbackCopyWrap').style.display = 'none';
+        document.getElementById('feedbackModal').classList.add('show');
+    }
+
+    function closeFeedbackModal() {
+        document.getElementById('feedbackModal').classList.remove('show');
+        feedbackTaskId = null;
+    }
+
+    function previewFeedback() {
+        var task = taskList.find(function(t) { return t.id === feedbackTaskId; });
+        if (!task) return;
+        var type = document.getElementById('feedbackType').value;
+        if (type === 'link') {
+            document.getElementById('feedbackLinkWrap').style.display = 'block';
+            document.getElementById('feedbackCopyWrap').style.display = 'none';
+            document.getElementById('feedbackLink').textContent = location.origin + location.pathname + '?viewResult=' + task.id;
+        } else if (type === 'copy') {
+            document.getElementById('feedbackLinkWrap').style.display = 'none';
+            document.getElementById('feedbackCopyWrap').style.display = 'block';
+            document.getElementById('feedbackCopyText').value = getFeedbackResultText(task);
+        } else {
+            document.getElementById('feedbackLinkWrap').style.display = 'none';
+            document.getElementById('feedbackCopyWrap').style.display = 'none';
+            alert('已选择站内消息回传，确认后将通过 postMessage 发送给来源页面。');
+        }
+    }
+
+    function submitFeedback() {
+        var task = taskList.find(function(t) { return t.id === feedbackTaskId; });
+        if (!task) return;
+        var type = document.getElementById('feedbackType').value;
+        var receiver = document.getElementById('feedbackReceiver').value.trim();
+        var remark = document.getElementById('feedbackRemark').value.trim();
+
+        if (type === 'copy') {
+            var text = getFeedbackResultText(task);
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(function() { alert('结果文本已复制到剪贴板'); });
+            } else {
+                document.getElementById('feedbackCopyText').value = text;
+                document.getElementById('feedbackCopyWrap').style.display = 'block';
+                document.getElementById('feedbackCopyText').select();
+                alert('请手动复制结果文本');
+            }
+        }
+
+        if (type === 'postMessage' && window.parent !== window) {
+            window.parent.postMessage({
+                action: 'expertDispatchResult',
+                payload: {
+                    taskId: task.id,
+                    code: task.code || task.id,
+                    name: task.name,
+                    domain: task.domain,
+                    experts: task.experts,
+                    updateTime: task.updateTime,
+                    receiver: receiver,
+                    remark: remark
+                }
+            }, '*');
+        }
+
+        task.status = 'feedback';
+        task.feedback = {
+            type: type,
+            receiver: receiver,
+            remark: remark,
+            time: new Date().toISOString().slice(0,19).replace('T',' ')
+        };
+        task.updateTime = task.feedback.time;
+        saveTasks();
+        renderTaskList();
+        closeFeedbackModal();
+        alert('反馈结果已发送');
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -610,7 +832,8 @@
         var domains = getDomainOptions();
         fillSelect('taskDomain', domains);
         fillSelect('filterDomain', domains);
-        renderTaskList();
+        document.getElementById('taskDomain').addEventListener('change', clearExpertsByDomainChange);
+        resetFilter();
     });
 
     // 接收外部传入的调度需求（其他模块通过 postMessage 发送）
@@ -622,6 +845,10 @@
             document.getElementById('taskDirection').value = payload.direction || '';
             document.getElementById('taskCount').value = payload.count || 1;
             document.getElementById('taskRemark').value = payload.remark || '';
+            document.getElementById('taskRequestSource').value = payload.requestSource || e.source ? '外部模块' : '';
+            document.getElementById('taskRequester').value = payload.requester || '';
+            document.getElementById('taskContact').value = payload.contact || '';
+            document.getElementById('taskCallbackType').value = payload.callbackType || 'postMessage';
             tempSelectedExperts = [];
             renderSelectedExperts();
             document.getElementById('taskModal').classList.add('show');

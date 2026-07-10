@@ -425,6 +425,9 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     <div class="tab-nav-item" data-tab="tab-equipment-modal">
                         <i class="fas fa-tools"></i> 设备信息
                     </div>
+                    <div class="tab-nav-item" data-tab="tab-experts-modal">
+                        <i class="fas fa-user-graduate"></i> 关联专家
+                    </div>
                 </div>
                 <div class="tab-progress" id="tabProgressModal">
                     <i class="fas fa-info-circle"></i>
@@ -644,6 +647,18 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     </div>
                 </div>
 
+                <!-- Tab 6: 关联专家 -->
+                <div class="tab-content" id="tab-experts-modal">
+                    <div class="form-section">
+                        <div id="relatedExpertsPanel" style="display: flex; flex-direction: column; gap: 12px;">
+                            <div class="form-hint">该机构下已入库的专家信息</div>
+                            <div id="relatedExpertsList" style="max-height: 420px; overflow-y: auto;">
+                                <!-- 动态渲染 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-actions" style="margin-top: 24px;">
                     <div class="form-actions-left" id="modalActionButtons">
                         <button class="btn btn-outline" id="btnPrevModal" onclick="prevTabModal()" style="display: none;"><i class="fas fa-arrow-left"></i> 上一步</button>
@@ -675,7 +690,7 @@ window.addEventListener('message', function(e) {
 });
 
 // 弹窗内 Tab 切换功能
-var tabNamesModal = ['法人信息', '企业信息', '人员信息', '资质信息', '设备信息'];
+var tabNamesModal = ['法人信息', '企业信息', '人员信息', '资质信息', '设备信息', '关联专家'];
 var currentTabModal = 0;
 
 function switchTabModal(index) {
@@ -1298,6 +1313,98 @@ function fillOrgForm(id) {
             '<div class="form-group"><label>数量</label><input type="number" value="' + (e.quantity || '') + '" placeholder="台/套" min="1"></div>' +
             '<button class="btn-remove" onclick="removeEquipmentRowModal(this)" title="删除"><i class="fas fa-trash-alt"></i></button>';
     });
+
+    // 关联专家
+    renderRelatedExperts(org ? org.orgId : '');
+}
+
+// 渲染机构关联专家列表
+function renderRelatedExperts(orgId) {
+    var list = document.getElementById('relatedExpertsList');
+    if (!list) return;
+    if (!orgId) {
+        list.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:24px 0;">无机构信息</div>';
+        return;
+    }
+    var experts = [];
+    if (typeof getExpertsByOrg === 'function') {
+        experts = getExpertsByOrg(orgId);
+    }
+    // 同时兼容本地专家缓存 expertListData
+    try {
+        var cached = localStorage.getItem('expertListData');
+        if (cached) {
+            var parsed = JSON.parse(cached);
+            if (Array.isArray(parsed)) {
+                parsed.forEach(function(e) {
+                    if (e.orgId === orgId && !experts.some(function(x) { return x.expertId === e.expertId || x.name === e.name; })) {
+                        experts.push({
+                            expertId: e.expertId,
+                            name: e.name,
+                            domain: e.domain,
+                            direction: e.direction,
+                            title: e.title,
+                            phone: e.phone,
+                            status: (e.status === '启用' || e.status === '正常') ? '正常' : '停用'
+                        });
+                    }
+                });
+            }
+        }
+    } catch(e) {}
+
+    if (!experts || experts.length === 0) {
+        list.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:24px 0;">暂无关联专家</div>';
+        return;
+    }
+
+    var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+    experts.forEach(function(ex) {
+        var statusClass = ex.status === '正常' || ex.status === '启用' ? 'status-normal' : 'status-update';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);" data-expert-id="' + (ex.expertId || '') + '">' +
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0;">' +
+                '<div style="font-size:14px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:8px;">' +
+                    '<span>' + (ex.name || '-') + '</span>' +
+                    '<span class="status-badge ' + statusClass + '">' + (ex.status || '正常') + '</span>' +
+                '</div>' +
+                '<div style="font-size:12px;color:var(--text-secondary);display:flex;gap:12px;flex-wrap:wrap;">' +
+                    '<span><i class="fas fa-briefcase" style="margin-right:4px;"></i>' + (ex.title || '-') + '</span>' +
+                    '<span><i class="fas fa-tags" style="margin-right:4px;"></i>' + (ex.domain || '-') + (ex.direction ? ' / ' + ex.direction : '') + '</span>' +
+                    '<span><i class="fas fa-phone" style="margin-right:4px;"></i>' + (ex.phone || '-') + '</span>' +
+                '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;flex-shrink:0;">' +
+                '<a href="javascript:;" class="table-link" onclick="viewExpertById(\'' + (ex.expertId || '') + '\');" title="查看专家"><i class="fas fa-eye"></i></a>' +
+            '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+    list.innerHTML = html;
+}
+
+function viewExpertById(expertId) {
+    if (!expertId) return;
+    var expert = null;
+    if (typeof getExpertById === 'function') expert = getExpertById(expertId);
+    if (!expert) {
+        try {
+            var cached = localStorage.getItem('expertListData');
+            if (cached) {
+                var parsed = JSON.parse(cached);
+                if (Array.isArray(parsed)) {
+                    expert = parsed.find(function(e) { return e.expertId === expertId; });
+                }
+            }
+        } catch(e) {}
+    }
+    if (!expert) {
+        alert('未找到该专家信息');
+        return;
+    }
+    // 通过专家库页面跳转查看（在新标签打开 iframe 详情页）
+    var url = 'tp-expert-view.html?name=' + encodeURIComponent(expert.name || '');
+    if (expert.expertId) url += '&expertId=' + encodeURIComponent(expert.expertId);
+    window.open(url, '_blank');
 }
 
 function setInputValue(selector, value) {
