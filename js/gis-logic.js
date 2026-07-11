@@ -330,16 +330,16 @@ function updateBreadcrumb() {
 }
 function renderLegend() {
     const mode = getLayerConfig();
+    const titleEl = document.getElementById('legendTitle');
     const container = document.getElementById('legendContent');
+    if (titleEl) titleEl.innerHTML = '<i class="fas fa-layer-group"></i> <span>' + mode.name + '</span>';
     if (!container) return;
     let html = '';
     if (currentLayer === 'eliminationHeatmap') {
-        html = '<div class="legend-title"><i class="fas fa-fire"></i> 销号热力图</div>' +
-            '<div class="legend-row"><span class="legend-color" style="background:#1e8e3e"></span> 审核通过已销号</div>' +
+        html = '<div class="legend-row"><span class="legend-color" style="background:#1e8e3e"></span> 审核通过已销号</div>' +
             '<div class="legend-row"><span class="legend-color" style="background:#1a73e8"></span> 已申请待审核</div>' +
             '<div class="legend-row"><span class="legend-shape">●</span> 半径越大表示销号/申请越密集</div>';
     } else {
-        html = '<div class="legend-title"><i class="fas fa-layer-group"></i> ' + mode.name + '</div>';
         html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">颜色：状态</div>';
         Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
         html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：隐患等级</div>';
@@ -587,11 +587,48 @@ function togglePanel(id, collapsedClass, toggleIconSelector, openIcon, closeIcon
     setTimeout(() => { if (leftChart) leftChart.resize(); if (streetRankingChart) streetRankingChart.resize(); if (measurePieChart) measurePieChart.resize(); }, 260);
 }
 function bindPanelToggles() {
-    const bind = (id, ...args) => { const el = document.getElementById(id); if (el) el.addEventListener('click', () => togglePanel(...args)); };
-    bind('leftPanelToggle', 'leftPanel', 'collapsed', '#leftPanelToggle i', 'fa-chevron-right', 'fa-chevron-left');
-    bind('dashToggle', 'dashboard', 'collapsed', '#dashToggle i', 'fa-chevron-left', 'fa-chevron-right');
-    bind('legendToggle', 'mapLegend', 'collapsed', '#legendToggle i', 'fa-chevron-right', 'fa-chevron-left');
-    bind('statsToggle', 'statsContent', 'collapsed', '#statsToggle i', 'fa-chevron-up', 'fa-chevron-down');
+    const legendClose = document.getElementById('legendClose');
+    const legendFloat = document.getElementById('legendFloat');
+    if (legendClose) {
+        legendClose.addEventListener('click', () => {
+            document.getElementById('mapLegend').classList.add('minimized');
+            legendFloat.classList.add('show');
+        });
+    }
+    if (legendFloat) {
+        legendFloat.addEventListener('click', () => {
+            document.getElementById('mapLegend').classList.remove('minimized');
+            legendFloat.classList.remove('show');
+        });
+    }
+    const dashClose = document.getElementById('dashClose');
+    const dashFloat = document.getElementById('dashFloat');
+    if (dashClose) {
+        dashClose.addEventListener('click', () => {
+            document.getElementById('dashboard').classList.add('minimized');
+            dashFloat.classList.add('show');
+        });
+    }
+    if (dashFloat) {
+        dashFloat.addEventListener('click', () => {
+            document.getElementById('dashboard').classList.remove('minimized');
+            dashFloat.classList.remove('show');
+        });
+    }
+    const statsClose = document.getElementById('statsClose');
+    const statsFloat = document.getElementById('statsFloat');
+    if (statsClose) {
+        statsClose.addEventListener('click', () => {
+            document.getElementById('statsContent').classList.add('minimized');
+            statsFloat.classList.add('show');
+        });
+    }
+    if (statsFloat) {
+        statsFloat.addEventListener('click', () => {
+            document.getElementById('statsContent').classList.remove('minimized');
+            statsFloat.classList.remove('show');
+        });
+    }
 }
 function bindEvents() {
     bindPanelToggles();

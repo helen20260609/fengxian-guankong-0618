@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>农村自建房 - 工匠管理</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+            --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+            --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+            --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+            --radius: 8px; --star: #f9ab00;
+        }
+        :root[data-theme="dark"] {
+            --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+            --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+            --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+            --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+            --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark); color: var(--text-primary);
+            padding: 20px; min-height: 100vh;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .page-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .page-title i { color: var(--primary); }
+        .page-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
+
+        /* KPI Cards */
+        .kpi-wrapper {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;
+        }
+        @media (max-width: 1024px) { .kpi-wrapper { grid-template-columns: repeat(2, 1fr); } }
+        .kpi-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 14px 16px; box-shadow: 0 1px 3px var(--shadow); display: flex; flex-direction: column; gap: 8px;
+        }
+        .kpi-card-header { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--text-secondary); }
+        .kpi-card-main { display: flex; align-items: baseline; gap: 6px; }
+        .kpi-card-value { font-size: 26px; font-weight: 700; }
+        .kpi-card-trend { font-size: 12px; color: var(--success); }
+
+        /* Toolbar */
+        .toolbar {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 14px 16px; margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap;
+            align-items: center; justify-content: space-between; box-shadow: 0 1px 3px var(--shadow);
+        }
+        .filter-group { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .filter-item { display: flex; align-items: center; gap: 6px; }
+        .filter-item label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+        .filter-item input, .filter-item select {
+            padding: 7px 10px; font-size: 13px; border: 1px solid var(--input-border); border-radius: 6px;
+            background: var(--input-bg); color: var(--text-primary); min-width: 130px; outline: none;
+        }
+        .filter-item input:focus, .filter-item select:focus { border-color: var(--primary); }
+        .btn {
+            padding: 8px 14px; border-radius: 6px; font-size: 13px; border: 1px solid transparent;
+            cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { background: transparent; border-color: var(--border); color: var(--text-primary); }
+        .btn-outline:hover { background: var(--bg-hover); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+        /* Main Layout */
+        .main-layout { display: grid; grid-template-columns: 240px 1fr; gap: 16px; }
+        @media (max-width: 1024px) { .main-layout { grid-template-columns: 1fr; } }
+
+        .category-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: 0 1px 3px var(--shadow); overflow: hidden; height: fit-content;
+        }
+        .category-header {
+            padding: 14px 16px; font-size: 14px; font-weight: 700; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .category-list { padding: 8px 0; }
+        .category-item {
+            padding: 9px 16px; font-size: 13px; cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; gap: 8px; color: var(--text-secondary);
+        }
+        .category-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .category-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+        .category-item i { font-size: 12px; width: 16px; text-align: center; }
+
+        .content-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: 0 1px 3px var(--shadow); overflow: hidden; display: flex; flex-direction: column; min-height: 560px;
+        }
+        .content-header {
+            padding: 14px 16px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .content-title { font-size: 14px; font-weight: 700; }
+        .content-stats { font-size: 12px; color: var(--text-secondary); }
+
+        .craftsman-list { padding: 16px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+        @media (max-width: 1200px) { .craftsman-list { grid-template-columns: 1fr; } }
+        .craftsman-card {
+            border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; transition: all 0.2s;
+            display: flex; gap: 14px; cursor: pointer; position: relative;
+        }
+        .craftsman-card:hover { box-shadow: 0 4px 12px var(--shadow); border-color: var(--primary); }
+        .avatar {
+            width: 64px; height: 64px; border-radius: 50%; background: var(--primary-light); color: var(--primary);
+            display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; flex-shrink: 0;
+        }
+        .craftsman-info { flex: 1; min-width: 0; }
+        .craftsman-name {
+            font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+        }
+        .cert-badge {
+            font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--success); color: #fff;
+        }
+        .cert-badge.no { background: var(--text-secondary); }
+        .craftsman-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+        .tag {
+            font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--bg-hover); color: var(--text-secondary);
+        }
+        .craftsman-meta { font-size: 12px; color: var(--text-secondary); display: flex; gap: 14px; flex-wrap: wrap; }
+        .craftsman-meta span { display: inline-flex; align-items: center; gap: 4px; }
+        .rating { display: flex; align-items: center; gap: 4px; color: var(--star); font-size: 13px; }
+        .rating .score { font-weight: 700; color: var(--text-primary); }
+        .actions {
+            position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; opacity: 0; transition: opacity 0.2s;
+        }
+        .craftsman-card:hover .actions { opacity: 1; }
+
+        .empty-state {
+            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: var(--text-secondary); padding: 40px; gap: 12px;
+        }
+        .empty-state i { font-size: 48px; opacity: 0.3; }
+        .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 12px 16px; border-top: 1px solid var(--border); }
+        .pagination button {
+            padding: 5px 10px; font-size: 13px; border: 1px solid var(--border); background: var(--bg-card);
+            color: var(--text-primary); border-radius: 6px; cursor: pointer;
+        }
+        .pagination button:hover:not(:disabled) { background: var(--bg-hover); }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pagination .active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center;
+            z-index: 9999; padding: 20px;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; width: 100%; max-width: 800px;
+            max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .modal-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-weight: 700; }
+        .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-secondary); }
+        .modal-body { padding: 18px; overflow-y: auto; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 14px; }
+        @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+        .form-group label .required { color: var(--danger); margin-left: 2px; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid var(--input-border); border-radius: 6px;
+            background: var(--input-bg); color: var(--text-primary); outline: none;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        .form-hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .skill-options { display: flex; gap: 8px; flex-wrap: wrap; }
+        .skill-options label {
+            display: flex; align-items: center; gap: 4px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
+            cursor: pointer; font-size: 12px; background: var(--input-bg);
+        }
+        .skill-options input { width: auto; }
+        .skill-options label:has(input:checked) { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+        .modal-footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+        /* Detail */
+        .detail-header { display: flex; gap: 16px; margin-bottom: 20px; }
+        .detail-main { flex: 1; }
+        .detail-name { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+        .detail-section {
+            border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 14px;
+        }
+        .detail-section-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; color: var(--primary); }
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; }
+        .detail-grid .label { color: var(--text-secondary); }
+        .timeline-item { display: flex; gap: 10px; font-size: 13px; margin-bottom: 10px; }
+        .timeline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); margin-top: 5px; flex-shrink: 0; }
+        .review-item {
+            border-bottom: 1px solid var(--border); padding: 10px 0; font-size: 13px;
+        }
+        .review-item:last-child { border-bottom: none; }
+        .review-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .review-stars { color: var(--star); }
+
+        .star-rating { display: flex; gap: 4px; font-size: 18px; cursor: pointer; color: var(--border); }
+        .star-rating .star.selected { color: var(--star); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="page-title"><i class="fas fa-user-hard-hat"></i> 工匠管理</div>
+    <div class="page-desc">
+        建立乡村工匠名录库，记录工匠基本信息、技能特长、培训情况、施工业绩、农户评价等，供农户选择参考。农户可对工匠施工质量进行评价，评价结果纳入工匠档案。
+    </div>
+
+    <div class="kpi-wrapper">
+        <div class="kpi-card">
+            <div class="kpi-card-header"><span>工匠总数</span><i class="fas fa-users" style="color:var(--primary)"></i></div>
+            <div class="kpi-card-main"><div class="kpi-card-value" id="kpiTotal">0</div></div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-card-header"><span>持证工匠</span><i class="fas fa-certificate" style="color:var(--success)"></i></div>
+            <div class="kpi-card-main"><div class="kpi-card-value" id="kpiCertified">0</div></div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-card-header"><span>平均评分</span><i class="fas fa-star" style="color:var(--warning)"></i></div>
+            <div class="kpi-card-main"><div class="kpi-card-value" id="kpiRating">0.0</div></div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-card-header"><span>本月新增</span><i class="fas fa-calendar-plus" style="color:var(--secondary)"></i></div>
+            <div class="kpi-card-main"><div class="kpi-card-value" id="kpiNew">0</div></div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>关键字</label>
+                <input type="text" id="searchKeyword" placeholder="姓名/手机号/村">
+            </div>
+            <div class="filter-item">
+                <label>技能特长</label>
+                <select id="searchSkill">
+                    <option value="">全部</option>
+                    <option value="泥瓦">泥瓦</option>
+                    <option value="木工">木工</option>
+                    <option value="水电">水电</option>
+                    <option value="钢结构">钢结构</option>
+                    <option value="装修">装修</option>
+                    <option value="古建筑">古建筑</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>持证状态</label>
+                <select id="searchCertified">
+                    <option value="">全部</option>
+                    <option value="1">已持证</option>
+                    <option value="0">未持证</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>乡镇</label>
+                <select id="searchTown">
+                    <option value="">全部</option>
+                </select>
+            </div>
+        </div>
+        <div class="filter-group">
+            <button class="btn btn-outline" onclick="resetFilter()"><i class="fas fa-rotate-left"></i> 重置</button>
+            <button class="btn btn-outline" onclick="restoreDefaultData()"><i class="fas fa-rotate-right"></i> 恢复默认数据</button>
+            <button class="btn btn-primary" onclick="openAddModal()"><i class="fas fa-plus"></i> 新增工匠</button>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <div class="category-card">
+            <div class="category-header"><i class="fas fa-tools" style="color:var(--primary)"></i> 技能特长</div>
+            <div class="category-list" id="categoryList"></div>
+        </div>
+
+        <div class="content-card">
+            <div class="content-header">
+                <div class="content-title" id="contentTitle">全部工匠</div>
+                <div class="content-stats">共 <span id="totalCount">0</span> 人</div>
+            </div>
+            <div class="craftsman-list" id="craftsmanList"></div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+    <div class="modal">
+        <div class="modal-header"><span id="modalTitle">新增工匠</span><button class="modal-close" onclick="closeEditModal()"><i class="fas fa-times"></i></button></div>
+        <div class="modal-body">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>姓名 <span class="required">*</span></label>
+                    <input type="text" id="editName" placeholder="请输入工匠姓名">
+                </div>
+                <div class="form-group">
+                    <label>联系电话 <span class="required">*</span></label>
+                    <input type="tel" id="editPhone" placeholder="请输入联系电话">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>乡镇 <span class="required">*</span></label>
+                    <select id="editTown" onchange="renderEditVillages()">
+                        <option value="">请选择</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>村 <span class="required">*</span></label>
+                    <select id="editVillage">
+                        <option value="">请选择</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>技能特长 <span class="required">*</span></label>
+                <div class="skill-options" id="skillOptions"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>从业年限（年）</label>
+                    <input type="number" id="editExperience" min="0" placeholder="如：10">
+                </div>
+                <div class="form-group">
+                    <label>是否持证</label>
+                    <select id="editCertified">
+                        <option value="1">已持证</option>
+                        <option value="0">未持证</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" id="certNoGroup">
+                <label>证书编号</label>
+                <input type="text" id="editCertNo" placeholder="请输入证书编号">
+            </div>
+            <div class="form-group">
+                <label>培训情况</label>
+                <textarea id="editTraining" placeholder="填写培训时间、机构、内容等"></textarea>
+            </div>
+            <div class="form-group">
+                <label>施工业绩</label>
+                <textarea id="editProjects" placeholder="填写参与的主要施工项目"></textarea>
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <input type="text" id="editRemark" placeholder="其他说明">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeEditModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveCraftsman()"><i class="fas fa-save"></i> 保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay detail-modal" id="detailModal">
+    <div class="modal">
+        <div class="modal-header"><span>工匠档案</span><button class="modal-close" onclick="closeDetailModal()"><i class="fas fa-times"></i></button></div>
+        <div class="modal-body" id="detailBody"></div>
+        <div class="modal-footer" style="justify-content:space-between;">
+            <button class="btn btn-primary" onclick="openReviewModal()"><i class="fas fa-star"></i> 我要评价</button>
+            <button class="btn btn-outline" onclick="closeDetailModal()">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- Review Modal -->
+<div class="modal-overlay" id="reviewModal">
+    <div class="modal" style="max-width:480px;">
+        <div class="modal-header"><span>评价工匠</span><button class="modal-close" onclick="closeReviewModal()"><i class="fas fa-times"></i></button></div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>施工质量评分</label>
+                <div class="star-rating" id="starRating">
+                    <span class="star" data-score="1"><i class="fas fa-star"></i></span>
+                    <span class="star" data-score="2"><i class="fas fa-star"></i></span>
+                    <span class="star" data-score="3"><i class="fas fa-star"></i></span>
+                    <span class="star" data-score="4"><i class="fas fa-star"></i></span>
+                    <span class="star" data-score="5"><i class="fas fa-star"></i></span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>评价人</label>
+                <input type="text" id="reviewUser" placeholder="您的姓名">
+            </div>
+            <div class="form-group">
+                <label>评价内容</label>
+                <textarea id="reviewContent" placeholder="请对工匠施工质量、服务态度等进行评价"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeReviewModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitReview()"><i class="fas fa-paper-plane"></i> 提交评价</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const allSkills = ['泥瓦', '木工', '水电', '钢结构', '装修', '古建筑'];
+const regionTree = [
+    { town: '南桥镇', villages: ['沈陆村', '江海村', '六墩村', '张翁庙村', '华严村'] },
+    { town: '奉城镇', villages: ['幸福村', '集贤村', '蔡家桥村', '白衣聚村', '东门村'] },
+    { town: '庄行镇', villages: ['庄行村', '潘垫村', '新华村', '长浜村', '存古村'] },
+    { town: '金汇镇', villages: ['金汇村', '光辉村', '新建村', '明星村', '白沙村'] },
+    { town: '青村镇', villages: ['陶宅村', '北唐村', '岳和村', '湾张村', '钱忠村'] },
+    { town: '柘林镇', villages: ['柘林村', '华亭村', '新塘村', '营房村', '夹路村'] },
+    { town: '四团镇', villages: ['四团村', '平安村', '邵厂村', '拾村村', '渔洋村'] },
+    { town: '海湾镇', villages: ['海湾社区', '星火社区', '五四社区', '洪卫社区', '中港社区'] }
+];
+
+let craftsmen = JSON.parse(localStorage.getItem('rural_craftsman_management')) || getDefaultCraftsmen();
+let currentCategory = '';
+let currentPage = 1;
+let pageSize = 8;
+let editingId = null;
+let currentDetailId = null;
+let currentRating = 0;
+
+function getDefaultCraftsmen() {
+    return [
+        {
+            id: 1, name: '张建民', phone: '138****1234', idCard: '310120********1234', town: '南桥镇', village: '沈陆村',
+            skills: ['泥瓦', '装修'], experienceYears: 18, isCertified: 1, certNo: 'FX2026001',
+            training: '2024年参加区住建局农村建筑工匠培训班，成绩合格。',
+            projects: '参与南桥镇农村危房改造项目12户，自建房建设项目8户。',
+            remark: '擅长传统砖混结构施工', reviews: [
+                { user: '李阿姨', score: 5, content: '张师傅手艺好，做事认真，墙面很平整。', date: '2026-06-15' },
+                { user: '王先生', score: 4, content: '总体不错，工期稍微有点长。', date: '2026-05-22' }
+            ], createdAt: '2024-01-10'
+        },
+        {
+            id: 2, name: '陈木匠', phone: '139****5678', idCard: '310120********5678', town: '奉城镇', village: '幸福村',
+            skills: ['木工', '古建筑'], experienceYears: 25, isCertified: 1, certNo: 'FX2026008',
+            training: '2023年通过传统建筑工匠技艺培训，擅长木构架制作。',
+            projects: '奉城镇古民居修缮项目3处，新建农房木结构施工15户。',
+            remark: '擅长传统木作工艺', reviews: [
+                { user: '赵大伯', score: 5, content: '老陈的木窗雕花做得非常漂亮，老人很满意。', date: '2026-06-08' }
+            ], createdAt: '2024-02-15'
+        },
+        {
+            id: 3, name: '刘伟', phone: '137****9012', idCard: '310120********9012', town: '庄行镇', village: '庄行村',
+            skills: ['水电', '装修'], experienceYears: 10, isCertified: 0, certNo: '',
+            training: '2025年参加水电安装安全培训。',
+            projects: '庄行镇农户水电改造30余户。',
+            remark: '年轻肯干，学习能力强', reviews: [
+                { user: '孙女士', score: 4, content: '水电布线图清楚，施工规范。', date: '2026-06-20' }
+            ], createdAt: '2025-03-20'
+        }
+    ];
+}
+
+function saveStorage() { localStorage.setItem('rural_craftsman_management', JSON.stringify(craftsmen)); }
+
+function getAverageRating(reviews) {
+    if (!reviews || reviews.length === 0) return 0;
+    return (reviews.reduce((s, r) => s + r.score, 0) / reviews.length).toFixed(1);
+}
+
+function renderKPIs() {
+    document.getElementById('kpiTotal').textContent = craftsmen.length;
+    document.getElementById('kpiCertified').textContent = craftsmen.filter(c => c.isCertified).length;
+    const totalScore = craftsmen.reduce((s, c) => s + parseFloat(getAverageRating(c.reviews)), 0);
+    const avgRating = craftsmen.length ? (totalScore / craftsmen.length).toFixed(1) : '0.0';
+    document.getElementById('kpiRating').textContent = avgRating;
+
+    const now = new Date();
+    const currentMonth = now.toISOString().slice(0, 7);
+    document.getElementById('kpiNew').textContent = craftsmen.filter(c => (c.createdAt || '').startsWith(currentMonth)).length;
+}
+
+function renderCategories() {
+    const counts = {};
+    allSkills.forEach(s => counts[s] = craftsmen.filter(c => c.skills.includes(s)).length);
+    const html = `
+        <div class="category-item ${currentCategory === '' ? 'active' : ''}" onclick="selectCategory('')">
+            <i class="fas fa-th-large"></i><span>全部</span><span style="margin-left:auto;font-size:12px;color:var(--text-secondary)">${craftsmen.length}</span>
+        </div>
+        ${allSkills.map(s => `
+            <div class="category-item ${currentCategory === s ? 'active' : ''}" onclick="selectCategory('${s}')">
+                <i class="fas fa-wrench"></i><span>${s}</span><span style="margin-left:auto;font-size:12px;color:var(--text-secondary)">${counts[s]}</span>
+            </div>
+        `).join('')}
+    `;
+    document.getElementById('categoryList').innerHTML = html;
+}
+
+function selectCategory(s) { currentCategory = s; currentPage = 1; renderCategories(); renderList(); }
+
+function initTownFilters() {
+    const townSel = document.getElementById('searchTown');
+    regionTree.forEach(t => {
+        const opt = document.createElement('option'); opt.value = t.town; opt.textContent = t.town; townSel.appendChild(opt);
+    });
+    townSel.addEventListener('change', () => { currentPage = 1; renderList(); });
+
+    const editTown = document.getElementById('editTown');
+    regionTree.forEach(t => {
+        const opt = document.createElement('option'); opt.value = t.town; opt.textContent = t.town; editTown.appendChild(opt);
+    });
+}
+
+function renderEditVillages() {
+    const town = document.getElementById('editTown').value;
+    const villageSel = document.getElementById('editVillage');
+    villageSel.innerHTML = '<option value="">请选择</option>';
+    const found = regionTree.find(t => t.town === town);
+    if (found) {
+        found.villages.forEach(v => {
+            const opt = document.createElement('option'); opt.value = v; opt.textContent = v; villageSel.appendChild(opt);
+        });
+    }
+}
+
+function renderSkillOptions() {
+    document.getElementById('skillOptions').innerHTML = allSkills.map(s => `
+        <label><input type="checkbox" value="${s}" class="skill-check"> ${s}</label>
+    `).join('');
+}
+
+function filterData() {
+    const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
+    const skill = document.getElementById('searchSkill').value;
+    const certified = document.getElementById('searchCertified').value;
+    const town = document.getElementById('searchTown').value;
+    return craftsmen.filter(c => {
+        if (currentCategory && !c.skills.includes(currentCategory)) return false;
+        if (skill && !c.skills.includes(skill)) return false;
+        if (certified !== '' && c.isCertified !== parseInt(certified)) return false;
+        if (town && c.town !== town) return false;
+        if (keyword && !(c.name.includes(keyword) || c.phone.includes(keyword) || c.village.includes(keyword))) return false;
+        return true;
+    }).sort((a, b) => parseFloat(getAverageRating(b.reviews)) - parseFloat(getAverageRating(a.reviews)));
+}
+
+function renderList() {
+    const data = filterData();
+    document.getElementById('totalCount').textContent = data.length;
+    document.getElementById('contentTitle').textContent = currentCategory ? `${currentCategory}类工匠` : '全部工匠';
+
+    const listEl = document.getElementById('craftsmanList');
+    const start = (currentPage - 1) * pageSize;
+    const pageData = data.slice(start, start + pageSize);
+
+    if (data.length === 0) {
+        listEl.innerHTML = `
+            <div class="empty-state" style="grid-column:1/-1;">
+                <i class="fas fa-user-hard-hat"></i>
+                <p>暂无工匠信息，点击“新增工匠”录入第一条数据。</p>
+            </div>
+        `;
+        document.getElementById('pagination').innerHTML = '';
+        return;
+    }
+
+    listEl.innerHTML = pageData.map(c => {
+        const rating = getAverageRating(c.reviews);
+        return `
+            <div class="craftsman-card" onclick="openDetail(${c.id})">
+                <div class="avatar">${c.name.charAt(0)}</div>
+                <div class="craftsman-info">
+                    <div class="craftsman-name">
+                        ${c.name}
+                        ${c.isCertified ? '<span class="cert-badge"><i class="fas fa-check-circle"></i> 已持证</span>' : '<span class="cert-badge no">未持证</span>'}
+                    </div>
+                    <div class="craftsman-tags">
+                        ${c.skills.map(s => `<span class="tag">${s}</span>`).join('')}
+                    </div>
+                    <div class="craftsman-meta">
+                        <span><i class="fas fa-map-marker-alt"></i> ${c.town} · ${c.village}</span>
+                        <span><i class="fas fa-briefcase"></i> ${c.experienceYears}年经验</span>
+                        <span class="rating"><i class="fas fa-star"></i> <span class="score">${rating}</span>（${c.reviews ? c.reviews.length : 0}条评价）</span>
+                    </div>
+                </div>
+                <div class="actions" onclick="event.stopPropagation()">
+                    <button class="btn btn-outline btn-sm" onclick="openEdit(${c.id})"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteCraftsman(${c.id})"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>
+        `;
+    }).join('');
+    renderPagination(data.length);
+}
+
+function renderPagination(total) {
+    const totalPages = Math.ceil(total / pageSize) || 1;
+    let html = `<button onclick="goPage(${currentPage-1})" ${currentPage === 1 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+    }
+    html += `<button onclick="goPage(${currentPage+1})" ${currentPage === totalPages ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>`;
+    document.getElementById('pagination').innerHTML = html;
+}
+
+function goPage(p) { currentPage = p; renderList(); }
+
+function resetFilter() {
+    document.getElementById('searchKeyword').value = '';
+    document.getElementById('searchSkill').value = '';
+    document.getElementById('searchCertified').value = '';
+    document.getElementById('searchTown').value = '';
+    currentCategory = ''; currentPage = 1;
+    renderCategories(); renderList();
+}
+
+function restoreDefaultData() {
+    if (!confirm('确定恢复默认工匠数据吗？会补充缺失的默认工匠，已有的自定义数据不会被覆盖。')) return;
+    const defaults = getDefaultCraftsmen();
+    defaults.forEach(d => {
+        if (!craftsmen.find(c => c.id === d.id)) craftsmen.push(d);
+    });
+    saveStorage(); renderKPIs(); renderCategories(); renderList();
+    alert('默认工匠数据已恢复。');
+}
+
+function openAddModal() {
+    editingId = null; currentDetailId = null;
+    document.getElementById('modalTitle').textContent = '新增工匠';
+    document.getElementById('editName').value = '';
+    document.getElementById('editPhone').value = '';
+    document.getElementById('editTown').value = '';
+    renderEditVillages();
+    document.getElementById('editExperience').value = '';
+    document.getElementById('editCertified').value = '1';
+    document.getElementById('editCertNo').value = '';
+    document.getElementById('editTraining').value = '';
+    document.getElementById('editProjects').value = '';
+    document.getElementById('editRemark').value = '';
+    document.querySelectorAll('.skill-check').forEach(cb => cb.checked = false);
+    document.getElementById('editModal').classList.add('open');
+}
+
+function openEdit(id) {
+    const c = craftsmen.find(x => x.id === id);
+    if (!c) return;
+    editingId = id; currentDetailId = id;
+    document.getElementById('modalTitle').textContent = '编辑工匠';
+    document.getElementById('editName').value = c.name;
+    document.getElementById('editPhone').value = c.phone;
+    document.getElementById('editTown').value = c.town;
+    renderEditVillages();
+    document.getElementById('editVillage').value = c.village;
+    document.getElementById('editExperience').value = c.experienceYears;
+    document.getElementById('editCertified').value = c.isCertified ? '1' : '0';
+    document.getElementById('editCertNo').value = c.certNo || '';
+    document.getElementById('editTraining').value = c.training || '';
+    document.getElementById('editProjects').value = c.projects || '';
+    document.getElementById('editRemark').value = c.remark || '';
+    document.querySelectorAll('.skill-check').forEach(cb => {
+        cb.checked = c.skills.includes(cb.value);
+    });
+    document.getElementById('editModal').classList.add('open');
+}
+
+function closeEditModal() { document.getElementById('editModal').classList.remove('open'); }
+
+function saveCraftsman() {
+    const name = document.getElementById('editName').value.trim();
+    const phone = document.getElementById('editPhone').value.trim();
+    const town = document.getElementById('editTown').value;
+    const village = document.getElementById('editVillage').value;
+    const skills = Array.from(document.querySelectorAll('.skill-check:checked')).map(cb => cb.value);
+    if (!name || !phone || !town || !village || skills.length === 0) {
+        alert('请填写姓名、电话、乡镇、村并至少选择一项技能特长'); return;
+    }
+    const experienceYears = parseInt(document.getElementById('editExperience').value) || 0;
+    const isCertified = parseInt(document.getElementById('editCertified').value);
+    const certNo = document.getElementById('editCertNo').value.trim();
+    const training = document.getElementById('editTraining').value.trim();
+    const projects = document.getElementById('editProjects').value.trim();
+    const remark = document.getElementById('editRemark').value.trim();
+
+    if (editingId) {
+        const c = craftsmen.find(x => x.id === editingId);
+        Object.assign(c, { name, phone, town, village, skills, experienceYears, isCertified, certNo, training, projects, remark });
+    } else {
+        const newId = craftsmen.length ? Math.max(...craftsmen.map(c => c.id)) + 1 : 1;
+        craftsmen.push({ id: newId, name, phone, town, village, skills, experienceYears, isCertified, certNo, training, projects, remark, reviews: [], createdAt: new Date().toISOString().split('T')[0] });
+    }
+    saveStorage(); closeEditModal(); renderKPIs(); renderCategories(); renderList();
+}
+
+function deleteCraftsman(id) {
+    if (!confirm('确定删除该工匠信息吗？')) return;
+    craftsmen = craftsmen.filter(c => c.id !== id);
+    saveStorage(); renderKPIs(); renderCategories(); renderList();
+}
+
+function openDetail(id) {
+    currentDetailId = id;
+    const c = craftsmen.find(x => x.id === id);
+    if (!c) return;
+    const rating = getAverageRating(c.reviews);
+    const stars = renderStars(rating);
+    document.getElementById('detailBody').innerHTML = `
+        <div class="detail-header">
+            <div class="avatar" style="width:80px;height:80px;font-size:28px;">${c.name.charAt(0)}</div>
+            <div class="detail-main">
+                <div class="detail-name">${c.name} ${c.isCertified ? '<span class="cert-badge">已持证</span>' : '<span class="cert-badge no">未持证</span>'}</div>
+                <div class="craftsman-tags" style="margin-bottom:10px;">${c.skills.map(s => `<span class="tag">${s}</span>`).join('')}</div>
+                <div class="rating" style="font-size:14px;">${stars} <span class="score">${rating}</span>（${c.reviews ? c.reviews.length : 0}条评价）</div>
+            </div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-title"><i class="fas fa-id-card"></i> 基本信息</div>
+            <div class="detail-grid">
+                <div><span class="label">联系电话：</span>${c.phone}</div>
+                <div><span class="label">所属区域：</span>${c.town} ${c.village}</div>
+                <div><span class="label">从业年限：</span>${c.experienceYears}年</div>
+                <div><span class="label">证书编号：</span>${c.certNo || '-'}</div>
+                <div><span class="label">备注：</span>${c.remark || '-'}</div>
+            </div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-title"><i class="fas fa-graduation-cap"></i> 培训情况</div>
+            <div style="font-size:13px;line-height:1.6;">${c.training ? c.training.replace(/\n/g, '<br>') : '暂无培训记录'}</div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-title"><i class="fas fa-hard-hat"></i> 施工业绩</div>
+            <div style="font-size:13px;line-height:1.6;">${c.projects ? c.projects.replace(/\n/g, '<br>') : '暂无施工业绩'}</div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-title"><i class="fas fa-comments"></i> 农户评价</div>
+            ${c.reviews && c.reviews.length ? c.reviews.map(r => `
+                <div class="review-item">
+                    <div class="review-header">
+                        <span><b>${r.user}</b></span>
+                        <span class="review-stars">${renderStars(r.score)} ${r.score}分</span>
+                    </div>
+                    <div style="color:var(--text-secondary);margin-bottom:4px;">${r.content}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);">${r.date}</div>
+                </div>
+            `).join('') : '<div style="font-size:13px;color:var(--text-secondary);">暂无评价，点击“我要评价”添加第一条评价。</div>'}
+        </div>
+    `;
+    document.getElementById('detailModal').classList.add('open');
+}
+
+function closeDetailModal() { document.getElementById('detailModal').classList.remove('open'); }
+
+function renderStars(score) {
+    let html = '';
+    for (let i = 1; i <= 5; i++) {
+        html += `<i class="fas fa-star" style="color:${i <= Math.round(score) ? 'var(--star)' : 'var(--border)'}"></i>`;
+    }
+    return html;
+}
+
+function openReviewModal() {
+    if (!currentDetailId) return;
+    closeDetailModal();
+    currentRating = 0;
+    document.querySelectorAll('#starRating .star').forEach(s => s.classList.remove('selected'));
+    document.getElementById('reviewUser').value = '';
+    document.getElementById('reviewContent').value = '';
+    document.getElementById('reviewModal').classList.add('open');
+}
+
+function closeReviewModal() { document.getElementById('reviewModal').classList.remove('open'); }
+
+function submitReview() {
+    if (!currentDetailId) return;
+    if (currentRating === 0) { alert('请选择评分'); return; }
+    const user = document.getElementById('reviewUser').value.trim() || '匿名农户';
+    const content = document.getElementById('reviewContent').value.trim();
+    if (!content) { alert('请填写评价内容'); return; }
+    const c = craftsmen.find(x => x.id === currentDetailId);
+    if (c) {
+        if (!c.reviews) c.reviews = [];
+        c.reviews.unshift({ user, score: currentRating, content, date: new Date().toISOString().split('T')[0] });
+        saveStorage();
+    }
+    closeReviewModal();
+    renderKPIs(); renderList(); openDetail(currentDetailId);
+}
+
+// Star rating interaction
+function initStarRating() {
+    const stars = document.querySelectorAll('#starRating .star');
+    stars.forEach(star => {
+        star.addEventListener('click', () => {
+            currentRating = parseInt(star.dataset.score);
+            stars.forEach(s => s.classList.toggle('selected', parseInt(s.dataset.score) <= currentRating));
+        });
+        star.addEventListener('mouseenter', () => {
+            const hoverScore = parseInt(star.dataset.score);
+            stars.forEach(s => s.style.color = parseInt(s.dataset.score) <= hoverScore ? 'var(--star)' : 'var(--border)');
+        });
+        star.addEventListener('mouseleave', () => {
+            stars.forEach(s => s.style.color = parseInt(s.dataset.score) <= currentRating ? 'var(--star)' : 'var(--border)');
+        });
+    });
+}
+
+// Event listeners
+document.getElementById('searchKeyword').addEventListener('input', () => { currentPage = 1; renderList(); });
+document.getElementById('searchSkill').addEventListener('change', () => { currentPage = 1; renderList(); });
+document.getElementById('searchCertified').addEventListener('change', () => { currentPage = 1; renderList(); });
+
+initTownFilters();
+renderSkillOptions();
+initStarRating();
+renderKPIs();
+renderCategories();
+renderList();
+</script>
+</body>
+</html>
