@@ -330,25 +330,27 @@ function updateBreadcrumb() {
 }
 function renderLegend() {
     const mode = getLayerConfig();
-    const container = document.getElementById('mapLegend');
+    const container = document.getElementById('legendContent');
+    if (!container) return;
+    let html = '';
     if (currentLayer === 'eliminationHeatmap') {
-        container.innerHTML = '<div class="legend-title"><i class="fas fa-fire"></i> 销号热力图</div>' +
+        html = '<div class="legend-title"><i class="fas fa-fire"></i> 销号热力图</div>' +
             '<div class="legend-row"><span class="legend-color" style="background:#1e8e3e"></span> 审核通过已销号</div>' +
             '<div class="legend-row"><span class="legend-color" style="background:#1a73e8"></span> 已申请待审核</div>' +
             '<div class="legend-row"><span class="legend-shape">●</span> 半径越大表示销号/申请越密集</div>';
-        return;
+    } else {
+        html = '<div class="legend-title"><i class="fas fa-layer-group"></i> ' + mode.name + '</div>';
+        html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">颜色：状态</div>';
+        Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
+        html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：隐患等级</div>';
+        Object.keys(RISK_CONFIG).forEach(key => { const cfg = RISK_CONFIG[key]; html += '<div class="legend-item"><span class="legend-symbol" style="color:' + cfg.color + '">' + getShapeHtml(cfg.shape, cfg.color, 12) + '</span><span>' + cfg.label + '</span></div>'; });
     }
-    if (!container) return;
-    let html = '<div class="legend-title"><i class="fas fa-layer-group"></i> ' + mode.name + '</div>';
-    html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">颜色：状态</div>';
-    Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
-    html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：隐患等级</div>';
-    Object.keys(RISK_CONFIG).forEach(key => { const cfg = RISK_CONFIG[key]; html += '<div class="legend-item"><span class="legend-symbol" style="color:' + cfg.color + '">' + getShapeHtml(cfg.shape, cfg.color, 12) + '</span><span>' + cfg.label + '</span></div>'; });
     container.innerHTML = html;
 }
 function renderStats() {
     const mode = getLayerConfig();
-    const container = document.getElementById('statsContent');
+    const container = document.getElementById('statsBody');
+    if (!container) return;
     const data = getVisibleData();
     const counts = {};
     data.forEach(item => { const v = mode.colorBy === 'risk' ? item.risk : (mode.colorBy === 'governance' ? item.governance : item.elimination); counts[v] = (counts[v] || 0) + 1; });
@@ -445,6 +447,20 @@ function renderLeftMeasureChart() {
     }, true);
     leftChart.off('click');
     leftChart.on('click', params => switchLayer(params.name === '管理措施' ? 'management' : 'engineering'));
+}
+function renderLeftTrendChart() {
+    const data = getVisibleData().filter(i => i.elimination === 'done' && i.eliminationInfo && i.eliminationInfo.reviewTime);
+    const dateMap = {};
+    data.forEach(i => { const d = i.eliminationInfo.reviewTime; dateMap[d] = (dateMap[d] || 0) + 1; });
+    const dates = Object.keys(dateMap).sort();
+    const values = dates.map(d => dateMap[d]);
+    leftChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 10, right: 10, top: 25, bottom: 20, containLabel: true },
+        xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 10, rotate: 30 } },
+        yAxis: { type: 'value', minInterval: 1, axisLabel: { fontSize: 10 } },
+        series: [{ type: 'line', data: values, smooth: true, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(30,142,62,0.5)' }, { offset: 1, color: 'rgba(30,142,62,0.05)' }] } }, itemStyle: { color: '#1e8e3e' } }]
+    }, true);
 }
 function renderTimeFilterTags() {
     const container = document.getElementById('timeFilterTags');
@@ -561,7 +577,24 @@ function switchTab(tab) {
         body.innerHTML = '<div class="arch-section"><div class="arch-section-title"><i class="fas fa-check-double"></i> 销号信息</div><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + cfg.class + '">' + cfg.label + '</span></div></div><div class="arch-row"><div class="arch-label">申请时间</div><div class="arch-value">' + (info.applyTime || '未申请') + '</div></div><div class="arch-row"><div class="arch-label">审核时间</div><div class="arch-value">' + (info.reviewTime || '待审核') + '</div></div><div class="arch-row"><div class="arch-label">审核人</div><div class="arch-value">' + (info.reviewer || '-') + '</div></div><div class="arch-row"><div class="arch-label">备注</div><div class="arch-value">' + (info.note || '-') + '</div></div><div class="arch-row"><div class="arch-label">证明文件</div><div class="arch-value">' + (info.certFiles && info.certFiles.length ? info.certFiles.map(f => '<span class="file-tag"><i class="fas fa-file-alt"></i> ' + f + '</span>').join(' ') : '暂无') + '</div></div></div>';
     }
 }
+function togglePanel(id, collapsedClass, toggleIconSelector, openIcon, closeIcon) {
+    const el = document.getElementById(id);
+    const icon = document.querySelector(toggleIconSelector);
+    if (!el) return;
+    el.classList.toggle(collapsedClass);
+    const isCollapsed = el.classList.contains(collapsedClass);
+    if (icon) icon.className = 'fas ' + (isCollapsed ? openIcon : closeIcon);
+    setTimeout(() => { if (leftChart) leftChart.resize(); if (streetRankingChart) streetRankingChart.resize(); if (measurePieChart) measurePieChart.resize(); }, 260);
+}
+function bindPanelToggles() {
+    const bind = (id, ...args) => { const el = document.getElementById(id); if (el) el.addEventListener('click', () => togglePanel(...args)); };
+    bind('leftPanelToggle', 'leftPanel', 'collapsed', '#leftPanelToggle i', 'fa-chevron-right', 'fa-chevron-left');
+    bind('dashToggle', 'dashboard', 'collapsed', '#dashToggle i', 'fa-chevron-left', 'fa-chevron-right');
+    bind('legendToggle', 'mapLegend', 'collapsed', '#legendToggle i', 'fa-chevron-right', 'fa-chevron-left');
+    bind('statsToggle', 'statsContent', 'collapsed', '#statsToggle i', 'fa-chevron-up', 'fa-chevron-down');
+}
 function bindEvents() {
+    bindPanelToggles();
     document.querySelectorAll('.layer-btn').forEach(btn => btn.addEventListener('click', () => switchLayer(btn.dataset.layer)));
     document.querySelectorAll('.chart-tab').forEach(tab => tab.addEventListener('click', () => { document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active')); tab.classList.add('active'); renderLeftChart(); renderList(); }));
     document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
