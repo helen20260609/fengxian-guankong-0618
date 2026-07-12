@@ -714,11 +714,11 @@
                 }
             },
             project: {
-                columns: ['工程措施', '实施拟采用的政策路径', '其他实施拟采用政策路径', '细化工程措施方案', '开始时间', '结束时间', '负责人信息', '联系电话', '工程措施实施照片', '工程措施完成照片', '措施是否完成', '备注', '填报人', '填报时间'],
+                columns: ['工程措施', '措施类型', '实施范围', '实施拟采用的政策路径', '其他实施拟采用政策路径', '细化工程措施方案', '开工时间', '竣工时间', '施工单位', '施工负责人', '联系电话', '工程概算（万元）', '资金来源', '经审核的施工方案文件', '设计图纸', '施工组织设计', '安全专项方案', '基础验收记录', '主体验收记录', '材料进场验收记录', '工程措施实施照片', '竣工验收报告', '验收结论', '验收人员', '验收日期', '整改后照片', '工程措施完成照片', '措施是否完成', '备注', '填报人', '填报时间'],
                 rows: [
-                    ['承重墙裂缝灌浆加固、屋面防水重做', '区级修缮工程补贴', '—', '采用压力灌浆封闭裂缝，屋面重新铺设防水卷材', '2024-08-01', '2024-09-30', '王建军', '139-5678-1234', '—', '—', '否', '已进场施工，进度约20%', '王建军', '2024-08-01 08:00']
+                    ['维修加固', '承重墙裂缝灌浆加固、屋面防水重做', '整栋房屋主体及屋面', '区级修缮工程补贴', '—', '采用压力灌浆封闭裂缝，屋面重新铺设防水卷材', '2024-08-01', '2024-09-30', '奉贤区房屋修缮工程公司', '王建军', '139-5678-1234', '12.5', '区级修缮补贴60%+业主自筹40%', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '—', '否', '已进场施工，进度约20%', '王建军', '2024-08-01 08:00']
                 ]
-            }
+            },
         };
 
         const timelineSteps = [
@@ -905,10 +905,13 @@
                 columns.indexOf('管理措施实施照片'),
                 columns.indexOf('管理措施完成照片（最少上传两张照片）'),
                 columns.indexOf('工程措施实施照片'),
-                columns.indexOf('工程措施完成照片')
+                columns.indexOf('工程措施完成照片'),
+                columns.indexOf('整改后照片')
             ].filter(i => i >= 0);
-            const fullWidthIndexes = [requirementIndex, measureIndex].concat(photoIndexes).filter(i => i >= 0);
+            const fileIndexes = columns.map((c, i) => (c && (c.includes('文件') || c.includes('图纸') || c.includes('方案') || c.includes('报告') || c.includes('记录'))) ? i : -1).filter(i => i >= 0);
+            const fullWidthIndexes = [requirementIndex, measureIndex].concat(photoIndexes).concat(fileIndexes).filter(i => i >= 0);
             const isImageUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
+            const isFileUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:') || v.startsWith('http') || v.endsWith('.pdf') || v.endsWith('.doc') || v.endsWith('.docx') || v.endsWith('.xls') || v.endsWith('.xlsx') || v.endsWith('.zip') || v.endsWith('.rar') || v.endsWith('.dwg'));
             const gridHtml = columns.map((c, i) => {
                 const isFullWidth = fullWidthIndexes.includes(i);
                 let valueHtml = '';
@@ -916,6 +919,13 @@
                     const urls = (rows[i] || '').split(',').map(s => s.trim()).filter(isImageUrl);
                     if (urls.length) {
                         valueHtml = '<div class="info-value photo-value photo-grid">' + urls.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>';
+                    } else {
+                        valueHtml = '<div class="info-value empty">—</div>';
+                    }
+                } else if (fileIndexes.includes(i)) {
+                    const urls = (rows[i] || '').split(',').map(s => s.trim()).filter(isFileUrl);
+                    if (urls.length) {
+                        valueHtml = '<div class="info-value photo-value photo-grid">' + urls.map((u, idx) => '<a href="' + u + '" target="_blank" class="photo-btn" style="margin-right:6px;"><i class="fas fa-file"></i> 附件 ' + (idx + 1) + '</a>').join('') + '</div>';
                     } else {
                         valueHtml = '<div class="info-value empty">—</div>';
                     }
@@ -1631,31 +1641,57 @@
             const data = measureData.project;
             const rows = data.rows[0] || [];
             const projectIndex = data.columns.indexOf('工程措施');
+            const measureTypeIndex = data.columns.indexOf('措施类型');
+            const dateIndexes = ['开工时间', '竣工时间', '验收日期'].map(c => data.columns.indexOf(c)).filter(i => i >= 0);
             const photoIndexes = data.columns.map((c, i) => (c && c.includes('照片')) ? i : -1).filter(i => i >= 0);
-            const projectOptions = ['拆除重建', '维修加固'];
-            const specialIndexes = [projectIndex].concat(photoIndexes);
+            const fileIndexes = data.columns.map((c, i) => (c && (c.includes('文件') || c.includes('图纸') || c.includes('方案') || c.includes('报告') || c.includes('记录'))) ? i : -1).filter(i => i >= 0);
+            const projectOptions = [
+                { value: '拆除重建', label: '拆除重建（危房整体拆除后重建）' },
+                { value: '维修加固', label: '维修加固（对房屋结构进行加固维修）' },
+                { value: '局部改造', label: '局部改造（对危险部位进行改造）' },
+                { value: '防护设施增设', label: '防护设施增设（加装防护设施）' }
+            ];
+            const specialIndexes = [projectIndex, measureTypeIndex].concat(photoIndexes).concat(fileIndexes);
             const isImageUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
+            const isFileUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:') || v.startsWith('http') || v.endsWith('.pdf') || v.endsWith('.doc') || v.endsWith('.docx') || v.endsWith('.xls') || v.endsWith('.xlsx') || v.endsWith('.zip') || v.endsWith('.rar') || v.endsWith('.dwg'));
             const gridHtml = data.columns.map((c, i) => {
                 let inputHtml = '';
+                const val = (rows[i] || '').replace(/"/g, '&quot;');
                 if (i === projectIndex) {
                     const currentValue = (rows[i] || '').replace(/"/g, '&quot;');
-                    const options = projectOptions.map(o => '<option value="' + o + '"' + (o === currentValue ? ' selected' : '') + '>' + o + '</option>').join('');
+                    const options = projectOptions.map(o => '<option value="' + o.value + '"' + (o.value === currentValue ? ' selected' : '') + '>' + o.label + '</option>').join('');
                     inputHtml = '<select class="form-input" data-idx="' + i + '">' + options + '</select>';
                 } else if (photoIndexes.includes(i)) {
-                    const val = rows[i] || '';
                     const imageUrls = val.split(',').map(s => s.trim()).filter(isImageUrl);
                     let thumbHtml = '';
                     if (imageUrls.length) {
                         thumbHtml = '<div class="file-thumb-preview">' + imageUrls.map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>';
                     }
                     inputHtml = '<div class="file-upload-wrap" data-idx="' + i + '">' +
-                        '<input class="form-input file-url-input" type="text" data-idx="' + i + '" value="' + val.replace(/"/g, '&quot;') + '" placeholder="图片 URL 或将图片拖入下方">' +
+                        '<input class="form-input file-url-input" type="text" data-idx="' + i + '" value="' + val + '" placeholder="图片 URL 或将图片拖入下方">' +
                         '<input class="file-upload-input" type="file" accept="image/*" multiple data-idx="' + i + '" onchange="handleMeasurePhotoUpload(this)">' +
                         '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传图片</div>' +
                         thumbHtml +
                         '</div>';
+                } else if (fileIndexes.includes(i)) {
+                    const fileUrls = val.split(',').map(s => s.trim()).filter(isFileUrl);
+                    let fileListHtml = '';
+                    if (fileUrls.length) {
+                        fileListHtml = '<div class="file-list-preview">' + fileUrls.map((u, idx) => '<div class="file-list-item"><i class="fas fa-file"></i> <a href="' + u + '" target="_blank">附件 ' + (idx + 1) + '</a></div>').join('') + '</div>';
+                    }
+                    inputHtml = '<div class="file-upload-wrap" data-idx="' + i + '">' +
+                        '<input class="form-input file-url-input" type="text" data-idx="' + i + '" value="' + val + '" placeholder="文件 URL 或将文件拖入下方">' +
+                        '<input class="file-upload-input" type="file" multiple data-idx="' + i + '" onchange="handleMeasureFileUpload(this)">' +
+                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传文件</div>' +
+                        fileListHtml +
+                        '</div>';
+                } else if (dateIndexes.includes(i)) {
+                    inputHtml = '<div class="date-input-wrap">' +
+                        '<input class="form-input" type="date" data-idx="' + i + '" value="' + normalizeDateValue(val) + '" placeholder="选择日期">' +
+                        '<i class="fas fa-calendar-alt date-icon"></i>' +
+                        '</div>';
                 } else {
-                    inputHtml = '<input class="form-input" type="text" data-idx="' + i + '" value="' + (rows[i] || '').replace(/"/g, '&quot;') + '">';
+                    inputHtml = '<input class="form-input" type="text" data-idx="' + i + '" value="' + val + '">';
                 }
                 const fullWidth = specialIndexes.includes(i) ? 'form-item-full' : '';
                 return '<div class="form-item ' + fullWidth + '">' +
@@ -1665,6 +1701,63 @@
             }).join('');
             document.getElementById('measureEditModalForm').innerHTML = '<div class="form-grid">' + gridHtml + '</div>';
             bindMeasurePhotoDropzones();
+            bindMeasureFileDropzones();
+        }
+
+        function handleMeasureFileUpload(input) {
+            const files = input.files;
+            if (!files || files.length === 0) return;
+            const wrap = input.closest('.file-upload-wrap');
+            const urlInput = wrap.querySelector('.file-url-input');
+            const previews = [];
+            const dataUrls = [];
+            Array.from(files).forEach((file, idx) => {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        dataUrls.push(e.target.result);
+                        if (dataUrls.length === files.length) {
+                            urlInput.value = dataUrls.join(',');
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    dataUrls.push(file.name);
+                    if (dataUrls.length === files.length) {
+                        urlInput.value = dataUrls.join(',');
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }
+            });
+        }
+
+        function bindMeasureFileDropzones() {
+            document.querySelectorAll('#measureEditModalForm .file-upload-wrap').forEach(wrap => {
+                const input = wrap.querySelector('.file-upload-input');
+                const dropzone = wrap.querySelector('.file-upload-dropzone');
+                if (!input || !dropzone) return;
+                dropzone.addEventListener('click', () => input.click());
+                ['dragenter', 'dragover'].forEach(event => {
+                    dropzone.addEventListener(event, (e) => {
+                        e.preventDefault();
+                        dropzone.classList.add('dragover');
+                    });
+                });
+                ['dragleave', 'drop'].forEach(event => {
+                    dropzone.addEventListener(event, (e) => {
+                        e.preventDefault();
+                        dropzone.classList.remove('dragover');
+                    });
+                });
+                dropzone.addEventListener('drop', (e) => {
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        input.files = files;
+                        handleMeasureFileUpload(input);
+                    }
+                });
+            });
         }
 
         function bindMeasurePhotoDropzones() {
