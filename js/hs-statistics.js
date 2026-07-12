@@ -1,18 +1,31 @@
 
-        const baseData = [
-            { no: 'FX-NQ-001', name: '南桥镇·张翁庙村5组12号', street: '南桥镇', address: '上海市奉贤区南桥镇张翁庙村5组12号', category: '砖混', year: 1978, risk: 'danger', lat: 30.918, lng: 121.472, owner: '张建国', community: '张翁庙村', houseType: '农村自建房', rectDeadline: '2025-05-30', completeStatus: '整治中', completeDate: '', manageMeasure: 2, projectMeasure: 1, totalTask: 3, doneTask: 1, fundUsed: 50000, fundTotal: 180000, overdue: true },
-            { no: 'FX-FC-002', name: '奉城镇·洪庙村2组8号', street: '奉城镇', address: '上海市奉贤区奉城镇洪庙村2组8号', category: '砖木', year: 1985, risk: 'major', lat: 30.953, lng: 121.553, owner: '李秀英', community: '洪庙村', houseType: '农村自建房', rectDeadline: '2025-06-15', completeStatus: '待整治', completeDate: '', manageMeasure: 1, projectMeasure: 0, totalTask: 1, doneTask: 0, fundUsed: 0, fundTotal: 45000, overdue: false },
-            { no: 'FX-ST-003', name: '四团镇·五四村7组3号', street: '四团镇', address: '上海市奉贤区四团镇五四村7组3号', category: '砖混', year: 1992, risk: 'danger', lat: 30.849, lng: 121.723, owner: '王志强', community: '五四村', houseType: '农村自建房', rectDeadline: '2025-04-20', completeStatus: '已完成', completeDate: '2025-04-18', manageMeasure: 2, projectMeasure: 2, totalTask: 4, doneTask: 4, fundUsed: 160000, fundTotal: 200000, overdue: false },
-            { no: 'FX-ZL-004', name: '柘林镇·新寺村1组6号', street: '柘林镇', address: '上海市奉贤区柘林镇新寺村1组6号', category: '框架', year: 2001, risk: 'safe', lat: 30.814, lng: 121.422, owner: '陈美华', community: '新寺村', houseType: '新建住宅', rectDeadline: '2025-12-31', completeStatus: '已完成', completeDate: '2025-05-10', manageMeasure: 0, projectMeasure: 0, totalTask: 0, doneTask: 0, fundUsed: 0, fundTotal: 0, overdue: false },
-            { no: 'FX-ZX-005', name: '庄行镇·潘垫村3组15号', street: '庄行镇', address: '上海市奉贤区庄行镇潘垫村3组15号', category: '砖混', year: 1988, risk: 'warning', lat: 30.895, lng: 121.381, owner: '刘大海', community: '潘垫村', houseType: '农村自建房', rectDeadline: '2025-07-31', completeStatus: '整治中', completeDate: '', manageMeasure: 1, projectMeasure: 0, totalTask: 1, doneTask: 0, fundUsed: 3000, fundTotal: 12000, overdue: false },
-            { no: 'FX-JH-006', name: '金汇镇·明星村9组7号', street: '金汇镇', address: '上海市奉贤区金汇镇明星村9组7号', category: '砖木', year: 1975, risk: 'danger', lat: 30.976, lng: 121.491, owner: '赵桂花', community: '明星村', houseType: '农村自建房', rectDeadline: '2025-03-15', completeStatus: '整治中', completeDate: '', manageMeasure: 2, projectMeasure: 1, totalTask: 3, doneTask: 1, fundUsed: 80000, fundTotal: 250000, overdue: true },
-            { no: 'FX-QC-007', name: '青村镇·李窑村6组9号', street: '青村镇', address: '上海市奉贤区青村镇李窑村6组9号', category: '砖混', year: 1996, risk: 'major', lat: 30.867, lng: 121.583, owner: '孙明华', community: '李窑村', houseType: '农村自建房', rectDeadline: '2025-06-30', completeStatus: '已完成', completeDate: '2025-06-20', manageMeasure: 1, projectMeasure: 1, totalTask: 2, doneTask: 2, fundUsed: 70000, fundTotal: 90000, overdue: false },
-            { no: 'FX-HW-008', name: '海湾镇·星火村2组11号', street: '海湾镇', address: '上海市奉贤区海湾镇星火村2组11号', category: '砖混', year: 1982, risk: 'danger', lat: 30.804, lng: 121.512, owner: '周志军', community: '星火村', houseType: '农村自建房', rectDeadline: '2025-05-01', completeStatus: '待整治', completeDate: '', manageMeasure: 1, projectMeasure: 1, totalTask: 2, doneTask: 0, fundUsed: 0, fundTotal: 80000, overdue: true },
-            { no: 'FX-NQ-009', name: '南桥镇·杨王村1组3号', street: '南桥镇', address: '上海市奉贤区南桥镇杨王村1组3号', category: '框架', year: 2005, risk: 'safe', lat: 30.936, lng: 121.458, owner: '吴秀英', community: '杨王村', houseType: '新建住宅', rectDeadline: '2025-12-31', completeStatus: '已完成', completeDate: '2025-06-01', manageMeasure: 0, projectMeasure: 0, totalTask: 0, doneTask: 0, fundUsed: 0, fundTotal: 0, overdue: false },
-            { no: 'FX-FC-010', name: '奉城镇·久茂村9组5号', street: '奉城镇', address: '上海市奉贤区奉城镇久茂村9组5号', category: '砖木', year: 1990, risk: 'warning', lat: 30.962, lng: 121.568, owner: '郑国良', community: '久茂村', houseType: '农村自建房', rectDeadline: '2025-08-15', completeStatus: '待整治', completeDate: '', manageMeasure: 1, projectMeasure: 0, totalTask: 1, doneTask: 0, fundUsed: 0, fundTotal: 15000, overdue: false },
-            { no: 'FX-ST-011', name: '四团镇·三坎村4组2号', street: '四团镇', address: '上海市奉贤区四团镇三坎村4组2号', category: '砖混', year: 1986, risk: 'major', lat: 30.871, lng: 121.701, owner: '杨建华', community: '三坎村', houseType: '农村自建房', rectDeadline: '2025-07-20', completeStatus: '整治中', completeDate: '', manageMeasure: 1, projectMeasure: 1, totalTask: 2, doneTask: 1, fundUsed: 30000, fundTotal: 75000, overdue: false },
-            { no: 'FX-ZL-012', name: '柘林镇·营房村8组4号', street: '柘林镇', address: '上海市奉贤区柘林镇营房村8组4号', category: '框架', year: 1998, risk: 'safe', lat: 30.827, lng: 121.439, owner: '何翠兰', community: '营房村', houseType: '新建住宅', rectDeadline: '2025-12-31', completeStatus: '已完成', completeDate: '2025-05-25', manageMeasure: 0, projectMeasure: 0, totalTask: 0, doneTask: 0, fundUsed: 0, fundTotal: 0, overdue: false }
-        ];
+        const baseData = (() => {
+            const recs = getAllHouseRecords();
+            return recs.map(r => ({
+                no: r.no,
+                name: r.name,
+                street: r.street,
+                address: r.address,
+                category: r.category,
+                year: r.year,
+                risk: r.risk,
+                owner: r.owner,
+                community: r.community,
+                houseType: r.houseType,
+                rectDeadline: r.rectDeadline,
+                completeDate: r.completeDate,
+                completeStatus: r.governStatus,
+                manageMeasure: r.manageMeasure,
+                projectMeasure: r.projectMeasure,
+                totalTask: r.totalTask,
+                doneTask: r.doneTask,
+                fundUsed: r.fundUsed,
+                fundTotal: r.fundTotal,
+                overdue: r.overdue,
+                lat: r.lat,
+                lng: r.lng
+            }));
+        })();
 
         const projectTypeNames = ['结构加固', '屋面修缮', '基础加固', '墙体修复', '排水改造', '电气改造', '消防改造'];
         const projectCompanyNames = ['上海建工集团', '奉贤城建公司', '华建工程公司', '东方建设集团', ' municipal engineering 公司'];

@@ -1,17 +1,30 @@
-const baseData = [
-    { no: 'FX-NQ-001', name: '南桥镇·张翁庙村5组12号', street: '南桥镇', community: '张翁庙村', address: '上海市奉贤区南桥镇张翁庙村5组12号', category: '砖混', year: 1978, risk: 'danger', governance: 'overdue', elimination: 'pending', owner: '张建国', lat: 30.918, lng: 121.456, responsibleDept: '南桥镇村镇办', responsiblePerson: '王建军', progress: 0, hazards: [{ part: '东侧承重墙', type: '结构裂缝', desc: '纵向裂缝长约1.2m', level: '一般风险' }, { part: '屋面', type: '渗漏', desc: '局部渗漏', level: '一般风险' }, { part: '公共空间', type: '消防设施', desc: '缺失灭火器', level: '较大风险' }], measures: [{ type: 'management', name: '设置警戒标识', status: 'done' }, { type: 'engineering', name: '承重墙裂缝灌浆', status: 'doing' }, { type: 'engineering', name: '屋面防水重做', status: 'pending' }], eliminationInfo: { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '尚未提交销号申请' } },
-    { no: 'FX-FC-002', name: '奉城镇·洪庙村2组8号', street: '奉城镇', community: '洪庙村', address: '上海市奉贤区奉城镇洪庙村2组8号', category: '砖木', year: 1985, risk: 'major', governance: 'doing', elimination: 'review', owner: '李秀英', lat: 30.942, lng: 121.512, responsibleDept: '奉城镇住房保障办', responsiblePerson: '陈国华', progress: 55, hazards: [{ part: '地基基础', type: '不均匀沉降', desc: '南侧沉降约3cm', level: '较大风险' }], measures: [{ type: 'management', name: '监测裂缝', status: 'doing' }, { type: 'engineering', name: '地基注浆', status: 'doing' }], eliminationInfo: { applyTime: '2026-07-02', reviewTime: null, reviewer: null, certFiles: ['地基注浆施工记录.pdf'], note: '已申请，待区级审核' } },
-    { no: 'FX-ST-003', name: '四团镇·五四村7组3号', street: '四团镇', community: '五四村', address: '上海市奉贤区四团镇五四村7组3号', category: '砖混', year: 1975, risk: 'danger', governance: 'pending', elimination: 'pending', owner: '王志强', lat: 30.965, lng: 121.548, responsibleDept: '四团镇城建中心', responsiblePerson: '赵明', progress: 0, hazards: [{ part: '整体结构', type: '倾斜', desc: '整体向东倾斜约1.5%', level: '重大风险' }, { part: '木构架', type: '腐朽', desc: '木构架虫蛀腐朽', level: '较大风险' }], measures: [{ type: 'management', name: '停止使用', status: 'done' }, { type: 'engineering', name: '整体纠偏', status: 'pending' }], eliminationInfo: { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '整治尚未完成，未申请销号' } },
-    { no: 'FX-ZL-004', name: '柘林镇·新寺村1组6号', street: '柘林镇', community: '新寺村', address: '上海市奉贤区柘林镇新寺村1组6号', category: '框架', year: 1992, risk: 'safe', governance: 'done', elimination: 'done', owner: '陈美华', lat: 30.884, lng: 121.493, responsibleDept: '柘林镇村镇办', responsiblePerson: '孙丽', progress: 100, hazards: [], measures: [{ type: 'management', name: '日常巡查', status: 'done' }], eliminationInfo: { applyTime: '2026-03-15', reviewTime: '2026-03-22', reviewer: '区住建局 周敏', certFiles: ['销号申请表.pdf','整治完成照片.zip','第三方鉴定报告.pdf'], note: '审核通过，已销号' } },
-    { no: 'FX-ZX-005', name: '庄行镇·潘垫村3组15号', street: '庄行镇', community: '潘垫村', address: '上海市奉贤区庄行镇潘垫村3组15号', category: '砖木', year: 1980, risk: 'warning', governance: 'doing', elimination: 'rejected', owner: '刘大海', lat: 30.930, lng: 121.405, responsibleDept: '庄行镇房屋安全办', responsiblePerson: '周强', progress: 40, hazards: [{ part: '屋面', type: '渗漏', desc: '瓦片破损局部渗漏', level: '一般风险' }], measures: [{ type: 'engineering', name: '屋面瓦片更换', status: 'doing' }], eliminationInfo: { applyTime: '2026-06-10', reviewTime: '2026-06-12', reviewer: '区住建局 吴刚', certFiles: ['首次销号申请.pdf'], note: '屋面仍有渗漏痕迹，驳回整改' } },
-    { no: 'FX-JH-006', name: '金汇镇·明星村9组7号', street: '金汇镇', community: '明星村', address: '上海市奉贤区金汇镇明星村9组7号', category: '砖混', year: 1972, risk: 'danger', governance: 'overdue', elimination: 'pending', owner: '赵桂花', lat: 30.950, lng: 121.468, responsibleDept: '金汇镇城建中心', responsiblePerson: '吴斌', progress: 10, hazards: [{ part: '承重墙', type: '开裂', desc: '多处斜向裂缝', level: '重大风险' }, { part: '楼梯', type: '破损', desc: '木楼梯磨损', level: '一般风险' }], measures: [{ type: 'management', name: '限制使用', status: 'done' }, { type: 'engineering', name: '承重墙加固', status: 'pending' }, { type: 'engineering', name: '楼梯更换', status: 'pending' }], eliminationInfo: { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '逾期未整治，未申请销号' } },
-    { no: 'FX-QC-007', name: '青村镇·李窑村6组9号', street: '青村镇', community: '李窑村', address: '上海市奉贤区青村镇李窑村6组9号', category: '框架', year: 1988, risk: 'major', governance: 'doing', elimination: 'review', owner: '孙明华', lat: 30.920, lng: 121.535, responsibleDept: '青村镇村镇办', responsiblePerson: '郑伟', progress: 70, hazards: [{ part: '外墙', type: '饰面脱落', desc: '马赛克大面积空鼓', level: '较大风险' }], measures: [{ type: 'management', name: '安全通道', status: 'done' }, { type: 'engineering', name: '外墙重做', status: 'doing' }], eliminationInfo: { applyTime: '2026-07-08', reviewTime: null, reviewer: null, certFiles: ['外墙施工照片.pdf'], note: '本周提交销号申请' } },
-    { no: 'FX-HW-008', name: '海湾镇·星火村2组11号', street: '海湾镇', community: '星火村', address: '上海市奉贤区海湾镇星火村2组11号', category: '砖混', year: 1976, risk: 'danger', governance: 'pending', elimination: 'pending', owner: '周志军', lat: 30.855, lng: 121.520, responsibleDept: '海湾镇城建中心', responsiblePerson: '冯磊', progress: 0, hazards: [{ part: '基础', type: '沉降', desc: '基础沉降门窗变形', level: '重大风险' }], measures: [{ type: 'management', name: '人员撤离', status: 'done' }, { type: 'engineering', name: '基础托换', status: 'pending' }], eliminationInfo: { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '整治方案制定中，未申请' } },
-    { no: 'FX-NQ-009', name: '南桥镇·杨王村1组3号', street: '南桥镇', community: '杨王村', address: '上海市奉贤区南桥镇杨王村1组3号', category: '框架', year: 1995, risk: 'safe', governance: 'done', elimination: 'done', owner: '吴秀英', lat: 30.912, lng: 121.462, responsibleDept: '南桥镇村镇办', responsiblePerson: '王建军', progress: 100, hazards: [], measures: [{ type: 'management', name: '日常巡查', status: 'done' }], eliminationInfo: { applyTime: '2026-07-01', reviewTime: '2026-07-06', reviewer: '区住建局 周敏', certFiles: ['销号申请表.pdf','整治照片.pdf'], note: '本月完成销号' } },
-    { no: 'FX-FC-010', name: '奉城镇·久茂村9组5号', street: '奉城镇', community: '久茂村', address: '上海市奉贤区奉城镇久茂村9组5号', category: '砖木', year: 1983, risk: 'warning', governance: 'doing', elimination: 'review', owner: '郑国良', lat: 30.938, lng: 121.518, responsibleDept: '奉城镇住房保障办', responsiblePerson: '陈国华', progress: 60, hazards: [{ part: '木柱', type: '腐朽', desc: '木柱根部腐朽', level: '一般风险' }], measures: [{ type: 'engineering', name: '木柱墩接', status: 'doing' }], eliminationInfo: { applyTime: '2026-05-20', reviewTime: null, reviewer: null, certFiles: ['木柱墩接记录.pdf'], note: '本季度申请，待审核' } },
-    { no: 'FX-ST-011', name: '四团镇·三坎村4组2号', street: '四团镇', community: '三坎村', address: '上海市奉贤区四团镇三坎村4组2号', category: '砖混', year: 1979, risk: 'major', governance: 'doing', elimination: 'rejected', owner: '杨建华', lat: 30.970, lng: 121.555, responsibleDept: '四团镇城建中心', responsiblePerson: '赵明', progress: 30, hazards: [{ part: '墙体', type: '开裂', desc: '纵横墙交接处开裂', level: '较大风险' }], measures: [{ type: 'engineering', name: '裂缝灌浆', status: 'doing' }, { type: 'management', name: '动态监测', status: 'done' }], eliminationInfo: { applyTime: '2026-06-25', reviewTime: '2026-06-28', reviewer: '区住建局 李华', certFiles: ['销号申请.pdf'], note: '灌浆范围不足，驳回整改' } },
-    { no: 'FX-ZL-012', name: '柘林镇·营房村8组4号', street: '柘林镇', community: '营房村', address: '上海市奉贤区柘林镇营房村8组4号', category: '砖木', year: 1986, risk: 'safe', governance: 'done', elimination: 'done', owner: '何翠兰', lat: 30.890, lng: 121.500, responsibleDept: '柘林镇村镇办', responsiblePerson: '孙丽', progress: 100, hazards: [], measures: [{ type: 'management', name: '日常巡查', status: 'done' }], eliminationInfo: { applyTime: '2026-02-10', reviewTime: '2026-02-18', reviewer: '区住建局 王芳', certFiles: ['销号申请表.pdf','鉴定报告.pdf'], note: '年初完成销号' } }
-];
+initHouseArchSeed();
+const baseData = (() => {
+    const recs = getAllHouseRecords();
+    return recs.map(r => ({
+        no: r.no,
+        name: r.name,
+        street: r.street,
+        community: r.community,
+        address: r.address,
+        category: r.category,
+        year: r.year,
+        risk: r.risk,
+        governance: r.governance,
+        elimination: r.eliminationInfo ?
+            (r.closeStatus === '已通过' ? 'done' : r.closeStatus === '审核中' ? 'review' : r.closeStatus === '已驳回' ? 'rejected' : 'pending') :
+            'pending',
+        owner: r.owner,
+        lat: r.lat,
+        lng: r.lng,
+        responsibleDept: r.responsibleDept,
+        responsiblePerson: r.responsiblePerson,
+        progress: r.progress,
+        hazards: r.hazards || [],
+        measures: r.measures || [],
+        eliminationInfo: r.eliminationInfo || { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '尚未提交销号申请' }
+    }));
+})();
 
 let filteredData = [...baseData];
 let activeFilter = 'all';
