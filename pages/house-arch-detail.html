@@ -6,7 +6,112 @@
     <title>房屋建筑档案 - 房屋安全管理</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="../js/third-party-data.js"></script>
-    <style>
+    <script>
+        // =========================================================
+        // 房屋建筑档案状态联动数据层
+        // 作用：将治理流程中的管理措施、工程措施、整治档案
+        //       自动关联到房屋档案，并同步更新风险/治理状态
+        // =========================================================
+        const HOUSE_ARCH_KEY = 'houseArchData';
+        const CLOSE_APPLY_KEY = 'closeApplyData';
+
+        const DEFAULT_HOUSE_STATUS = {
+            no: '',
+            name: '',
+            owner: '',
+            street: '',
+            address: '',
+            riskLevel: '重大',            // 隐患等级：安全/一般/重大/已治理
+            governStatus: '整治中',       // 治理状态：待整治/整治中/已治理
+            currentMeasure: '',
+            managerName: '',
+            managerPhone: '',
+            manageRecords: [],            // 管理措施归档记录
+            projectRecords: [],           // 工程措施归档记录
+            qualityTrace: [],             // 质量追溯记录
+            archiveRecords: [],           // 整治档案归档记录
+            closeStatus: '未申请',        // 销号状态：未申请/待审核/审核中/已通过/已驳回
+            closeApplyTime: '',           // 销号申请时间
+            closeAuditTime: '',           // 销号审核时间
+            closeAuditor: '',             // 销号审核人
+            closeAuditOpinion: '',        // 销号审核意见
+            closeRejectReason: '',        // 销号驳回原因/整改要求
+            isRemovedFromFocus: false     // 是否已退出重点监控名单
+        };
+
+        function getUrlParam(key) {
+            return new URLSearchParams(location.search).get(key) || '';
+        }
+
+        function getHouseArchStorage() {
+            try {
+                const raw = localStorage.getItem(HOUSE_ARCH_KEY);
+                const parsed = raw ? JSON.parse(raw) : {};
+                return parsed && typeof parsed === 'object' ? parsed : {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function setHouseArchStorage(all) {
+            localStorage.setItem(HOUSE_ARCH_KEY, JSON.stringify(all));
+        }
+
+        function getCloseApplyStorage() {
+            try {
+                const raw = localStorage.getItem(CLOSE_APPLY_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function setCloseApplyStorage(list) {
+            localStorage.setItem(CLOSE_APPLY_KEY, JSON.stringify(list));
+        }
+
+        function generateCloseApplyId(prefix) {
+            const d = new Date();
+            const pad = n => n < 10 ? '0' + n : n;
+            return prefix + '-' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '-' + Math.floor(Math.random()*900 + 100);
+        }
+
+        function getCurrentHouseNo() {
+            const no = getUrlParam('no');
+            if (no) return no;
+            // 兼容旧页面使用 id 参数
+            return getUrlParam('id') || 'NF-2025-00001';
+        }
+
+        function getCurrentHouseArch() {
+            const no = getCurrentHouseNo();
+            const all = getHouseArchStorage();
+            if (!all[no]) {
+                all[no] = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS));
+                all[no].no = no;
+            }
+            // 确保所有数组字段存在
+            ['manageRecords','projectRecords','qualityTrace','archiveRecords'].forEach(k => {
+                if (!Array.isArray(all[no][k])) all[no][k] = [];
+            });
+            return all[no];
+        }
+
+        function saveCurrentHouseArch(status) {
+            const no = getCurrentHouseNo();
+            const all = getHouseArchStorage();
+            all[no] = status;
+            setHouseArchStorage(all);
+        }
+
+        function generateArchId(prefix) {
+            const d = new Date();
+            const pad = n => n < 10 ? '0' + n : n;
+            const ts = d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '-' +
+                       pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+            return prefix + '-' + ts + '-' + Math.floor(Math.random()*900 + 100);
+        }
+    </script>    <style>
         :root {
             --primary: #1a73e8;
             --primary-dark: #1557b0;
@@ -110,7 +215,7 @@
         .status-badge.safe { background: #e6f4ea; color: var(--safe); }
         .status-badge.info { background: var(--primary-light); color: var(--primary); }
         .status-measure { font-size: 13px; color: var(--text-primary); font-weight: 500; }
-        .progress-wrap { display: flex; align-items: center; gap: 10px; }
+        .progress-wrap { display: none; }
         .progress-bar { width: 100px; height: 8px; background: #e8eaed; border-radius: 4px; overflow: hidden; }
         .progress-fill { height: 100%; background: var(--primary); border-radius: 4px; }
         .progress-text { font-size: 14px; font-weight: 600; color: var(--primary); }
@@ -452,6 +557,79 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="closeApplyModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-paper-plane"></i> 提交销号申请</div>
+                <button class="modal-close" onclick="closeCloseApplyModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-item">
+                        <label class="form-label">申请人</label>
+                        <input class="form-input" id="closeApplyApplicant" type="text" value="李志强">
+                    </div>
+                    <div class="form-item">
+                        <label class="form-label">申请时间</label>
+                        <input class="form-input" id="closeApplyTime" type="text" value="">
+                    </div>
+                    <div class="form-item form-item-full">
+                        <label class="form-label">销号说明</label>
+                        <textarea class="form-input" id="closeApplyRemark" rows="3" placeholder="请填写隐患整治完成情况、验收结论等说明"></textarea>
+                    </div>
+                    <div class="form-item form-item-full">
+                        <label class="form-label">证明材料</label>
+                        <div class="file-upload-wrap" id="closeApplyFilesWrap">
+                            <input class="form-input file-url-input" type="text" id="closeApplyFiles" placeholder="图片 URL 逗号分隔">
+                            <input class="file-upload-input" type="file" accept="image/*" multiple onchange="handleCloseApplyPhotoUpload(this)">
+                            <div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传整改后照片、验收报告、检测报告等</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="closeCloseApplyModal()">取消</button>
+                <button class="modal-btn primary" onclick="submitCloseApply()"><i class="fas fa-paper-plane"></i> 提交申请</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="closeAuditModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title" id="closeAuditTitle"><i class="fas fa-gavel"></i> 审核销号申请</div>
+                <button class="modal-close" onclick="closeCloseAuditModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-item">
+                        <label class="form-label">审核结论</label>
+                        <select class="form-input" id="closeAuditConclusion">
+                            <option value="通过">通过</option>
+                            <option value="驳回">驳回</option>
+                        </select>
+                    </div>
+                    <div class="form-item">
+                        <label class="form-label">审核人</label>
+                        <input class="form-input" id="closeAuditAuditor" type="text" value="王建国">
+                    </div>
+                    <div class="form-item form-item-full">
+                        <label class="form-label">审核意见</label>
+                        <textarea class="form-input" id="closeAuditOpinionInput" rows="3" placeholder="请填写审核意见"></textarea>
+                    </div>
+                    <div class="form-item form-item-full" id="closeRejectReasonWrap" style="display:none;">
+                        <label class="form-label">驳回原因 / 整改要求</label>
+                        <textarea class="form-input" id="closeRejectReasonInput" rows="3" placeholder="请填写退回原因和整改要求"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="closeCloseAuditModal()">取消</button>
+                <button class="modal-btn primary" onclick="submitCloseAudit()"><i class="fas fa-gavel"></i> 确认审核</button>
+            </div>
+        </div>
+    </div>
+
     <div class="photo-viewer-overlay" id="photoViewerOverlay" onclick="closePhotoViewer()">
         <div class="photo-viewer-box" onclick="event.stopPropagation()">
             <button class="photo-viewer-close" onclick="closePhotoViewer()">×</button>
@@ -654,7 +832,7 @@
             <div class="topbar-left">
                 <div>
                     <div class="topbar-title" id="topbarTitle">陈连明自住民居</div>
-                    <div class="topbar-sub" id="topbarSub">编号：NF-2025-00123 | 奉贤区西渡街道 · 灯塔村</div>
+                    <div class="topbar-sub" id="topbarSub">编号：NF-2025-00001 | 奉贤区南桥镇 · 解放路328号</div>
                 </div>
             </div>
             <div class="topbar-actions">
@@ -664,30 +842,8 @@
             </div>
         </div>
 
-        <div class="status-panel">
-            <div class="status-cell">
-                <div class="status-label">隐患等级</div>
-                <div class="status-badge danger">重大</div>
-            </div>
-            <div class="status-cell">
-                <div class="status-label">治理状态</div>
-                <div class="status-badge warning">整治中</div>
-            </div>
-            <div class="status-cell full">
-                <div class="status-label">当前措施</div>
-                <div class="status-measure">管理措施（停止使用） + 工程措施（维修加固）</div>
-            </div>
-            <div class="status-cell">
-                <div class="status-label">责任人</div>
-                <div class="status-value">李志强 <span style="font-weight:400;color:var(--text-secondary);font-size:12px;">138****1234</span></div>
-            </div>
-            <div class="status-cell">
-                <div class="status-label">进度</div>
-                <div class="progress-wrap">
-                    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-                    <div class="progress-text" id="progressText">0%</div>
-                </div>
-            </div>
+        <div class="status-panel" id="statusPanel">
+            <!-- 由 renderStatusPanel() 动态填充 -->
         </div>
 
         <div class="timeline-card" id="timelineCard">
@@ -754,7 +910,7 @@
 
         const basicData = {
             jbxx: [
-                ['房屋编号', 'NF-2025-00123'],
+                ['房屋编号', 'NF-2025-00001'],
                 ['房屋名称', '陈连明自住民居'],
                 ['房屋性质', '自住民居'],
                 ['所在区域', '奉贤区西渡街道'],
@@ -900,6 +1056,75 @@
         let currentSubTab = 'jbxx';
         let currentMeasureSubTab = 'manage';
         let currentSurveySubTab = 'survey1';
+        let currentHouseArch = getCurrentHouseArch();
+
+        const riskBadgeClass = {
+            '安全': 'safe',
+            '一般': 'warning',
+            '重大': 'major',
+            '较大': 'danger',
+            '已治理': 'safe'
+        };
+
+        const governBadgeClass = {
+            '待整治': 'info',
+            '整治中': 'warning',
+            '已治理': 'safe'
+        };
+
+        function syncHouseArchFromStatus() {
+            const s = currentHouseArch;
+            // 从当前页面已有静态数据中初始化一次（若未保存过）
+            if (!s.riskLevel || s.riskLevel === '安全') s.riskLevel = '重大';
+            if (!s.governStatus) s.governStatus = '整治中';
+            if (!s.currentMeasure) s.currentMeasure = '管理措施（停止使用） + 工程措施（维修加固）';
+            if (!s.managerName) s.managerName = '李志强';
+            if (!s.managerPhone) s.managerPhone = '138****1234';
+            saveCurrentHouseArch(s);
+        }
+
+        function renderStatusPanel() {
+            const s = currentHouseArch;
+            const panel = document.getElementById('statusPanel');
+            if (!panel) return;
+            const riskClass = riskBadgeClass[s.riskLevel] || 'danger';
+            const governClass = governBadgeClass[s.governStatus] || 'warning';
+            panel.innerHTML =
+                '<div class="status-cell"><div class="status-label">隐患等级</div><div class="status-badge ' + riskClass + '">' + (s.riskLevel || '—') + '</div></div>' +
+                '<div class="status-cell"><div class="status-label">治理状态</div><div class="status-badge ' + governClass + '">' + (s.governStatus || '—') + '</div></div>' +
+                '<div class="status-cell full"><div class="status-label">当前措施</div><div class="status-measure">' + (s.currentMeasure || '—') + '</div></div>' +
+                '<div class="status-cell"><div class="status-label">责任人</div><div class="status-value">' + (s.managerName || '—') + ' <span style="font-weight:400;color:var(--text-secondary);font-size:12px;">' + (s.managerPhone || '') + '</span></div></div>';
+        }
+
+        function updateStatusPanel(updates) {
+            currentHouseArch = { ...currentHouseArch, ...updates };
+            saveCurrentHouseArch(currentHouseArch);
+            renderStatusPanel();
+        }
+
+        function archiveManageMeasure(record) {
+            const s = currentHouseArch;
+            s.manageRecords.unshift(record);
+            saveCurrentHouseArch(s);
+        }
+
+        function archiveProjectMeasure(record) {
+            const s = currentHouseArch;
+            s.projectRecords.unshift(record);
+            saveCurrentHouseArch(s);
+        }
+
+        function addQualityTrace(record) {
+            const s = currentHouseArch;
+            s.qualityTrace.unshift(record);
+            saveCurrentHouseArch(s);
+        }
+
+        function archiveCloseRecord(record) {
+            const s = currentHouseArch;
+            s.archiveRecords.unshift(record);
+            saveCurrentHouseArch(s);
+        }
 
         function renderSidebar() {
             const menu = document.getElementById('sidebarMenu');
@@ -920,8 +1145,8 @@
         }
 
         function renderContent() {
-            updateProgress();
             renderTimeline();
+            renderStatusPanel();
             const area = document.getElementById('contentArea');
             if (currentSidebar === 'basic') {
                 area.innerHTML = renderBasicContent();
@@ -935,17 +1160,6 @@
             } else {
                 area.innerHTML = renderTableContent(currentSidebar);
             }
-        }
-
-        function updateProgress() {
-            const currentIndex = timelineSteps.findIndex(s => s.key === currentSidebar);
-            const activeIndex = currentIndex === -1 ? 0 : currentIndex;
-            const total = timelineSteps.length;
-            const percent = Math.round((activeIndex + 1) / total * 100);
-            const fill = document.getElementById('progressFill');
-            const text = document.getElementById('progressText');
-            if (fill) fill.style.width = percent + '%';
-            if (text) text.textContent = percent + '%';
         }
 
         function renderTimeline() {
@@ -1304,6 +1518,8 @@
         function renderAuditRows(list, showSeq) {
             if (!list || list.length === 0) return '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);">暂无数据</td></tr>';
             return list.map((item, idx) => {
+                const reportVal = item.report || '';
+                const hasFile = reportVal && (reportVal.startsWith('data:') || reportVal.startsWith('http'));
                 return '<tr>' +
                     (showSeq ? '<td>' + (item.seq || (idx + 1)) + '</td>' : '') +
                     '<td>' + (item.submitter || '-') + '</td>' +
@@ -1311,7 +1527,7 @@
                     '<td>' + (item.auditTime || '-') + '</td>' +
                     '<td>' + (item.auditor || '-') + '</td>' +
                     '<td>' + (item.conclusion || '-') + '</td>' +
-                    '<td>' + (item.report === '查看报告' ? '<button class="photo-btn">查看报告</button>' : (item.report || '—')) + '</td>' +
+                    '<td>' + (hasFile ? '<button class="photo-btn" onclick="viewPhotoOnline(\'' + reportVal.split(',')[0].trim() + '\')">查看报告</button>' : (reportVal || '—')) + '</td>' +
                     '<td>' + (item.remark || '-') + '</td>' +
                     '</tr>';
             }).join('');
@@ -1357,11 +1573,29 @@
                     '<tbody>' + renderAuditRows(data.auditList, true) + '</tbody></table></div>';
             }
             if (key === 'close') {
+                const s = currentHouseArch;
+                const closeStatusClass = {
+                    '未申请': 'info',
+                    '待审核': 'warning',
+                    '审核中': 'warning',
+                    '已通过': 'safe',
+                    '已驳回': 'danger'
+                }[s.closeStatus] || 'info';
+                html += '<div class="info-section-title" style="margin-top:18px;"><i class="fas fa-clipboard-check"></i> 销号状态</div>' +
+                    '<div class="info-grid info-grid-table">' +
+                        '<div class="info-item"><div class="info-label">当前销号状态</div><div class="info-value"><span class="status-badge ' + closeStatusClass + '">' + (s.closeStatus || '未申请') + '</span></div></div>' +
+                        '<div class="info-item"><div class="info-label">申请时间</div><div class="info-value">' + (s.closeApplyTime || '—') + '</div></div>' +
+                        '<div class="info-item"><div class="info-label">审核时间</div><div class="info-value">' + (s.closeAuditTime || '—') + '</div></div>' +
+                        '<div class="info-item"><div class="info-label">审核人</div><div class="info-value">' + (s.closeAuditor || '—') + '</div></div>' +
+                        '<div class="info-item full-width"><div class="info-label">审核意见</div><div class="info-value">' + (s.closeAuditOpinion || '—') + '</div></div>' +
+                        (s.closeStatus === '已驳回' ? '<div class="info-item full-width"><div class="info-label">驳回原因 / 整改要求</div><div class="info-value" style="color:var(--danger);">' + (s.closeRejectReason || '—') + '</div></div>' : '') +
+                        '<div class="info-item"><div class="info-label">重点监控名单</div><div class="info-value">' + (s.isRemovedFromFocus ? '<span class="status-badge safe">已退出</span>' : '<span class="status-badge warning">监控中</span>') + '</div></div>' +
+                    '</div>';
                 html += '<div class="table-section-title">审核列表</div>' +
                     '<div class="table-wrap">' +
                     '<table class="arch-table" id="closeAuditTable">' +
                     '<thead><tr><th>提交人</th><th>提交时间</th><th>审核时间</th><th>审核人</th><th>审核结论</th><th>审核报告</th><th>备注</th></tr></thead>' +
-                    '<tbody>' + renderAuditRows(data.auditList, false) + '</tbody></table></div>';
+                    '<tbody>' + renderAuditRows(buildCloseAuditList(), false) + '</tbody></table></div>';
             }
             html += '</div>' +
             '</div>';
@@ -1370,9 +1604,21 @@
                     '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
                     '当前节点：<span class="bottom-node">' + item.title + '</span> | <i class="far fa-eye"></i> 查看/编辑' +
                 '</div>' +
-                '<div class="bottom-actions">' +
-                    '<button class="bottom-btn primary" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>' +
-                    '<button class="bottom-btn"><i class="fas fa-file-export"></i> 导出</button>' +
+                '<div class="bottom-actions">';
+            if (key === 'close') {
+                const s = currentHouseArch;
+                if (s.closeStatus === '未申请' || s.closeStatus === '已驳回') {
+                    html += '<button class="bottom-btn primary" onclick="openCloseApplyModal()"><i class="fas fa-paper-plane"></i> 提交销号申请</button>';
+                }
+                if (s.closeStatus === '待审核' || s.closeStatus === '审核中') {
+                    html += '<button class="bottom-btn" style="border-color:var(--safe);color:var(--safe);" onclick="openCloseAuditModal(true)"><i class="fas fa-check"></i> 通过</button>' +
+                        '<button class="bottom-btn" style="border-color:var(--danger);color:var(--danger);" onclick="openCloseAuditModal(false)"><i class="fas fa-times"></i> 驳回</button>';
+                }
+                html += '<button class="bottom-btn" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
+            } else {
+                html += '<button class="bottom-btn primary" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
+            }
+            html += '<button class="bottom-btn"><i class="fas fa-file-export"></i> 导出</button>' +
                 '</div>' +
             '</div>';
             return html;
@@ -1382,6 +1628,23 @@
         let surveyEditModalSubTab = 'survey1';
         let measureEditModalSubTab = 'manage';
         let commonEditKey = '';
+
+        function buildCloseAuditList() {
+            const applies = getCloseApplyStorage().filter(a => a.no === getCurrentHouseNo());
+            if (applies.length === 0) {
+                return tableData.close.auditList || [];
+            }
+            // 按申请时间倒序
+            return applies.slice().sort((a, b) => (b.applyTime || '').localeCompare(a.applyTime || '')).map(a => ({
+                submitter: a.applicant,
+                submitTime: a.applyTime,
+                auditTime: a.auditTime,
+                auditor: a.auditor,
+                conclusion: a.closeStatus === '已通过' || a.closeStatus === '已驳回' ? a.closeStatus : '待审核',
+                report: a.files || a.report || '',
+                remark: a.auditOpinion || a.rejectReason || a.remark || ''
+            }));
+        }
 
         function openBasicEditModal() {
             editModalSubTab = currentSubTab;
@@ -2034,12 +2297,101 @@
                         phone: document.getElementById('measureReminderPhone').value || data.baseValues[7] || ''
                     };
                 }
+                // 规则2：管理措施记录自动关联至房屋档案
+                const measureType = data.baseValues[0] || '停止使用';
+                const dutyUnit = data.baseValues[5] || '';
+                const dutyPerson = data.baseValues[6] || '';
+                const phone = data.baseValues[7] || '';
+                const startTime = data.baseValues[2] || '';
+                const planEnd = data.baseValues[3] || '';
+                const doneIndex = data.baseColumns.indexOf('措施是否完成');
+                const isDone = (data.baseValues[doneIndex] || '').trim() === '是';
+                const effectIndex = data.baseColumns.indexOf('措施效果评估');
+                const effect = data.baseValues[effectIndex] || '';
+                const record = {
+                    archId: generateArchId('MNG'),
+                    type: '管理措施',
+                    measureType: measureType,
+                    dutyUnit: dutyUnit,
+                    dutyPerson: dutyPerson,
+                    phone: phone,
+                    startTime: startTime,
+                    planEndTime: planEnd,
+                    isDone: isDone,
+                    effect: effect,
+                    saveTime: formatDateTime(new Date()),
+                    source: '整治措施-管理措施'
+                };
+                archiveManageMeasure(record);
+                // 同步状态面板
+                updateStatusPanel({
+                    currentMeasure: '管理措施（' + measureType + '） + 工程措施（维修加固）',
+                    managerName: dutyPerson,
+                    managerPhone: phone
+                });
             } else {
                 readProjectEditForm();
                 const data = measureData.project;
                 if (data.isMajorProject && !(data.expertOpinion && data.expertOpinion.expertId)) {
                     alert('本工程属于重大工程方案，必须关联专家评审意见。请先选择评审专家并填写意见。');
                     return;
+                }
+                // 规则3：工程措施记录自动关联至房屋档案，验收通过后更新风险等级为“已治理”
+                const row = data.rows[0] || [];
+                const projectIdx = data.columns.indexOf('工程措施');
+                const projectType = row[projectIdx] || '';
+                const companyIdx = data.columns.indexOf('施工单位');
+                const company = row[companyIdx] || data.orgName || '';
+                const personIdx = data.columns.indexOf('施工负责人');
+                const person = row[personIdx] || '';
+                const phoneIdx = data.columns.indexOf('联系电话');
+                const phone = row[phoneIdx] || '';
+                const startIdx = data.columns.indexOf('开工时间');
+                const endIdx = data.columns.indexOf('竣工时间');
+                const acceptIdx = data.columns.indexOf('验收结论');
+                const acceptConclusion = row[acceptIdx] || '';
+                const doneIdx = data.columns.indexOf('措施是否完成');
+                const isDone = (row[doneIdx] || '').trim() === '是';
+                const pass = isDone && /^(合格|通过|整改后合格|验收合格)/.test(acceptConclusion);
+                const projectRecord = {
+                    archId: generateArchId('PRJ'),
+                    type: '工程措施',
+                    projectType: projectType,
+                    company: company,
+                    person: person,
+                    phone: phone,
+                    startTime: row[startIdx] || '',
+                    endTime: row[endIdx] || '',
+                    acceptConclusion: acceptConclusion,
+                    isDone: isDone,
+                    saveTime: formatDateTime(new Date()),
+                    source: '整治措施-工程措施'
+                };
+                archiveProjectMeasure(projectRecord);
+                if (pass) {
+                    updateStatusPanel({
+                        riskLevel: '已治理',
+                        governStatus: '已治理',
+                        currentMeasure: '工程措施（' + projectType + '）已验收通过',
+                        managerName: person,
+                        managerPhone: phone
+                    });
+                    addQualityTrace({
+                        traceId: generateArchId('QTR'),
+                        type: '质量追溯',
+                        title: '工程措施竣工验收',
+                        content: '工程措施「' + projectType + '」已验收通过，施工单位：' + company + '，负责人：' + person + '。',
+                        happenTime: row[endIdx] || formatDateTime(new Date()),
+                        createTime: formatDateTime(new Date()),
+                        source: '工程措施验收'
+                    });
+                    alert('工程措施验收通过，房屋风险等级已更新为“已治理”，质量追溯记录已生成。');
+                } else {
+                    updateStatusPanel({
+                        currentMeasure: '工程措施（' + projectType + '）' + (isDone ? '已完成' : '进行中'),
+                        managerName: person,
+                        managerPhone: phone
+                    });
                 }
             }
             currentMeasureSubTab = measureEditModalSubTab;
@@ -2160,7 +2512,7 @@
             return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
         }
 
-        function openMeasureChangeAuditModal() {
+        function renderCommonPhotoThumbs(wrap, urls) {
             const flow = measureData.manage.changeFlow;
             const current = flow.current;
             if (!current || current.status !== 'pending') {
@@ -2405,6 +2757,25 @@
             });
             if (commonEditKey === 'accept' || commonEditKey === 'close') {
                 data.auditList = readCommonEditAuditList();
+            }
+            // 规则1：治理完成后（归档）自动关联至房屋档案，更新治理状态为“已治理”
+            if (commonEditKey === 'close') {
+                const closeTime = row && row[0] ? row[0] : formatDateTime(new Date());
+                const closePerson = row && row[1] ? row[1] : '李志强';
+                const closeResult = row && row[2] ? row[2] : '完成';
+                const closeRemark = row && row[3] ? row[3] : '';
+                archiveCloseRecord({
+                    archId: generateArchId('ARC'),
+                    type: '整治档案',
+                    closeTime: closeTime,
+                    closePerson: closePerson,
+                    closeResult: closeResult,
+                    closeRemark: closeRemark,
+                    saveTime: formatDateTime(new Date()),
+                    source: '整治闭环-归档'
+                });
+                updateStatusPanel({ governStatus: '已治理' });
+                alert('治理档案已归档，房屋治理状态已更新为“已治理”。');
             }
             closeCommonEditModal();
             renderSidebar();
@@ -3161,6 +3532,232 @@
             }
         }
 
+        // =========================================================
+        // 验收销号：申请与审核流程
+        // =========================================================
+        let closeAuditMode = true; // true = 通过, false = 驳回
+
+        function openCloseApplyModal() {
+            document.getElementById('closeApplyApplicant').value = currentHouseArch.managerName || '李志强';
+            document.getElementById('closeApplyTime').value = formatDateTime(new Date()).split(' ')[0];
+            document.getElementById('closeApplyRemark').value = '';
+            document.getElementById('closeApplyFiles').value = '';
+            const wrap = document.getElementById('closeApplyFilesWrap');
+            let thumb = wrap.querySelector('.file-thumb-preview');
+            if (thumb) thumb.innerHTML = '';
+            document.getElementById('closeApplyModal').classList.add('open');
+        }
+
+        function closeCloseApplyModal() {
+            document.getElementById('closeApplyModal').classList.remove('open');
+        }
+
+        async function handleCloseApplyPhotoUpload(input) {
+            const files = Array.from(input.files || []);
+            if (files.length === 0) return;
+            const invalid = files.find(f => !f.type.startsWith('image/'));
+            if (invalid) {
+                alert('请上传图片文件');
+                return;
+            }
+            const wrap = input.parentElement;
+            const urlInput = wrap.querySelector('.file-url-input');
+            const existingUrls = urlInput.value.split(',').map(s => s.trim()).filter(Boolean);
+            const readers = files.map(file => {
+                return new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.readAsDataURL(file);
+                });
+            });
+            Promise.all(readers).then(results => {
+                const allUrls = existingUrls.concat(results).filter((v, i, a) => a.indexOf(v) === i);
+                urlInput.value = allUrls.join(',');
+                renderCommonPhotoThumbs(wrap, allUrls);
+            });
+        }
+
+        function submitCloseApply() {
+            const applicant = document.getElementById('closeApplyApplicant').value.trim() || '李志强';
+            const applyTime = document.getElementById('closeApplyTime').value.trim() || formatDateTime(new Date());
+            const remark = document.getElementById('closeApplyRemark').value.trim();
+            const files = document.getElementById('closeApplyFiles').value.trim();
+            // 材料完整性校验：至少要求整改后照片、验收报告、检测报告之一
+            if (!files) {
+                alert('请至少上传整改后照片、验收报告或检测报告等证明材料。');
+                return;
+            }
+            if (!remark) {
+                alert('请填写销号说明。');
+                return;
+            }
+            const s = currentHouseArch;
+            s.closeStatus = '待审核';
+            s.closeApplyTime = applyTime;
+            s.closeAuditTime = '';
+            s.closeAuditor = '';
+            s.closeAuditOpinion = '';
+            s.closeRejectReason = '';
+            saveCurrentHouseArch(s);
+            // 同步到审核列表
+            const closeData = tableData.close;
+            closeData.auditList = closeData.auditList || [];
+            closeData.auditList.push({
+                submitter: applicant,
+                submitTime: applyTime,
+                auditTime: '',
+                auditor: '',
+                conclusion: '待审核',
+                report: files,
+                remark: remark
+            });
+            // 同步至独立销号申请清单
+            const applies = getCloseApplyStorage();
+            const existing = applies.find(a => a.no === getCurrentHouseNo());
+            if (existing) {
+                existing.closeStatus = '待审核';
+                existing.applicant = applicant;
+                existing.applyTime = applyTime;
+                existing.auditor = '';
+                existing.auditTime = '';
+                existing.auditOpinion = '';
+                existing.rejectReason = '';
+                existing.files = files;
+            } else {
+                applies.push({
+                    id: generateCloseApplyId('CLOSE'),
+                    no: getCurrentHouseNo(),
+                    name: s.name || '—',
+                    street: s.street || '—',
+                    riskLevel: s.riskLevel || '—',
+                    governStatus: s.governStatus || '—',
+                    closeStatus: '待审核',
+                    applicant: applicant,
+                    applyTime: applyTime,
+                    auditor: '',
+                    auditTime: '',
+                    auditOpinion: '',
+                    rejectReason: '',
+                    files: files
+                });
+            }
+            setCloseApplyStorage(applies);
+            archiveCloseRecord({
+                archId: generateArchId('ARC'),
+                type: '销号申请',
+                closeTime: applyTime,
+                closePerson: applicant,
+                closeResult: '待审核',
+                closeRemark: remark,
+                files: files,
+                saveTime: formatDateTime(new Date()),
+                source: '验收销项-申请'
+            });
+            closeCloseApplyModal();
+            renderSidebar();
+            renderContent();
+            alert('销号申请已提交，等待审核。');
+        }
+
+        function openCloseAuditModal(pass) {
+            closeAuditMode = pass;
+            document.getElementById('closeAuditTitle').innerHTML = pass ? '<i class="fas fa-check"></i> 通过销号申请' : '<i class="fas fa-times"></i> 驳回销号申请';
+            document.getElementById('closeAuditConclusion').value = pass ? '通过' : '驳回';
+            document.getElementById('closeAuditAuditor').value = '王建国';
+            document.getElementById('closeAuditOpinionInput').value = '';
+            document.getElementById('closeRejectReasonInput').value = '';
+            document.getElementById('closeRejectReasonWrap').style.display = pass ? 'none' : 'block';
+            document.getElementById('closeAuditModal').classList.add('open');
+        }
+
+        function closeCloseAuditModal() {
+            document.getElementById('closeAuditModal').classList.remove('open');
+        }
+
+        function submitCloseAudit() {
+            const conclusion = document.getElementById('closeAuditConclusion').value;
+            const auditor = document.getElementById('closeAuditAuditor').value.trim() || '王建国';
+            const opinion = document.getElementById('closeAuditOpinionInput').value.trim();
+            const rejectReason = document.getElementById('closeRejectReasonInput').value.trim();
+            if (!opinion) {
+                alert('请填写审核意见。');
+                return;
+            }
+            if (conclusion === '驳回' && !rejectReason) {
+                alert('请填写驳回原因 / 整改要求。');
+                return;
+            }
+            const s = currentHouseArch;
+            const auditTime = formatDateTime(new Date());
+            s.closeStatus = conclusion === '通过' ? '已通过' : '已驳回';
+            s.closeAuditTime = auditTime;
+            s.closeAuditor = auditor;
+            s.closeAuditOpinion = opinion;
+            s.closeRejectReason = rejectReason;
+            if (conclusion === '通过') {
+                s.governStatus = '已治理';
+                s.riskLevel = '无风险'; // 或 '低风险'，按业务规则
+                s.isRemovedFromFocus = true;
+            }
+            saveCurrentHouseArch(s);
+            // 同步审核列表最后一条
+            const closeData = tableData.close;
+            closeData.auditList = closeData.auditList || [];
+            const last = closeData.auditList[closeData.auditList.length - 1];
+            if (last) {
+                last.auditTime = auditTime;
+                last.auditor = auditor;
+                last.conclusion = conclusion;
+                last.remark = (opinion ? '审核意见：' + opinion : '') + (rejectReason ? '；驳回原因：' + rejectReason : '');
+            }
+            // 同步至独立销号申请清单
+            const applies = getCloseApplyStorage();
+            const existing = applies.find(a => a.no === getCurrentHouseNo());
+            if (existing) {
+                existing.closeStatus = conclusion === '通过' ? '已通过' : '已驳回';
+                existing.auditor = auditor;
+                existing.auditTime = auditTime;
+                existing.auditOpinion = opinion;
+                existing.rejectReason = conclusion === '驳回' ? rejectReason : '';
+                if (conclusion === '通过') {
+                    existing.governStatus = '已治理';
+                    existing.riskLevel = '无风险';
+                }
+            }
+            setCloseApplyStorage(applies);
+            archiveCloseRecord({
+                archId: generateArchId('ARC'),
+                type: '销号审核',
+                closeTime: auditTime,
+                closePerson: auditor,
+                closeResult: conclusion === '通过' ? '已通过' : '已驳回',
+                closeRemark: opinion + (rejectReason ? '；' + rejectReason : ''),
+                saveTime: auditTime,
+                source: '验收销项-审核'
+            });
+            closeCloseAuditModal();
+            renderSidebar();
+            renderContent();
+            if (conclusion === '通过') {
+                alert('销号审核已通过：房屋风险状态已更新为“已销号”，风险等级调整为“无风险”，并已退出重点监控名单。');
+            } else {
+                alert('销号申请已驳回：已记录驳回原因和整改要求，请申请人补充材料后重新提交。');
+            }
+        }
+
+        document.getElementById('closeAuditConclusion').addEventListener('change', function() {
+            document.getElementById('closeRejectReasonWrap').style.display = this.value === '驳回' ? 'block' : 'none';
+        });
+
+        document.getElementById('closeApplyModal').addEventListener('click', function(e) {
+            if (e.target === this) closeCloseApplyModal();
+        });
+
+        document.getElementById('closeAuditModal').addEventListener('click', function(e) {
+            if (e.target === this) closeCloseAuditModal();
+        });
+
+        syncHouseArchFromStatus();
         renderSidebar();
         renderContent();
     </script>

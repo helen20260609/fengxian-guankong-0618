@@ -1033,12 +1033,12 @@
             if (config.metrics.includes('table') || config.metrics.length > 0) {
                 const visibleHeaders = reportHeaders.filter(h => h.visible);
                 const ths = visibleHeaders.map(h => `<th style="width:${h.width}px">${h.label}</th>`).join('');
-                const tds = (row) => visibleHeaders.map(h => {
+                const tds = (row) => `<tr>${visibleHeaders.map(h => {
                     const key = h.key;
                     if (key === 'completionRate' || key === 'fundUsageRate') return `${row[key] || 0}%`;
                     if (key === 'fundUsed' || key === 'fundTotal') return (row[key] || 0).toLocaleString('zh-CN');
                     return row[key] !== undefined ? row[key] : '-';
-                }).map(v => `<td>${v}</td>`).join('');
+                }).map(v => `<td>${v}</td>`).join('')}</tr>`;
                 tableHtml = `<div class="report-section"><div class="report-section-title"><i class="fas fa-table"></i> 明细数据</div><table class="report-table"><thead><tr>${ths}</tr></thead><tbody>${rows.map(tds).join('')}${rows.length > 1 ? `<tr style="font-weight:600;background:#f7f8fa;">${visibleHeaders.map(h => {
                     if (h.key === 'dimension') return '<td>合计</td>';
                     if (totalRow[h.key] !== undefined) {
