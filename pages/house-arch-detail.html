@@ -429,6 +429,71 @@
             </div>
         </div>
     </div>
+
+    <div class="modal-overlay" id="measureChangeApplyModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-exchange-alt"></i> 申请管理措施变更</div>
+                <button class="modal-close" onclick="closeMeasureChangeApplyModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-item form-item-full" style="margin-bottom:16px;">
+                    <label class="form-label"><i class="fas fa-comment-alt"></i> 变更理由</label>
+                    <textarea class="form-input" id="measureChangeReason" rows="3" placeholder="请说明变更原因、依据及影响..."></textarea>
+                </div>
+                <div class="info-section-title" style="margin-bottom:12px;"><i class="fas fa-edit"></i> 选择变更字段并填写新值</div>
+                <div class="form-grid" id="measureChangeApplyForm"></div>
+                <div class="reminder-desc" style="margin-top:12px;">
+                    <i class="fas fa-info-circle"></i> 仅填写需要变更的字段，空白表示保持原值不变。提交后将进入审批流程，审批通过前原记录不受影响。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="closeMeasureChangeApplyModal()">取消</button>
+                <button class="modal-btn primary" onclick="submitMeasureChangeApply()"><i class="fas fa-paper-plane"></i> 提交申请</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="measureChangeAuditModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-gavel"></i> 审批管理措施变更</div>
+                <button class="modal-close" onclick="closeMeasureChangeAuditModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="info-section-title" style="margin-bottom:12px;"><i class="fas fa-file-alt"></i> 变更申请信息</div>
+                <div class="info-grid info-grid-table" id="measureChangeAuditInfo"></div>
+
+                <div class="info-section-title" style="margin-top:20px;margin-bottom:12px;"><i class="fas fa-columns"></i> 变更前后对比</div>
+                <div class="table-wrap">
+                    <table class="arch-table" id="measureChangeDiffTable">
+                        <thead><tr><th>字段</th><th>变更前</th><th>变更后</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <div class="info-section-title" style="margin-top:20px;margin-bottom:12px;"><i class="fas fa-stamp"></i> 审批意见</div>
+                <div class="form-grid">
+                    <div class="form-item">
+                        <label class="form-label">审批结论</label>
+                        <select class="form-input" id="measureChangeAuditConclusion">
+                            <option value="通过">通过</option>
+                            <option value="驳回">驳回</option>
+                        </select>
+                    </div>
+                    <div class="form-item form-item-full">
+                        <label class="form-label">审批备注</label>
+                        <input class="form-input" type="text" id="measureChangeAuditRemark" placeholder="填写审批意见或驳回原因">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="closeMeasureChangeAuditModal()">取消</button>
+                <button class="modal-btn primary" onclick="submitMeasureChangeAudit()"><i class="fas fa-check"></i> 确认审批</button>
+            </div>
+        </div>
+    </div>
+
     <div class="page-wrapper">
         <div class="topbar">
             <div class="topbar-left">
@@ -627,7 +692,26 @@
                     '人员撤离': { '撤离人数': '—', '安置方式': '—', '撤离确认人': '—', '撤离时间': '—' },
                     '持续监控': { '监控设备': '—', '监控频次': '—', '巡查责任人': '—' }
                 },
-                reminder: { enabled: false, daysBefore: 7, action: '续期', phone: '138-1234-5678' }
+                reminder: { enabled: false, daysBefore: 7, action: '续期', phone: '138-1234-5678' },
+                changeFlow: {
+                    current: null,
+                    records: [
+                        {
+                            id: 'CHG-2024-001',
+                            status: 'approved',
+                            applicant: '李志强',
+                            applyTime: '2024-06-28 10:00',
+                            reason: '原计划结束时间无法满足施工进度，需延长至 2024-10-31。',
+                            changes: [
+                                { field: '计划结束时间', oldValue: '2024-09-30', newValue: '2024-10-31' }
+                            ],
+                            auditor: '王建国',
+                            auditTime: '2024-06-29 14:30',
+                            auditConclusion: '通过',
+                            auditRemark: '同意延长，需加强期间管控。'
+                        }
+                    ]
+                }
             },
             project: {
                 columns: ['工程措施', '实施拟采用的政策路径', '其他实施拟采用政策路径', '细化工程措施方案', '开始时间', '结束时间', '负责人信息', '联系电话', '工程措施实施照片', '工程措施完成照片', '措施是否完成', '备注', '填报人', '填报时间'],
@@ -868,6 +952,65 @@
                     '</div>';
             }
 
+            let changeFlowHtml = '';
+            let pendingAuditButton = '';
+            if (currentMeasureSubTab === 'manage') {
+                const flow = measureData.manage.changeFlow || { current: null, records: [] };
+                const pending = flow.current && flow.current.status === 'pending' ? flow.current : null;
+                const latestApproved = flow.records.slice().reverse().find(r => r.status === 'approved');
+
+                const statusBadgeClass = {
+                    pending: 'warning',
+                    approved: 'safe',
+                    rejected: 'danger'
+                };
+                const statusText = {
+                    pending: '审批中',
+                    approved: '已通过',
+                    rejected: '已驳回'
+                };
+
+                const statusHtml = pending
+                    ? '<div class="info-item"><div class="info-label">当前变更状态</div><div class="info-value"><span class="status-badge ' + statusBadgeClass.pending + '">审批中</span> 申请人：' + pending.applicant + '（' + pending.applyTime + '）</div></div>'
+                    : '<div class="info-item"><div class="info-label">当前变更状态</div><div class="info-value"><span class="status-badge info">无进行中变更</span></div></div>';
+
+                const latestHtml = latestApproved
+                    ? '<div class="info-item full-width"><div class="info-label">最近通过变更</div><div class="info-value" style="font-weight:400;">' + latestApproved.id + ' · ' + latestApproved.applyTime + ' · ' + latestApproved.changes.map(c => (c.label || c.field) + '：' + c.oldValue + ' → ' + c.newValue).join('；') + ' · 审批人：' + latestApproved.auditor + ' · ' + latestApproved.auditConclusion + '</div></div>'
+                    : '';
+
+                const historyRows = flow.records.length
+                    ? flow.records.slice().reverse().map((r, idx) => {
+                        const diff = r.changes.map(c => c.field + '：' + c.oldValue + ' → ' + c.newValue).join('；');
+                        return '<tr>' +
+                            '<td>' + r.id + '</td>' +
+                            '<td><span class="status-badge ' + (statusBadgeClass[r.status] || 'info') + '">' + (statusText[r.status] || r.status) + '</span></td>' +
+                            '<td>' + r.applicant + '</td>' +
+                            '<td>' + r.applyTime + '</td>' +
+                            '<td>' + r.reason + '</td>' +
+                            '<td>' + (r.auditor || '—') + '</td>' +
+                            '<td>' + (r.auditTime || '—') + '</td>' +
+                            '<td>' + (r.auditConclusion || '—') + '</td>' +
+                            '<td><button class="photo-btn" onclick="viewMeasureChangeDetail(' + (flow.records.length - 1 - idx) + ')">查看</button></td>' +
+                        '</tr>';
+                    }).join('')
+                    : '<tr><td colspan="9" style="text-align:center;color:var(--text-secondary);">暂无变更记录</td></tr>';
+
+                changeFlowHtml = '<div class="info-section-title" style="margin-top:20px;"><i class="fas fa-random"></i> 变更流程管理</div>' +
+                    '<div class="info-grid info-grid-table" style="margin-bottom:14px;">' +
+                        statusHtml +
+                        latestHtml +
+                    '</div>' +
+                    '<div class="table-section-title">变更历史</div>' +
+                    '<div class="table-wrap" style="max-height:260px;overflow:auto;">' +
+                    '<table class="arch-table" id="measureChangeHistoryTable">' +
+                    '<thead><tr><th>变更编号</th><th>状态</th><th>申请人</th><th>申请时间</th><th>变更理由</th><th>审批人</th><th>审批时间</th><th>审批结论</th><th>操作</th></tr></thead>' +
+                    '<tbody>' + historyRows + '</tbody></table></div>';
+
+                if (pending) {
+                    pendingAuditButton = '<button class="bottom-btn" style="border-color:var(--safe);color:var(--safe);" onclick="openMeasureChangeAuditModal()"><i class="fas fa-gavel"></i> 审批变更</button>';
+                }
+            }
+
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
                     '<div class="content-card-title"><i class="fas ' + item.icon + '" style="width:16px;text-align:center;"></i> ' + item.title + '</div>' +
@@ -876,6 +1019,7 @@
                 '<div class="content-body">' +
                     '<div class="info-grid info-grid-table">' + gridHtml + '</div>' +
                     reminderHtml +
+                    changeFlowHtml +
                 '</div>' +
             '</div>' +
             '<div class="bottom-bar">' +
@@ -884,6 +1028,8 @@
                     '当前节点：<span class="bottom-node">' + item.title + ' - ' + sub.title + '</span> | <i class="far fa-eye"></i> 查看/编辑' +
                 '</div>' +
                 '<div class="bottom-actions">' +
+                    '<button class="bottom-btn" style="border-color:var(--major);color:var(--major);" onclick="openMeasureChangeApplyModal()"><i class="fas fa-exchange-alt"></i> 申请变更</button>' +
+                    pendingAuditButton +
                     '<button class="bottom-btn primary" onclick="openMeasureEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>' +
                     '<button class="bottom-btn"><i class="fas fa-file-export"></i> 导出</button>' +
                 '</div>' +
@@ -1290,6 +1436,12 @@
         document.getElementById('commonEditModal').addEventListener('click', function(e) {
             if (e.target === this) closeCommonEditModal();
         });
+        document.getElementById('measureChangeApplyModal').addEventListener('click', function(e) {
+            if (e.target === this) closeMeasureChangeApplyModal();
+        });
+        document.getElementById('measureChangeAuditModal').addEventListener('click', function(e) {
+            if (e.target === this) closeMeasureChangeAuditModal();
+        });
 
         function openMeasureEditModal() {
             measureEditModalSubTab = currentMeasureSubTab;
@@ -1606,6 +1758,182 @@
             closeMeasureEditModal();
             renderSidebar();
             renderContent();
+        }
+
+        // 管理措施变更流程
+        function getManageMeasureFlatFields() {
+            const data = measureData.manage;
+            const fields = [];
+            data.baseColumns.forEach((c, i) => {
+                if (c === '变更或延长申请审批') return;
+                fields.push({ key: 'base:' + i, label: c, value: data.baseValues[i] || '' });
+            });
+            const measureType = data.baseValues[0] || '停止使用';
+            const extra = data.extraFields[measureType] || {};
+            Object.keys(extra).forEach(k => {
+                fields.push({ key: 'extra:' + k, label: k, value: extra[k] || '' });
+            });
+            return fields;
+        }
+
+        function getFieldValueByKey(key) {
+            const data = measureData.manage;
+            if (key.startsWith('base:')) {
+                const idx = parseInt(key.split(':')[1], 10);
+                return data.baseValues[idx] || '';
+            }
+            if (key.startsWith('extra:')) {
+                const k = key.split(':')[1];
+                const measureType = data.baseValues[0] || '停止使用';
+                return (data.extraFields[measureType] || {})[k] || '';
+            }
+            return '';
+        }
+
+        function setFieldValueByKey(key, value) {
+            const data = measureData.manage;
+            if (key.startsWith('base:')) {
+                const idx = parseInt(key.split(':')[1], 10);
+                data.baseValues[idx] = value;
+            } else if (key.startsWith('extra:')) {
+                const k = key.split(':')[1];
+                const measureType = data.baseValues[0] || '停止使用';
+                if (!data.extraFields[measureType]) data.extraFields[measureType] = {};
+                data.extraFields[measureType][k] = value;
+            }
+        }
+
+        function openMeasureChangeApplyModal() {
+            const flow = measureData.manage.changeFlow;
+            if (flow.current && flow.current.status === 'pending') {
+                alert('当前已存在一条审批中的变更申请，请等待审批完成后再提交。');
+                return;
+            }
+            document.getElementById('measureChangeReason').value = '';
+            const fields = getManageMeasureFlatFields();
+            const formHtml = fields.map(f => {
+                return '<div class="form-item">' +
+                    '<label class="form-label">' + f.label + '</label>' +
+                    '<input class="form-input measure-change-field" type="text" data-key="' + f.key + '" placeholder="当前：' + (f.value || '—').replace(/"/g, '&quot;') + '" value="">' +
+                    '</div>';
+            }).join('');
+            document.getElementById('measureChangeApplyForm').innerHTML = formHtml;
+            document.getElementById('measureChangeApplyModal').classList.add('open');
+        }
+
+        function closeMeasureChangeApplyModal() {
+            document.getElementById('measureChangeApplyModal').classList.remove('open');
+        }
+
+        function submitMeasureChangeApply() {
+            const reason = document.getElementById('measureChangeReason').value.trim();
+            if (!reason) {
+                alert('请填写变更理由。');
+                return;
+            }
+            const inputs = document.querySelectorAll('#measureChangeApplyForm .measure-change-field');
+            const changes = [];
+            inputs.forEach(input => {
+                const newValue = input.value.trim();
+                if (!newValue) return;
+                const key = input.dataset.key;
+                const oldValue = getFieldValueByKey(key);
+                if (newValue !== oldValue) {
+                    changes.push({ key: key, label: input.parentElement.querySelector('.form-label').textContent, oldValue: oldValue, newValue: newValue });
+                }
+            });
+            if (changes.length === 0) {
+                alert('请至少修改一个字段后再提交。');
+                return;
+            }
+            const flow = measureData.manage.changeFlow;
+            const seq = (flow.records.length + 1).toString().padStart(3, '0');
+            flow.current = {
+                id: 'CHG-' + new Date().getFullYear() + '-' + seq,
+                status: 'pending',
+                applicant: '当前用户',
+                applyTime: formatDateTime(new Date()),
+                reason: reason,
+                changes: changes,
+                auditor: '',
+                auditTime: '',
+                auditConclusion: '',
+                auditRemark: ''
+            };
+            closeMeasureChangeApplyModal();
+            renderSidebar();
+            renderContent();
+            alert('变更申请已提交，等待审批。');
+        }
+
+        function formatDateTime(d) {
+            const pad = n => n < 10 ? '0' + n : n;
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        }
+
+        function openMeasureChangeAuditModal() {
+            const flow = measureData.manage.changeFlow;
+            const current = flow.current;
+            if (!current || current.status !== 'pending') {
+                alert('当前没有待审批的变更申请。');
+                return;
+            }
+            document.getElementById('measureChangeAuditConclusion').value = '通过';
+            document.getElementById('measureChangeAuditRemark').value = '';
+            document.getElementById('measureChangeAuditInfo').innerHTML =
+                '<div class="info-item"><div class="info-label">变更编号</div><div class="info-value">' + current.id + '</div></div>' +
+                '<div class="info-item"><div class="info-label">申请人</div><div class="info-value">' + current.applicant + '</div></div>' +
+                '<div class="info-item"><div class="info-label">申请时间</div><div class="info-value">' + current.applyTime + '</div></div>' +
+                '<div class="info-item full-width"><div class="info-label">变更理由</div><div class="info-value" style="font-weight:400;">' + current.reason + '</div></div>';
+            document.querySelector('#measureChangeDiffTable tbody').innerHTML = current.changes.map(c =>
+                '<tr><td>' + c.label + '</td><td>' + (c.oldValue || '—') + '</td><td>' + c.newValue + '</td></tr>'
+            ).join('');
+            document.getElementById('measureChangeAuditModal').classList.add('open');
+        }
+
+        function closeMeasureChangeAuditModal() {
+            document.getElementById('measureChangeAuditModal').classList.remove('open');
+        }
+
+        function submitMeasureChangeAudit() {
+            const flow = measureData.manage.changeFlow;
+            const current = flow.current;
+            if (!current || current.status !== 'pending') return;
+            const conclusion = document.getElementById('measureChangeAuditConclusion').value;
+            const remark = document.getElementById('measureChangeAuditRemark').value.trim();
+            current.auditor = '当前审批人';
+            current.auditTime = formatDateTime(new Date());
+            current.auditConclusion = conclusion;
+            current.auditRemark = remark;
+            current.status = conclusion === '通过' ? 'approved' : 'rejected';
+            if (conclusion === '通过') {
+                current.changes.forEach(c => {
+                    setFieldValueByKey(c.key, c.newValue);
+                });
+            }
+            flow.records.push(current);
+            flow.current = null;
+            closeMeasureChangeAuditModal();
+            renderSidebar();
+            renderContent();
+            alert('审批已' + (conclusion === '通过' ? '通过，措施记录已更新' : '驳回') + '。');
+        }
+
+        function viewMeasureChangeDetail(recordIndex) {
+            const flow = measureData.manage.changeFlow;
+            const record = flow.records[recordIndex];
+            if (!record) return;
+            document.getElementById('measureChangeAuditConclusion').value = record.auditConclusion || '通过';
+            document.getElementById('measureChangeAuditRemark').value = record.auditRemark || '';
+            document.getElementById('measureChangeAuditInfo').innerHTML =
+                '<div class="info-item"><div class="info-label">变更编号</div><div class="info-value">' + record.id + '</div></div>' +
+                '<div class="info-item"><div class="info-label">申请人</div><div class="info-value">' + record.applicant + '</div></div>' +
+                '<div class="info-item"><div class="info-label">申请时间</div><div class="info-value">' + record.applyTime + '</div></div>' +
+                '<div class="info-item full-width"><div class="info-label">变更理由</div><div class="info-value" style="font-weight:400;">' + record.reason + '</div></div>';
+            document.querySelector('#measureChangeDiffTable tbody').innerHTML = record.changes.map(c =>
+                '<tr><td>' + c.label + '</td><td>' + (c.oldValue || '—') + '</td><td>' + c.newValue + '</td></tr>'
+            ).join('');
+            document.getElementById('measureChangeAuditModal').classList.add('open');
         }
 
         function openCommonEditModal(key) {
