@@ -29,13 +29,24 @@ const STATUS_LABEL_MAP = {
     'doing': '整治中',
     'done': '已整治',
     'overdue': '逾期未整治'
-};const STATUS_LABEL_MAP_INV = {
+};
+const STATUS_LABEL_MAP_INV = {
     '待整治': 'pending',
     '整治中': 'doing',
     '已治理': 'done',
     '已整治': 'done',
     '逾期未整治': 'overdue'
 };
+
+// 完整的隐患部位/类型/措施词库，用于生成丰富的种子数据
+const HAZARD_PARTS = ['承重墙', '屋面', '地基基础', '木构架', '楼梯间', '阳台', '外墙', '梁柱', '楼板', '排水系统'];
+const HAZARD_TYPES = ['裂缝', '渗漏', '沉降', '腐朽', '破损', '变形', '倾斜', '钢筋锈蚀', '抹灰脱落', '积水'];
+const MANAGEMENT_MEASURES = ['停止使用', '封控警示', '人员撤离', '持续监控', '停止经营'];
+const ENGINEERING_MEASURES = ['结构加固', '屋面修缮', '基础加固', '墙体修复', '排水改造', '电气改造', '消防改造'];
+const MANAGER_PHONES = ['138-1234-5678', '139-5678-1234', '136-0000-1234', '137-9999-8888', '150-1111-2222'];
+const RESPONSIBLE_PERSONS = ['李志强', '王建国', '陈明华', '周敏', '张建军', '刘伟', '赵敏'];
+const AUDITORS = ['王建国', '李志强', '周敏', '陈明华'];
+const ENGINEERING_COMPANIES = ['上海建工集团', '奉贤城建公司', '华建工程公司', '东方建设集团', ' Municipal Engineering 公司'];
 let __seedGenerated = false;
 
 // ---------------- localStorage 读写 ----------------
@@ -164,8 +175,280 @@ function ensureHouseRecord(no) {
     return all[no];
 }
 
+// 根据治理状态生成管理措施记录（变更历史）
+function generateManageRecords(no, risk, governance, doneTask, totalTask, i) {
+    if (risk === 'safe') return [];
+    const records = [];
+    const isDone = governance === 'done';
+    const measureType = MANAGEMENT_MEASURES[i % MANAGEMENT_MEASURES.length];
+    const startDate = '2024-' + pad2(6 + (i % 4)) + '-' + pad2(10 + (i % 15));
+    const planEnd = '2025-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28));
+    const actualEnd = isDone ? '2025-' + pad2(1 + ((i + 2) % 12)) + '-' + pad2(1 + (i % 28)) : '';
+    records.push({
+        id: 'M-' + no + '-001',
+        measureType: measureType,
+        implementPart: '整栋房屋',
+        startTime: startDate,
+        planEndTime: planEnd,
+        actualEndTime: actualEnd,
+        requirement: '立即对危险区域采取管控，设置围挡和警示标识，必要时组织人员撤离',
+        dutyUnit: MODULE_STREETS[(i - 1) % MODULE_STREETS.length] + '城建中心',
+        dutyPerson: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+        phone: MANAGER_PHONES[i % MANAGER_PHONES.length],
+        measureDesc: measureType + '：设置围挡、警示标识，安排专人巡查',
+        implementPhotos: '',
+        completePhotos: '',
+        isDone: isDone || doneTask > 0,
+        effectEvaluation: isDone ? '风险已有效控制，无新增变形' : '风险已有效控制，需继续观察',
+        riskControlled: isDone || doneTask > 0,
+        changeApply: '—',
+        remark: '已落实' + measureType + '措施',
+        reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+        reportTime: startDate + ' 09:00'
+    });
+    // 部分已整治/已治理房屋增加一条变更续期记录
+    if ((isDone || governance === 'doing') && i % 3 === 0) {
+        records.push({
+            id: 'M-' + no + '-002',
+            measureType: measureType,
+            implementPart: '整栋房屋',
+            startTime: startDate,
+            planEndTime: planEnd,
+            actualEndTime: actualEnd,
+            requirement: '因施工进度调整，申请延长管控期限',
+            dutyUnit: MODULE_STREETS[(i - 1) % MODULE_STREETS.length] + '城建中心',
+            dutyPerson: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+            phone: MANAGER_PHONES[i % MANAGER_PHONES.length],
+            measureDesc: measureType + '续期',
+            implementPhotos: '',
+            completePhotos: '',
+            isDone: isDone,
+            effectEvaluation: '风险已有效控制',
+            riskControlled: true,
+            changeApply: 'CHG-' + no + '-001',
+            remark: '经审批同意延长管控至' + planEnd,
+            reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+            reportTime: '2024-' + pad2(8 + (i % 3)) + '-' + pad2(10 + (i % 15)) + ' 14:30'
+        });
+    }
+    return records;
+}
+
+// 生成工程措施施工过程记录（时间线）
+function generateProjectRecordsLocal(no, risk, governance, projectMeasure, i, fundTotal) {
+    if (projectMeasure <= 0 || risk === 'safe') return [];
+    const records = [];
+    const company = ENGINEERING_COMPANIES[i % ENGINEERING_COMPANIES.length];
+    const isDone = governance === 'done';
+    const startDate = '2024-' + pad2(8 + (i % 3)) + '-' + pad2(1 + (i % 28));
+    const endDate = isDone ? '2025-' + pad2(1 + ((i + 2) % 12)) + '-' + pad2(1 + (i % 28)) : '';
+    const projectNames = [];
+    for (let p = 0; p < projectMeasure; p++) {
+        projectNames.push(ENGINEERING_MEASURES[(i + p) % ENGINEERING_MEASURES.length]);
+    }
+    projectNames.forEach((pName, idx) => {
+        const nodeCount = isDone ? 3 : (governance === 'doing' ? 2 : 1);
+        const fundPer = projectMeasure > 0 ? Math.round(fundTotal / projectMeasure) : 0;
+        const projectFund = fundPer + Math.round((Math.sin(i * 100 + idx) * 0.3) * fundPer);
+        records.push({
+            id: no + '-P' + (idx + 1),
+            projectName: pName,
+            company: company,
+            startDate: startDate,
+            endDate: endDate,
+            fund: projectFund,
+            status: isDone ? '已完成' : (governance === 'doing' ? '进行中' : '未开工'),
+            isDone: isDone,
+            manager: RESPONSIBLE_PERSONS[(i + idx) % RESPONSIBLE_PERSONS.length],
+            phone: MANAGER_PHONES[(i + idx) % MANAGER_PHONES.length],
+            progress: isDone ? 100 : (governance === 'doing' ? 50 : 0),
+            timeline: generateProjectTimeline(no, pName, startDate, endDate, isDone, governance, i, idx)
+        });
+    });
+    return records;
+}
+
+function generateProjectTimeline(no, pName, startDate, endDate, isDone, governance, i, idx) {
+    const timeline = [];
+    const fmt = d => d;
+    timeline.push({
+        title: '进场准备',
+        date: startDate,
+        desc: '完成现场围挡、材料进场及安全技术交底',
+        photos: '',
+        acceptConclusion: '合格',
+        acceptChecker: RESPONSIBLE_PERSONS[(i + idx) % RESPONSIBLE_PERSONS.length],
+        acceptDate: startDate
+    });
+    if (governance === 'doing' || isDone) {
+        timeline.push({
+            title: '施工过程',
+            date: '2024-' + pad2(9 + (i % 3)) + '-' + pad2(1 + (i % 28)),
+            desc: '开展' + pName + '施工，按方案组织实施',
+            photos: '',
+            acceptConclusion: '整改后合格',
+            acceptChecker: RESPONSIBLE_PERSONS[(i + idx + 1) % RESPONSIBLE_PERSONS.length],
+            acceptDate: '2024-' + pad2(10 + (i % 2)) + '-' + pad2(1 + (i % 28))
+        });
+    }
+    if (isDone) {
+        timeline.push({
+            title: '竣工验收',
+            date: endDate,
+            desc: '完成' + pName + '，组织竣工验收并出具报告',
+            photos: '',
+            acceptConclusion: '合格',
+            acceptChecker: RESPONSIBLE_PERSONS[(i + idx + 2) % RESPONSIBLE_PERSONS.length],
+            acceptDate: endDate
+        });
+    }
+    return timeline;
+}
+
+// 生成质量追溯记录
+function generateQualityTrace(no, risk, governance, projectMeasure, i) {
+    if (risk === 'safe' || projectMeasure <= 0) return [];
+    const records = [];
+    const isDone = governance === 'done';
+    records.push({
+        id: 'QT-' + no + '-001',
+        checkItem: '材料进场验收',
+        checkDate: '2024-' + pad2(8 + (i % 3)) + '-' + pad2(1 + (i % 28)),
+        checker: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+        result: '合格',
+        conclusion: '材料合格证、检验报告齐全',
+        photos: '',
+        files: ''
+    });
+    records.push({
+        id: 'QT-' + no + '-002',
+        checkItem: '隐蔽工程验收',
+        checkDate: '2024-' + pad2(9 + (i % 3)) + '-' + pad2(1 + (i % 28)),
+        checker: RESPONSIBLE_PERSONS[(i + 1) % RESPONSIBLE_PERSONS.length],
+        result: isDone ? '合格' : '待验收',
+        conclusion: isDone ? '隐蔽工程质量符合设计及规范要求' : '待后续工序完成后统一验收',
+        photos: '',
+        files: ''
+    });
+    if (isDone) {
+        records.push({
+            id: 'QT-' + no + '-003',
+            checkItem: '竣工验收',
+            checkDate: '2025-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28)),
+            checker: RESPONSIBLE_PERSONS[(i + 2) % RESPONSIBLE_PERSONS.length],
+            result: '合格',
+            conclusion: '工程完成质量良好，满足销号条件',
+            photos: '',
+            files: '竣工验收报告.pdf'
+        });
+    }
+    return records;
+}
+
+// 生成整治档案归档记录
+function generateArchiveRecords(no, risk, governance, closeStatus, i) {
+    const records = [];
+    const isDone = governance === 'done';
+    const planDate = '2024-' + pad2(7 + (i % 3)) + '-' + pad2(1 + (i % 28));
+    const doneDate = isDone ? '2025-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28)) : '';
+    records.push({
+        archiveType: '整治方案',
+        archiveNo: no + '-FA',
+        archiveTime: planDate,
+        archiveStatus: '已归档',
+        fileName: '整治方案.pdf',
+        uploader: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length]
+    });
+    if (risk !== 'safe') {
+        records.push({
+            archiveType: '实施记录',
+            archiveNo: no + '-SG',
+            archiveTime: isDone ? doneDate : '',
+            archiveStatus: isDone ? '已归档' : '待归档',
+            fileName: '施工过程记录.pdf',
+            uploader: RESPONSIBLE_PERSONS[(i + 1) % RESPONSIBLE_PERSONS.length]
+        });
+    }
+    if (closeStatus === '已通过') {
+        records.push({
+            archiveType: '验收材料',
+            archiveNo: no + '-YS',
+            archiveTime: doneDate,
+            archiveStatus: '已归档',
+            fileName: '验收销号材料.pdf',
+            uploader: RESPONSIBLE_PERSONS[(i + 2) % RESPONSIBLE_PERSONS.length]
+        });
+    }
+    return records;
+}
+
+// 生成隐患明细
+function generateHazards(risk, i) {
+    if (risk === 'safe') return [];
+    const count = 1 + (i % 3);
+    const hazards = [];
+    for (let k = 0; k < count; k++) {
+        const part = HAZARD_PARTS[(i + k) % HAZARD_PARTS.length];
+        const type = HAZARD_TYPES[(i + k + 3) % HAZARD_TYPES.length];
+        hazards.push({
+            part: part,
+            type: type,
+            desc: part + '存在' + type + '，需进行安全整治',
+            level: RISK_LABEL_MAP[risk]
+        });
+    }
+    return hazards;
+}
+
+// 生成措施明细
+function generateMeasures(risk, governance, projectMeasure, i) {
+    const measures = [];
+    if (risk === 'safe') return measures;
+    const isDone = governance === 'done';
+    const mgmtName = MANAGEMENT_MEASURES[i % MANAGEMENT_MEASURES.length];
+    measures.push({
+        type: 'management',
+        name: mgmtName,
+        status: isDone ? 'done' : (governance === 'doing' ? 'doing' : 'pending'),
+        startTime: '2024-' + pad2(6 + (i % 4)) + '-' + pad2(10 + (i % 15)),
+        dutyPerson: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length]
+    });
+    for (let p = 0; p < projectMeasure; p++) {
+        const engName = ENGINEERING_MEASURES[(i + p) % ENGINEERING_MEASURES.length];
+        measures.push({
+            type: 'engineering',
+            name: engName,
+            status: isDone ? 'done' : (governance === 'doing' ? 'doing' : 'pending'),
+            startTime: '2024-' + pad2(8 + (i % 3)) + '-' + pad2(1 + (i % 28)),
+            dutyPerson: RESPONSIBLE_PERSONS[(i + p + 1) % RESPONSIBLE_PERSONS.length]
+        });
+    }
+    return measures;
+}
+
+// 根据房屋状态生成销号申请记录
+function generateCloseApplyForRecord(record) {
+    if (record.closeStatus === '未申请') return null;
+    return {
+        id: generateCloseApplyId('CLOSE'),
+        no: record.no,
+        name: record.name,
+        street: record.street,
+        riskLevel: record.riskLevel,
+        governStatus: record.governStatus,
+        closeStatus: record.closeStatus,
+        applicant: record.responsiblePerson || RESPONSIBLE_PERSONS[0],
+        applyTime: record.closeApplyTime,
+        auditor: record.closeAuditor,
+        auditTime: record.closeAuditTime,
+        auditOpinion: record.closeAuditOpinion,
+        rejectReason: record.closeRejectReason,
+        files: record.eliminationInfo && record.eliminationInfo.certFiles ? record.eliminationInfo.certFiles.join(',') : ''
+    };
+}
+
 // ---------------- 种子数据生成 ----------------
-// 生成 85 条 NF-2025-XXXXX 数据，携带坐标、状态、任务、资金等统计字段
+// 生成 85 条 NF-2025-XXXXX 数据，携带完整工作流、隐患、措施、资金、销号等统计字段
 function generateHouseSeed() {
     const streets = MODULE_STREETS;
     const communities = MODULE_COMMUNITIES;
@@ -199,7 +482,7 @@ function generateHouseSeed() {
     for (let i = 1; i <= 85; i++) {
         const no = generateNo(i);
         const nameIdx = (i - 1) % names.length;
-        const name = names[nameIdx] + (Math.floor((i - 1) / 20) > 0 ? '·' + i + '号' : (i > 20 ? '·' + i + '号' : (i <= 20 ? i + '号' : '')));
+        const name = names[nameIdx] + (i > 20 ? '·' + i + '号' : i + '号');
         const street = streets[(i - 1) % streets.length];
         const community = communities[(i - 1) % communities.length];
         const address = '上海市奉贤区' + street + community + (i * 3) + '号';
@@ -219,7 +502,7 @@ function generateHouseSeed() {
         const totalTask = risk === 'safe' ? 0 : (1 + (i % 4));
         const doneTask = governance === 'done' ? totalTask : (governance === 'doing' ? Math.floor(totalTask * 0.5) : 0);
         const manageMeasure = totalTask > 0 ? (1 + (i % 2)) : 0;
-        const projectMeasure = totalTask > 0 ? (i % 3) : 0;
+        const projectMeasure = totalTask > 0 ? (1 + (i % 3)) : 0;
         const fundTotal = totalTask > 0 ? (30000 + (i * 2500)) : 0;
         const fundUsed = Math.round(fundTotal * (doneTask / (totalTask || 1)));
         const overdue = governance === 'overdue';
@@ -232,20 +515,12 @@ function generateHouseSeed() {
         const rectDeadline = '2025-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28));
         const completeDate = governance === 'done' ? ('2025-' + pad2(1 + (i % 6)) + '-' + pad2(1 + (i % 28))) : '';
 
-        // 隐患/措施
-        const hazards = risk === 'safe' ? [] : [{
-            part: ['承重墙', '屋面', '地基', '木构架', '楼梯'][i % 5],
-            type: ['裂缝', '渗漏', '沉降', '腐朽', '破损'][i % 5],
-            desc: '需整治处理',
-            level: RISK_LABEL_MAP[risk]
-        }];
-        const measures = [];
-        if (risk !== 'safe') {
-            measures.push({ type: 'management', name: ['停止使用', '封控警示', '人员撤离', '持续监控'][i % 4], status: doneTask > 0 ? 'done' : 'doing' });
-            if (projectMeasure > 0) measures.push({ type: 'engineering', name: ['结构加固', '屋面修缮', '基础加固', '墙体修复', '排水改造'][i % 5], status: doneTask === totalTask ? 'done' : 'doing' });
-        }
+        // 隐患与措施
+        const hazards = generateHazards(risk, i);
+        const measures = generateMeasures(risk, governance, projectMeasure, i);
+        const currentMeasure = measures.map(m => (m.type === 'management' ? '管理' : '工程') + '措施（' + m.name + '）').join(' + ');
 
-        // 销号状态：已整治中一部分给通过/待审核，未整治中给驳回/待申请
+        // 销号状态分布
         let closeStatus = '未申请';
         let applyTime = '';
         let auditTime = '';
@@ -257,7 +532,7 @@ function generateHouseSeed() {
             applyTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(1 + (i % 28));
             if (closeStatus === '已通过') {
                 auditTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(2 + (i % 27));
-                auditor = '区住建局 ' + ['王建国', '李志强', '周敏'][i % 3];
+                auditor = '区住建局 ' + AUDITORS[i % AUDITORS.length];
                 auditOpinion = '验收合格，同意销号';
             }
         } else if (governance === 'doing' && i % 3 === 0) {
@@ -267,7 +542,7 @@ function generateHouseSeed() {
             closeStatus = '已驳回';
             applyTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(1 + (i % 28));
             auditTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(2 + (i % 27));
-            auditor = '区住建局 李华';
+            auditor = '区住建局 ' + AUDITORS[(i + 1) % AUDITORS.length];
             rejectReason = '整治不到位，需补充材料';
         }
 
@@ -286,6 +561,15 @@ function generateHouseSeed() {
 
         const governStatus = STATUS_LABEL_MAP[governance];
         const riskLevel = risk === 'safe' ? (closeStatus === '已通过' ? '无风险' : '安全') : RISK_LABEL_MAP[risk];
+        const managerName = owner;
+        const managerPhone = MANAGER_PHONES[i % MANAGER_PHONES.length];
+        const responsiblePerson = RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length];
+        const responsibleDept = street + '城建中心';
+
+        const manageRecords = generateManageRecords(no, risk, governance, doneTask, totalTask, i);
+        const projectRecords = generateProjectRecordsLocal(no, risk, governance, projectMeasure, i, fundTotal);
+        const qualityTrace = generateQualityTrace(no, risk, governance, projectMeasure, i);
+        const archiveRecords = generateArchiveRecords(no, risk, governance, closeStatus, i);
 
         const record = {
             no, name, owner, street, community, address,
@@ -297,15 +581,15 @@ function generateHouseSeed() {
             closeApplyTime: applyTime, closeAuditTime: auditTime, closeAuditor: auditor,
             closeAuditOpinion: auditOpinion, closeRejectReason: rejectReason,
             isRemovedFromFocus: closeStatus === '已通过',
-            currentMeasure: '', managerName: owner, managerPhone: '',
-            manageRecords: [], projectRecords: [], qualityTrace: [], archiveRecords: [],
+            currentMeasure, managerName, managerPhone,
+            manageRecords, projectRecords, qualityTrace, archiveRecords,
             lat, lng, year, totalTask, doneTask, overdue,
             manageMeasure, projectMeasure, fundUsed, fundTotal,
             rectDeadline, completeDate,
             hazards, measures, eliminationInfo,
             progress: totalTask ? Math.round(doneTask / totalTask * 100) : 100,
-            responsibleDept: street + '城建中心',
-            responsiblePerson: ['李志强', '王建国', '陈明华', '周敏'][i % 4]
+            responsibleDept,
+            responsiblePerson
         };
         data[no] = record;
     }
@@ -319,12 +603,28 @@ function initHouseArchSeed() {
         const seed = generateHouseSeed();
         setHouseArchStorage(seed);
         __seedGenerated = true;
+        // 同步生成 closeApplyData，确保 hidden-close-apply 页面可展示
+        syncCloseApplyData(seed);
         return seed;
     }
     // 规范化已存在的数据，确保各页面读取一致
     Object.keys(all).forEach(no => normalizeHouseRecord(all[no]));
     setHouseArchStorage(all);
+    // 若 closeApplyData 为空则根据现有房屋数据同步生成
+    if (getCloseApplyStorage().length === 0) {
+        syncCloseApplyData(all);
+    }
     return all;
+}
+
+// 根据 houseArchData 同步 closeApplyData（与房屋状态保持一致）
+function syncCloseApplyData(houses) {
+    const applies = [];
+    Object.values(houses).forEach(record => {
+        const apply = generateCloseApplyForRecord(record);
+        if (apply) applies.push(apply);
+    });
+    setCloseApplyStorage(applies);
 }
 
 // 在需要的地方调用，例如：initHouseArchSeed();
