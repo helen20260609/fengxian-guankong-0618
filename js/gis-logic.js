@@ -38,16 +38,16 @@ let map, markers = [];
 let leftChart, streetRankingChart, measurePieChart;
 
 const RISK_CONFIG = {
-    danger: { label: '重大风险', color: '#d93025', class: 'danger', shape: 'triangle' },
-    major: { label: '较大风险', color: '#f57c00', class: 'major', shape: 'square' },
-    warning: { label: '一般风险', color: '#f9ab00', class: 'warning', shape: 'circle' },
-    safe: { label: '低风险', color: '#34a853', class: 'safe', shape: 'circle' }
+    danger: { label: '重大隐患', color: '#d93025', class: 'danger', shape: 'triangle' },
+    major: { label: '较大隐患', color: '#f57c00', class: 'major', shape: 'square' },
+    warning: { label: '一般隐患', color: '#f9ab00', class: 'warning', shape: 'circle' },
+    safe: { label: '安全', color: '#34a853', class: 'safe', shape: 'circle' }
 };
 
 const STATUS_CONFIG = {
     pending: { label: '待整治', color: '#9aa0a6', class: 'treat-pending' },
     doing: { label: '整治中', color: '#f9ab00', class: 'treat-doing' },
-    done: { label: '已整治', color: '#1e8e3e', class: 'treat-done' },
+    done: { label: '已治理', color: '#1e8e3e', class: 'treat-done' },
     overdue: { label: '逾期未整治', color: '#d93025', class: 'treat-overdue' }
 };
 

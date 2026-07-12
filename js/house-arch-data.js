@@ -17,13 +17,25 @@ const RISK_LABEL_MAP = {
     'warning': '一般隐患',
     'safe': '安全'
 };
+const RISK_LABEL_MAP_INV = {
+    '重大隐患': 'danger',
+    '较大隐患': 'major',
+    '一般隐患': 'warning',
+    '安全': 'safe',
+    '无风险': 'safe'
+};
 const STATUS_LABEL_MAP = {
     'pending': '待整治',
     'doing': '整治中',
     'done': '已整治',
     'overdue': '逾期未整治'
+};const STATUS_LABEL_MAP_INV = {
+    '待整治': 'pending',
+    '整治中': 'doing',
+    '已治理': 'done',
+    '已整治': 'done',
+    '逾期未整治': 'overdue'
 };
-
 let __seedGenerated = false;
 
 // ---------------- localStorage 读写 ----------------
@@ -79,19 +91,64 @@ const DEFAULT_HOUSE_STATUS = {
     risk: 'warning', governance: 'pending'
 };
 
+// 规范化单条记录：保持 risk/riskLevel、governance/governStatus 两对字段一致，
+// 销号通过则统一为 safe/无风险 + done/已治理，并补全编号。
+function normalizeHouseRecord(record) {
+    if (!record) return record;
+    const rec = record;
+    // 确保 no 存在
+    if (!rec.no) rec.no = '';
+
+    // 销号已通过：强制无风险/已治理
+    if (rec.closeStatus === '已通过') {
+        rec.risk = 'safe';
+        rec.governance = 'done';
+        rec.riskLevel = '无风险';
+        rec.governStatus = '已治理';
+        rec.isRemovedFromFocus = true;
+        return rec;
+    }
+
+    // 风险等级：以中文 riskLevel 为准，回写 risk；若 riskLevel 缺失则反向生成
+    if (rec.riskLevel && RISK_LABEL_MAP_INV[rec.riskLevel]) {
+        rec.risk = RISK_LABEL_MAP_INV[rec.riskLevel];
+    } else if (rec.risk && RISK_LABEL_MAP[rec.risk]) {
+        rec.riskLevel = RISK_LABEL_MAP[rec.risk];
+    } else {
+        rec.risk = 'warning';
+        rec.riskLevel = '一般隐患';
+    }
+
+    // 治理状态：以中文 governStatus 为准，回写 governance；若缺失则反向生成
+    if (rec.governStatus && STATUS_LABEL_MAP_INV[rec.governStatus]) {
+        rec.governance = STATUS_LABEL_MAP_INV[rec.governStatus];
+    } else if (rec.governance && STATUS_LABEL_MAP[rec.governance]) {
+        rec.governStatus = STATUS_LABEL_MAP[rec.governance];
+    } else {
+        rec.governance = 'pending';
+        rec.governStatus = '待整治';
+    }
+
+    return rec;
+}
+
 // 从统一数据记录获取完整记录（如不存在则返回 null）
 function getHouseRecord(no) {
     const all = getHouseArchStorage();
-    return all[no] || null;
+    const rec = all[no] || null;
+    if (rec) normalizeHouseRecord(rec);
+    return rec;
 }
 function getAllHouseRecords() {
-    return Object.values(getHouseArchStorage());
+    const all = getHouseArchStorage();
+    Object.keys(all).forEach(no => normalizeHouseRecord(all[no]));
+    return Object.values(all);
 }
 
 // 设置单条记录并返回所有记录
 function setHouseRecord(no, record) {
     const all = getHouseArchStorage();
-    all[no] = record;
+    all[no] = normalizeHouseRecord(record);
     setHouseArchStorage(all);
     return all;
 }
@@ -255,7 +312,7 @@ function generateHouseSeed() {
     return data;
 }
 
-// 初始化种子：若 localStorage 为空则写入 85 条数据
+// 初始化种子：若 localStorage 为空则写入 85 条数据；否则规范化已有数据
 function initHouseArchSeed() {
     const all = getHouseArchStorage();
     if (Object.keys(all).length === 0) {
@@ -264,6 +321,9 @@ function initHouseArchSeed() {
         __seedGenerated = true;
         return seed;
     }
+    // 规范化已存在的数据，确保各页面读取一致
+    Object.keys(all).forEach(no => normalizeHouseRecord(all[no]));
+    setHouseArchStorage(all);
     return all;
 }
 

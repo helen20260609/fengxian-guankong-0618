@@ -1001,23 +1001,26 @@
 
         const riskBadgeClass = {
             '安全': 'safe',
-            '一般': 'warning',
-            '重大': 'major',
-            '较大': 'danger',
+            '一般隐患': 'warning',
+            '重大隐患': 'major',
+            '较大隐患': 'danger',
+            '无风险': 'safe',
             '已治理': 'safe'
         };
 
         const governBadgeClass = {
             '待整治': 'info',
             '整治中': 'warning',
-            '已治理': 'safe'
+            '已整治': 'safe',
+            '已治理': 'safe',
+            '逾期未整治': 'danger'
         };
 
         function syncHouseArchFromStatus() {
             const s = currentHouseArch;
-            // 从当前页面已有静态数据中初始化一次（若未保存过）
-            if (!s.riskLevel || s.riskLevel === '安全') s.riskLevel = '重大';
-            if (!s.governStatus) s.governStatus = '整治中';
+            // 从统一数据层补齐缺省字段，避免覆盖已有有效值
+            if (!s.riskLevel) s.riskLevel = '一般隐患';
+            if (!s.governStatus) s.governStatus = '待整治';
             if (!s.currentMeasure) s.currentMeasure = '管理措施（停止使用） + 工程措施（维修加固）';
             if (!s.managerName) s.managerName = '李志强';
             if (!s.managerPhone) s.managerPhone = '138****1234';
@@ -3539,6 +3542,9 @@
             s.closeAuditor = '';
             s.closeAuditOpinion = '';
             s.closeRejectReason = '';
+            s.governStatus = '已整治';
+            s.risk = s.risk === 'safe' ? 'safe' : (RISK_LABEL_MAP_INV[s.riskLevel] || s.risk || 'warning');
+            s.riskLevel = s.risk === 'safe' ? '安全' : RISK_LABEL_MAP[s.risk] || s.riskLevel;
             saveCurrentHouseArch(s);
             // 同步到审核列表
             const closeData = tableData.close;
@@ -3637,8 +3643,12 @@
             s.closeRejectReason = rejectReason;
             if (conclusion === '通过') {
                 s.governStatus = '已治理';
-                s.riskLevel = '无风险'; // 或 '低风险'，按业务规则
+                s.riskLevel = '无风险';
+                s.risk = 'safe';
                 s.isRemovedFromFocus = true;
+            } else {
+                s.risk = s.risk === 'safe' ? 'safe' : (RISK_LABEL_MAP_INV[s.riskLevel] || s.risk || 'warning');
+                s.riskLevel = s.risk === 'safe' ? '安全' : RISK_LABEL_MAP[s.risk] || s.riskLevel;
             }
             saveCurrentHouseArch(s);
             // 同步审核列表最后一条
@@ -3662,7 +3672,11 @@
                 existing.rejectReason = conclusion === '驳回' ? rejectReason : '';
                 if (conclusion === '通过') {
                     existing.governStatus = '已治理';
+                    existing.risk = 'safe';
                     existing.riskLevel = '无风险';
+                } else {
+                    existing.risk = s.risk;
+                    existing.riskLevel = s.riskLevel;
                 }
             }
             setCloseApplyStorage(applies);
