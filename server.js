@@ -37,7 +37,13 @@ http.createServer(function(req, res) {
     }
 
     var urlPath = req.url.split('?')[0];
-    urlPath = urlPath === '/' ? 'tp-overview.html' : urlPath;
+    urlPath = urlPath === '/' ? '/tp-overview.html' : urlPath;
+
+    // 去掉前缀的 /pages/，因为 pages 目录就是用来放页面的
+    if (urlPath.startsWith('/pages/')) {
+        urlPath = urlPath.replace('/pages/', '/');
+    }
+
     var baseDir = pagesDir;
 
     // 静态资源（js/css/data/backups/tools/temp/fonts）从根目录提供

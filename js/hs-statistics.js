@@ -78,7 +78,7 @@
             danger: { label: '重大', color: '#d93025' },
             major: { label: '较大', color: '#f57c00' },
             warning: { label: '一般', color: '#f9ab00' },
-            safe: { label: '低', color: '#1a73e8' }
+            safe: { label: '低/安全', color: '#1a73e8' }
         };
 
         const houseTypeMap = {

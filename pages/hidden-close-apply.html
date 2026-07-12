@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>隐患销号申请与审核 - 房屋安全管理</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="../js/house-arch-data.js"></script>
     <style>
         :root {
             --primary: #1a73e8;
@@ -328,8 +329,7 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        const HOUSE_ARCH_KEY = 'houseArchData';
-        const CLOSE_APPLY_KEY = 'closeApplyData';
+        initHouseArchSeed();
         const PAGE_SIZE = 10;
         let currentPage = 1;
         let selectedIds = [];
@@ -338,19 +338,14 @@
 
         function init() {
             document.getElementById('batchApplyTime').value = new Date().toISOString().split('T')[0];
-            seedDataIfEmpty();
             allData = loadAll();
             renderTable();
         }
 
-        function getHouseArchStorage() {
-            try { const raw = localStorage.getItem(HOUSE_ARCH_KEY); return raw ? JSON.parse(raw) : {}; } catch(e) { return {}; }
-        }
-        function setHouseArchStorage(all) { localStorage.setItem(HOUSE_ARCH_KEY, JSON.stringify(all)); }
-        function getCloseApplyStorage() {
-            try { const raw = localStorage.getItem(CLOSE_APPLY_KEY); return raw ? JSON.parse(raw) : []; } catch(e) { return []; }
-        }
-        function setCloseApplyStorage(list) { localStorage.setItem(CLOSE_APPLY_KEY, JSON.stringify(list)); }
+        function getHouseArchStorage() { return __getHouseArchStorage(); }
+        function setHouseArchStorage(all) { return __setHouseArchStorage(all); }
+        function getCloseApplyStorage() { return __getCloseApplyStorage(); }
+        function setCloseApplyStorage(list) { return __setCloseApplyStorage(list); }
 
         function generateId(prefix) {
             const d = new Date();
@@ -429,6 +424,7 @@
             allData.forEach(d => {
                 if (!arch[d.no]) arch[d.no] = { no: d.no };
                 arch[d.no].closeStatus = d.closeStatus;
+                arch[d.no].risk = d.risk;
                 arch[d.no].closeApplyTime = d.applyTime;
                 arch[d.no].closeAuditTime = d.auditTime;
                 arch[d.no].closeAuditor = d.auditor;
@@ -437,7 +433,11 @@
                 arch[d.no].isRemovedFromFocus = d.closeStatus === '已通过';
                 if (d.closeStatus === '已通过') {
                     arch[d.no].governStatus = '已治理';
+                    arch[d.no].risk = 'safe';
                     arch[d.no].riskLevel = '无风险';
+                } else {
+                    arch[d.no].risk = d.risk;
+                    arch[d.no].riskLevel = d.riskLevel;
                 }
                 applyMap[d.no] = {
                     id: d.id, no: d.no, name: d.name, street: d.street, riskLevel: d.riskLevel, governStatus: d.governStatus,
@@ -632,11 +632,14 @@
                 d.auditOpinion = '';
                 d.rejectReason = '';
                 d.files = files;
+                d.governStatus = '已整治';
+                d.riskLevel = d.risk === 'safe' ? '安全' : RISK_LABEL_MAP[d.risk] || d.riskLevel;
             });
+            const applyCount = selectedIds.length;
             saveAll();
             selectedIds = [];
             closeModal('batchApplyModal');
-            showToast('批量销号申请已提交，共 ' + selectedIds.length + ' 条');
+            showToast('批量销号申请已提交，共 ' + applyCount + ' 条');
             renderTable();
         }
 
@@ -698,13 +701,17 @@
                 if (conclusion === '通过') {
                     d.governStatus = '已治理';
                     d.riskLevel = '无风险';
+                    d.risk = 'safe';
+                } else {
+                    d.riskLevel = d.risk === 'safe' ? '安全' : RISK_LABEL_MAP[d.risk] || d.riskLevel;
                 }
             });
+            const auditCount = auditTargetIds.length;
             saveAll();
             selectedIds = selectedIds.filter(id => !auditTargetIds.includes(id));
             auditTargetIds = [];
             closeModal('auditModal');
-            showToast('批量审核完成：' + conclusion + ' ' + auditTargetIds.length + ' 条');
+            showToast('批量审核完成：' + conclusion + ' ' + auditCount + ' 条');
             renderTable();
         }
 

@@ -6,95 +6,36 @@
     <title>房屋建筑档案 - 房屋安全管理</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="../js/third-party-data.js"></script>
+    <script src="../js/house-arch-data.js"></script>
     <script>
         // =========================================================
-        // 房屋建筑档案状态联动数据层
-        // 作用：将治理流程中的管理措施、工程措施、整治档案
-        //       自动关联到房屋档案，并同步更新风险/治理状态
+        // 房屋建筑档案状态联动数据层（已接入 house-arch-data.js 统一数据层）
         // =========================================================
-        const HOUSE_ARCH_KEY = 'houseArchData';
-        const CLOSE_APPLY_KEY = 'closeApplyData';
-
-        const DEFAULT_HOUSE_STATUS = {
-            no: '',
-            name: '',
-            owner: '',
-            street: '',
-            address: '',
-            riskLevel: '重大',            // 隐患等级：安全/一般/重大/已治理
-            governStatus: '整治中',       // 治理状态：待整治/整治中/已治理
-            currentMeasure: '',
-            managerName: '',
-            managerPhone: '',
-            manageRecords: [],            // 管理措施归档记录
-            projectRecords: [],           // 工程措施归档记录
-            qualityTrace: [],             // 质量追溯记录
-            archiveRecords: [],           // 整治档案归档记录
-            closeStatus: '未申请',        // 销号状态：未申请/待审核/审核中/已通过/已驳回
-            closeApplyTime: '',           // 销号申请时间
-            closeAuditTime: '',           // 销号审核时间
-            closeAuditor: '',             // 销号审核人
-            closeAuditOpinion: '',        // 销号审核意见
-            closeRejectReason: '',        // 销号驳回原因/整改要求
-            isRemovedFromFocus: false     // 是否已退出重点监控名单
-        };
 
         function getUrlParam(key) {
             return new URLSearchParams(location.search).get(key) || '';
         }
 
-        function getHouseArchStorage() {
-            try {
-                const raw = localStorage.getItem(HOUSE_ARCH_KEY);
-                const parsed = raw ? JSON.parse(raw) : {};
-                return parsed && typeof parsed === 'object' ? parsed : {};
-            } catch (e) {
-                return {};
-            }
-        }
-
-        function setHouseArchStorage(all) {
-            localStorage.setItem(HOUSE_ARCH_KEY, JSON.stringify(all));
-        }
-
-        function getCloseApplyStorage() {
-            try {
-                const raw = localStorage.getItem(CLOSE_APPLY_KEY);
-                return raw ? JSON.parse(raw) : [];
-            } catch (e) {
-                return [];
-            }
-        }
-
-        function setCloseApplyStorage(list) {
-            localStorage.setItem(CLOSE_APPLY_KEY, JSON.stringify(list));
-        }
-
-        function generateCloseApplyId(prefix) {
-            const d = new Date();
-            const pad = n => n < 10 ? '0' + n : n;
-            return prefix + '-' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '-' + Math.floor(Math.random()*900 + 100);
-        }
-
         function getCurrentHouseNo() {
             const no = getUrlParam('no');
             if (no) return no;
-            // 兼容旧页面使用 id 参数
             return getUrlParam('id') || 'NF-2025-00001';
         }
 
+        // 兼容：house-arch-detail 原有局部函数优先调用统一数据层
         function getCurrentHouseArch() {
+            initHouseArchSeed();
             const no = getCurrentHouseNo();
-            const all = getHouseArchStorage();
-            if (!all[no]) {
-                all[no] = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS));
-                all[no].no = no;
+            let rec = getHouseRecord(no);
+            if (!rec) {
+                rec = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS));
+                rec.no = no;
+                ensureHouseRecord(no);
             }
-            // 确保所有数组字段存在
             ['manageRecords','projectRecords','qualityTrace','archiveRecords'].forEach(k => {
-                if (!Array.isArray(all[no][k])) all[no][k] = [];
+                if (!Array.isArray(rec[k])) rec[k] = [];
             });
-            return all[no];
+            return rec;
         }
 
         function saveCurrentHouseArch(status) {

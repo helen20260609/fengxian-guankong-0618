@@ -27,22 +27,28 @@ const STATUS_LABEL_MAP = {
 let __seedGenerated = false;
 
 // ---------------- localStorage 读写 ----------------
-function getHouseArchStorage() {
+function __getHouseArchStorage() {
     try {
         const raw = localStorage.getItem(HOUSE_ARCH_KEY);
         const parsed = raw ? JSON.parse(raw) : {};
         return parsed && typeof parsed === 'object' ? parsed : {};
     } catch (e) { return {}; }
 }
-function setHouseArchStorage(all) {
+function __setHouseArchStorage(all) {
     localStorage.setItem(HOUSE_ARCH_KEY, JSON.stringify(all));
 }
-function getCloseApplyStorage() {
+function __getCloseApplyStorage() {
     try { const raw = localStorage.getItem(CLOSE_APPLY_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
-function setCloseApplyStorage(list) {
+function __setCloseApplyStorage(list) {
     localStorage.setItem(CLOSE_APPLY_KEY, JSON.stringify(list));
 }
+
+// 保持原有名称的全局别名
+function getHouseArchStorage() { return __getHouseArchStorage(); }
+function setHouseArchStorage(all) { return __setHouseArchStorage(all); }
+function getCloseApplyStorage() { return __getCloseApplyStorage(); }
+function setCloseApplyStorage(list) { return __setCloseApplyStorage(list); }
 
 // ---------------- 工具函数 ----------------
 function pad5(n) { return String(n).padStart(5, '0'); }
@@ -69,7 +75,8 @@ const DEFAULT_HOUSE_STATUS = {
     lat: 30.92, lng: 121.47, year: 1990, category: '砖混', houseType: '农村自建房',
     totalTask: 0, doneTask: 0, fundUsed: 0, fundTotal: 0, overdue: false,
     projectMeasure: 0, manageMeasure: 0, rectDeadline: '', completeDate: '',
-    hazards: [], measures: [], eliminationInfo: {}, progress: 0, responsibleDept: '', responsiblePerson: ''
+    hazards: [], measures: [], eliminationInfo: {}, progress: 0, responsibleDept: '', responsiblePerson: '',
+    risk: 'warning', governance: 'pending'
 };
 
 // 从统一数据记录获取完整记录（如不存在则返回 null）
@@ -207,6 +214,11 @@ function generateHouseSeed() {
             rejectReason = '整治不到位，需补充材料';
         }
 
+        // 已销号且治理完成的风险统一为 safe/无风险
+        if (governance === 'done' && closeStatus === '已通过') {
+            risk = 'safe';
+        }
+
         const eliminationInfo = {
             applyTime: applyTime || null,
             reviewTime: auditTime || null,
@@ -216,7 +228,7 @@ function generateHouseSeed() {
         };
 
         const governStatus = STATUS_LABEL_MAP[governance];
-        const riskLevel = RISK_LABEL_MAP[risk];
+        const riskLevel = risk === 'safe' ? (closeStatus === '已通过' ? '无风险' : '安全') : RISK_LABEL_MAP[risk];
 
         const record = {
             no, name, owner, street, community, address,
