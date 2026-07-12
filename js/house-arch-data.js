@@ -250,6 +250,11 @@ function generateProjectRecordsLocal(no, risk, governance, projectMeasure, i, fu
         const nodeCount = isDone ? 3 : (governance === 'doing' ? 2 : 1);
         const fundPer = projectMeasure > 0 ? Math.round(fundTotal / projectMeasure) : 0;
         const projectFund = fundPer + Math.round((Math.sin(i * 100 + idx) * 0.3) * fundPer);
+        const manager = RESPONSIBLE_PERSONS[(i + idx) % RESPONSIBLE_PERSONS.length];
+        const phone = MANAGER_PHONES[(i + idx) % MANAGER_PHONES.length];
+        const progress = isDone ? 100 : (governance === 'doing' ? 50 : 0);
+        const reportTime = isDone ? (endDate + ' 16:00') : (startDate + ' 08:00');
+        const remark = isDone ? '工程已竣工，验收合格' : (governance === 'doing' ? '施工进行中，进度约' + progress + '%' : '尚未开工，待资金到位后启动');
         records.push({
             id: no + '-P' + (idx + 1),
             projectName: pName,
@@ -259,9 +264,12 @@ function generateProjectRecordsLocal(no, risk, governance, projectMeasure, i, fu
             fund: projectFund,
             status: isDone ? '已完成' : (governance === 'doing' ? '进行中' : '未开工'),
             isDone: isDone,
-            manager: RESPONSIBLE_PERSONS[(i + idx) % RESPONSIBLE_PERSONS.length],
-            phone: MANAGER_PHONES[(i + idx) % MANAGER_PHONES.length],
-            progress: isDone ? 100 : (governance === 'doing' ? 50 : 0),
+            manager: manager,
+            phone: phone,
+            progress: progress,
+            reporter: manager,
+            reportTime: reportTime,
+            remark: remark,
             timeline: generateProjectTimeline(no, pName, startDate, endDate, isDone, governance, i, idx)
         });
     });

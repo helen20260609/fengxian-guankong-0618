@@ -1088,7 +1088,17 @@
             });
         }
 
+        function syncTopbarFromHouseArch() {
+            const s = currentHouseArch;
+            const titleEl = document.getElementById('topbarTitle');
+            const subEl = document.getElementById('topbarSub');
+            if (titleEl) titleEl.textContent = (s.name || '—') + (s.owner ? '（' + s.owner + '）' : '');
+            if (subEl) subEl.textContent = '编号：' + (s.no || '—') + ' | 奉贤区' + (s.street || '—') + ' · ' + (s.community || '—');
+        }
+
         function renderContent() {
+            currentHouseArch = getCurrentHouseArch();
+            syncTopbarFromHouseArch();
             renderTimeline();
             renderStatusPanel();
             const area = document.getElementById('contentArea');
@@ -1133,6 +1143,7 @@
         }
 
         function renderBasicContent() {
+            const s = currentHouseArch;
             const tabsHtml = basicSubTabs.map(tab => {
                 const active = tab.key === currentSubTab ? 'active' : '';
                 return '<div class="content-tab ' + active + '" data-key="' + tab.key + '">' +
@@ -1140,7 +1151,48 @@
                     '</div>';
             }).join('');
 
-            const rows = basicData[currentSubTab] || [];
+            const jbxx = [
+                ['房屋编号', s.no || 'NF-2025-00001'],
+                ['房屋名称', s.name || '—'],
+                ['房屋性质', s.houseType || '自住民居'],
+                ['所在区域', '奉贤区' + (s.street || '—')],
+                ['路号信息', s.address || '—'],
+                ['不需要排查原因', '—'],
+                ['产权人 / 使用人信息', s.owner || '—'],
+                ['身份证号码', '—'],
+                ['房屋用途', '自住'],
+                ['是否同时自住', '是'],
+                ['具体用途', '日常居住'],
+                ['人员聚集场所周边', '否'],
+                ['其他人员密集场所周边', '否'],
+                ['土地性质', '集体土地'],
+                ['集体土地', '宅基地'],
+                ['所在区域', '奉贤区' + (s.street || '—')],
+                ['建筑层数', '3层'],
+                ['建筑面积 (m²)', '—'],
+                ['建成时间', (s.year || '—') + '年'],
+                ['具体年份', (s.year || '—') + '年']
+            ];
+            const zjd = [
+                ['宅基地面积', '132㎡'],
+                ['审批情况', '自然资源部门审批通过'],
+                ['权属证明', '—']
+            ];
+            const jsqk = [
+                ['常住或使用人数超过 10 人', '否'],
+                ['设计方式', '有专业设计'],
+                ['建造方式', '有资质施工队伍'],
+                ['结构类型', s.category === '框架' ? '框架结构' : '砌体结构'],
+                ['楼屋盖', '现浇板'],
+                ['是否改扩建', '否'],
+                ['是否装修', '否']
+            ];
+            const glqk = [
+                ['已取得的行政许可', '宅基地批准书'],
+                ['违法建设和违法审批', '否']
+            ];
+            const dynamicBasic = { jbxx, zjd, jsqk, glqk };
+            const rows = dynamicBasic[currentSubTab] || basicData[currentSubTab] || [];
             const gridHtml = rows.map(r => {
                 return '<div class="info-item">' +
                     '<div class="info-label">' + r[0] + '</div>' +
@@ -1188,6 +1240,27 @@
 
         function getMeasureManageData() {
             const data = measureData.manage;
+            const rec = (currentHouseArch.manageRecords || [])[0];
+            if (rec) {
+                data.baseValues[0] = rec.measureType || '—';
+                data.baseValues[1] = rec.implementPart || '—';
+                data.baseValues[2] = rec.startTime || '—';
+                data.baseValues[3] = rec.planEndTime || '—';
+                data.baseValues[4] = rec.requirement || '—';
+                data.baseValues[5] = rec.dutyUnit || '—';
+                data.baseValues[6] = rec.dutyPerson || '—';
+                data.baseValues[7] = rec.phone || '—';
+                data.baseValues[8] = rec.measureDesc || '—';
+                data.baseValues[9] = rec.implementPhotos || '—';
+                data.baseValues[10] = rec.completePhotos || '—';
+                data.baseValues[11] = rec.isDone ? '是' : '否';
+                data.baseValues[12] = rec.effectEvaluation || '—';
+                data.baseValues[13] = rec.riskControlled ? '是' : '否';
+                data.baseValues[14] = rec.changeApply || '—';
+                data.baseValues[15] = rec.remark || '—';
+                data.baseValues[16] = rec.reporter || '—';
+                data.baseValues[17] = rec.reportTime || '—';
+            }
             const measureType = data.baseValues[0] || '停止使用';
             const extra = data.extraFields[measureType] || {};
             const columns = data.baseColumns.concat(Object.keys(extra));
@@ -1211,6 +1284,30 @@
                 rows = manageData.values;
             } else {
                 data = measureData[currentMeasureSubTab] || { columns: [], rows: [] };
+                const rec = (currentHouseArch.projectRecords || [])[0];
+                if (rec && currentMeasureSubTab === 'project') {
+                    const files = ['—','—','—','—','—','—','—','—','—','—','—','—','—','—'];
+                    data.rows[0] = [
+                        rec.projectName || '—',                       // 0 工程措施
+                        rec.projectName || '—',                       // 1 措施类型
+                        '整栋房屋',                                   // 2 实施范围
+                        '区级修缮工程补贴',                           // 3 政策路径
+                        '—',                                          // 4 其他政策路径
+                        '—',                                          // 5 细化方案
+                        rec.startDate || '—',                         // 6 开工时间
+                        rec.endDate || '—',                           // 7 竣工时间
+                        rec.company || '—',                           // 8 施工单位
+                        rec.manager || '—',                           // 9 施工负责人
+                        rec.phone || '—',                             // 10 联系电话
+                        rec.fund ? (rec.fund / 10000).toFixed(2) : '—', // 11 工程概算
+                        '区级修缮补贴60%+业主自筹40%',                // 12 资金来源
+                        ...files,                                     // 13-26 文件/照片
+                        rec.isDone ? '是' : '否',                    // 27 措施是否完成
+                        rec.remark || '—',                           // 28 备注
+                        rec.reporter || '—',                         // 29 填报人
+                        rec.reportTime || '—'                        // 30 填报时间
+                    ];
+                }
                 columns = data.columns;
                 rows = data.rows[0] || [];
             }
@@ -1478,71 +1575,34 @@
         }
 
         function renderTableContent(key) {
-            const data = tableData[key];
             const item = sidebarItems.find(i => i.key === key);
-            const columns = data.columns;
-            const values = data.rows[0] || [];
-            const gridHtml = columns.map((c, i) => {
-                const isPhoto = c && c.includes('照片');
-                const val = values[i] || '';
-                const isImageUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
-                let valueHtml = '';
-                if (isPhoto && val) {
-                    const urls = val.split(',').map(s => s.trim()).filter(isImageUrl);
-                    if (urls.length) {
-                        valueHtml = '<div class="info-value photo-value photo-grid">' + urls.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>';
-                    } else {
-                        valueHtml = '<div class="info-value empty">—</div>';
-                    }
-                } else {
-                    valueHtml = '<div class="info-value ' + (val ? '' : 'empty') + '">' + (val || '--') + '</div>';
-                }
-                return '<div class="info-item ' + (isPhoto ? 'full-width' : '') + '">' +
-                    '<div class="info-label">' + c + '</div>' +
-                    valueHtml +
-                    '</div>';
-            }).join('');
-
+            const s = currentHouseArch;
             let html = '<div class="content-card">' +
                 '<div class="content-card-header">' +
-                    '<div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + data.title + '</div>' +
+                    '<div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div>' +
                 '</div>' +
-                '<div class="content-body">' +
-                    '<div class="info-grid info-grid-table">' + gridHtml + '</div>';
-            if (key === 'accept') {
-                html += '<div class="table-section-title">审核历史</div>' +
-                    '<div class="table-wrap">' +
-                    '<table class="arch-table" id="acceptAuditTable">' +
-                    '<thead><tr><th>序号</th><th>提交人</th><th>提交时间</th><th>审核时间</th><th>审核人</th><th>审核结论</th><th>审核报告</th><th>备注</th></tr></thead>' +
-                    '<tbody>' + renderAuditRows(data.auditList, true) + '</tbody></table></div>';
+                '<div class="content-body">';
+
+            if (key === 'measure') {
+                html += renderMeasureTable(s);
+            } else if (key === 'control') {
+                html += renderControlTable(s);
+            } else if (key === 'accept') {
+                html += renderAcceptTable(s);
+            } else if (key === 'close') {
+                html += renderCloseTable(s);
+            } else if (key === 'record') {
+                html += renderRecordTable(s);
+            } else if (key === 'archive') {
+                html += renderArchiveTable(s);
+            } else {
+                const data = tableData[key];
+                const columns = data.columns;
+                const values = data.rows[0] || [];
+                html += renderKeyValueGrid(columns, values);
             }
-            if (key === 'close') {
-                const s = currentHouseArch;
-                const closeStatusClass = {
-                    '未申请': 'info',
-                    '待审核': 'warning',
-                    '审核中': 'warning',
-                    '已通过': 'safe',
-                    '已驳回': 'danger'
-                }[s.closeStatus] || 'info';
-                html += '<div class="info-section-title" style="margin-top:18px;"><i class="fas fa-clipboard-check"></i> 销号状态</div>' +
-                    '<div class="info-grid info-grid-table">' +
-                        '<div class="info-item"><div class="info-label">当前销号状态</div><div class="info-value"><span class="status-badge ' + closeStatusClass + '">' + (s.closeStatus || '未申请') + '</span></div></div>' +
-                        '<div class="info-item"><div class="info-label">申请时间</div><div class="info-value">' + (s.closeApplyTime || '—') + '</div></div>' +
-                        '<div class="info-item"><div class="info-label">审核时间</div><div class="info-value">' + (s.closeAuditTime || '—') + '</div></div>' +
-                        '<div class="info-item"><div class="info-label">审核人</div><div class="info-value">' + (s.closeAuditor || '—') + '</div></div>' +
-                        '<div class="info-item full-width"><div class="info-label">审核意见</div><div class="info-value">' + (s.closeAuditOpinion || '—') + '</div></div>' +
-                        (s.closeStatus === '已驳回' ? '<div class="info-item full-width"><div class="info-label">驳回原因 / 整改要求</div><div class="info-value" style="color:var(--danger);">' + (s.closeRejectReason || '—') + '</div></div>' : '') +
-                        '<div class="info-item"><div class="info-label">重点监控名单</div><div class="info-value">' + (s.isRemovedFromFocus ? '<span class="status-badge safe">已退出</span>' : '<span class="status-badge warning">监控中</span>') + '</div></div>' +
-                    '</div>';
-                html += '<div class="table-section-title">审核列表</div>' +
-                    '<div class="table-wrap">' +
-                    '<table class="arch-table" id="closeAuditTable">' +
-                    '<thead><tr><th>提交人</th><th>提交时间</th><th>审核时间</th><th>审核人</th><th>审核结论</th><th>审核报告</th><th>备注</th></tr></thead>' +
-                    '<tbody>' + renderAuditRows(buildCloseAuditList(), false) + '</tbody></table></div>';
-            }
-            html += '</div>' +
-            '</div>';
+
+            html += '</div></div>';
             html += '<div class="bottom-bar">' +
                 '<div class="bottom-info">' +
                     '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
@@ -1550,7 +1610,6 @@
                 '</div>' +
                 '<div class="bottom-actions">';
             if (key === 'close') {
-                const s = currentHouseArch;
                 if (s.closeStatus === '未申请' || s.closeStatus === '已驳回') {
                     html += '<button class="bottom-btn primary" onclick="openCloseApplyModal()"><i class="fas fa-paper-plane"></i> 提交销号申请</button>';
                 }
@@ -1559,12 +1618,162 @@
                         '<button class="bottom-btn" style="border-color:var(--danger);color:var(--danger);" onclick="openCloseAuditModal(false)"><i class="fas fa-times"></i> 驳回</button>';
                 }
                 html += '<button class="bottom-btn" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
-            } else {
+            } else if (key !== 'archive') {
                 html += '<button class="bottom-btn primary" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             }
             html += '<button class="bottom-btn"><i class="fas fa-file-export"></i> 导出</button>' +
                 '</div>' +
             '</div>';
+            return html;
+        }
+
+        function renderKeyValueGrid(columns, values) {
+            return columns.map((c, i) => {
+                const isPhoto = c && c.includes('照片');
+                const val = values[i] || '';
+                const isImageUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
+                let valueHtml = '';
+                if (isPhoto && val) {
+                    const urls = val.split(',').map(s => s.trim()).filter(isImageUrl);
+                    valueHtml = urls.length
+                        ? '<div class="info-value photo-value photo-grid">' + urls.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
+                        : '<div class="info-value empty">—</div>';
+                } else {
+                    valueHtml = '<div class="info-value ' + (val ? '' : 'empty') + '">' + (val || '--') + '</div>';
+                }
+                return '<div class="info-item ' + (isPhoto ? 'full-width' : '') + '">' +
+                    '<div class="info-label">' + c + '</div>' + valueHtml +
+                '</div>';
+            }).join('');
+        }
+
+        function renderMeasureTable(s) {
+            if (!s.measures || s.measures.length === 0) {
+                return '<div class="empty-tip">暂无整治措施记录</div>';
+            }
+            let html = '<div class="table-section-title">措施清单</div>' +
+                '<div class="table-wrap"><table class="arch-table">' +
+                '<thead><tr><th>措施类型</th><th>措施名称</th><th>状态</th><th>开始时间</th><th>责任人</th></tr></thead>' +
+                '<tbody>';
+            s.measures.forEach(m => {
+                const statusMap = { pending: '待整治', doing: '整治中', done: '已完成' };
+                const typeMap = { management: '管理措施', engineering: '工程措施' };
+                html += '<tr><td>' + (typeMap[m.type] || m.type) + '</td><td>' + (m.name || '—') + '</td><td>' + (statusMap[m.status] || m.status) + '</td><td>' + (m.startTime || '—') + '</td><td>' + (m.dutyPerson || '—') + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+
+            if (s.manageRecords && s.manageRecords.length) {
+                html += '<div class="table-section-title" style="margin-top:18px;">管理措施实施记录</div>' +
+                    '<div class="table-wrap"><table class="arch-table">' +
+                    '<thead><tr><th>记录编号</th><th>措施类型</th><th>实施部位</th><th>开始时间</th><th>计划结束</th><th>实际结束</th><th>责任单位</th><th>责任人</th><th>完成状态</th><th>效果评估</th></tr></thead>' +
+                    '<tbody>';
+                s.manageRecords.forEach(r => {
+                    html += '<tr><td>' + (r.id || '—') + '</td><td>' + (r.measureType || '—') + '</td><td>' + (r.implementPart || '—') + '</td><td>' + (r.startTime || '—') + '</td><td>' + (r.planEndTime || '—') + '</td><td>' + (r.actualEndTime || '—') + '</td><td>' + (r.dutyUnit || '—') + '</td><td>' + (r.dutyPerson || '—') + '</td><td>' + (r.isDone ? '已完成' : '进行中') + '</td><td>' + (r.effectEvaluation || '—') + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            }
+
+            if (s.projectRecords && s.projectRecords.length) {
+                html += '<div class="table-section-title" style="margin-top:18px;">工程措施实施记录</div>' +
+                    '<div class="table-wrap"><table class="arch-table">' +
+                    '<thead><tr><th>工程名称</th><th>施工单位</th><th>开工时间</th><th>竣工时间</th><th>工程概算(元)</th><th>状态</th><th>负责人</th><th>进度</th></tr></thead>' +
+                    '<tbody>';
+                s.projectRecords.forEach(r => {
+                    html += '<tr><td>' + (r.projectName || '—') + '</td><td>' + (r.company || '—') + '</td><td>' + (r.startDate || '—') + '</td><td>' + (r.endDate || '—') + '</td><td>' + (r.fund || '—') + '</td><td>' + (r.status || '—') + '</td><td>' + (r.manager || '—') + '</td><td>' + (r.progress || 0) + '%</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            }
+            return html;
+        }
+
+        function renderControlTable(s) {
+            if (!s.manageRecords || s.manageRecords.length === 0) {
+                return '<div class="empty-tip">暂无隐患控制记录</div>';
+            }
+            let html = '<div class="info-section-title"><i class="fas fa-shield-alt"></i> 隐患控制情况</div>' +
+                '<div class="table-wrap"><table class="arch-table">' +
+                '<thead><tr><th>记录编号</th><th>措施类型</th><th>实施要求</th><th>风险是否已控制</th><th>效果评估</th><th>备注</th><th>填报人</th><th>填报时间</th></tr></thead>' +
+                '<tbody>';
+            s.manageRecords.forEach(r => {
+                html += '<tr><td>' + (r.id || '—') + '</td><td>' + (r.measureType || '—') + '</td><td>' + (r.requirement || '—') + '</td><td>' + (r.riskControlled ? '是' : '否') + '</td><td>' + (r.effectEvaluation || '—') + '</td><td>' + (r.remark || '—') + '</td><td>' + (r.reporter || '—') + '</td><td>' + (r.reportTime || '—') + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function renderAcceptTable(s) {
+            if (!s.qualityTrace || s.qualityTrace.length === 0) {
+                return '<div class="empty-tip">暂无阶段性验收记录</div>';
+            }
+            let html = '<div class="info-section-title"><i class="fas fa-clipboard-check"></i> 阶段性验收 / 质量追溯</div>' +
+                '<div class="table-wrap"><table class="arch-table">' +
+                '<thead><tr><th>检查项</th><th>检查日期</th><th>检查人</th><th>结果</th><th>结论</th><th>附件</th></tr></thead>' +
+                '<tbody>';
+            s.qualityTrace.forEach(r => {
+                html += '<tr><td>' + (r.checkItem || '—') + '</td><td>' + (r.checkDate || '—') + '</td><td>' + (r.checker || '—') + '</td><td>' + (r.result || '—') + '</td><td>' + (r.conclusion || '—') + '</td><td>' + (r.files || '—') + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function renderCloseTable(s) {
+            const closeStatusClass = {
+                '未申请': 'info',
+                '待审核': 'warning',
+                '审核中': 'warning',
+                '已通过': 'safe',
+                '已驳回': 'danger'
+            }[s.closeStatus] || 'info';
+            let html = '<div class="info-section-title"><i class="fas fa-clipboard-check"></i> 销号状态</div>' +
+                '<div class="info-grid info-grid-table">' +
+                    '<div class="info-item"><div class="info-label">当前销号状态</div><div class="info-value"><span class="status-badge ' + closeStatusClass + '">' + (s.closeStatus || '未申请') + '</span></div></div>' +
+                    '<div class="info-item"><div class="info-label">申请时间</div><div class="info-value">' + (s.closeApplyTime || '—') + '</div></div>' +
+                    '<div class="info-item"><div class="info-label">审核时间</div><div class="info-value">' + (s.closeAuditTime || '—') + '</div></div>' +
+                    '<div class="info-item"><div class="info-label">审核人</div><div class="info-value">' + (s.closeAuditor || '—') + '</div></div>' +
+                    '<div class="info-item full-width"><div class="info-label">审核意见</div><div class="info-value">' + (s.closeAuditOpinion || '—') + '</div></div>' +
+                    (s.closeStatus === '已驳回' ? '<div class="info-item full-width"><div class="info-label">驳回原因 / 整改要求</div><div class="info-value" style="color:var(--danger);">' + (s.closeRejectReason || '—') + '</div></div>' : '') +
+                    '<div class="info-item"><div class="info-label">重点监控名单</div><div class="info-value">' + (s.isRemovedFromFocus ? '<span class="status-badge safe">已退出</span>' : '<span class="status-badge warning">监控中</span>') + '</div></div>' +
+                '</div>';
+            html += '<div class="table-section-title">审核列表</div>' +
+                '<div class="table-wrap"><table class="arch-table" id="closeAuditTable">' +
+                '<thead><tr><th>提交人</th><th>提交时间</th><th>审核时间</th><th>审核人</th><th>审核结论</th><th>审核报告</th><th>备注</th></tr></thead>' +
+                '<tbody>' + renderAuditRows(buildCloseAuditList(), false) + '</tbody></table></div>';
+            return html;
+        }
+
+        function renderRecordTable(s) {
+            const events = [];
+            (s.manageRecords || []).forEach(r => events.push({ type: '管理措施', title: r.measureType || r.id, date: r.reportTime || r.startTime || '—', desc: r.remark || '—' }));
+            (s.projectRecords || []).forEach(r => events.push({ type: '工程措施', title: r.projectName || r.id, date: r.startDate || '—', desc: (r.company || '—') + ' | 状态：' + (r.status || '—') }));
+            (s.qualityTrace || []).forEach(r => events.push({ type: '质量追溯', title: r.checkItem || r.id, date: r.checkDate || '—', desc: r.conclusion || '—' }));
+            (s.archiveRecords || []).forEach(r => events.push({ type: '档案归档', title: r.archiveType || r.archiveNo, date: r.archiveTime || '—', desc: r.archiveStatus || '—' }));
+            if (events.length === 0) {
+                return '<div class="empty-tip">暂无隐患动态记录</div>';
+            }
+            events.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+            let html = '<div class="info-section-title"><i class="fas fa-history"></i> 隐患动态记录</div>' +
+                '<div class="table-wrap"><table class="arch-table">' +
+                '<thead><tr><th>类型</th><th>事项</th><th>日期</th><th>说明</th></tr></thead>' +
+                '<tbody>';
+            events.forEach(e => {
+                html += '<tr><td>' + e.type + '</td><td>' + e.title + '</td><td>' + e.date + '</td><td>' + e.desc + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function renderArchiveTable(s) {
+            if (!s.archiveRecords || s.archiveRecords.length === 0) {
+                return '<div class="empty-tip">暂无整治档案</div>';
+            }
+            let html = '<div class="info-section-title"><i class="fas fa-folder-open"></i> 整治档案</div>' +
+                '<div class="table-wrap"><table class="arch-table">' +
+                '<thead><tr><th>档案类型</th><th>档案编号</th><th>归档时间</th><th>归档状态</th><th>文件名</th><th>归档人</th></tr></thead>' +
+                '<tbody>';
+            s.archiveRecords.forEach(r => {
+                html += '<tr><td>' + (r.archiveType || '—') + '</td><td>' + (r.archiveNo || '—') + '</td><td>' + (r.archiveTime || '—') + '</td><td>' + (r.archiveStatus || '—') + '</td><td>' + (r.fileName || '—') + '</td><td>' + (r.uploader || '—') + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
             return html;
         }
 
