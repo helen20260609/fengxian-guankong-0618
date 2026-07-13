@@ -63,10 +63,6 @@ function normalizeExpertDomain(domain) {
 }
 function getFallbackList() {
     return [
-        { name: '张奉贤', gender: '男', birth: '1978-05', org: '上海市奉贤区建设工程安全质量监督站', domain: '建筑工地', direction: '隐患排查', industryExpertGroup: '建筑施工安全专家组', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2018-11', years: '22', phone: '138-1678-9523', email: 'zhangfengxian@example.com', address: '上海市奉贤区南桥镇解放东路23号', emergencyPosition: '安全评估组组长', originalDepartment: '工程质量监督科', emergencySpecialty: '建筑工地事故应急、坍塌救援技术指导', workplace: '奉贤区', status: '启用', history: [
-            { time: '2025-06-18 14:30:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
-            { time: '2025-06-18 15:10:00', action: '审核通过', operator: '审核员', remark: '资料齐全，同意入库' }
-        ] },
         { name: '王建国', gender: '男', birth: '1970-03', org: '上海市奉贤区燃气管理所', domain: '燃气', direction: '隐患排查', industryExpertGroup: '燃气安全专家组', title: '高级工程师', titleOrg: '上海市住房和城乡建设管理委员会', titleTime: '2015-09', years: '25', phone: '136-7890-1234', email: 'wangjianguo@example.com', address: '上海市奉贤区南桥镇沪杭公路999号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-17 09:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-17 10:30:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
@@ -79,10 +75,6 @@ function getFallbackList() {
             { time: '2025-06-15 08:30:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-15 09:45:00', action: '审核通过', operator: '审核员', remark: '同意入库' },
             { time: '2025-06-20 16:00:00', action: '停用', operator: '审核员', remark: '因长期未参与项目，暂停使用' }
-        ] },
-        { name: '赵文华', gender: '男', birth: '1975-11', org: '上海市奉贤区建筑管理所', domain: '建筑工地', direction: '安全评估', industryExpertGroup: '建筑施工安全专家组', title: '教授', titleOrg: '上海市教育委员会', titleTime: '2014-07', years: '28', phone: '138-1234-5678', email: 'zhaowenhua@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '启用', history: [
-            { time: '2025-06-14 11:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
-            { time: '2025-06-14 14:00:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] },
         { name: '孙丽华', gender: '女', birth: '1983-04', org: '上海市奉贤区市政公路管理所', domain: '交通', direction: '隐患排查', industryExpertGroup: '道路交通安全专家组', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2018-03', years: '16', phone: '137-9876-5432', email: 'sunlihua@example.com', address: '上海市奉贤区南桥镇沪杭公路999号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-13 10:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
@@ -171,18 +163,18 @@ function render() {
         '<span style="display:inline-block;padding:2px 8px;background:#f0f4ff;color:#2a5cff;border-radius:4px;font-size:12px;">独立专家</span>' :
         '<a style="cursor:pointer;color:var(--primary);text-decoration:underline;" onclick="goToTPOrgOrgView(\'' + item.orgId + '\')">' + (item.org || '') + '</a>';
     var rows = [
-        ['姓名', item.name],
-        ['性别', item.gender],
-        ['出生年月', item.birth],
+        ['姓名', item.name || ''],
+        ['性别', item.gender || ''],
+        ['出生年月', item.birth || ''],
         ['工作单位', orgHtml],
-        ['专业领域', item.domain],
-        ['专业', item.direction],
+        ['专业领域', item.domain || ''],
+        ['专业', item.direction || ''],
         ['所属行业专家组', item.industryExpertGroup || '—'],
-        ['职称', item.title],
+        ['职称', item.title || ''],
+        ['评定机构', item.titleOrg || ''],
+        ['评定时间', item.titleTime || ''],
         ['工作地点', item.workplace || ''],
-        ['发证机构', item.titleOrg],
-        ['取得时间', item.titleTime],
-        ['工作年限', item.years + ' 年'],
+        ['工作年限', (item.years || '') + ' 年'],
         ['联系电话', item.phone],
         ['电子邮箱', item.email],
         ['通讯地址', item.address],
@@ -201,14 +193,27 @@ function renderFiles(item) {
     var container = document.getElementById('fileList');
     if (!container) return;
     var files = [
-        { name: '专家入库申请表.pdf', status: '已上传' },
-        { name: '职称证书扫描件.pdf', status: '已上传' },
-        { name: '身份证扫描件.pdf', status: '已上传' },
-        { name: '学历学位证书.pdf', status: '已上传' }
+        { name: '专家入库申请表.pdf', status: '已上传', url: '../docs/专家入库申请表-' + (item.name || '') + '.pdf' },
+        { name: '职称证书扫描件.pdf', status: '已上传', url: '../docs/职称证书-' + (item.name || '') + '.pdf' },
+        { name: '身份证扫描件.pdf', status: '已上传', url: '../docs/身份证-' + (item.name || '') + '.pdf' },
+        { name: '学历学位证书.pdf', status: '已上传', url: '../docs/学历学位-' + (item.name || '') + '.pdf' }
     ];
-    container.innerHTML = files.map(function(f) {
-        return '<div class="file-item"><i class="fas fa-file-pdf"></i><span class="file-name">' + f.name + '</span><span class="file-status">' + f.status + '</span></div>';
+    container.innerHTML = files.map(function(f, idx) {
+        return '<div class="file-item" data-idx="' + idx + '">' +
+            '<i class="fas fa-file-pdf"></i>' +
+            '<span class="file-name">' + f.name + '</span>' +
+            '<span class="file-status">' + f.status + '</span>' +
+            '<button class="btn btn-sm" type="button" onclick="openFileInNewWindow(' + idx + ')">查看</button>' +
+        '</div>';
     }).join('');
+    window.__expertFiles = files;
+}
+
+function openFileInNewWindow(idx) {
+    var files = window.__expertFiles || [];
+    var f = files[idx];
+    if (!f) return;
+    window.open(f.url, '_blank', 'noopener,noreferrer');
 }
 
 render();
