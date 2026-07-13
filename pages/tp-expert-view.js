@@ -18,6 +18,7 @@ function getExpertList() {
                     expertType: e.expertType || (e.orgId ? '机构专家' : '独立专家'),
                     domain: normalizeExpertDomain(e.domain) || '',
                     direction: e.direction || '',
+                    industryExpertGroup: e.industryExpertGroup || '',
                     title: e.title || '',
                     titleOrg: e.titleOrg || '',
                     titleTime: e.titleTime || '',
@@ -62,36 +63,36 @@ function normalizeExpertDomain(domain) {
 }
 function getFallbackList() {
     return [
-        { name: '张奉贤', gender: '男', birth: '1978-05', org: '上海市奉贤区建设工程安全质量监督站', domain: '建筑工地', direction: '隐患排查', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2018-11', years: '22', phone: '138-1678-9523', email: 'zhangfengxian@example.com', address: '上海市奉贤区南桥镇解放东路23号', emergencyPosition: '安全评估组组长', originalDepartment: '工程质量监督科', emergencySpecialty: '建筑工地事故应急、坍塌救援技术指导', workplace: '奉贤区', status: '启用', history: [
+        { name: '张奉贤', gender: '男', birth: '1978-05', org: '上海市奉贤区建设工程安全质量监督站', domain: '建筑工地', direction: '隐患排查', industryExpertGroup: '建筑施工安全专家组', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2018-11', years: '22', phone: '138-1678-9523', email: 'zhangfengxian@example.com', address: '上海市奉贤区南桥镇解放东路23号', emergencyPosition: '安全评估组组长', originalDepartment: '工程质量监督科', emergencySpecialty: '建筑工地事故应急、坍塌救援技术指导', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-18 14:30:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-18 15:10:00', action: '审核通过', operator: '审核员', remark: '资料齐全，同意入库' }
         ] },
-        { name: '王建国', gender: '男', birth: '1970-03', org: '上海市奉贤区燃气管理所', domain: '燃气', direction: '隐患排查', title: '高级工程师', titleOrg: '上海市住房和城乡建设管理委员会', titleTime: '2015-09', years: '25', phone: '136-7890-1234', email: 'wangjianguo@example.com', address: '上海市奉贤区南桥镇沪杭公路999号', workplace: '奉贤区', status: '启用', history: [
+        { name: '王建国', gender: '男', birth: '1970-03', org: '上海市奉贤区燃气管理所', domain: '燃气', direction: '隐患排查', industryExpertGroup: '燃气安全专家组', title: '高级工程师', titleOrg: '上海市住房和城乡建设管理委员会', titleTime: '2015-09', years: '25', phone: '136-7890-1234', email: 'wangjianguo@example.com', address: '上海市奉贤区南桥镇沪杭公路999号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-17 09:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-17 10:30:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] },
-        { name: '陈志强', gender: '男', birth: '1985-12', org: '上海市奉贤区交通运输局', domain: '交通', direction: '安全评估', title: '工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2019-12', years: '12', phone: '135-4321-8765', email: 'chenzhiqiang@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '启用', history: [
+        { name: '陈志强', gender: '男', birth: '1985-12', org: '上海市奉贤区交通运输局', domain: '交通', direction: '安全评估', industryExpertGroup: '道路交通安全专家组', title: '工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2019-12', years: '12', phone: '135-4321-8765', email: 'chenzhiqiang@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-16 14:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-16 16:20:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] },
-        { name: '刘美华', gender: '女', birth: '1979-07', org: '上海市奉贤区住房保障和房屋管理局', domain: '城镇自建房', direction: '检测检验', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2017-05', years: '20', phone: '139-8765-4321', email: 'liumaihua@example.com', address: '上海市奉贤区南桥镇解放东路8号', workplace: '奉贤区', status: '停用', history: [
+        { name: '刘美华', gender: '女', birth: '1979-07', org: '上海市奉贤区住房保障和房屋管理局', domain: '城镇自建房', direction: '检测检验', industryExpertGroup: '城镇房屋安全专家组', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2017-05', years: '20', phone: '139-8765-4321', email: 'liumaihua@example.com', address: '上海市奉贤区南桥镇解放东路8号', workplace: '奉贤区', status: '停用', history: [
             { time: '2025-06-15 08:30:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-15 09:45:00', action: '审核通过', operator: '审核员', remark: '同意入库' },
             { time: '2025-06-20 16:00:00', action: '停用', operator: '审核员', remark: '因长期未参与项目，暂停使用' }
         ] },
-        { name: '赵文华', gender: '男', birth: '1975-11', org: '上海市奉贤区建筑管理所', domain: '建筑工地', direction: '安全评估', title: '教授', titleOrg: '上海市教育委员会', titleTime: '2014-07', years: '28', phone: '138-1234-5678', email: 'zhaowenhua@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '启用', history: [
+        { name: '赵文华', gender: '男', birth: '1975-11', org: '上海市奉贤区建筑管理所', domain: '建筑工地', direction: '安全评估', industryExpertGroup: '建筑施工安全专家组', title: '教授', titleOrg: '上海市教育委员会', titleTime: '2014-07', years: '28', phone: '138-1234-5678', email: 'zhaowenhua@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-14 11:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-14 14:00:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] },
-        { name: '孙丽华', gender: '女', birth: '1983-04', org: '上海市奉贤区市政公路管理所', domain: '交通', direction: '隐患排查', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2018-03', years: '16', phone: '137-9876-5432', email: 'sunlihua@example.com', address: '上海市奉贤区南桥镇沪杭公路999号', workplace: '奉贤区', status: '启用', history: [
+        { name: '孙丽华', gender: '女', birth: '1983-04', org: '上海市奉贤区市政公路管理所', domain: '交通', direction: '隐患排查', industryExpertGroup: '道路交通安全专家组', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2018-03', years: '16', phone: '137-9876-5432', email: 'sunlihua@example.com', address: '上海市奉贤区南桥镇沪杭公路999号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-13 10:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-13 11:30:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] },
-        { name: '周海涛', gender: '男', birth: '1980-08', org: '上海市奉贤区市场监管局', domain: '基坑', direction: '事故调查', title: '工程师', titleOrg: '上海市市场监督管理局', titleTime: '2020-08', years: '14', phone: '136-5678-9012', email: 'zhouhaitao@example.com', address: '上海市奉贤区南桥镇解放东路8号', workplace: '奉贤区', status: '启用', history: [
+        { name: '周海涛', gender: '男', birth: '1980-08', org: '上海市奉贤区市场监管局', domain: '基坑', direction: '事故调查', industryExpertGroup: '基坑与地下工程专家组', title: '工程师', titleOrg: '上海市市场监督管理局', titleTime: '2020-08', years: '14', phone: '136-5678-9012', email: 'zhouhaitao@example.com', address: '上海市奉贤区南桥镇解放东路8号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-12 09:30:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-12 11:00:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] },
-        { name: '吴建平', gender: '男', birth: '1973-02', org: '上海市奉贤区城管执法局', domain: '玻璃幕墙', direction: '应急咨询', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2012-11', years: '30', phone: '138-3456-7890', email: 'wujianping@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '停用', history: [
+        { name: '吴建平', gender: '男', birth: '1973-02', org: '上海市奉贤区城管执法局', domain: '玻璃幕墙', direction: '应急咨询', industryExpertGroup: '玻璃幕墙安全专家组', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2012-11', years: '30', phone: '138-3456-7890', email: 'wujianping@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '停用', history: [
             { time: '2025-06-11 13:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-11 15:00:00', action: '审核通过', operator: '审核员', remark: '同意入库' },
             { time: '2025-06-19 10:00:00', action: '停用', operator: '审核员', remark: '因工作调动，暂停使用' }
@@ -100,11 +101,11 @@ function getFallbackList() {
             { time: '2025-06-10 14:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-10 16:30:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] },
-        { name: '徐明辉', gender: '男', birth: '1977-10', org: '上海市奉贤区消防支队', domain: '高空坠物', direction: '隐患排查', title: '高级工程师', titleOrg: '上海市消防救援总队', titleTime: '2016-09', years: '23', phone: '137-8765-1234', email: 'xuminghui@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '启用', history: [
+        { name: '徐明辉', gender: '男', birth: '1977-10', org: '上海市奉贤区消防支队', domain: '高空坠物', direction: '隐患排查', industryExpertGroup: '消防安全专家组', title: '高级工程师', titleOrg: '上海市消防救援总队', titleTime: '2016-09', years: '23', phone: '137-8765-1234', email: 'xuminghui@example.com', address: '上海市奉贤区南桥镇解放东路23号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-09 08:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-09 10:00:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] },
-        { name: '杨慧敏', gender: '女', birth: '1984-01', org: '上海市奉贤区玻璃幕墙管理办', domain: '玻璃幕墙', direction: '检测检验', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2019-01', years: '15', phone: '136-7890-4567', email: 'yanghuimin@example.com', address: '上海市奉贤区南桥镇沪杭公路999号', workplace: '奉贤区', status: '启用', history: [
+        { name: '杨慧敏', gender: '女', birth: '1984-01', org: '上海市奉贤区玻璃幕墙管理办', domain: '玻璃幕墙', direction: '检测检验', industryExpertGroup: '玻璃幕墙安全专家组', title: '高级工程师', titleOrg: '上海市人力资源和社会保障局', titleTime: '2019-01', years: '15', phone: '136-7890-4567', email: 'yanghuimin@example.com', address: '上海市奉贤区南桥镇沪杭公路999号', workplace: '奉贤区', status: '启用', history: [
             { time: '2025-06-08 09:00:00', action: '新增', operator: '系统管理员', remark: '专家信息录入，提交审核' },
             { time: '2025-06-08 11:00:00', action: '审核通过', operator: '审核员', remark: '同意入库' }
         ] }
@@ -175,7 +176,8 @@ function render() {
         ['出生年月', item.birth],
         ['工作单位', orgHtml],
         ['专业领域', item.domain],
-        ['专业方向', item.direction],
+        ['专业', item.direction],
+        ['所属行业专家组', item.industryExpertGroup || '—'],
         ['职称', item.title],
         ['工作地点', item.workplace || ''],
         ['发证机构', item.titleOrg],
