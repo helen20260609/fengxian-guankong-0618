@@ -47,6 +47,20 @@ const MANAGER_PHONES = ['138-1234-5678', '139-5678-1234', '136-0000-1234', '137-
 const RESPONSIBLE_PERSONS = ['李志强', '王建国', '陈明华', '周敏', '张建军', '刘伟', '赵敏'];
 const AUDITORS = ['王建国', '李志强', '周敏', '陈明华'];
 const ENGINEERING_COMPANIES = ['上海建工集团', '奉贤城建公司', '华建工程公司', '东方建设集团', ' Municipal Engineering 公司'];
+const DESIGN_UNITS = ['上海城乡建筑设计院', '奉贤区建筑设计院', '华东建筑设计研究院', '上海民用建筑设计院', '上海现代建筑设计集团'];
+const SUPERVISION_UNITS = ['上海建设工程监理', '奉贤区工程监理公司', '华东工程监理', '上海市政监理', '南方建设监理'];
+const APPRAISAL_UNITS = ['上海市房屋安全检测中心', '奉贤区房屋安全鉴定所', '上海建科院房屋鉴定部', '同济大学房屋质量检测站', '上海房屋科学研究院'];
+const USAGE_TYPES = ['自住', '自住兼经营', '出租', '空置', '其他'];
+const FLOOR_OPTIONS = [1, 2, 3, 4, 5];
+const ROOF_TYPES = ['现浇板', '预制板', '木楼盖', '钢屋架', '坡屋顶', '平屋顶'];
+const FOUNDATION_TYPES = ['条形基础', '独立基础', '筏板基础', '桩基础', '毛石基础', '三合土基础'];
+const LAND_NATURES = ['宅基地', '集体建设用地', '国有划拨', '国有出让', '其他'];
+const OVER_10_PEOPLE = ['是', '否'];
+const DESIGN_MODES = ['有专业设计', '无专业设计', '通用图集', '自行设计'];
+const BUILD_MODES = ['有资质施工队伍', '无资质施工队伍', '自建', '村镇建筑工匠'];
+const EXPANSION_OPTIONS = ['否', '改扩建', '加层', '搭建'];
+const DECORATION_OPTIONS = ['否', '装修', '二次装修', '外立面改造'];
+const VILLAGES = ['张翁庙村', '洪庙村', '五四村', '新寺村', '潘垫村', '明星村', '李窑村', '星火村', '杨王村', '久茂村', '三坎村', '营房村'];
 let __seedGenerated = false;
 
 // ---------------- localStorage 读写 ----------------
@@ -89,7 +103,7 @@ function generateArchId(prefix) {
 
 // 默认单条房屋结构（兼容 house-arch-detail 的 DEFAULT_HOUSE_STATUS）
 const DEFAULT_HOUSE_STATUS = {
-    no: '', name: '', owner: '', street: '', address: '', community: '',
+    no: '', name: '', owner: '', street: '', address: '', community: '', village: '',
     riskLevel: '一般隐患', governStatus: '待整治', currentMeasure: '',
     managerName: '', managerPhone: '',
     manageRecords: [], projectRecords: [], qualityTrace: [], archiveRecords: [],
@@ -99,7 +113,49 @@ const DEFAULT_HOUSE_STATUS = {
     totalTask: 0, doneTask: 0, fundUsed: 0, fundTotal: 0, overdue: false,
     projectMeasure: 0, manageMeasure: 0, rectDeadline: '', completeDate: '',
     hazards: [], measures: [], eliminationInfo: {}, progress: 0, responsibleDept: '', responsiblePerson: '',
-    risk: 'warning', governance: 'pending'
+    risk: 'warning', governance: 'pending',
+    // 全要素档案扩展字段
+    overview: {
+        houseName: '', houseNo: '', houseType: '', structureType: '',
+        floors: '', buildingArea: '', builtYear: '', landNature: '',
+        address: '', belongTo: '', owner: '', idCard: '', phone: '',
+        usage: '', isSelfLive: '', specificUsage: '', crowdAround: '',
+        otherCrowdAround: '', over10People: '', permit: '', illegalBuild: ''
+    },
+    homestead: {
+        landNature: '', plotNo: '', area: '', approvalStatus: '', certNo: '',
+        approvalDept: '', approvalDate: '', remark: ''
+    },
+    designConstruction: {
+        designUnit: '', designUnitCode: '', designDate: '',
+        constructionUnit: '', constructionUnitCode: '', constructionQual: '',
+        supervisionUnit: '', supervisionUnitCode: '',
+        designMode: '', buildMode: '',
+        hasProfessionalDesign: false, hasQualificationTeam: false
+    },
+    structure: {
+        structureType: '', floors: '', buildingArea: '',
+        roofType: '', wallMaterial: '', floorMaterial: '',
+        foundationType: '', seismicInfo: '', maxSpan: '',
+        expansionStatus: '', decorationStatus: '', remark: ''
+    },
+    usage: {
+        usageType: '', isSelfLive: '', specificUsage: '', occupancy: '',
+        crowdAround: '', otherCrowdAround: '', over10People: '',
+        historyChanges: []
+    },
+    photos: {
+        exterior: [], interior: [], surrounding: [], hazard: [],
+        measure: [], completion: []
+    },
+    inspectionRecords: [],
+    appraisalReports: [],
+    patrolRecords: [],
+    riskIdentification: [],
+    riskClassification: { level: '', basis: '', assessTime: '', assessor: '' },
+    emergencyResponse: {
+        planName: '', planDate: '', drillRecords: [], responseRecords: []
+    }
 };
 
 // 规范化单条记录：保持 risk/riskLevel、governance/governStatus 两对字段一致，
@@ -109,6 +165,20 @@ function normalizeHouseRecord(record) {
     const rec = record;
     // 确保 no 存在
     if (!rec.no) rec.no = '';
+
+    // 确保全要素档案字段存在
+    if (!rec.overview) rec.overview = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.overview));
+    if (!rec.homestead) rec.homestead = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.homestead));
+    if (!rec.designConstruction) rec.designConstruction = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.designConstruction));
+    if (!rec.structure) rec.structure = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.structure));
+    if (!rec.usage) rec.usage = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.usage));
+    if (!rec.photos) rec.photos = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.photos));
+    if (!rec.inspectionRecords) rec.inspectionRecords = [];
+    if (!rec.appraisalReports) rec.appraisalReports = [];
+    if (!rec.patrolRecords) rec.patrolRecords = [];
+    if (!rec.riskIdentification) rec.riskIdentification = [];
+    if (!rec.riskClassification) rec.riskClassification = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskClassification));
+    if (!rec.emergencyResponse) rec.emergencyResponse = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.emergencyResponse));
 
     // 销号已通过：强制无风险/已治理
     if (rec.closeStatus === '已通过') {
@@ -390,6 +460,139 @@ function generateArchiveRecords(no, risk, governance, closeStatus, i) {
     return records;
 }
 
+// 生成排查记录
+function generateInspectionRecords(no, risk, i) {
+    if (risk === 'safe') return [];
+    const part = HAZARD_PARTS[i % HAZARD_PARTS.length];
+    const type = HAZARD_TYPES[(i + 3) % HAZARD_TYPES.length];
+    const checkDate = '2024-' + pad2(5 + (i % 4)) + '-' + pad2(10 + (i % 15));
+    return [{
+        id: 'INS-' + no + '-001',
+        checkDate: checkDate,
+        checker: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+        checkerPhone: MANAGER_PHONES[i % MANAGER_PHONES.length],
+        structureStatus: RISK_LABEL_MAP[risk],
+        damagePart: part,
+        overload: '否',
+        otherRisk: '暂无',
+        preliminaryJudge: risk === 'danger' ? '立即停止使用' : (risk === 'major' ? '停止使用危险区域' : '加强观察'),
+        location: '',
+        dutyPerson: RESPONSIBLE_PERSONS[(i + 1) % RESPONSIBLE_PERSONS.length],
+        dutyPhone: MANAGER_PHONES[(i + 1) % MANAGER_PHONES.length],
+        photos: '',
+        preAppraisal: '否',
+        noAppraisalReason: '资金尚未到位',
+        proofFiles: '',
+        remark: part + '存在' + type + '，需进行安全整治',
+        reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+        reportTime: checkDate + ' 09:00'
+    }];
+}
+
+// 生成鉴定报告
+function generateAppraisalReports(no, risk, governance, i) {
+    if (risk === 'safe') return [];
+    const isDone = governance === 'done';
+    const appraisalDate = '2024-' + pad2(6 + (i % 4)) + '-' + pad2(10 + (i % 15));
+    return [{
+        id: 'APP-' + no + '-001',
+        orgName: APPRAISAL_UNITS[i % APPRAISAL_UNITS.length],
+        orgCode: '91310120MA1K' + pad5(i),
+        appraisalDate: appraisalDate,
+        appraiser: RESPONSIBLE_PERSONS[(i + 2) % RESPONSIBLE_PERSONS.length],
+        conclusion: RISK_LABEL_MAP[risk],
+        level: RISK_LABEL_MAP[risk],
+        phaseTag: '阶段性鉴定',
+        reportFiles: '',
+        remark: '东侧承重墙需加固',
+        reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+        reportTime: appraisalDate + ' 10:00'
+    }];
+}
+
+// 生成巡查检查记录
+function generatePatrolRecords(no, risk, governance, i) {
+    if (risk === 'safe') return [];
+    const records = [];
+    const months = governance === 'done' ? 3 : (governance === 'doing' ? 2 : 1);
+    for (let m = 0; m < months; m++) {
+        records.push({
+            id: 'PAT-' + no + '-' + pad2(m + 1),
+            patrolDate: '2024-' + pad2(7 + m + (i % 3)) + '-' + pad2(5 + (i % 20)),
+            patrolType: m % 2 === 0 ? '日常巡查' : '专项检查',
+            patrolOrg: MODULE_STREETS[(i - 1) % MODULE_STREETS.length] + '城建中心',
+            patrolPerson: RESPONSIBLE_PERSONS[(i + m) % RESPONSIBLE_PERSONS.length],
+            content: '检查房屋隐患部位安全状况、管控措施落实情况',
+            result: '正常',
+            photos: '',
+            files: '',
+            remark: '管控措施到位，需持续关注'
+        });
+    }
+    return records;
+}
+
+// 生成风险辨识记录
+function generateRiskIdentification(no, risk, i) {
+    if (risk === 'safe') return [];
+    const part = HAZARD_PARTS[i % HAZARD_PARTS.length];
+    const type = HAZARD_TYPES[(i + 3) % HAZARD_TYPES.length];
+    return [{
+        id: 'RIS-' + no + '-001',
+        identifyDate: '2024-' + pad2(5 + (i % 4)) + '-' + pad2(10 + (i % 15)),
+        identifyPerson: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+        hazardPart: part,
+        hazardType: type,
+        hazardDesc: part + '存在' + type + '，影响结构安全',
+        possibleConsequence: '局部坍塌、人员伤亡',
+        controlSuggestion: '立即停止使用，设置围挡警示，尽快实施加固',
+        photos: ''
+    }];
+}
+
+// 生成应急处置记录
+function generateEmergencyResponse(no, risk, governance, i) {
+    const hasPlan = risk !== 'safe' || i % 5 === 0;
+    const planDate = '2024-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28));
+    const drills = hasPlan ? [{
+        drillDate: '2024-' + pad2(6 + (i % 4)) + '-' + pad2(10 + (i % 15)),
+        drillOrg: MODULE_STREETS[(i - 1) % MODULE_STREETS.length] + '应急管理办',
+        drillContent: '房屋安全隐患应急疏散演练',
+        participants: 12 + (i % 8),
+        photos: '',
+        remark: '演练达到预期效果'
+    }] : [];
+    const responses = [];
+    if (risk !== 'safe' && governance !== 'done' && i % 4 === 0) {
+        responses.push({
+            responseDate: '2024-' + pad2(8 + (i % 3)) + '-' + pad2(5 + (i % 20)),
+            eventDesc: '巡查发现' + HAZARD_PARTS[i % HAZARD_PARTS.length] + '变形加剧',
+            responseMeasure: '立即扩大警戒范围，组织人员撤离，安排专家现场研判',
+            responseResult: '险情得到控制，无人员伤亡',
+            photos: '',
+            reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length]
+        });
+    }
+    return {
+        planName: hasPlan ? (no + ' 房屋安全应急预案') : '',
+        planDate: hasPlan ? planDate : '',
+        drillRecords: drills,
+        responseRecords: responses
+    };
+}
+
+// 生成房屋照片占位
+function generateHousePhotos(no, i) {
+    return {
+        exterior: [],
+        interior: [],
+        surrounding: [],
+        hazard: [],
+        measure: [],
+        completion: []
+    };
+}
+
 // 生成隐患明细
 function generateHazards(risk, i) {
     if (risk === 'safe') return [];
@@ -579,8 +782,110 @@ function generateHouseSeed() {
         const qualityTrace = generateQualityTrace(no, risk, governance, projectMeasure, i);
         const archiveRecords = generateArchiveRecords(no, risk, governance, closeStatus, i);
 
+        // 全要素档案字段
+        const village = VILLAGES[(i - 1) % VILLAGES.length];
+        const floors = FLOOR_OPTIONS[i % FLOOR_OPTIONS.length];
+        const buildingArea = (80 + (i * 3.5)).toFixed(1);
+        const roofType = ROOF_TYPES[i % ROOF_TYPES.length];
+        const foundationType = FOUNDATION_TYPES[i % FOUNDATION_TYPES.length];
+        const landNature = LAND_NATURES[i % LAND_NATURES.length];
+        const designMode = DESIGN_MODES[i % DESIGN_MODES.length];
+        const buildMode = BUILD_MODES[i % BUILD_MODES.length];
+        const usageType = USAGE_TYPES[i % USAGE_TYPES.length];
+        const over10 = OVER_10_PEOPLE[i % OVER_10_PEOPLE.length];
+        const expansionStatus = EXPANSION_OPTIONS[i % EXPANSION_OPTIONS.length];
+        const decorationStatus = DECORATION_OPTIONS[i % DECORATION_OPTIONS.length];
+
+        const overview = {
+            houseName: name, houseNo: no, houseType: category,
+            structureType: struct === '砖混' ? '砌体结构' : (struct === '框架' ? '框架结构' : '砖木结构'),
+            floors: floors + '层', buildingArea: buildingArea, builtYear: String(year),
+            landNature: landNature, address: address, belongTo: street + ' · ' + village,
+            owner: owner, idCard: '310226' + (1960 + (i % 40)) + pad2(1 + (i % 12)) + pad2(1 + (i % 28)) + pad2(i % 100),
+            phone: MANAGER_PHONES[i % MANAGER_PHONES.length],
+            usage: usageType, isSelfLive: usageType === '自住' ? '是' : '否',
+            specificUsage: usageType === '自住' ? '日常居住' : (usageType === '出租' ? '出租居住' : '—'),
+            crowdAround: '否', otherCrowdAround: '否', over10People: over10,
+            permit: category === '农村自建房' ? '宅基地批准书' : '建设工程规划许可证',
+            illegalBuild: '否'
+        };
+
+        const homestead = {
+            landNature: landNature,
+            plotNo: 'ZD-' + (2000 + (i % 25)) + pad2(1 + (i % 12)) + pad2(1 + (i % 28)),
+            area: (120 + (i * 2)).toFixed(1) + '㎡',
+            approvalStatus: '审批通过',
+            certNo: '沪奉宅字' + (2000 + (i % 25)) + '第' + pad5(i) + '号',
+            approvalDept: '上海市奉贤区规划和自然资源局',
+            approvalDate: (2000 + (i % 25)) + '-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28)),
+            remark: ''
+        };
+
+        const designConstruction = {
+            designUnit: DESIGN_UNITS[i % DESIGN_UNITS.length],
+            designUnitCode: '91310120MA1H' + pad5(i),
+            designDate: (year - 1) + '-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28)),
+            constructionUnit: ENGINEERING_COMPANIES[i % ENGINEERING_COMPANIES.length],
+            constructionUnitCode: '91310120MA1J' + pad5(i),
+            constructionQual: i % 3 === 0 ? '建筑工程施工总承包一级' : (i % 3 === 1 ? '建筑工程施工总承包二级' : '房屋建筑工程施工总承包三级'),
+            supervisionUnit: SUPERVISION_UNITS[i % SUPERVISION_UNITS.length],
+            supervisionUnitCode: '91310120MA1K' + pad5(i),
+            designMode: designMode,
+            buildMode: buildMode,
+            hasProfessionalDesign: designMode === '有专业设计',
+            hasQualificationTeam: buildMode === '有资质施工队伍'
+        };
+
+        const structure = {
+            structureType: struct === '砖混' ? '砌体结构' : (struct === '框架' ? '框架结构' : '砖木结构'),
+            floors: floors + '层',
+            buildingArea: buildingArea + '㎡',
+            roofType: roofType,
+            wallMaterial: struct === '框架' ? '加气混凝土砌块' : '烧结普通砖',
+            floorMaterial: roofType,
+            foundationType: foundationType,
+            seismicInfo: '未做抗震专项设计',
+            maxSpan: (3.6 + (i % 5) * 0.3).toFixed(1) + 'm',
+            expansionStatus: expansionStatus,
+            decorationStatus: decorationStatus,
+            remark: ''
+        };
+
+        const usage = {
+            usageType: usageType,
+            isSelfLive: usageType === '自住' ? '是' : '否',
+            specificUsage: overview.specificUsage,
+            occupancy: over10 === '是' ? '12人' : (2 + (i % 6)) + '人',
+            crowdAround: '否',
+            otherCrowdAround: '否',
+            over10People: over10,
+            historyChanges: []
+        };
+        if (expansionStatus !== '否') {
+            usage.historyChanges.push({
+                changeDate: (year + 5 + (i % 10)) + '-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28)),
+                changeType: expansionStatus,
+                changeContent: '对房屋进行' + expansionStatus,
+                approvalStatus: '已审批',
+                remark: ''
+            });
+        }
+
+        const inspectionRecords = generateInspectionRecords(no, risk, i);
+        const appraisalReports = generateAppraisalReports(no, risk, governance, i);
+        const patrolRecords = generatePatrolRecords(no, risk, governance, i);
+        const riskIdentification = generateRiskIdentification(no, risk, i);
+        const riskClassification = {
+            level: riskLevel,
+            basis: '依据《农村住房危险性鉴定标准》综合评定为' + riskLevel,
+            assessTime: inspectionRecords.length ? inspectionRecords[0].checkDate : '',
+            assessor: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length]
+        };
+        const emergencyResponse = generateEmergencyResponse(no, risk, governance, i);
+        const photos = generateHousePhotos(no, i);
+
         const record = {
-            no, name, owner, street, community, address,
+            no, name, owner, street, community, address, village,
             category: struct,
             houseType: category,
             riskLevel, risk,
@@ -597,7 +902,10 @@ function generateHouseSeed() {
             hazards, measures, eliminationInfo,
             progress: totalTask ? Math.round(doneTask / totalTask * 100) : 100,
             responsibleDept,
-            responsiblePerson
+            responsiblePerson,
+            overview, homestead, designConstruction, structure, usage,
+            photos, inspectionRecords, appraisalReports, patrolRecords,
+            riskIdentification, riskClassification, emergencyResponse
         };
         data[no] = record;
     }
