@@ -189,6 +189,30 @@
         .photo-viewer-box img { max-width: 100%; max-height: 90vh; border-radius: 4px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
         .photo-viewer-close { position: absolute; top: -40px; right: 0; width: 32px; height: 32px; border: none; border-radius: 50%; background: rgba(255,255,255,0.9); font-size: 20px; cursor: pointer; color: #333; }
 
+        .record-list { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px; }        .record-list th, .record-list td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+        .record-list th { background: #fafbfc; color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+        .record-list tr { cursor: pointer; transition: background 0.15s; }
+        .record-list tr:hover { background: var(--bg-hover); }
+        .record-list tr.active { background: var(--primary-light); }
+        .record-list .actions { text-align: right; white-space: nowrap; }
+        .record-list .tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+        .record-list .tag.primary { background: var(--primary-light); color: var(--primary); }
+        .record-list .tag.success { background: #e6f4ea; color: var(--safe); }
+        .record-list .tag.warning { background: #fff8e1; color: #f9a825; }
+        .record-list .tag.danger { background: #fce8e6; color: var(--danger); }
+        .record-list .tag.info { background: #f0f2f5; color: var(--text-secondary); }
+        .record-empty { color: var(--text-secondary); font-size: 13px; padding: 12px 0; }
+        .record-section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .record-section-title span { font-size: 14px; font-weight: 600; }
+        .record-add-btn {
+            display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--primary);
+            background: #fff; color: var(--primary); font-size: 12px; cursor: pointer;
+        }
+        .record-add-btn:hover { background: var(--primary-light); }
+        .record-detail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+        .record-detail-header .title { font-size: 14px; font-weight: 600; }
+        .record-detail-header .meta { font-size: 12px; color: var(--text-secondary); }
+
         @media (max-width: 900px) {
             .main-body { flex-direction: column; }
             .sidebar { width: 100%; position: static; }
@@ -258,29 +282,71 @@
         // 侧边栏模块配置：key / icon / title / tag
         const sidebarModules = [
             { key: 'overview', icon: 'fa-id-card', title: '房屋概况', tag: '基础' },
-            { key: 'designConstruction', icon: 'fa-hard-hat', title: '设计施工信息', tag: '建设' },
-            { key: 'structure', icon: 'fa-building', title: '结构信息', tag: '结构' },
-            { key: 'usage', icon: 'fa-home', title: '使用信息', tag: '用途' },
             { key: 'inspection', icon: 'fa-search', title: '排查记录', tag: '排查' },
-            { key: 'appraisal', icon: 'fa-clipboard-check', title: '鉴定报告', tag: '鉴定' },
             { key: 'risk', icon: 'fa-exclamation-triangle', title: '风险辨识与分类', tag: '风险' },
             { key: 'patrol', icon: 'fa-walking', title: '巡查检查', tag: '巡查' },
             { key: 'measure', icon: 'fa-tools', title: '隐患整治', tag: '整治' },
             { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '应急' },
             { key: 'close', icon: 'fa-check-circle', title: '验收销号', tag: '闭环' },
+            { key: 'appraisal', icon: 'fa-clipboard-check', title: '安全鉴定', tag: '鉴定' },
             { key: 'archive', icon: 'fa-folder-open', title: '整治档案', tag: '归档' }
         ];
 
         let currentModule = 'overview';
         let currentHouse = getCurrentHouseArch();
+        let eventListenersBound = false;
 
         const overviewSubTabs = [
             { key: 'jbxx', title: '基本信息', icon: 'fa-id-card' },
             { key: 'zjd', title: '宅基地信息', icon: 'fa-map' },
             { key: 'jsqk', title: '建设情况', icon: 'fa-hard-hat' },
-            { key: 'glqk', title: '管理情况', icon: 'fa-file-alt' }
+            { key: 'glqk', title: '管理情况', icon: 'fa-file-alt' },
+            { key: 'designConstruction', title: '设计施工信息', icon: 'fa-hard-hat' },
+            { key: 'structure', title: '结构信息', icon: 'fa-building' },
+            { key: 'usage', title: '使用信息', icon: 'fa-home' }
         ];
         let currentOverviewSubTab = 'jbxx';
+
+        // 排查记录子Tab配置（与 house-arch-detail.html 排查信息保持一致）
+        const inspectionSubTabs = [
+            { key: 'survey1', title: '排查情况', icon: 'fa-search' },
+            { key: 'survey2', title: '建房现场安全自查情况', icon: 'fa-hard-hat' },
+            { key: 'survey3', title: '房屋用途现场情况', icon: 'fa-home' }
+        ];
+        let currentInspectionSubTab = 'survey1';
+
+        // 各多次记录模块当前选中的记录索引
+        const recordViewState = {
+            inspection: 0,
+            appraisal: 0,
+            risk: 0,
+            patrol: 0,
+            measure: 0,
+            close: 0,
+            designConstruction: 0
+        };
+
+        const inspectionData = {
+            survey1: {
+                columns: ['结构状况', '损伤具体部位', '增加堆载（二层及以上堆放大量重物）', '其他使用安全隐患', '初步判定', '位置标注', '房屋安全责任人', '联系方式', '安全监管责任人', '联系方式', '排查照片', '安全鉴定：是否整治前鉴定', '未进行鉴定房屋原因', '上传证明文件', '排查备注', '更新时间'],
+                rows: [
+                    ['C级（局部危险）', '东侧承重墙', '否', '暂无', '立即停止使用', '—', '陈连明', '138****1234', '王建军', '139****5678', '—', '否', '资金尚未到位', '—', '东侧承重墙纵向裂缝长约1.2m，缝宽约2mm', '2024-06-12 09:30']
+                ]
+            },
+            survey2: {
+                columns: ['建房类型', '实施路径', '目前建房进度', '是否属于初判存在隐患的农村自建房的解危工程措施', '自查现场是否存在施工安全隐患', '隐患是否已消除', '消除隐患的具体措施', '备注', '建房现场照片', '填报人', '填报时间'],
+                rows: [
+                    ['-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
+                ]
+            },
+            survey3: {
+                columns: ['房屋用途', '当前使用情况', '当前房屋用途', '填报人', '填报时间'],
+                rows: [
+                    ['-', '-', '-', '-', '-']
+                ]
+            }
+        };
+
 
         // ---------------- 初始化 ----------------
         function initPage() {
@@ -323,6 +389,18 @@
             const menu = document.getElementById('sidebarMenu');
             const moduleParam = getUrlParam('module');
             if (moduleParam && sidebarModules.some(m => m.key === moduleParam)) currentModule = moduleParam;
+            if (moduleParam === 'designConstruction') {
+                currentOverviewSubTab = 'designConstruction';
+                currentModule = 'overview';
+            }
+            if (moduleParam === 'structure') {
+                currentOverviewSubTab = 'structure';
+                currentModule = 'overview';
+            }
+            if (moduleParam === 'usage') {
+                currentOverviewSubTab = 'usage';
+                currentModule = 'overview';
+            }
             menu.innerHTML = sidebarModules.map(item => {
                 const active = item.key === currentModule ? 'active' : '';
                 return '<div class="sidebar-item ' + active + '" data-key="' + item.key + '">' +
@@ -341,18 +419,12 @@
 
         // ---------------- 内容渲染 ----------------
         function renderContent() {
-            currentHouse = getCurrentHouseArch();
             const s = currentHouse;
             const area = document.getElementById('contentArea');
             const module = sidebarModules.find(m => m.key === currentModule);
             let html = '';
             switch (currentModule) {
                 case 'overview': html = renderOverview(s); break;
-
-
-                case 'designConstruction': html = renderDesignConstruction(s); break;
-                case 'structure': html = renderStructure(s); break;
-                case 'usage': html = renderUsage(s); break;
                 case 'inspection': html = renderInspection(s); break;
                 case 'appraisal': html = renderAppraisal(s); break;
                 case 'risk': html = renderRisk(s); break;
@@ -364,7 +436,42 @@
                 default: html = renderOverview(s);
             }
             area.innerHTML = html;
-            bindOverviewSubTabs();
+            if (!eventListenersBound) {
+                bindContentAreaEvents();
+                eventListenersBound = true;
+            }
+        }
+
+        function bindContentAreaEvents() {
+            const container = document.getElementById('contentArea');
+            if (!container) return;
+            container.addEventListener('click', function(e) {
+                // 概览子 tab
+                const overviewTab = e.target.closest('.content-tab[data-scope="overview"]');
+                if (overviewTab) {
+                    e.stopPropagation();
+                    currentOverviewSubTab = overviewTab.dataset.key;
+                    renderContent();
+                    return;
+                }
+                // 排查子 tab
+                const inspectionTab = e.target.closest('.content-tab[data-scope="inspection"]');
+                if (inspectionTab) {
+                    e.stopPropagation();
+                    currentInspectionSubTab = inspectionTab.dataset.key;
+                    renderContent();
+                    return;
+                }
+                // 记录列表行
+                const row = e.target.closest('.record-list-row[data-module]');
+                if (row) {
+                    e.stopPropagation();
+                    const module = row.dataset.module;
+                    const index = parseInt(row.dataset.index, 10);
+                    recordViewState[module] = index;
+                    renderContent();
+                }
+            });
         }
 
         function card(title, icon, body) {
@@ -428,7 +535,85 @@
                 ['已取得的行政许可', s.overview && s.overview.permit || '宅基地批准书'],
                 ['违法建设和违法审批', s.overview && s.overview.illegalBuild || '否']
             ];
-            const dynamicOverview = { jbxx, zjd, jsqk, glqk };
+            const d = s.designConstruction || {};
+            const designConstructionRecords = s.designConstructionRecords || (s.designConstruction ? [s.designConstruction] : []);
+            const st = s.structure || {};
+            const structure = [
+                ['结构形式', st.structureType || '—'],
+                ['建筑层数', st.floors || '—'],
+                ['建筑面积', st.buildingArea || '—'],
+                ['屋盖类型', st.roofType || '—'],
+                ['墙体材料', st.wallMaterial || '—'],
+                ['楼盖材料', st.floorMaterial || '—'],
+                ['基础形式', st.foundationType || '—'],
+                ['抗震信息', st.seismicInfo || '—'],
+                ['最大跨度', st.maxSpan || '—'],
+                ['改扩建情况', st.expansionStatus || '—'],
+                ['装修情况', st.decorationStatus || '—'],
+                ['备注', st.remark || '—']
+            ];
+            const u = s.usage || {};
+            const usage = [
+                ['使用用途', u.usageType || '—'],
+                ['是否自住', u.isSelfLive ? '是' : '否'],
+                ['具体用途', u.specificUsage || '—'],
+                ['居住人数', u.occupancy || '—'],
+                ['人员聚集场所周边', u.crowdAround ? '是' : '否'],
+                ['其他人员密集场所周边', u.otherCrowdAround ? '是' : '否'],
+                ['超10人使用', u.over10People ? '是' : '否']
+            ];
+            if (u.historyChanges && u.historyChanges.length) {
+                usage.push(['使用变更历史', '']);
+                u.historyChanges.forEach(h => {
+                    usage.push(['变更日期', h.changeDate || '—']);
+                    usage.push(['变更类型', h.changeType || '—']);
+                    usage.push(['变更内容', h.changeContent || '—']);
+                    usage.push(['审批情况', h.approvalStatus || '—']);
+                    usage.push(['备注', h.remark || '—']);
+                });
+            }
+
+            // 设计施工信息：记录列表 + 详情（参考巡查检查模式）
+            let designConstructionHtml = '';
+            if (currentOverviewSubTab === 'designConstruction') {
+                const activeIndex = recordViewState.designConstruction;
+                const listHtml = recordListTable(
+                    ['设计日期', '施工单位', '是否正规设计', '是否正规施工', '填报人'],
+                    designConstructionRecords.map(r => [
+                        r.designDate || '—',
+                        r.constructionUnit || '—',
+                        r.hasProfessionalDesign ? '是' : '否',
+                        r.hasQualificationTeam ? '是' : '否',
+                        r.reporter || '—'
+                    ]),
+                    'designConstruction',
+                    activeIndex,
+                    { showAction: true }
+                );
+                const r = designConstructionRecords[activeIndex] || designConstructionRecords[0] || {};
+                const grid = [
+                    kv('设计日期', r.designDate),
+                    kv('施工单位', r.constructionUnit),
+                    kv('是否正规设计', r.hasProfessionalDesign ? '是' : '否'),
+                    kv('是否正规施工', r.hasQualificationTeam ? '是' : '否'),
+                    kv('设计单位', r.designUnit),
+                    kv('建造工匠', r.builder),
+                    kv('建造年份', r.buildYear || (s.year || '—') + '年'),
+                    kv('改建扩建记录', r.expansionRecord || (s.structure && s.structure.expansionStatus) || '—'),
+                    kv('设计方式', r.designMode),
+                    kv('建造方式', r.buildMode),
+                    kv('备注', r.remark)
+                ].join('');
+                designConstructionHtml =
+                    recordListWrapper('设计施工记录列表', listHtml, { icon: 'fa-hard-hat' }) +
+                    '<div class="record-detail-header">' +
+                        '<div class="title">设计施工详情（' + (designConstructionRecords.length ? (activeIndex + 1) + ' / ' + designConstructionRecords.length : '0 / 0') + '）</div>' +
+                        '<div class="meta">设计日期：' + (r.designDate || '—') + ' | 填报人：' + (r.reporter || '—') + '</div>' +
+                    '</div>' +
+                    '<div class="info-grid info-grid-2col">' + grid + '</div>';
+            }
+
+            const dynamicOverview = { jbxx, zjd, jsqk, glqk, structure, usage };
             const rows = dynamicOverview[currentOverviewSubTab] || jbxx;
             const gridHtml = rows.map(r => {
                 return '<div class="info-item">' +
@@ -443,21 +628,40 @@
                 '</div>' +
                 '<div class="content-tabs">' + tabsHtml + '</div>' +
                 '<div class="content-body">' +
-                    '<div class="info-grid info-grid-2col">' + gridHtml + '</div>' +
+                    (currentOverviewSubTab === 'designConstruction'
+                        ? designConstructionHtml
+                        : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>') +
                 '</div>' +
             '</div>';
         }
 
-        function bindOverviewSubTabs() {
-            const container = document.getElementById('contentArea');
-            if (!container) return;
-            container.addEventListener('click', function(e) {
-                const tab = e.target.closest('.content-tab[data-scope="overview"]');
-                if (!tab) return;
-                e.stopPropagation();
-                currentOverviewSubTab = tab.dataset.key;
-                renderContent();
-            });
+        // ---------------- 通用记录列表组件 ----------------
+        function recordListTable(columns, rows, moduleKey, activeIndex, options) {
+            options = options || {};
+            if (!rows || rows.length === 0) {
+                return '<div class="record-empty">暂无记录</div>';
+            }
+            const head = '<thead><tr>' + columns.map(c => '<th>' + (c.title || c) + '</th>').join('') + (options.showAction ? '<th>操作</th>' : '') + '</tr></thead>';
+            const body = rows.map((row, idx) => {
+                const isActive = idx === activeIndex;
+                const cells = row.map((cell, cIdx) => {
+                    const col = columns[cIdx] || {};
+                    const val = cell === undefined || cell === '' || cell === null ? '—' : cell;
+                    if (col.tag) {
+                        return '<td><span class="tag ' + (col.tagClass ? col.tagClass(val) : 'info') + '">' + val + '</span></td>';
+                    }
+                    return '<td>' + val + '</td>';
+                }).join('');
+                return '<tr class="record-list-row ' + (isActive ? 'active' : '') + '" data-module="' + moduleKey + '" data-index="' + idx + '">' + cells + (options.showAction ? '<td class="actions"><span class="tag primary">查看</span></td>' : '') + '</tr>';
+            }).join('');
+            return '<table class="record-list">' + head + '<tbody>' + body + '</tbody></table>';
+        }
+
+        function recordListWrapper(title, listHtml, options) {
+            options = options || {};
+            return '<div class="record-section-title"><span><i class="fas ' + (options.icon || 'fa-list') + '"></i> ' + title + '</span>' +
+                (options.addBtn ? '<button class="record-add-btn" onclick="' + options.addBtn.onclick + '"><i class="fas fa-plus"></i> ' + options.addBtn.text + '</button>' : '') +
+                '</div>' + listHtml;
         }
 
         function renderPhotos(s) {
@@ -533,92 +737,245 @@
             return card('使用信息', 'fa-home', '<div class="info-grid">' + grid + '</div>' + history);
         }
 
+        function inspectionRecordToData(record) {
+            // 把单条 inspectionRecord 对象转换成 3 个 tab 的展示数据
+            return {
+                survey1: {
+                    columns: ['结构状况', '损伤具体部位', '增加堆载（二层及以上堆放大量重物）', '其他使用安全隐患', '初步判定', '位置标注', '房屋安全责任人', '联系方式', '安全监管责任人', '联系方式', '排查照片', '安全鉴定：是否整治前鉴定', '未进行鉴定房屋原因', '上传证明文件', '排查备注', '更新时间'],
+                    rows: [[
+                        record.structureStatus || '—', record.damagePart || '—', record.overload || '否', record.otherRisks || '暂无',
+                        record.preliminary || '—', record.location || '—', record.ownerName || '—', record.ownerPhone || '—',
+                        record.safetyName || '—', record.safetyPhone || '—', record.photos || '—', record.preAppraisal || '否',
+                        record.noAppraisalReason || '—', record.proofFiles || '—', record.remark || '—', record.updateTime || record.checkDate || '—'
+                    ]]
+                },
+                survey2: {
+                    columns: ['建房类型', '实施路径', '目前建房进度', '是否属于初判存在隐患的农村自建房的解危工程措施', '自查现场是否存在施工安全隐患', '隐患是否已消除', '消除隐患的具体措施', '备注', '建房现场照片', '填报人', '填报时间'],
+                    rows: [[
+                        record.buildType || '-', record.buildPath || '-', record.buildProgress || '-', record.isRiskMeasure || '-',
+                        record.hasSiteRisk || '-', record.riskEliminated || '-', record.eliminateMeasure || '-', record.buildRemark || '-',
+                        record.sitePhotos || '-', record.reporter || '-', record.checkDate || '-'
+                    ]]
+                },
+                survey3: {
+                    columns: ['房屋用途', '当前使用情况', '当前房屋用途', '填报人', '填报时间'],
+                    rows: [[
+                        record.houseUsage || '-', record.currentUsage || '-', record.currentUsage2 || '-',
+                        record.reporter || '-', record.checkDate || '-'
+                    ]]
+                }
+            };
+        }
+
         function renderInspection(s) {
             const list = s.inspectionRecords || [];
-            if (!list.length) return card('排查记录', 'fa-search', '<div class="photo-empty">暂无排查记录</div>');
-            const body = list.map((r, idx) => {
-                const grid = [
-                    kv('记录编号', r.id), kv('排查日期', r.checkDate), kv('排查人员', r.checker),
-                    kv('联系电话', r.checkerPhone), kv('结构状况', r.structureStatus), kv('损伤部位', r.damagePart),
-                    kv('增加堆载', r.overload), kv('其他安全隐患', r.otherRisk), kv('初步判定', r.preliminaryJudge),
-                    kv('位置标注', r.location || '—'), kv('房屋安全责任人', r.dutyPerson), kv('责任人电话', r.dutyPhone),
-                    kv('排查照片', r.photos ? '有' : '无'), kv('是否整治前鉴定', r.preAppraisal), kv('未鉴定原因', r.noAppraisalReason),
-                    kv('证明文件', r.proofFiles ? '有' : '无'), kv('排查备注', r.remark), kv('填报人', r.reporter), kv('填报时间', r.reportTime)
-                ].join('');
-                return '<div class="info-section-title"><i class="fas fa-search"></i> 排查记录 ' + (idx + 1) + '</div><div class="info-grid info-grid-2col">' + grid + '</div>';
+            if (!list.length) {
+                return card('排查记录', 'fa-search', recordListWrapper('排查记录列表', '', { icon: 'fa-search' }));
+            }
+            const activeIndex = recordViewState.inspection;
+            const listHtml = recordListTable(
+                ['排查日期', '排查人员', '结构状况', '初步判定', '填报时间', { title: '状态', tag: true, tagClass: v => v }],
+                list.map((r, i) => {
+                    const status = i === 0 ? '最新' : '历史';
+                    return [r.checkDate || '—', r.checker || '—', r.structureStatus || '—', r.preliminaryJudge || '—', r.reportTime || '—', status];
+                }),
+                'inspection',
+                activeIndex,
+                { showAction: true }
+            );
+            const record = list[activeIndex] || list[0];
+            const data = inspectionRecordToData(record);
+            const tabsHtml = inspectionSubTabs.map(tab => {
+                const active = tab.key === currentInspectionSubTab ? 'active' : '';
+                return '<div class="content-tab ' + active + '" data-scope="inspection" data-key="' + tab.key + '">' +
+                    '<i class="fas ' + tab.icon + '"></i> ' + tab.title +
+                    '</div>';
             }).join('');
-            return card('排查记录', 'fa-search', body);
+            const rows = data[currentInspectionSubTab].rows[0] || [];
+            const cols = data[currentInspectionSubTab].columns || [];
+            const specialIndex = cols.indexOf('初步判定');
+            const locationIndex = cols.indexOf('位置标注');
+            const photoIndex = cols.indexOf('排查照片');
+            const proofIndex = cols.indexOf('上传证明文件');
+            const sitePhotoIndex = cols.indexOf('建房现场照片');
+            const gridHtml = cols.map((c, i) => {
+                let extraClass = '';
+                if (i === specialIndex || i === photoIndex || i === proofIndex || i === locationIndex || i === sitePhotoIndex) extraClass = 'full-width';
+                let valueHtml = '<div class="info-value ' + (rows[i] ? '' : 'empty') + '">' + (rows[i] || '—') + '</div>';
+                if (i === locationIndex && rows[i] && rows[i] !== '—' && rows[i] !== '-') {
+                    valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewLocationOnMap(\'' + rows[i] + '\')"><i class="fas fa-map-marker-alt"></i> 在地图中查看</button></div>';
+                }
+                if ((i === photoIndex || i === proofIndex || i === sitePhotoIndex) && rows[i] && rows[i] !== '—' && rows[i] !== '-') {
+                    valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + rows[i] + '\')">查看文件</button></div>';
+                }
+                return '<div class="info-item ' + extraClass + '">' +
+                    '<div class="info-label">' + c + '</div>' +
+                    valueHtml +
+                    '</div>';
+            }).join('');
+
+            return '<div class="content-card">' +
+                '<div class="content-card-header">' +
+                    '<div class="content-card-title"><i class="fas fa-search"></i> 排查记录</div>' +
+                '</div>' +
+                '<div class="content-body">' +
+                    recordListWrapper('排查记录列表', listHtml, { icon: 'fa-search' }) +
+                    '<div class="record-detail-header">' +
+                        '<div class="title">排查详情（记录 ' + (activeIndex + 1) + ' / ' + list.length + '）</div>' +
+                        '<div class="meta">排查日期：' + (record.checkDate || '—') + ' | 填报人：' + (record.reporter || '—') + '</div>' +
+                    '</div>' +
+                    '<div class="content-tabs" style="padding-left:0;padding-right:0;">' + tabsHtml + '</div>' +
+                    '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + gridHtml + '</div>' +
+                '</div>' +
+            '</div>';
         }
 
         function renderAppraisal(s) {
             const list = s.appraisalReports || [];
-            if (!list.length) return card('鉴定报告', 'fa-clipboard-check', '<div class="photo-empty">暂无鉴定报告</div>');
-            const body = list.map((r, idx) => {
-                const grid = [
-                    kv('报告编号', r.id), kv('鉴定机构', r.orgName), kv('统一社会信用代码', r.orgCode),
-                    kv('鉴定日期', r.appraisalDate), kv('鉴定负责人', r.appraiser), kv('鉴定结论', r.conclusion),
-                    kv('风险等级', r.level), kv('阶段性标识', r.phaseTag), kv('报告文件', r.reportFiles ? '有' : '无'),
-                    kv('备注', r.remark), kv('填报人', r.reporter), kv('填报时间', r.reportTime)
-                ].join('');
-                return '<div class="info-section-title"><i class="fas fa-clipboard-check"></i> 鉴定报告 ' + (idx + 1) + '</div><div class="info-grid info-grid-2col">' + grid + '</div>';
-            }).join('');
-            return card('鉴定报告', 'fa-clipboard-check', body);
+            if (!list.length) return card('安全鉴定', 'fa-clipboard-check', '<div class="record-empty">暂无安全鉴定记录</div>');
+            const activeIndex = recordViewState.appraisal;
+            const listHtml = recordListTable(
+                ['报告编号', '鉴定机构', '鉴定日期', '鉴定结论', '填报时间', { title: '状态', tag: true }],
+                list.map((r, i) => [r.id || '—', r.orgName || '—', r.appraisalDate || '—', r.conclusion || '—', r.reportTime || '—', i === 0 ? '最新' : '历史']),
+                'appraisal',
+                activeIndex,
+                { showAction: true }
+            );
+            const r = list[activeIndex] || list[0];
+            const grid = [
+                kv('隐患动态整治状态', s.governStatus || '—'), kv('鉴定机构名称', r.orgName),
+                kv('统一社会信用代码', r.orgCode), kv('鉴定时间', r.appraisalDate),
+                kv('鉴定负责人', r.appraiser), kv('鉴定结论', r.conclusion),
+                kv('阶段性标识', r.phaseTag), kv('鉴定报告', r.reportFiles ? '有' : '—'),
+                kv('备注', r.remark), kv('填报人', r.reporter),
+                kv('填报时间', r.reportTime)
+            ].join('');
+            return card('安全鉴定', 'fa-clipboard-check',
+                recordListWrapper('安全鉴定记录列表', listHtml, { icon: 'fa-clipboard-list' }) +
+                '<div class="record-detail-header"><div class="title">安全鉴定详情（' + (activeIndex + 1) + ' / ' + list.length + '）</div>' +
+                '<div class="meta">报告编号：' + (r.id || '—') + '</div></div>' +
+                '<div class="info-grid info-grid-2col">' + grid + '</div>'
+            );
         }
 
         function renderRisk(s) {
             const ident = s.riskIdentification || [];
             const cls = s.riskClassification || {};
-            let body = '<div class="info-section-title"><i class="fas fa-exclamation-triangle"></i> 风险分类</div>' +
+            const ri = s.riskInfo || {};
+
+            // 风险基础信息
+            let body = '<div class="info-section-title"><i class="fas fa-id-card"></i> 风险基础信息</div>' +
                 '<div class="info-grid info-grid-2col">' +
-                kv('风险等级', cls.level || s.riskLevel) + kv('评定依据', cls.basis) +
-                kv('评定时间', cls.assessTime) + kv('评定人', cls.assessor) +
+                kv('风险编号', ri.riskNo) + kv('风险名称', ri.riskName) +
+                kv('风险类型', ri.riskType) + kv('风险等级', ri.riskLevel || cls.level || s.riskLevel) +
+                kv('发现时间', ri.discoveryTime) + kv('发现方式', ri.discoveryMethod) +
+                kv('发现人员', ri.discoverer) + kv('风险状态', ri.riskStatus || s.governStatus) +
                 '</div>';
+
+            // 风险特征信息
+            body += '<div class="info-section-title" style="margin-top:20px;"><i class="fas fa-map-marker-alt"></i> 风险特征信息</div>' +
+                '<div class="info-grid info-grid-2col">' +
+                kv('风险部位', ri.riskPart) + kv('空间位置', ri.spatialLocation) +
+                kv('风险描述', ri.riskDesc) +
+                kv('评定依据', cls.basis) + kv('评定时间', cls.assessTime) + kv('评定人', cls.assessor) +
+                '</div>';
+
+            // 风险关联信息
+            body += '<div class="info-section-title" style="margin-top:20px;"><i class="fas fa-link"></i> 风险关联信息</div>' +
+                '<div class="info-grid info-grid-2col">' +
+                kv('关联房屋', ri.relatedHouse) + kv('关联户主', ri.relatedOwner) +
+                kv('关联使用人', ri.relatedUser) + kv('关联排查记录', ri.relatedInspectionId) +
+                kv('关联鉴定报告', ri.relatedAppraisalId) + kv('关联巡查记录', ri.relatedPatrolId) +
+                kv('关联整治任务', ri.relatedTaskId) +
+                '</div>';
+
             if (ident.length) {
-                body += ident.map((r, idx) => {
-                    const grid = [
-                        kv('辨识编号', r.id), kv('辨识日期', r.identifyDate), kv('辨识人', r.identifyPerson),
-                        kv('隐患部位', r.hazardPart), kv('隐患类型', r.hazardType), kv('隐患描述', r.hazardDesc),
-                        kv('可能后果', r.possibleConsequence), kv('管控建议', r.controlSuggestion), kv('现场照片', r.photos ? '有' : '无')
-                    ].join('');
-                    return '<div class="info-section-title"><i class="fas fa-search-location"></i> 风险辨识 ' + (idx + 1) + '</div><div class="info-grid info-grid-2col">' + grid + '</div>';
-                }).join('');
+                const activeIndex = recordViewState.risk;
+                const listHtml = recordListTable(
+                    ['辨识编号', '辨识日期', '隐患类型', '隐患部位', '填报人'],
+                    ident.map(r => [r.id || '—', r.identifyDate || '—', r.hazardType || '—', r.hazardPart || '—', r.identifyPerson || '—']),
+                    'risk',
+                    activeIndex,
+                    { showAction: true }
+                );
+                const r = ident[activeIndex] || ident[0];
+                const grid = [
+                    kv('辨识编号', r.id), kv('辨识日期', r.identifyDate), kv('辨识人', r.identifyPerson),
+                    kv('隐患部位', r.hazardPart), kv('隐患类型', r.hazardType), kv('隐患描述', r.hazardDesc),
+                    kv('可能后果', r.possibleConsequence), kv('管控建议', r.controlSuggestion), kv('现场照片', r.photos ? '有' : '无')
+                ].join('');
+                body += '<div class="info-section-title" style="margin-top:20px;"><i class="fas fa-search-location"></i> 风险辨识记录</div>' +
+                    recordListWrapper('风险辨识记录列表', listHtml, { icon: 'fa-search-location' }) +
+                    '<div class="record-detail-header"><div class="title">风险辨识详情（' + (activeIndex + 1) + ' / ' + ident.length + '）</div>' +
+                    '<div class="meta">辨识编号：' + (r.id || '—') + '</div></div>' +
+                    '<div class="info-grid info-grid-2col">' + grid + '</div>';
             }
             return card('风险辨识与分类', 'fa-exclamation-triangle', body);
         }
 
         function renderPatrol(s) {
-            const list = s.patrolRecords || [];
-            if (!list.length) return card('巡查检查', 'fa-walking', '<div class="photo-empty">暂无巡查检查记录</div>');
-            const body = list.map((r, idx) => {
-                const grid = [
-                    kv('记录编号', r.id), kv('巡查日期', r.patrolDate), kv('巡查类型', r.patrolType),
-                    kv('巡查机构', r.patrolOrg), kv('巡查人员', r.patrolPerson), kv('巡查内容', r.content),
-                    kv('巡查结果', r.result), kv('现场照片', r.photos ? '有' : '无'), kv('附件', r.files ? '有' : '无'), kv('备注', r.remark)
-                ].join('');
-                return '<div class="info-section-title"><i class="fas fa-walking"></i> 巡查记录 ' + (idx + 1) + '</div><div class="info-grid info-grid-2col">' + grid + '</div>';
-            }).join('');
-            return card('巡查检查', 'fa-walking', body);
+            let list = s.patrolRecords || [];
+            list = list.slice().sort((a, b) => (b.patrolDate || '').localeCompare(a.patrolDate || ''));
+            if (!list.length) return card('巡查检查', 'fa-walking', '<div class="record-empty">暂无巡查检查记录</div>');
+            const activeIndex = recordViewState.patrol;
+            const listHtml = recordListTable(
+                ['巡查日期', '巡查类型', '巡查机构', '巡查人员', '巡查结果', { title: '状态', tag: true }],
+                list.map((r, i) => [r.patrolDate || '—', r.patrolType || '—', r.patrolOrg || '—', r.patrolPerson || '—', r.result || '—', i === 0 ? '最新' : '历史']),
+                'patrol',
+                activeIndex,
+                { showAction: true }
+            );
+            const r = list[activeIndex] || list[0];
+            const grid = [
+                kv('记录编号', r.id), kv('巡查日期', r.patrolDate), kv('巡查类型', r.patrolType),
+                kv('巡查机构', r.patrolOrg), kv('巡查人员', r.patrolPerson), kv('巡查内容', r.content),
+                kv('巡查结果', r.result), kv('发现问题', r.foundProblems || '无'),
+                kv('现场照片', r.photos ? '有' : '无'), kv('附件', r.files ? '有' : '无'), kv('备注', r.remark)
+            ].join('');
+            return card('巡查检查', 'fa-walking',
+                recordListWrapper('巡查检查记录列表', listHtml, { icon: 'fa-walking' }) +
+                '<div class="record-detail-header"><div class="title">巡查详情（' + (activeIndex + 1) + ' / ' + list.length + '）</div>' +
+                '<div class="meta">记录编号：' + (r.id || '—') + '</div></div>' +
+                '<div class="info-grid info-grid-2col">' + grid + '</div>'
+            );
         }
 
         function renderMeasure(s) {
-            let body = '';
-            // 管理措施
             const mgmt = s.manageRecords || [];
-            if (mgmt.length) {
-                body += '<div class="table-section-title"><i class="fas fa-shield-alt"></i> 管理措施记录</div>' +
-                    '<table class="arch-table"><thead><tr><th>记录编号</th><th>措施类型</th><th>实施部位</th><th>开始时间</th><th>计划结束</th><th>责任单位</th><th>责任人</th><th>完成状态</th><th>效果评估</th></tr></thead><tbody>' +
-                    mgmt.map(r => '<tr><td>' + (r.id || r.archId || '—') + '</td><td>' + (r.measureType || '—') + '</td><td>' + (r.implementPart || '—') + '</td><td>' + (r.startTime || '—') + '</td><td>' + (r.planEndTime || '—') + '</td><td>' + (r.dutyUnit || '—') + '</td><td>' + (r.dutyPerson || '—') + '</td><td>' + (r.isDone ? '已完成' : '进行中') + '</td><td>' + (r.effectEvaluation || '—') + '</td></tr>').join('') +
-                    '</tbody></table>';
-            }
-            // 工程措施
             const prj = s.projectRecords || [];
+            if (!mgmt.length && !prj.length) return card('隐患整治', 'fa-tools', '<div class="record-empty">暂无整治记录</div>');
+
+            let body = '';
+            if (mgmt.length) {
+                const activeIndex = recordViewState.measure;
+                const listHtml = recordListTable(
+                    ['记录编号', '措施类型', '开始时间', '计划结束', '完成状态', '填报人'],
+                    mgmt.map((r, i) => [r.id || '—', r.measureType || '—', r.startTime || '—', r.planEndTime || '—', r.isDone ? '已完成' : '进行中', r.reporter || '—']),
+                    'measure',
+                    activeIndex,
+                    { showAction: true }
+                );
+                const r = mgmt[activeIndex] || mgmt[0];
+                const grid = [
+                    kv('记录编号', r.id), kv('措施类型', r.measureType), kv('实施部位', r.implementPart),
+                    kv('开始时间', r.startTime), kv('计划结束时间', r.planEndTime), kv('实际结束时间', r.actualEndTime),
+                    kv('实施要求', r.requirement), kv('责任单位', r.dutyUnit), kv('责任人', r.dutyPerson),
+                    kv('联系电话', r.phone), kv('管理措施', r.measureDesc), kv('管理措施实施照片', r.implementPhotos ? '有' : '无'),
+                    kv('管理措施完成照片', r.completePhotos ? '有' : '无'), kv('措施是否完成', r.isDone ? '已完成' : '进行中'),
+                    kv('措施效果评估', r.effectEvaluation), kv('风险是否已有效控制', r.riskControlled ? '是' : '否'),
+                    kv('变更或延长申请审批', r.changeApply), kv('备注', r.remark), kv('填报人', r.reporter), kv('填报时间', r.reportTime)
+                ].join('');
+                body += recordListWrapper('管理措施记录列表', listHtml, { icon: 'fa-shield-alt' }) +
+                    '<div class="record-detail-header"><div class="title">管理措施详情（' + (activeIndex + 1) + ' / ' + mgmt.length + '）</div>' +
+                    '<div class="meta">记录编号：' + (r.id || '—') + '</div></div>' +
+                    '<div class="info-grid info-grid-2col">' + grid + '</div>';
+            }
             if (prj.length) {
                 body += '<div class="table-section-title"><i class="fas fa-hammer"></i> 工程措施记录</div>' +
                     '<table class="arch-table"><thead><tr><th>工程名称</th><th>施工单位</th><th>开工时间</th><th>竣工时间</th><th>负责人</th><th>联系电话</th><th>状态</th><th>进度</th></tr></thead><tbody>' +
                     prj.map(r => '<tr><td>' + (r.projectName || '—') + '</td><td>' + (r.company || '—') + '</td><td>' + (r.startDate || '—') + '</td><td>' + (r.endDate || '—') + '</td><td>' + (r.manager || '—') + '</td><td>' + (r.phone || '—') + '</td><td>' + (r.status || '—') + '</td><td>' + (r.progress || 0) + '%</td></tr>').join('') +
                     '</tbody></table>';
             }
-            if (!body) body = '<div class="photo-empty">暂无整治记录</div>';
             return card('隐患整治', 'fa-tools', body);
         }
 
@@ -646,9 +1003,34 @@
         }
 
         function renderClose(s) {
+            const records = s.closeRecords || [];
             const statusClass = {
                 '未申请': 'info', '待审核': 'warning', '审核中': 'warning', '已通过': 'safe', '已驳回': 'danger'
             }[s.closeStatus] || 'info';
+            if (records.length) {
+                const activeIndex = recordViewState.close;
+                const listHtml = recordListTable(
+                    ['申请时间', '审核时间', '审核人', '审核结论', '填报人'],
+                    records.map(r => [r.applyTime || '—', r.auditTime || '—', r.auditor || '—', r.conclusion || '—', r.reporter || '—']),
+                    'close',
+                    activeIndex,
+                    { showAction: true }
+                );
+                const r = records[activeIndex] || records[0];
+                const grid = [
+                    kv('当前销号状态', '<span class="status-badge ' + statusClass + '">' + (r.status || s.closeStatus || '未申请') + '</span>'),
+                    kv('申请时间', r.applyTime), kv('审核时间', r.auditTime),
+                    kv('审核人', r.auditor), kv('审核意见', r.auditOpinion),
+                    (r.status === '已驳回' || s.closeStatus === '已驳回' ? kv('驳回原因', r.rejectReason || s.closeRejectReason) : ''),
+                    kv('重点监控名单', s.isRemovedFromFocus ? '<span class="status-badge safe">已退出</span>' : '<span class="status-badge warning">监控中</span>')
+                ].join('');
+                return card('验收销号', 'fa-check-circle',
+                    recordListWrapper('验收销号申请记录', listHtml, { icon: 'fa-check-circle' }) +
+                    '<div class="record-detail-header"><div class="title">验收销号详情（' + (activeIndex + 1) + ' / ' + records.length + '）</div>' +
+                    '<div class="meta">申请时间：' + (r.applyTime || '—') + '</div></div>' +
+                    '<div class="info-grid info-grid-2col">' + grid + '</div>'
+                );
+            }
             let body = '<div class="info-section-title"><i class="fas fa-clipboard-check"></i> 销号状态</div>' +
                 '<div class="info-grid info-grid-2col">' +
                 kv('当前销号状态', '<span class="status-badge ' + statusClass + '">' + (s.closeStatus || '未申请') + '</span>') +
@@ -699,6 +1081,10 @@
         function closePhotoViewer() {
             document.getElementById('photoViewerOverlay').classList.remove('open');
             document.getElementById('photoViewerImage').src = '';
+        }
+
+        function viewLocationOnMap(location) {
+            alert('位置标注：' + location + '（地图查看功能待对接）');
         }
 
         // 启动

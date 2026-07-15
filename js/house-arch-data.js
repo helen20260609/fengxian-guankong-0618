@@ -148,6 +148,27 @@ const DEFAULT_HOUSE_STATUS = {
         exterior: [], interior: [], surrounding: [], hazard: [],
         measure: [], completion: []
     },
+    // 风险信息记录（基础 / 特征 / 关联）
+    riskInfo: {
+        riskNo: '',
+        riskName: '',
+        riskType: '',
+        riskLevel: '',
+        discoveryTime: '',
+        discoveryMethod: '',
+        discoverer: '',
+        riskStatus: '',
+        riskPart: '',
+        spatialLocation: '',
+        riskDesc: '',
+        relatedHouse: '',
+        relatedOwner: '',
+        relatedUser: '',
+        relatedInspectionId: '',
+        relatedAppraisalId: '',
+        relatedPatrolId: '',
+        relatedTaskId: ''
+    },
     inspectionRecords: [],
     appraisalReports: [],
     patrolRecords: [],
@@ -173,6 +194,7 @@ function normalizeHouseRecord(record) {
     if (!rec.structure) rec.structure = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.structure));
     if (!rec.usage) rec.usage = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.usage));
     if (!rec.photos) rec.photos = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.photos));
+    if (!rec.riskInfo) rec.riskInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskInfo));
     if (!rec.inspectionRecords) rec.inspectionRecords = [];
     if (!rec.appraisalReports) rec.appraisalReports = [];
     if (!rec.patrolRecords) rec.patrolRecords = [];
@@ -209,6 +231,13 @@ function normalizeHouseRecord(record) {
         rec.governance = 'pending';
         rec.governStatus = '待整治';
     }
+
+    if (!rec.closeStatus) rec.closeStatus = '未申请';
+    if (!rec.riskInfo) rec.riskInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskInfo));
+    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '一般隐患';
+    rec.riskInfo.riskStatus = rec.riskInfo.riskStatus || rec.governStatus || '待整治';
+    rec.riskInfo.relatedHouse = rec.riskInfo.relatedHouse || rec.no || '';
+    rec.riskInfo.relatedOwner = rec.riskInfo.relatedOwner || rec.owner || '';
 
     return rec;
 }
@@ -524,6 +553,7 @@ function generatePatrolRecords(no, risk, governance, i) {
             patrolPerson: RESPONSIBLE_PERSONS[(i + m) % RESPONSIBLE_PERSONS.length],
             content: '检查房屋隐患部位安全状况、管控措施落实情况',
             result: '正常',
+            foundProblems: '',
             photos: '',
             files: '',
             remark: '管控措施到位，需持续关注'
@@ -883,6 +913,26 @@ function generateHouseSeed() {
         };
         const emergencyResponse = generateEmergencyResponse(no, risk, governance, i);
         const photos = generateHousePhotos(no, i);
+        const riskInfo = {
+            riskNo: 'RSK-' + no,
+            riskName: name + ' ' + RISK_LABEL_MAP[risk] + '风险',
+            riskType: type,
+            riskLevel: riskLevel,
+            discoveryTime: inspectionRecords.length ? inspectionRecords[0].checkDate : '',
+            discoveryMethod: '排查发现',
+            discoverer: inspectionRecords.length ? inspectionRecords[0].checker : '',
+            riskStatus: governStatus,
+            riskPart: part,
+            spatialLocation: '上海市奉贤区' + street + community + (i * 3) + '号',
+            riskDesc: part + '存在' + type + '，影响结构安全',
+            relatedHouse: no,
+            relatedOwner: owner,
+            relatedUser: usageType === '自住' ? owner : (usageType === '出租' ? '租户' : ''),
+            relatedInspectionId: inspectionRecords.length ? inspectionRecords[0].id : '',
+            relatedAppraisalId: appraisalReports.length ? appraisalReports[0].id : '',
+            relatedPatrolId: patrolRecords.length ? patrolRecords[0].id : '',
+            relatedTaskId: manageRecords.length ? manageRecords[0].id : ''
+        };
 
         const record = {
             no, name, owner, street, community, address, village,
@@ -904,7 +954,7 @@ function generateHouseSeed() {
             responsibleDept,
             responsiblePerson,
             overview, homestead, designConstruction, structure, usage,
-            photos, inspectionRecords, appraisalReports, patrolRecords,
+            photos, riskInfo, inspectionRecords, appraisalReports, patrolRecords,
             riskIdentification, riskClassification, emergencyResponse
         };
         data[no] = record;

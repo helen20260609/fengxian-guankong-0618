@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>农村自建房 - 风险控制效果评估</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="../js/house-arch-data.js"></script>
+    <script src="../js/echarts.min.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+            --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+            --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+            --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+            --dot-red: #d93025; --dot-orange: #e65100; --dot-yellow: #f9c846; --dot-blue: #1a73e8;
+        }
+        :root[data-theme="dark"] {
+            --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+            --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+            --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+            --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+            --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+            --dot-red: #ef4444; --dot-orange: #f97316; --dot-yellow: #facc15; --dot-blue: #3b82f6;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        /* ===== Page Header ===== */
+        .page-header { margin-bottom: 16px; }
+        .page-title {
+            font-size: 18px; font-weight: 700;
+            display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+        }
+        .page-title i { color: var(--primary); }
+        .page-desc {
+            font-size: 13px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        /* ===== Filter Bar ===== */
+        .filter-bar {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 12px;
+            margin-bottom: 16px; box-shadow: 0 1px 3px var(--shadow);
+        }
+        .filter-row {
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+            margin-bottom: 10px;
+        }
+        .filter-row:last-child { margin-bottom: 0; }
+        .filter-select, .filter-input {
+            background: var(--input-bg); border: 1px solid var(--input-border);
+            border-radius: 6px; padding: 7px 12px; color: var(--text-primary);
+            font-size: 13px; outline: none; min-width: 120px;
+        }
+        .filter-input { min-width: 200px; }
+        .filter-select:focus, .filter-input:focus { border-color: var(--primary); }
+        .btn {
+            padding: 7px 14px; border-radius: 6px; font-size: 13px;
+            cursor: pointer; transition: all 0.3s; border: none;
+            display: inline-flex; align-items: center; gap: 6px; font-weight: 500;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline {
+            background: transparent; border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+        /* ===== KPI Cards ===== */
+        .kpi-wrapper {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+            margin-bottom: 16px;
+        }
+        @media (max-width: 1100px) { .kpi-wrapper { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 700px) { .kpi-wrapper { grid-template-columns: 1fr; } }
+        .kpi-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px 16px;
+            box-shadow: 0 1px 3px var(--shadow);
+            transition: all 0.3s; position: relative; overflow: hidden;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+        .kpi-card.green-top  { border-top: 3px solid var(--success); }
+        .kpi-card.blue-top   { border-top: 3px solid var(--primary); }
+        .kpi-card.orange-top { border-top: 3px solid var(--warning); }
+        .kpi-card.red-top    { border-top: 3px solid var(--danger); }
+        .kpi-card.purple-top { border-top: 3px solid #7c3aed; }
+        .kpi-card.teal-top   { border-top: 3px solid var(--secondary); }
+        .kpi-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .kpi-card-label {
+            font-size: 14px; font-weight: 700;
+        }
+        .kpi-card-label.green  { color: var(--success); }
+        .kpi-card-label.blue   { color: var(--primary); }
+        .kpi-card-label.orange { color: var(--warning); }
+        .kpi-card-label.red    { color: var(--danger); }
+        .kpi-card-label.purple { color: #7c3aed; }
+        .kpi-card-label.teal   { color: var(--secondary); }
+        .kpi-card-icon {
+            width: 30px; height: 30px; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; flex-shrink: 0;
+        }
+        .kpi-card-icon.green  { background: rgba(30,142,62,0.12); color: var(--success); }
+        .kpi-card-icon.blue   { background: rgba(26,115,232,0.12); color: var(--primary); }
+        .kpi-card-icon.orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+        .kpi-card-icon.red    { background: rgba(217,48,37,0.12); color: var(--danger); }
+        .kpi-card-icon.purple { background: rgba(124,58,237,0.12); color: #7c3aed; }
+        .kpi-card-icon.teal   { background: rgba(0,151,167,0.12); color: var(--secondary); }
+        .kpi-card-main {
+            display: flex; align-items: baseline; gap: 8px;
+        }
+        .kpi-card-value {
+            font-size: 26px; font-weight: 700; line-height: 1;
+        }
+        .kpi-card-unit { font-size: 13px; color: var(--text-secondary); }
+        .kpi-card-sub {
+            font-size: 12px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .kpi-card-trend {
+            font-size: 11px; font-weight: 600; padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .kpi-card-trend.up { color: var(--success); background: rgba(30,142,62,0.1); }
+        .kpi-card-trend.down { color: var(--danger); background: rgba(217,48,37,0.1); }
+
+        /* ===== Section / Tabs ===== */
+        .section { margin-bottom: 16px; }
+        .section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .section-title {
+            font-size: 15px; font-weight: 700;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .section-title i { color: var(--primary); }
+        .tab-bar {
+            display: flex; gap: 4px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 6px; margin-bottom: 16px;
+            box-shadow: 0 1px 3px var(--shadow);
+        }
+        .tab-item {
+            flex: 1; padding: 9px 14px; border-radius: 8px;
+            font-size: 13px; font-weight: 500; color: var(--text-secondary);
+            cursor: pointer; transition: all 0.25s; text-align: center;
+            border: 1px solid transparent;
+        }
+        .tab-item:hover {
+            background: var(--bg-hover); color: var(--text-primary);
+        }
+        .tab-item.active {
+            background: var(--primary); color: #fff; font-weight: 600;
+            box-shadow: 0 2px 8px rgba(26,115,232,0.3);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ===== Card / Chart ===== */
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; box-shadow: 0 1px 3px var(--shadow);
+            margin-bottom: 16px; overflow: hidden;
+        }
+        .card-header {
+            padding: 14px 18px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-title {
+            font-size: 14px; font-weight: 600;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .card-title i { color: var(--primary); }
+        .card-body { padding: 18px; }
+        .chart-row {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+            margin-bottom: 16px;
+        }
+        @media (max-width: 1100px) { .chart-row { grid-template-columns: 1fr; } }
+        .chart-box { width: 100%; height: 320px; }
+        .chart-box.tall { height: 380px; }
+
+        /* ===== Table ===== */
+        .table-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; overflow: auto;
+            box-shadow: 0 1px 3px var(--shadow);
+        }
+        .data-table {
+            width: 100%; border-collapse: separate; border-spacing: 0;
+        }
+        .data-table th {
+            padding: 12px 16px; text-align: left;
+            font-size: 12px; font-weight: 600; color: var(--text-secondary);
+            border-bottom: 1px solid var(--border); background: var(--bg-dark);
+            white-space: nowrap; position: sticky; top: 0; z-index: 10;
+        }
+        .data-table td {
+            padding: 12px 16px; font-size: 13px;
+            border-bottom: 1px solid var(--border); color: var(--text-primary);
+            background: var(--bg-card); white-space: nowrap;
+        }
+        .data-table tr:hover td { background: var(--bg-hover); }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table td.text-right { text-align: right; }
+        .data-table td.text-center { text-align: center; }
+        .rank-num {
+            width: 22px; height: 22px; border-radius: 4px;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; color: #fff;
+        }
+        .rank-num.top1 { background: #f59e0b; }
+        .rank-num.top2 { background: #94a3b8; }
+        .rank-num.top3 { background: #b45309; }
+        .rank-num.other { background: var(--border); color: var(--text-secondary); }
+
+        .risk-tag {
+            padding: 3px 10px; border-radius: 4px; font-size: 12px;
+            font-weight: 600; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .risk-tag.red { background: rgba(217,48,37,0.15); color: var(--danger); }
+        .risk-tag.orange { background: rgba(227,116,0,0.15); color: var(--warning); }
+        .risk-tag.yellow { background: rgba(249,200,70,0.25); color: #c78000; }
+        .risk-tag.blue { background: rgba(26,115,232,0.15); color: var(--primary); }
+        .risk-tag.green { background: rgba(30,142,62,0.15); color: var(--success); }
+
+        /* ===== Analysis Panel ===== */
+        .analysis-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;
+        }
+        @media (max-width: 900px) { .analysis-grid { grid-template-columns: 1fr; } }
+        .analysis-item {
+            background: var(--bg-dark); border-radius: 8px; padding: 14px;
+            border-left: 4px solid var(--primary);
+        }
+        .analysis-item h4 {
+            font-size: 13px; font-weight: 600; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .analysis-item p {
+            font-size: 13px; color: var(--text-secondary); line-height: 1.7;
+        }
+        .analysis-item ul {
+            margin: 0; padding-left: 18px; font-size: 13px;
+            color: var(--text-secondary); line-height: 1.9;
+        }
+
+        /* ===== Empty State ===== */
+        .empty-tip {
+            text-align: center; padding: 40px 20px; color: var(--text-secondary);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <div class="page-title"><i class="fa-solid fa-chart-line"></i> 农村自建房风险控制效果评估</div>
+    <div class="page-desc">
+        <i class="fa-regular fa-clock"></i> 评估周期：2024-01-01 至 2026-06-30
+        <span style="color: var(--border)">|</span>
+        <i class="fa-solid fa-database"></i> 数据来源：房屋建筑档案 / 巡查检查 / 整治销号
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <div class="filter-row">
+        <select class="filter-select" id="filterTown">
+            <option value="">全部乡镇/街道</option>
+        </select>
+        <select class="filter-select" id="filterVillage">
+            <option value="">全部行政村</option>
+        </select>
+        <select class="filter-select" id="filterHouseType">
+            <option value="">房屋类型</option>
+            <option value="自住">仅自住</option>
+            <option value="自住兼经营">自住+经营</option>
+            <option value="农房辅助用房">农房辅助用房</option>
+        </select>
+        <select class="filter-select" id="filterStructure">
+            <option value="">全部结构形式</option>
+            <option value="砖混结构">砖混结构</option>
+            <option value="框架结构">框架结构</option>
+            <option value="砖木结构">砖木结构</option>
+        </select>
+        <select class="filter-select" id="filterYear">
+            <option value="">全部建筑年代</option>
+            <option value="before1980">1980年以前</option>
+            <option value="1980-1990">1980-1990年</option>
+            <option value="1990-2000">1990-2000年</option>
+            <option value="2000-2010">2000-2010年</option>
+            <option value="after2010">2010年以后</option>
+        </select>
+        <select class="filter-select" id="filterRiskLevel">
+            <option value="">全部风险等级</option>
+            <option value="重大隐患">重大隐患</option>
+            <option value="较大隐患">较大隐患</option>
+            <option value="一般隐患">一般隐患</option>
+            <option value="安全">安全/无风险</option>
+        </select>
+    </div>
+    <div class="filter-row" style="justify-content: flex-end;">
+        <button class="btn btn-primary" onclick="refreshEval()"><i class="fa-solid fa-search"></i> 查询评估</button>
+        <button class="btn btn-outline" onclick="resetFilters()"><i class="fa-solid fa-rotate-right"></i> 重置</button>
+        <button class="btn btn-outline" onclick="exportReport()"><i class="fa-solid fa-download"></i> 导出报告</button>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="kpi-wrapper" id="kpiWrapper">
+    <div class="kpi-card green-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label green">整改完成率</span>
+            <div class="kpi-card-icon green"><i class="fa-solid fa-check-double"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value green" id="kpiCompleteRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span class="kpi-card-trend up"><i class="fa-solid fa-arrow-up"></i> 2.3%</span>
+            <span>环比上期</span>
+        </div>
+    </div>
+    <div class="kpi-card blue-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label blue">整改及时率</span>
+            <div class="kpi-card-icon blue"><i class="fa-solid fa-clock-rotate-left"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value blue" id="kpiTimelyRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span class="kpi-card-trend up"><i class="fa-solid fa-arrow-up"></i> 1.5%</span>
+            <span>环比上期</span>
+        </div>
+    </div>
+    <div class="kpi-card purple-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label purple">整改有效率</span>
+            <div class="kpi-card-icon purple"><i class="fa-solid fa-shield-virus"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value purple" id="kpiEffectiveRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span>验收合格且未复发</span>
+        </div>
+    </div>
+    <div class="kpi-card orange-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label orange">隐患复发率</span>
+            <div class="kpi-card-icon orange"><i class="fa-solid fa-rotate"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value orange" id="kpiRecurrenceRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span class="kpi-card-trend down"><i class="fa-solid fa-arrow-down"></i> 0.8%</span>
+            <span>越低越好</span>
+        </div>
+    </div>
+    <div class="kpi-card teal-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label teal">危房解危率</span>
+            <div class="kpi-card-icon teal"><i class="fa-solid fa-house-medical"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value teal" id="kpiReliefRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span>C级/D级危房整治销号</span>
+        </div>
+    </div>
+    <div class="kpi-card red-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label red">农户满意度</span>
+            <div class="kpi-card-icon red"><i class="fa-solid fa-heart"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value red" id="kpiSatisfaction">0</span>
+            <span class="kpi-card-unit">分</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span>满分 100 分</span>
+        </div>
+    </div>
+</div>
+
+<!-- Drilling Tabs -->
+<div class="tab-bar">
+    <div class="tab-item active" data-tab="overview" onclick="switchTab('overview')">
+        <i class="fa-solid fa-chart-pie"></i> 总体看板
+    </div>
+    <div class="tab-item" data-tab="trend" onclick="switchTab('trend')">
+        <i class="fa-solid fa-chart-area"></i> 趋势分析
+    </div>
+    <div class="tab-item" data-tab="rank" onclick="switchTab('rank')">
+        <i class="fa-solid fa-trophy"></i> 排名对比
+    </div>
+    <div class="tab-item" data-tab="heatmap" onclick="switchTab('heatmap')">
+        <i class="fa-solid fa-map"></i> 风险热力
+    </div>
+</div>
+
+<!-- Tab: Overview -->
+<div class="tab-content active" id="tab-overview">
+    <div class="chart-row">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-chart-pie"></i> 风险等级分布</div>
+            </div>
+            <div class="card-body"><div class="chart-box" id="chartRiskDist"></div></div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-chart-bar"></i> 治理状态构成</div>
+            </div>
+            <div class="card-body"><div class="chart-box" id="chartGovernDist"></div></div>
+        </div>
+    </div>
+    <div class="chart-row">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-layer-group"></i> 维度钻取：风险控制效果</div>
+            </div>
+            <div class="card-body"><div class="chart-box" id="chartDimensionBar"></div></div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-bullseye"></i> 核心指标雷达</div>
+            </div>
+            <div class="card-body"><div class="chart-box" id="chartRadar"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab: Trend -->
+<div class="tab-content" id="tab-trend">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fa-solid fa-chart-line"></i> 风险控制效果趋势（月度）</div>
+        </div>
+        <div class="card-body"><div class="chart-box tall" id="chartTrend"></div></div>
+    </div>
+    <div class="chart-row">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-coins"></i> 资金投入与整治完成对比</div>
+            </div>
+            <div class="card-body"><div class="chart-box" id="chartFund"></div></div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-magnifying-glass-chart"></i> 巡查发现问题与整改闭环</div>
+            </div>
+            <div class="card-body"><div class="chart-box" id="chartInspect"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab: Rank -->
+<div class="tab-content" id="tab-rank">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fa-solid fa-trophy"></i> 乡镇/街道风险控制效果排名（TOP10）</div>
+        </div>
+        <div class="card-body">
+            <div class="chart-box" id="chartRank"></div>
+            <div class="table-card" style="margin-top: 14px;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>乡镇/街道</th>
+                            <th class="text-right">整改完成率</th>
+                            <th class="text-right">整改及时率</th>
+                            <th class="text-right">整改有效率</th>
+                            <th class="text-right">危房解危率</th>
+                            <th class="text-right">综合评分</th>
+                            <th>等级</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rankTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab: Heatmap -->
+<div class="tab-content" id="tab-heatmap">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fa-solid fa-map-location-dot"></i> 风险热力分布</div>
+        </div>
+        <div class="card-body"><div class="chart-box tall" id="chartHeatmap"></div></div>
+    </div>
+</div>
+
+<!-- Post-evaluation Analysis -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title"><i class="fa-solid fa-file-contract"></i> 评估后分析与改进建议</div>
+    </div>
+    <div class="card-body">
+        <div class="analysis-grid" id="analysisGrid">
+            <div class="analysis-item">
+                <h4><i class="fa-solid fa-circle-info"></i> 总体评价</h4>
+                <p id="analysisOverall">正在计算评估结论...</p>
+            </div>
+            <div class="analysis-item">
+                <h4><i class="fa-solid fa-triangle-exclamation"></i> 薄弱环节</h4>
+                <ul id="analysisWeak"></ul>
+            </div>
+            <div class="analysis-item">
+                <h4><i class="fa-solid fa-lightbulb"></i> 改进建议</h4>
+                <ul id="analysisSuggest"></ul>
+            </div>
+            <div class="analysis-item">
+                <h4><i class="fa-solid fa-list-check"></i> 后续跟踪</h4>
+                <ul id="analysisTrack"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ===== Theme Sync =====
+(function() {
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') {
+        document.documentElement.setAttribute('data-theme', e.data.theme);
+        localStorage.setItem('theme', e.data.theme);
+    }
+});
+
+// ===== Globals =====
+let currentTab = 'overview';
+let allRecords = [];
+let filteredRecords = [];
+let dimMode = 'town'; // town | village | type | year | structure | risk
+const dimensionModes = [
+    { key: 'town', label: '乡镇/街道' },
+    { key: 'village', label: '行政村' },
+    { key: 'type', label: '房屋类型' },
+    { key: 'year', label: '建筑年代' },
+    { key: 'structure', label: '结构形式' },
+    { key: 'risk', label: '风险等级' }
+];
+let chartInstances = {};
+
+// ===== Helpers =====
+function fmtPct(v) { return (v * 100).toFixed(1); }
+function fmtNum(n) { return n.toLocaleString('zh-CN'); }
+
+function isRural(r) { return (r.houseType || r.category) === '农村自建房'; }
+
+function yearGroup(y) {
+    if (!y) return '未知';
+    const year = parseInt(y, 10);
+    if (year < 1980) return '1980年以前';
+    if (year < 1990) return '1980-1990年';
+    if (year < 2000) return '1990-2000年';
+    if (year < 2010) return '2000-2010年';
+    return '2010年以后';
+}
+
+function structureLabel(r) {
+    return (r.structure && r.structure.structureType) || (r.category ? r.category + '结构' : '未知');
+}
+
+function townLabel(r) { return r.street || '未知'; }
+function villageLabel(r) { return r.village || r.community || '未知'; }
+
+function passFilter(r) {
+    const ft = document.getElementById('filterTown').value;
+    const fv = document.getElementById('filterVillage').value;
+    const fh = document.getElementById('filterHouseType').value;
+    const fs = document.getElementById('filterStructure').value;
+    const fy = document.getElementById('filterYear').value;
+    const fr = document.getElementById('filterRiskLevel').value;
+    if (ft && townLabel(r) !== ft) return false;
+    if (fv && villageLabel(r) !== fv) return false;
+    if (fh && (r.houseType || r.category) !== fh) return false;
+    if (fs && structureLabel(r) !== fs) return false;
+    if (fy && yearGroup(r.year) !== fy) return false;
+    if (fr && r.riskLevel !== fr) return false;
+    return true;
+}
+
+function computeMetrics(records) {
+    const total = records.length;
+    if (!total) {
+        return {
+            total, completeRate: 0, timelyRate: 0, effectiveRate: 0,
+            recurrenceRate: 0, reliefRate: 0, satisfaction: 0
+        };
+    }
+    const riskTasks = records.filter(r => r.risk !== 'safe' && r.totalTask > 0);
+    const completeRate = riskTasks.length
+        ? riskTasks.reduce((s, r) => s + (r.doneTask / r.totalTask), 0) / riskTasks.length
+        : 0;
+
+    const timelyRate = riskTasks.length
+        ? riskTasks.reduce((s, r) => {
+            const onTime = r.governance === 'done'
+                ? (r.completeDate && r.rectDeadline ? new Date(r.completeDate) <= new Date(r.rectDeadline) : true)
+                : false;
+            return s + (onTime ? 1 : 0);
+        }, 0) / riskTasks.length
+        : 0;
+
+    const effectiveRate = riskTasks.length
+        ? riskTasks.reduce((s, r) => {
+            const effective = r.governance === 'done' && r.closeStatus === '已通过' && !r.overdue;
+            return s + (effective ? 1 : 0);
+        }, 0) / riskTasks.length
+        : 0;
+
+    const recurrenceRate = riskTasks.length
+        ? riskTasks.reduce((s, r) => {
+            const recurrence = r.patrolRecords && r.patrolRecords.some(p => p.foundProblems && p.foundProblems.trim());
+            return s + (recurrence ? 1 : 0);
+        }, 0) / riskTasks.length
+        : 0;
+
+    const dangerHouses = records.filter(r => r.riskLevel === '重大隐患' || r.riskLevel === '较大隐患');
+    const reliefRate = dangerHouses.length
+        ? dangerHouses.filter(r => r.closeStatus === '已通过' || r.riskLevel === '安全' || r.riskLevel === '无风险').length / dangerHouses.length
+        : 0;
+
+    // satisfaction: weighted by complete & timely & effective, plus random base
+    const satisfaction = Math.min(100, Math.max(60,
+        completeRate * 35 + timelyRate * 25 + effectiveRate * 30 - recurrenceRate * 20 + 30
+    ));
+
+    return {
+        total, completeRate, timelyRate, effectiveRate,
+        recurrenceRate, reliefRate, satisfaction
+    };
+}
+
+function groupBy(records, keyFn) {
+    const groups = {};
+    records.forEach(r => {
+        const k = keyFn(r);
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(r);
+    });
+    return groups;
+}
+
+function groupByDimension(records, mode) {
+    switch (mode) {
+        case 'town': return groupBy(records, townLabel);
+        case 'village': return groupBy(records, villageLabel);
+        case 'type': return groupBy(records, r => r.houseType || r.category || '未知');
+        case 'year': return groupBy(records, r => yearGroup(r.year));
+        case 'structure': return groupBy(records, structureLabel);
+        case 'risk': return groupBy(records, r => r.riskLevel || '未知');
+        default: return groupBy(records, townLabel);
+    }
+}
+
+function populateFilters() {
+    const towns = [...new Set(allRecords.map(townLabel))].sort();
+    const villages = [...new Set(allRecords.map(villageLabel))].sort();
+    const townSel = document.getElementById('filterTown');
+    const villageSel = document.getElementById('filterVillage');
+
+    townSel.innerHTML = '<option value="">全部乡镇/街道</option>' + towns.map(t => `<option value="${t}">${t}</option>`).join('');
+    villageSel.innerHTML = '<option value="">全部行政村</option>' + villages.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+// ===== Rendering =====
+function renderKpis(metrics) {
+    document.getElementById('kpiCompleteRate').textContent = fmtPct(metrics.completeRate);
+    document.getElementById('kpiTimelyRate').textContent = fmtPct(metrics.timelyRate);
+    document.getElementById('kpiEffectiveRate').textContent = fmtPct(metrics.effectiveRate);
+    document.getElementById('kpiRecurrenceRate').textContent = fmtPct(metrics.recurrenceRate);
+    document.getElementById('kpiReliefRate').textContent = fmtPct(metrics.reliefRate);
+    document.getElementById('kpiSatisfaction').textContent = metrics.satisfaction.toFixed(1);
+}
+
+function renderAnalysis(metrics, records) {
+    const overall = document.getElementById('analysisOverall');
+    const weak = document.getElementById('analysisWeak');
+    const suggest = document.getElementById('analysisSuggest');
+    const track = document.getElementById('analysisTrack');
+
+    const score = (metrics.completeRate * 25 + metrics.timelyRate * 20 + metrics.effectiveRate * 25 + metrics.reliefRate * 20 + metrics.satisfaction / 100 * 10);
+    const level = score >= 90 ? '优秀' : (score >= 80 ? '良好' : (score >= 60 ? '合格' : '待改进'));
+    overall.innerHTML = `本评估周期内，共纳入 <strong>${records.length}</strong> 条农村自建房档案。
+        综合风险控制效果评分为 <strong>${score.toFixed(1)}</strong> 分，等级为
+        <span class="risk-tag ${score >= 80 ? 'green' : (score >= 60 ? 'blue' : 'red')}">${level}</span>。
+        整改完成率 <strong>${fmtPct(metrics.completeRate)}%</strong>，农户满意度 <strong>${metrics.satisfaction.toFixed(1)}</strong> 分。`;
+
+    const weakItems = [];
+    if (metrics.completeRate < 0.75) weakItems.push(`整改完成率偏低（${fmtPct(metrics.completeRate)}%），部分隐患长期未闭环。`);
+    if (metrics.timelyRate < 0.7) weakItems.push(`整改及时率不足（${fmtPct(metrics.timelyRate)}%），存在超期未整改项目。`);
+    if (metrics.effectiveRate < 0.7) weakItems.push(`整改有效率较低（${fmtPct(metrics.effectiveRate)}%），需关注整治质量与验收把关。`);
+    if (metrics.recurrenceRate > 0.15) weakItems.push(`隐患复发率较高（${fmtPct(metrics.recurrenceRate)}%），巡查发现同类问题反复出现。`);
+    if (metrics.reliefRate < 0.6) weakItems.push(`危房解危率偏低（${fmtPct(metrics.reliefRate)}%），C/D级危房销号进度需加快。`);
+    if (metrics.satisfaction < 75) weakItems.push(`农户满意度不足（${metrics.satisfaction.toFixed(1)}分），需改善沟通与服务体验。`);
+    if (!weakItems.length) weakItems.push('当前各指标表现良好，未发现明显薄弱环节。');
+    weak.innerHTML = weakItems.map(x => `<li>${x}</li>`).join('');
+
+    const suggestItems = [
+        '对长期未整改及超期项目实行清单化管理，明确责任人和完成时限。',
+        '强化整治过程质量监管，落实“整治—验收—销号”全流程闭环。',
+        '针对复发隐患开展专项复查，追根溯源并完善长效管控措施。',
+        '加强 C/D 级危房动态监测，优先安排资金与工程技术力量推进解危销号。',
+        '建立农户回访机制，将满意度纳入考核，提升治理温度。'
+    ];
+    suggest.innerHTML = suggestItems.map(x => `<li>${x}</li>`).join('');
+
+    const trackItems = [
+        '每月生成风险控制效果月报，重点跟踪完成率、复发率变化。',
+        '对排名后 3 位的乡镇/街道开展专项督导与约谈。',
+        '每季度开展一次巡查整改“回头看”，防止隐患反弹。',
+        '将评估结果与资金补助、绩效考核挂钩，形成正向激励。'
+    ];
+    track.innerHTML = trackItems.map(x => `<li>${x}</li>`).join('');
+}
+
+function renderRankTable(townMetrics) {
+    const tbody = document.getElementById('rankTableBody');
+    const sorted = Object.entries(townMetrics)
+        .map(([name, m]) => ({
+            name,
+            completeRate: m.completeRate,
+            timelyRate: m.timelyRate,
+            effectiveRate: m.effectiveRate,
+            reliefRate: m.reliefRate,
+            score: m.completeRate * 25 + m.timelyRate * 20 + m.effectiveRate * 25 + m.reliefRate * 20 + m.satisfaction / 100 * 10
+        }))
+        .sort((a, b) => b.score - a.score);
+    tbody.innerHTML = sorted.map((row, idx) => {
+        const rankCls = idx === 0 ? 'top1' : (idx === 1 ? 'top2' : (idx === 2 ? 'top3' : 'other'));
+        const level = row.score >= 90 ? '优秀' : (row.score >= 80 ? '良好' : (row.score >= 60 ? '合格' : '待改进'));
+        const levelCls = row.score >= 80 ? 'green' : (row.score >= 60 ? 'blue' : 'red');
+        return `<tr>
+            <td><span class="rank-num ${rankCls}">${idx + 1}</span></td>
+            <td>${row.name}</td>
+            <td class="text-right">${fmtPct(row.completeRate)}%</td>
+            <td class="text-right">${fmtPct(row.timelyRate)}%</td>
+            <td class="text-right">${fmtPct(row.effectiveRate)}%</td>
+            <td class="text-right">${fmtPct(row.reliefRate)}%</td>
+            <td class="text-right" style="font-weight:700">${row.score.toFixed(1)}</td>
+            <td><span class="risk-tag ${levelCls}">${level}</span></td>
+        </tr>`;
+    }).join('');
+}
+
+// ===== Charts =====
+function getThemeColors() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+        text: isDark ? '#94a3b8' : '#5f6368',
+        axis: isDark ? '#1e3a5f' : '#dadce0',
+        bg: 'transparent'
+    };
+}
+
+function disposeChart(id) {
+    if (chartInstances[id]) { chartInstances[id].dispose(); delete chartInstances[id]; }
+}
+
+function initChart(id, option) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    disposeChart(id);
+    const c = echarts.init(el);
+    const theme = getThemeColors();
+    option.backgroundColor = theme.bg;
+    if (option.title) option.title.textStyle = { color: theme.text, fontSize: 14 };
+    const axisCommon = { axisLine: { lineStyle: { color: theme.axis } }, axisLabel: { color: theme.text }, splitLine: { lineStyle: { color: theme.axis } } };
+    if (option.xAxis) {
+        if (Array.isArray(option.xAxis)) option.xAxis.forEach(a => Object.assign(a, axisCommon));
+        else Object.assign(option.xAxis, axisCommon);
+    }
+    if (option.yAxis) {
+        if (Array.isArray(option.yAxis)) option.yAxis.forEach(a => Object.assign(a, axisCommon));
+        else Object.assign(option.yAxis, axisCommon);
+    }
+    if (option.legend) option.legend.textStyle = { color: theme.text };
+    if (option.tooltip) option.tooltip.backgroundColor = document.documentElement.getAttribute('data-theme') === 'dark' ? 'rgba(17,34,64,0.95)' : 'rgba(255,255,255,0.95)';
+    c.setOption(option);
+    chartInstances[id] = c;
+    return c;
+}
+
+function renderRiskDist(records) {
+    const groups = groupBy(records, r => r.riskLevel || '未知');
+    const order = ['重大隐患', '较大隐患', '一般隐患', '安全', '无风险'];
+    const data = order.filter(k => groups[k]).map(k => ({ value: groups[k].length, name: k }));
+    initChart('chartRiskDist', {
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        legend: { bottom: 0, textStyle: { color: getThemeColors().text } },
+        color: ['#d93025', '#e65100', '#f9c846', '#1a73e8', '#1e8e3e'],
+        series: [{
+            type: 'pie', radius: ['40%', '65%'], center: ['50%', '45%'],
+            label: { color: getThemeColors().text },
+            data
+        }]
+    });
+}
+
+function renderGovernDist(records) {
+    const groups = groupBy(records, r => r.governStatus || '未知');
+    const data = Object.entries(groups).map(([k, v]) => ({ value: v.length, name: k }));
+    initChart('chartGovernDist', {
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        legend: { bottom: 0, textStyle: { color: getThemeColors().text } },
+        color: ['#d93025', '#f59e0b', '#1a73e8', '#1e8e3e', '#94a3b8'],
+        series: [{
+            type: 'pie', radius: '60%', center: ['50%', '45%'],
+            label: { color: getThemeColors().text },
+            roseType: 'radius', data
+        }]
+    });
+}
+
+function renderDimensionBar(records, mode) {
+    const groups = groupByDimension(records, mode);
+    const labels = Object.keys(groups).sort();
+    const complete = labels.map(k => fmtPct(computeMetrics(groups[k]).completeRate));
+    const effective = labels.map(k => fmtPct(computeMetrics(groups[k]).effectiveRate));
+    initChart('chartDimensionBar', {
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        legend: { data: ['整改完成率', '整改有效率'], textStyle: { color: getThemeColors().text } },
+        grid: { left: '3%', right: '4%', bottom: '15%', top: '15%', containLabel: true },
+        xAxis: { type: 'category', data: labels, axisLabel: { rotate: 25, color: getThemeColors().text } },
+        yAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+        series: [
+            { name: '整改完成率', type: 'bar', data: complete, itemStyle: { color: '#1a73e8', borderRadius: [4, 4, 0, 0] } },
+            { name: '整改有效率', type: 'bar', data: effective, itemStyle: { color: '#1e8e3e', borderRadius: [4, 4, 0, 0] } }
+        ]
+    });
+}
+
+function renderRadar(metrics) {
+    initChart('chartRadar', {
+        tooltip: {},
+        radar: {
+            indicator: [
+                { name: '整改完成率', max: 100 },
+                { name: '整改及时率', max: 100 },
+                { name: '整改有效率', max: 100 },
+                { name: '危房解危率', max: 100 },
+                { name: '农户满意度', max: 100 }
+            ],
+            axisName: { color: getThemeColors().text },
+            splitArea: { areaStyle: { color: ['rgba(26,115,232,0.05)', 'rgba(26,115,232,0.1)'] } }
+        },
+        series: [{
+            type: 'radar',
+            data: [{
+                value: [
+                    metrics.completeRate * 100,
+                    metrics.timelyRate * 100,
+                    metrics.effectiveRate * 100,
+                    metrics.reliefRate * 100,
+                    metrics.satisfaction
+                ],
+                name: '当前评估',
+                areaStyle: { color: 'rgba(26,115,232,0.25)' },
+                lineStyle: { color: '#1a73e8', width: 2 },
+                itemStyle: { color: '#1a73e8' }
+            }]
+        }]
+    });
+}
+
+function renderTrend(records) {
+    const months = ['2024-07','2024-08','2024-09','2024-10','2024-11','2024-12','2025-01','2025-02','2025-03','2025-04','2025-05','2025-06'];
+    const baseComplete = 0.55;
+    const baseTimely = 0.60;
+    const baseEffective = 0.50;
+    const complete = months.map((_, i) => (baseComplete + i * 0.03 + Math.random() * 0.05) * 100);
+    const timely = months.map((_, i) => (baseTimely + i * 0.025 + Math.random() * 0.05) * 100);
+    const effective = months.map((_, i) => (baseEffective + i * 0.028 + Math.random() * 0.05) * 100);
+    initChart('chartTrend', {
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['整改完成率', '整改及时率', '整改有效率'], textStyle: { color: getThemeColors().text } },
+        grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+        xAxis: { type: 'category', boundaryGap: false, data: months },
+        yAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+        series: [
+            { name: '整改完成率', type: 'line', smooth: true, data: complete, areaStyle: { color: 'rgba(26,115,232,0.15)' }, itemStyle: { color: '#1a73e8' } },
+            { name: '整改及时率', type: 'line', smooth: true, data: timely, areaStyle: { color: 'rgba(0,151,167,0.15)' }, itemStyle: { color: '#0097a7' } },
+            { name: '整改有效率', type: 'line', smooth: true, data: effective, areaStyle: { color: 'rgba(30,142,62,0.15)' }, itemStyle: { color: '#1e8e3e' } }
+        ]
+    });
+}
+
+function renderFund(records) {
+    const months = ['2024-07','2024-09','2024-11','2025-01','2025-03','2025-05'];
+    const funds = months.map(() => Math.round(50 + Math.random() * 80));
+    const completes = months.map(() => Math.round(40 + Math.random() * 70));
+    initChart('chartFund', {
+        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+        legend: { data: ['资金投入（万元）', '整治完成数'], textStyle: { color: getThemeColors().text } },
+        grid: { left: '3%', right: '4%', bottom: '3%', top: '18%', containLabel: true },
+        xAxis: { type: 'category', data: months },
+        yAxis: [
+            { type: 'value', name: '万元', axisLabel: { formatter: '{value}' } },
+            { type: 'value', name: '户数', axisLabel: { formatter: '{value}' } }
+        ],
+        series: [
+            { name: '资金投入（万元）', type: 'bar', data: funds, itemStyle: { color: '#f59e0b', borderRadius: [4, 4, 0, 0] } },
+            { name: '整治完成数', type: 'line', yAxisIndex: 1, data: completes, itemStyle: { color: '#1e8e3e' } }
+        ]
+    });
+}
+
+function renderInspect(records) {
+    const months = ['2024-07','2024-08','2024-09','2024-10','2024-11','2024-12'];
+    const found = months.map(() => Math.round(10 + Math.random() * 25));
+    const closed = months.map(() => Math.round(8 + Math.random() * 20));
+    initChart('chartInspect', {
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        legend: { data: ['发现问题数', '整改闭环数'], textStyle: { color: getThemeColors().text } },
+        grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+        xAxis: { type: 'category', data: months },
+        yAxis: { type: 'value' },
+        series: [
+            { name: '发现问题数', type: 'bar', stack: 'total', data: found, itemStyle: { color: '#d93025' } },
+            { name: '整改闭环数', type: 'bar', stack: 'total', data: closed, itemStyle: { color: '#1e8e3e' } }
+        ]
+    });
+}
+
+function renderRankChart(records) {
+    const groups = groupBy(records, townLabel);
+    const townMetrics = {};
+    Object.entries(groups).forEach(([k, v]) => { townMetrics[k] = computeMetrics(v); });
+    const sorted = Object.entries(townMetrics)
+        .map(([name, m]) => ({
+            name,
+            score: m.completeRate * 25 + m.timelyRate * 20 + m.effectiveRate * 25 + m.reliefRate * 20 + m.satisfaction / 100 * 10
+        }))
+        .sort((a, b) => a.score - b.score)
+        .slice(-10);
+    initChart('chartRank', {
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: '3%', right: '8%', bottom: '3%', top: '5%', containLabel: true },
+        xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}' } },
+        yAxis: { type: 'category', data: sorted.map(x => x.name) },
+        series: [{
+            type: 'bar', data: sorted.map(x => x.score.toFixed(1)),
+            itemStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                    { offset: 0, color: '#1a73e8' }, { offset: 1, color: '#1e8e3e' }
+                ]),
+                borderRadius: [0, 4, 4, 0]
+            },
+            label: { show: true, position: 'right', formatter: '{c}分' }
+        }]
+    });
+    renderRankTable(townMetrics);
+}
+
+function renderHeatmap(records) {
+    // Use village x risk-level matrix
+    const villages = [...new Set(records.map(villageLabel))].sort();
+    const levels = ['重大隐患', '较大隐患', '一般隐患'];
+    const data = [];
+    villages.forEach((v, y) => {
+        levels.forEach((lvl, x) => {
+            const count = records.filter(r => villageLabel(r) === v && r.riskLevel === lvl).length;
+            data.push([x, y, count]);
+        });
+    });
+    initChart('chartHeatmap', {
+        tooltip: { position: 'top', formatter: p => `${villages[p.value[1]]}<br/>${levels[p.value[0]]}: ${p.value[2]}户` },
+        grid: { left: '18%', right: '8%', top: '8%', bottom: '12%' },
+        xAxis: { type: 'category', data: levels, splitArea: { show: true } },
+        yAxis: { type: 'category', data: villages, splitArea: { show: true } },
+        visualMap: {
+            min: 0, max: Math.max(1, ...data.map(d => d[2])),
+            calculable: true,
+            inRange: { color: ['#e8f0fe', '#1a73e8', '#e65100', '#d93025'] },
+            right: 0, top: 'center', textStyle: { color: getThemeColors().text }
+        },
+        series: [{
+            type: 'heatmap', data,
+            label: { show: true, color: getThemeColors().text },
+            emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' } }
+        }]
+    });
+}
+
+function renderCharts() {
+    const metrics = computeMetrics(filteredRecords);
+    renderKpis(metrics);
+    renderAnalysis(metrics, filteredRecords);
+
+    if (currentTab === 'overview') {
+        renderRiskDist(filteredRecords);
+        renderGovernDist(filteredRecords);
+        renderDimensionBar(filteredRecords, dimMode);
+        renderRadar(metrics);
+    } else if (currentTab === 'trend') {
+        renderTrend(filteredRecords);
+        renderFund(filteredRecords);
+        renderInspect(filteredRecords);
+    } else if (currentTab === 'rank') {
+        renderRankChart(filteredRecords);
+    } else if (currentTab === 'heatmap') {
+        renderHeatmap(filteredRecords);
+    }
+}
+
+// ===== Tab Switch =====
+function switchTab(tabId) {
+    currentTab = tabId;
+    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.tab-item[data-tab="${tabId}"]`).classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+    // Wait for display to apply
+    setTimeout(renderCharts, 50);
+}
+
+// ===== Filter Actions =====
+function refreshEval() {
+    filteredRecords = allRecords.filter(passFilter);
+    renderCharts();
+}
+
+function resetFilters() {
+    document.getElementById('filterTown').value = '';
+    document.getElementById('filterVillage').value = '';
+    document.getElementById('filterHouseType').value = '';
+    document.getElementById('filterStructure').value = '';
+    document.getElementById('filterYear').value = '';
+    document.getElementById('filterRiskLevel').value = '';
+    refreshEval();
+}
+
+function exportReport() {
+    alert('评估报告导出功能已触发（演示：可结合后端生成 PDF/Excel）。');
+}
+
+// ===== Init =====
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof initHouseArchSeed === 'function' && typeof getAllHouseRecords === 'function') {
+        initHouseArchSeed();
+        allRecords = getAllHouseRecords().filter(isRural);
+        populateFilters();
+        filteredRecords = allRecords.slice();
+        renderCharts();
+    }
+
+    window.addEventListener('resize', function() {
+        Object.values(chartInstances).forEach(c => c && c.resize());
+    });
+});
+</script>
+
+</body>
+</html>
