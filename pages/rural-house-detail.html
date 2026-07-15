@@ -118,11 +118,33 @@
         .content-card-title i { color: var(--primary); }
         .content-body { padding: 18px 20px; }
 
+        /* 标签页 */
+        .content-tabs {
+            display: flex; gap: 8px; padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: #fff; flex-wrap: wrap;
+        }
+        .content-tab {
+            display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+            font-size: 13px; color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
+            border-radius: 6px 6px 0 0; border: 1px solid transparent; border-bottom: none; background: transparent;
+            margin-bottom: -1px;
+        }
+        .content-tab:hover { color: var(--primary); background: var(--primary-light); }
+        .content-tab.active { color: var(--primary); font-weight: 500; background: #fff; border-color: var(--border); border-bottom-color: #fff; }
+        .content-tab-count {
+            font-size: 11px; padding: 1px 7px; border-radius: 10px;
+            background: #f0f2f5; color: var(--text-secondary); margin-left: 4px;
+        }
+        .content-tab.active .content-tab-count { background: var(--primary-light); color: var(--primary); }
+
         /* 信息网格 */
         .info-section-title { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; margin-bottom: 14px; color: var(--text-primary); }
         .info-section-title i { color: var(--primary); }
         .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 16px; }
         .info-grid-2col { grid-template-columns: repeat(2, 1fr); }
+        .info-grid.info-grid-2col { grid-template-columns: repeat(2, 1fr); }
+        .info-grid.info-grid-2col .info-item { display: flex; flex-direction: row; align-items: baseline; gap: 12px; }
+        .info-grid.info-grid-2col .info-label { width: 140px; flex-shrink: 0; color: var(--text-secondary); font-size: 13px; }
+        .info-grid.info-grid-2col .info-value { flex: 1; min-width: 0; font-size: 14px; color: var(--text-primary); font-weight: 500; }
         .info-item { display: flex; flex-direction: column; gap: 4px; }
         .info-label { font-size: 12px; color: var(--text-secondary); }
         .info-value { font-size: 14px; color: var(--text-primary); font-weight: 500; line-height: 1.4; }
@@ -236,8 +258,6 @@
         // 侧边栏模块配置：key / icon / title / tag
         const sidebarModules = [
             { key: 'overview', icon: 'fa-id-card', title: '房屋概况', tag: '基础' },
-            { key: 'photos', icon: 'fa-images', title: '房屋照片', tag: '影像' },
-            { key: 'homestead', icon: 'fa-map', title: '宅基地信息', tag: '权属' },
             { key: 'designConstruction', icon: 'fa-hard-hat', title: '设计施工信息', tag: '建设' },
             { key: 'structure', icon: 'fa-building', title: '结构信息', tag: '结构' },
             { key: 'usage', icon: 'fa-home', title: '使用信息', tag: '用途' },
@@ -253,6 +273,14 @@
 
         let currentModule = 'overview';
         let currentHouse = getCurrentHouseArch();
+
+        const overviewSubTabs = [
+            { key: 'jbxx', title: '基本信息', icon: 'fa-id-card' },
+            { key: 'zjd', title: '宅基地信息', icon: 'fa-map' },
+            { key: 'jsqk', title: '建设情况', icon: 'fa-hard-hat' },
+            { key: 'glqk', title: '管理情况', icon: 'fa-file-alt' }
+        ];
+        let currentOverviewSubTab = 'jbxx';
 
         // ---------------- 初始化 ----------------
         function initPage() {
@@ -320,8 +348,8 @@
             let html = '';
             switch (currentModule) {
                 case 'overview': html = renderOverview(s); break;
-                case 'photos': html = renderPhotos(s); break;
-                case 'homestead': html = renderHomestead(s); break;
+
+
                 case 'designConstruction': html = renderDesignConstruction(s); break;
                 case 'structure': html = renderStructure(s); break;
                 case 'usage': html = renderUsage(s); break;
@@ -336,6 +364,7 @@
                 default: html = renderOverview(s);
             }
             area.innerHTML = html;
+            bindOverviewSubTabs();
         }
 
         function card(title, icon, body) {
@@ -352,17 +381,83 @@
         }
 
         function renderOverview(s) {
-            const o = s.overview || {};
-            const grid = [
-                kv('房屋名称', o.houseName), kv('房屋编号', o.houseNo || s.no), kv('房屋类型', o.houseType || s.houseType),
-                kv('结构类型', o.structureType), kv('建筑层数', o.floors), kv('建筑面积', o.buildingArea),
-                kv('建成年代', o.builtYear), kv('土地性质', o.landNature), kv('详细地址', o.address),
-                kv('权属人', o.owner || s.owner), kv('身份证号', o.idCard), kv('联系电话', o.phone),
-                kv('使用用途', o.usage), kv('是否自住', o.isSelfLive), kv('具体用途', o.specificUsage),
-                kv('人员聚集场所周边', o.crowdAround), kv('其他人员密集场所周边', o.otherCrowdAround), kv('超10人使用', o.over10People),
-                kv('行政许可', o.permit), kv('违法建设', o.illegalBuild)
-            ].join('');
-            return card('房屋概况', 'fa-id-card', '<div class="info-grid">' + grid + '</div>');
+            const tabsHtml = overviewSubTabs.map(tab => {
+                const active = tab.key === currentOverviewSubTab ? 'active' : '';
+                return '<div class="content-tab ' + active + '" data-scope="overview" data-key="' + tab.key + '">' +
+                    '<i class="fas ' + tab.icon + '"></i> ' + tab.title +
+                    '</div>';
+            }).join('');
+
+            const jbxx = [
+                ['房屋编号', s.no || '—'],
+                ['房屋名称', s.overview && s.overview.houseName || s.name || '—'],
+                ['房屋性质', s.houseType || '自住民居'],
+                ['所在区域', '奉贤区' + (s.street || '—')],
+                ['路号信息', s.address || '—'],
+                ['不需要排查原因', '—'],
+                ['产权人 / 使用人信息', s.owner || '—'],
+                ['身份证号码', s.overview && s.overview.idCard || '—'],
+                ['房屋用途', s.overview && s.overview.usage || '自住'],
+                ['是否同时自住', s.overview && s.overview.isSelfLive || '是'],
+                ['具体用途', s.overview && s.overview.specificUsage || '日常居住'],
+                ['人员聚集场所周边', s.overview && s.overview.crowdAround || '否'],
+                ['其他人员密集场所周边', s.overview && s.overview.otherCrowdAround || '否'],
+                ['土地性质', s.overview && s.overview.landNature || '集体土地'],
+                ['集体土地', '宅基地'],
+                ['所在区域', '奉贤区' + (s.street || '—')],
+                ['建筑层数', s.overview && s.overview.floors || '3层'],
+                ['建筑面积 (m²)', s.overview && s.overview.buildingArea || '—'],
+                ['建成时间', (s.year || '—') + '年'],
+                ['具体年份', (s.year || '—') + '年']
+            ];
+            const zjd = [
+                ['宅基地面积', s.homestead && s.homestead.area || '132㎡'],
+                ['审批情况', s.homestead && s.homestead.approvalStatus || '自然资源部门审批通过'],
+                ['权属证明', s.homestead && s.homestead.certNo || 'ZD-20070419']
+            ];
+            const jsqk = [
+                ['常住或使用人数超过 10 人', s.overview && s.overview.over10People || '否'],
+                ['设计方式', s.designConstruction && s.designConstruction.designMode || '有专业设计'],
+                ['建造方式', s.designConstruction && s.designConstruction.buildMode || '有资质施工队伍'],
+                ['结构类型', s.overview && s.overview.structureType || s.structure && s.structure.structureType || (s.category === '框架' ? '框架结构' : '砌体结构')],
+                ['楼屋盖', s.structure && s.structure.roofType || '现浇板'],
+                ['是否改扩建', s.structure && s.structure.expansionStatus || '否'],
+                ['是否装修', s.structure && s.structure.decorationStatus || '否']
+            ];
+            const glqk = [
+                ['已取得的行政许可', s.overview && s.overview.permit || '宅基地批准书'],
+                ['违法建设和违法审批', s.overview && s.overview.illegalBuild || '否']
+            ];
+            const dynamicOverview = { jbxx, zjd, jsqk, glqk };
+            const rows = dynamicOverview[currentOverviewSubTab] || jbxx;
+            const gridHtml = rows.map(r => {
+                return '<div class="info-item">' +
+                    '<div class="info-label">' + r[0] + '</div>' +
+                    '<div class="info-value ' + (r[1] ? '' : 'empty') + '">' + (r[1] || '—') + '</div>' +
+                    '</div>';
+            }).join('');
+
+            return '<div class="content-card">' +
+                '<div class="content-card-header">' +
+                    '<div class="content-card-title"><i class="fas fa-id-card"></i> 房屋概况</div>' +
+                '</div>' +
+                '<div class="content-tabs">' + tabsHtml + '</div>' +
+                '<div class="content-body">' +
+                    '<div class="info-grid info-grid-2col">' + gridHtml + '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function bindOverviewSubTabs() {
+            const container = document.getElementById('contentArea');
+            if (!container) return;
+            container.addEventListener('click', function(e) {
+                const tab = e.target.closest('.content-tab[data-scope="overview"]');
+                if (!tab) return;
+                e.stopPropagation();
+                currentOverviewSubTab = tab.dataset.key;
+                renderContent();
+            });
         }
 
         function renderPhotos(s) {
