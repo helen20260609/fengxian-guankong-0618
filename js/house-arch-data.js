@@ -913,18 +913,20 @@ function generateHouseSeed() {
         };
         const emergencyResponse = generateEmergencyResponse(no, risk, governance, i);
         const photos = generateHousePhotos(no, i);
+        const riskPart = HAZARD_PARTS[i % HAZARD_PARTS.length];
+        const riskType = HAZARD_TYPES[(i + 3) % HAZARD_TYPES.length];
         const riskInfo = {
             riskNo: 'RSK-' + no,
             riskName: name + ' ' + RISK_LABEL_MAP[risk] + '风险',
-            riskType: type,
+            riskType: riskType,
             riskLevel: riskLevel,
             discoveryTime: inspectionRecords.length ? inspectionRecords[0].checkDate : '',
             discoveryMethod: '排查发现',
             discoverer: inspectionRecords.length ? inspectionRecords[0].checker : '',
             riskStatus: governStatus,
-            riskPart: part,
+            riskPart: riskPart,
             spatialLocation: '上海市奉贤区' + street + community + (i * 3) + '号',
-            riskDesc: part + '存在' + type + '，影响结构安全',
+            riskDesc: riskPart + '存在' + riskType + '，影响结构安全',
             relatedHouse: no,
             relatedOwner: owner,
             relatedUser: usageType === '自住' ? owner : (usageType === '出租' ? '租户' : ''),
