@@ -204,7 +204,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .map-container { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #eef6ff; min-width: 0; min-height: 0; }
 .map-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; opacity: 0.85; pointer-events: none; z-index: 0; }
 .amap-embed { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; display: flex; }
-.amap-embed iframe { width: 100%; height: 100%; min-height: 100%; border: none; display: block; }
+#baiduMapContainer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 .map-region { position: absolute; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; font-weight: 600; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.25); z-index: 1; border: 2px solid rgba(255,255,255,0.7); width: 56px; height: 56px; padding: 4px 8px; transform: translate(-50%, -50%); }
 .map-region:hover { transform: translate(-50%, -50%) scale(1.1); z-index: 10; box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
 .map-region .region-name { font-size: 12px; line-height: 1.2; white-space: nowrap; }
@@ -225,6 +225,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 }
 </style>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://api.map.baidu.com/api?v=3.0&ak=KZC3aTy6LXVDRQSauPax1wloEMsAGK47"></script>
     <script src="../js/third-party-data.js"></script>
 </head>
 <body>
@@ -310,17 +311,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     </div>
     <div class="map-body">
         <div class="map-container" id="serviceMapContainer">
-            <div class="amap-embed" id="amapEmbed">
-                <iframe
-                    id="amapIframe"
-                    src="https://map.baidu.com/search/%E4%B8%8A%E6%B5%B7%E5%B8%82%E5%A5%89%E8%B4%A4%E5%8C%BA"
-                    width="100%"
-                    height="100%"
-                    frameborder="0"
-                    scrolling="no"
-                    allowfullscreen>
-                </iframe>
-            </div>
+            <div id="baiduMapContainer" class="amap-embed"></div>
             <div class="map-tooltip" id="mapTooltip">
                 <div class="map-tooltip-title" id="mapTooltipTitle"></div>
                 <div id="mapTooltipContent"></div>
@@ -1337,8 +1328,7 @@ function renderServiceMap() {
     var container = document.getElementById('serviceMapContainer');
     var field = document.getElementById('mapFilterField').value;
     var tooltip = document.getElementById('mapTooltip');
-    var embed = document.getElementById('amapEmbed');
-    var iframe = document.getElementById('amapIframe');
+    var mapEl = document.getElementById('baiduMapContainer');
     var mapBody = document.querySelector('.map-body');
     
     // 强制修复布局：确保地图容器和覆盖层正确渲染
@@ -1362,25 +1352,15 @@ function renderServiceMap() {
         container.style.minWidth = '0';
         container.style.minHeight = '0';
     }
-    if (embed) {
-        embed.style.position = 'absolute';
-        embed.style.top = '0';
-        embed.style.right = '0';
-        embed.style.bottom = '0';
-        embed.style.left = '0';
-        embed.style.width = '100%';
-        embed.style.height = '100%';
-        embed.style.zIndex = '0';
-    }
-    if (iframe) {
-        iframe.style.position = 'absolute';
-        iframe.style.top = '0';
-        iframe.style.left = '0';
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.minHeight = '100%';
-        iframe.style.border = 'none';
-        iframe.style.display = 'block';
+    if (mapEl) {
+        mapEl.style.position = 'absolute';
+        mapEl.style.top = '0';
+        mapEl.style.right = '0';
+        mapEl.style.bottom = '0';
+        mapEl.style.left = '0';
+        mapEl.style.width = '100%';
+        mapEl.style.height = '100%';
+        mapEl.style.zIndex = '0';
     }
     var legend = container ? container.querySelector('.map-legend') : document.querySelector('.map-legend');
     if (legend) {
@@ -1459,6 +1439,24 @@ function renderServiceMap() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // 初始化百度地图（仅执行一次，BMap 加载完成后创建）
+    var baiduMapInitialized = false;
+    function initBaiduMap() {
+        if (baiduMapInitialized) return;
+        if (typeof BMap === 'undefined' || typeof BMap.Map !== 'function') {
+            setTimeout(initBaiduMap, 300);
+            return;
+        }
+        try {
+            var map = new BMap.Map('baiduMapContainer');
+            map.centerAndZoom(new BMap.Point(121.47, 30.92), 11);
+            map.enableScrollWheelZoom(true);
+            baiduMapInitialized = true;
+        } catch (e) {
+            console.error('百度地图初始化失败', e);
+        }
+    }
+    initBaiduMap();
     renderServiceMap();
 });
 </script>
