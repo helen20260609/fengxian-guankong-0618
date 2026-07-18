@@ -35,14 +35,13 @@ let currentLevel = 'district';
 let currentStreet = null;
 let currentCommunity = null;
 let map, markers = [];
-let footprintPolygons = [];
 let leftChart, streetRankingChart, measurePieChart;
 
 const RISK_CONFIG = {
     danger: { label: '重大隐患', color: '#d93025', class: 'danger', shape: 'triangle' },
     major: { label: '较大隐患', color: '#f57c00', class: 'major', shape: 'square' },
     warning: { label: '一般隐患', color: '#f9ab00', class: 'warning', shape: 'circle' },
-    safe: { label: '安全', color: '#1a73e8', class: 'safe', shape: 'circle' }
+    safe: { label: '安全', color: '#34a853', class: 'safe', shape: 'circle' }
 };
 
 const STATUS_CONFIG = {
@@ -175,84 +174,12 @@ function createClusterIcon(count, color) {
     const size = count < 10 ? 28 : count < 50 ? 36 : 44;
     return L.divIcon({ className: 'cluster-marker', html: '<div class="cluster-icon" style="width:' + size + 'px;height:' + size + 'px;background:' + color + ';">' + count + '</div>', iconSize: [size, size], iconAnchor: [size/2, size/2] });
 }
-
-function generateHouseFootprint(lat, lng, seed, scale) {
-    scale = scale || 0.0002;
-    function seededRandom(seed) {
-        const x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
-    }
-    const rand = n => seededRandom(seed + n);
-    const w = scale * (0.6 + rand(1) * 0.8);
-    const h = scale * (0.6 + rand(2) * 0.8);
-    const angle = rand(3) * Math.PI;
-    const corners = [
-        [-w/2, -h/2], [w/2, -h/2], [w/2, h/2], [-w/2, h/2]
-    ];
-    const jitter = (n, mag) => (rand(n) - 0.5) * mag;
-    const rotated = corners.map((pt, i) => {
-        const x = pt[0] + jitter(i * 10 + 1, scale * 0.12);
-        const y = pt[1] + jitter(i * 10 + 2, scale * 0.12);
-        const rx = x * Math.cos(angle) - y * Math.sin(angle);
-        const ry = x * Math.sin(angle) + y * Math.cos(angle);
-        return [lat + ry, lng + rx];
-    });
-    return rotated;
-}
-
-function generateHouseFootprintByRisk(lat, lng, risk, seed, scale) {
-    scale = scale || 0.0002;
-    function seededRandom(seed) {
-        const x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
-    }
-    const rand = n => seededRandom(seed + n);
-    const riskFactor = risk === 'danger' ? 1.6 : risk === 'major' ? 1.3 : risk === 'warning' ? 1.0 : 0.8;
-    const w = scale * (0.8 + rand(1) * 1.0) * riskFactor;
-    const h = scale * (0.8 + rand(2) * 1.0) * riskFactor;
-    const angle = rand(3) * Math.PI;
-    const corners = [
-        [-w/2, -h/2], [w/2, -h/2], [w/2, h/2], [-w/2, h/2]
-    ];
-    const jitter = (n, mag) => (rand(n) - 0.5) * mag;
-    const rotated = corners.map((pt, i) => {
-        const x = pt[0] + jitter(i * 10 + 1, scale * 0.12);
-        const y = pt[1] + jitter(i * 10 + 2, scale * 0.12);
-        const rx = x * Math.cos(angle) - y * Math.sin(angle);
-        const ry = x * Math.sin(angle) + y * Math.cos(angle);
-        return [lat + ry, lng + rx];
-    });
-    return rotated;
-}
-
-function renderHouseFootprint(item, idx) {
-    const color = getHouseColor(item);
-    const seed = item.no.charCodeAt(item.no.length - 1) + idx;
-    const footprint = generateHouseFootprintByRisk(item.lat, item.lng, item.risk, seed, 0.00025);
-    const polygon = L.polygon(footprint, {
-        color: color,
-        weight: 1.5,
-        fillColor: color,
-        fillOpacity: 0.35,
-        opacity: 0.8,
-        className: 'house-footprint'
-    }).addTo(map);
-    polygon.bindPopup(buildHousePopup(item, idx));
-    polygon.on('click', function() { selectHouse(idx); });
-    footprintPolygons.push(polygon);
-}
-
 function initMap() {
     map = L.map('map').setView([30.920, 121.500], 11);
-    L.tileLayer('https://map.geoq.cn/arcgis/rest/services/ChinaOnlineStreetPurplishBlue/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '© GeoQ',
-        maxZoom: 18
-    }).addTo(map);
-    const boundaryPolygon = L.polygon(fengxianBoundary, { color: '#1a73e8', weight: 2, fillColor: '#1a73e8', fillOpacity: 0.08, dashArray: '5, 5' }).addTo(map).bindPopup('上海奉贤区范围');
-    map.fitBounds(boundaryPolygon.getBounds().pad(0.05));
+    L.tileLayer('https://map.geoq.cn/arcgis/rest/services/ChinaOnlineStreetPurplishBlue/MapServer/tile/{z}/{y}/{x}', { attribution: '© GeoQ', maxZoom: 18 }).addTo(map);
+    L.polygon(fengxianBoundary, { color: '#1a73e8', weight: 2, fillColor: '#1a73e8', fillOpacity: 0.08, dashArray: '5, 5' }).addTo(map).bindPopup('上海奉贤区范围');
     renderMap();
 }
-
 function getFilteredByDrill(data) {
     let list = data;
     if (currentLevel === 'street' && currentStreet) list = list.filter(d => d.street === currentStreet);
@@ -263,8 +190,6 @@ function getVisibleData() { return getFilteredByDrill(filteredData); }
 function renderMap() {
     markers.forEach(m => map.removeLayer(m));
     markers = [];
-    footprintPolygons.forEach(p => map.removeLayer(p));
-    footprintPolygons = [];
     const data = getVisibleData();
     if (currentLayer === 'eliminationHeatmap') {
         renderHeatmap(data);
@@ -287,7 +212,6 @@ function renderStreetClusters(data) {
         marker.on('click', () => drillToStreet(street));
         markers.push(marker);
     });
-    renderStreetFootprints(data);
 }
 function renderCommunityClusters(data) {
     const groups = {};
@@ -299,24 +223,14 @@ function renderCommunityClusters(data) {
         marker.on('click', () => drillToCommunity(community));
         markers.push(marker);
     });
-    renderCommunityFootprints(data);
 }
 function renderBuildingMarkers(data) {
     data.forEach((item, idx) => {
-        renderHouseFootprint(item, idx);
         const marker = L.marker([item.lat, item.lng], { icon: createShapeIcon(getHouseShape(item), getHouseColor(item), 22) }).addTo(map);
         marker.bindPopup(buildHousePopup(item, idx));
         marker.on('click', () => selectHouse(idx));
         markers.push(marker);
     });
-}
-
-function renderStreetFootprints(data) {
-    data.forEach((item, idx) => renderHouseFootprint(item, idx));
-}
-
-function renderCommunityFootprints(data) {
-    data.forEach((item, idx) => renderHouseFootprint(item, idx));
 }
 
 function renderHeatmap(data) {
@@ -443,8 +357,6 @@ function renderLegend() {
         Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
         html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：隐患等级</div>';
         Object.keys(RISK_CONFIG).forEach(key => { const cfg = RISK_CONFIG[key]; html += '<div class="legend-item"><span class="legend-symbol" style="color:' + cfg.color + '">' + getShapeHtml(cfg.shape, cfg.color, 12) + '</span><span>' + cfg.label + '</span></div>'; });
-        html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">图斑：房屋占地轮廓</div>';
-        html += '<div class="legend-item"><span class="legend-dot" style="background:#1a73e8;"></span><span>颜色随状态变化</span></div>';
     }
     container.innerHTML = html;
 }
@@ -663,19 +575,19 @@ function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     const body = document.getElementById('archiveBody');
     if (tab === 'basic') {
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">房屋名称</div><div class="arch-value">' + item.name + '</div></div><div class="arch-row"><div class="arch-label">房屋编号</div><div class="arch-value">' + item.no + '</div></div><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-section-title"><i class="fas fa-home"></i> 基本信息</div><div class="arch-row"><div class="arch-label">房屋名称</div><div class="arch-value">' + item.name + '</div></div><div class="arch-row"><div class="arch-label">房屋编号</div><div class="arch-value">' + item.no + '</div></div><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
     } else if (tab === 'hazard') {
-        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">危险等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level).class + '">' + getRiskConfig(h.level).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-section-title"><i class="fas fa-exclamation-triangle"></i> 隐患信息</div>' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">危险等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level).class + '">' + getRiskConfig(h.level).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
     } else if (tab === 'measure') {
-        body.innerHTML = '<div class="arch-section">' + (item.measures && item.measures.length ? item.measures.map(m => '<div class="arch-row"><div class="arch-label">' + (m.type === 'management' ? '管理' : '工程') + '措施</div><div class="arch-value">' + m.name + '</div></div><div class="arch-row"><div class="arch-label">当前状态</div><div class="arch-value"><span class="risk-tag ' + (m.status === 'done' ? 'safe' : m.status === 'doing' ? 'doing' : 'pending') + '">' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无整治措施</div></div>') + '</div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-section-title"><i class="fas fa-tools"></i> 整治措施</div>' + (item.measures && item.measures.length ? item.measures.map(m => '<div class="arch-row"><div class="arch-label">' + (m.type === 'management' ? '管理' : '工程') + '措施</div><div class="arch-value">' + m.name + '</div></div><div class="arch-row"><div class="arch-label">当前状态</div><div class="arch-value"><span class="risk-tag ' + (m.status === 'done' ? 'safe' : m.status === 'doing' ? 'doing' : 'pending') + '">' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无整治措施</div></div>') + '</div>';
     } else if (tab === 'progress') {
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">完成率</div><div class="arch-value"><b>' + item.progress + '%</b></div></div><div class="progress-bar" style="margin:8px 0;"><div class="fill" style="width:' + item.progress + '%"></div></div><div class="arch-row"><div class="arch-label">整治状态</div><div class="arch-value"><span class="risk-tag ' + getStatusConfig(item.governance).class + '">' + getStatusConfig(item.governance).label + '</span></div></div><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + (item.elimination === 'done' ? 'safe' : 'pending') + '">' + (item.elimination === 'done' ? '已销号' : '未销号') + '</span></div></div></div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-section-title"><i class="fas fa-tasks"></i> 整治进度</div><div class="arch-row"><div class="arch-label">完成率</div><div class="arch-value"><b>' + item.progress + '%</b></div></div><div class="progress-bar" style="margin:8px 0;"><div class="fill" style="width:' + item.progress + '%"></div></div><div class="arch-row"><div class="arch-label">整治状态</div><div class="arch-value"><span class="risk-tag ' + getStatusConfig(item.governance).class + '">' + getStatusConfig(item.governance).label + '</span></div></div><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + (item.elimination === 'done' ? 'safe' : 'pending') + '">' + (item.elimination === 'done' ? '已销号' : '未销号') + '</span></div></div></div>';
     } else if (tab === 'responsible') {
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">责任单位</div><div class="arch-value">' + (item.responsibleDept || '-') + '</div></div><div class="arch-row"><div class="arch-label">责任人</div><div class="arch-value">' + (item.responsiblePerson || '-') + '</div></div><div class="arch-row"><div class="arch-label">联系电话</div><div class="arch-value">021-5710' + (1000 + Math.floor(Math.random() * 8999)) + '</div></div></div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-section-title"><i class="fas fa-sitemap"></i> 责任单位/责任人</div><div class="arch-row"><div class="arch-label">责任单位</div><div class="arch-value">' + (item.responsibleDept || '-') + '</div></div><div class="arch-row"><div class="arch-label">责任人</div><div class="arch-value">' + (item.responsiblePerson || '-') + '</div></div><div class="arch-row"><div class="arch-label">联系电话</div><div class="arch-value">021-5710' + (1000 + Math.floor(Math.random() * 8999)) + '</div></div></div>';
     } else if (tab === 'elimination') {
         const info = item.eliminationInfo || {};
         const cfg = ELIMINATION_CONFIG[item.elimination] || ELIMINATION_CONFIG.pending;
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + cfg.class + '">' + cfg.label + '</span></div></div><div class="arch-row"><div class="arch-label">申请时间</div><div class="arch-value">' + (info.applyTime || '未申请') + '</div></div><div class="arch-row"><div class="arch-label">审核时间</div><div class="arch-value">' + (info.reviewTime || '待审核') + '</div></div><div class="arch-row"><div class="arch-label">审核人</div><div class="arch-value">' + (info.reviewer || '-') + '</div></div><div class="arch-row"><div class="arch-label">备注</div><div class="arch-value">' + (info.note || '-') + '</div></div><div class="arch-row"><div class="arch-label">证明文件</div><div class="arch-value">' + (info.certFiles && info.certFiles.length ? info.certFiles.map(f => '<span class="file-tag"><i class="fas fa-file-alt"></i> ' + f + '</span>').join(' ') : '暂无') + '</div></div></div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-section-title"><i class="fas fa-check-double"></i> 销号信息</div><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + cfg.class + '">' + cfg.label + '</span></div></div><div class="arch-row"><div class="arch-label">申请时间</div><div class="arch-value">' + (info.applyTime || '未申请') + '</div></div><div class="arch-row"><div class="arch-label">审核时间</div><div class="arch-value">' + (info.reviewTime || '待审核') + '</div></div><div class="arch-row"><div class="arch-label">审核人</div><div class="arch-value">' + (info.reviewer || '-') + '</div></div><div class="arch-row"><div class="arch-label">备注</div><div class="arch-value">' + (info.note || '-') + '</div></div><div class="arch-row"><div class="arch-label">证明文件</div><div class="arch-value">' + (info.certFiles && info.certFiles.length ? info.certFiles.map(f => '<span class="file-tag"><i class="fas fa-file-alt"></i> ' + f + '</span>').join(' ') : '暂无') + '</div></div></div>';
     }
 }
 function togglePanel(id, collapsedClass, toggleIconSelector, openIcon, closeIcon) {

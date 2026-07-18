@@ -111,7 +111,7 @@
         .warning-table th { background: var(--bg-hover); color: var(--text-secondary); font-weight: 600; }
         .warning-table tr:hover { background: var(--bg-hover); }
         .warning-table td { color: var(--text-primary); }
-        .warning-table .level-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .level-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
         #pagination {
             display: flex; justify-content: center; align-items: center; gap: 8px;
             padding: 16px; border-top: 1px solid var(--border);
@@ -146,6 +146,7 @@
         .modal-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-weight: 700; }
         .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-secondary); }
         .modal-body { padding: 18px; overflow-y: auto; }
+        .modal-footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 14px; }
         @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
         .form-group { margin-bottom: 14px; }
@@ -158,7 +159,28 @@
         .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
         .form-group textarea { resize: vertical; min-height: 80px; }
         .form-hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-        .modal-footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+.org-picker {
+    width: 100%; min-height: 36px; padding: 8px 10px; font-size: 13px;
+    border: 1px solid var(--input-border); border-radius: 6px;
+    background: var(--input-bg); color: var(--text-primary);
+    display: flex; align-items: center; justify-content: space-between; cursor: pointer;
+}
+.org-picker:hover { border-color: var(--primary); }
+.org-picker span { color: var(--text-secondary); }
+.org-picker.has-value span { color: var(--text-primary); }
+.org-layout { display: grid; grid-template-columns: 1fr 1fr; height: 360px; border-top: 1px solid var(--border); }
+.org-panel { overflow: hidden; display: flex; flex-direction: column; }
+.org-panel + .org-panel { border-left: 1px solid var(--border); }
+.org-panel-title { padding: 12px 14px; font-size: 13px; font-weight: 700; border-bottom: 1px solid var(--border); background: var(--bg-hover); }
+.org-search { padding: 10px; border-bottom: 1px solid var(--border); }
+.org-search input { width: 100%; padding: 6px 8px; border: 1px solid var(--input-border); border-radius: 4px; font-size: 13px; outline: none; }
+.org-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+.org-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; transition: background .15s; }
+.org-item:hover { background: var(--bg-hover); }
+.org-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.org-item input[type="checkbox"], .org-item input[type="radio"] { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
+.org-selected-bar { padding: 10px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); min-height: 40px; background: var(--bg-hover); }
+.org-selected-bar strong { color: var(--text-primary); margin-right: 6px; }
 
         .detail-section { margin-bottom: 14px; }
         .detail-section-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; color: var(--primary); }
@@ -177,7 +199,7 @@
 <div class="container">
     <div class="page-title"><i class="fas fa-bell"></i> 安全预警</div>
     <div class="page-desc">
-        基于风险档案数据，对存在重大风险的房屋自动生成预警信息，推送至户主、村委和乡镇政府，提醒及时采取处置措施。支持规则引擎配置和多渠道发布。
+        基于风险档案数据，对存在重大风险的房屋自动生成预警信息，从奉贤区建管委科室下发至相关街镇，提醒及时采取处置措施。支持规则引擎配置和多渠道发布。
     </div>
 
     <div class="kpi-wrapper">
@@ -209,7 +231,7 @@
         <div class="filter-group">
             <div class="filter-item">
                 <label>关键字</label>
-                <input type="text" id="searchKeyword" placeholder="房屋/户主/预警内容">
+                <input type="text" id="searchKeyword" placeholder="科室/街镇/预警内容">
             </div>
             <div class="filter-item">
                 <label>预警等级</label>
@@ -260,7 +282,8 @@
                     <tr>
                         <th>预警等级</th>
                         <th>预警内容</th>
-                        <th>涉及房屋</th>
+                        <th>下发科室</th>
+                    <th>接收街镇</th>
                         <th>推送对象</th>
                         <th>生成时间</th>
                         <th>状态</th>
@@ -299,12 +322,22 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>涉及房屋</label>
-                    <input type="text" id="wHouse" placeholder="如 青村镇光明村5组">
+                    <label>下发科室<span class="required">*</span></label>
+                    <select id="wIssueDept">
+                        <option value="">请选择科室</option>
+                        <option value="燃气管理科">燃气管理科</option>
+                        <option value="安全管理科">安全管理科</option>
+                        <option value="市政设施科">市政设施科</option>
+                        <option value="综合监督科">综合监督科</option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label>户主姓名</label>
-                    <input type="text" id="wOwner" placeholder="户主姓名">
+                    <label>接收街镇<span class="required">*</span></label>
+                    <div class="org-picker" id="wTownPicker" onclick="openOrgModal()">
+                        <span id="wTownText">请选择街镇</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <input type="hidden" id="wReceiveTowns">
                 </div>
             </div>
             <div class="form-group">
@@ -343,6 +376,40 @@
     </div>
 </div>
 
+<!-- 组织选取模态框 -->
+<div class="modal-overlay" id="orgModal">
+    <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+            <span>组织架构选取</span>
+            <button class="modal-close" onclick="closeOrgModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding:0;">
+            <div class="org-layout">
+                <div class="org-panel">
+                    <div class="org-panel-title">
+                        <i class="fas fa-building"></i> 奉贤区建管委
+                    </div>
+                    <div class="org-list" id="orgDeptList"></div>
+                </div>
+                <div class="org-panel">
+                    <div class="org-panel-title">
+                        <i class="fas fa-map-marker-alt"></i> 接收街镇
+                    </div>
+                    <div class="org-search">
+                        <input type="text" id="orgTownSearch" placeholder="搜索街镇" oninput="renderOrgTowns()">
+                    </div>
+                    <div class="org-list" id="orgTownList"></div>
+                </div>
+            </div>
+            <div class="org-selected-bar" id="orgSelectedBar"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeOrgModal()">取消</button>
+            <button class="btn btn-primary" onclick="confirmOrgSelect()"><i class="fas fa-check"></i> 确认</button>
+        </div>
+    </div>
+</div>
+
 <!-- 详情模态框 -->
 <div class="modal-overlay" id="detailModal">
     <div class="modal">
@@ -369,10 +436,19 @@
         closed: { label: '已关闭', class: 'status-closed' }
     };
     const CHANNELS = { sms: '短信', app: 'APP', phone: '电话', screen: '大屏' };
+    const DEPTS = [
+        { id: 'dept-gas', name: '燃气管理科' },
+        { id: 'dept-safe', name: '安全管理科' },
+        { id: 'dept-municipal', name: '市政设施科' },
+        { id: 'dept-supervise', name: '综合监督科' }
+    ];
+    const TOWNS = ['南桥镇','奉城镇','庄行镇','金汇镇','青村镇','柘林镇','四团镇','海湾镇','西渡街道','奉浦街道','海湾旅游区','头桥街道','金海街道'];
 
     let allWarnings = [];
     let rules = [];
     let currentDetail = null;
+    let selectedIssueDept = '';
+    let selectedReceiveTowns = [];
 
     function getDefaultRules() {
         return [
@@ -387,36 +463,42 @@
     function getDefaultWarnings() {
         return [
             {
-                id: 'w1', title: 'D级危房未整治预警', level: 'high', house: '青村镇光明村3组', owner: '张建国',
+                id: 'w1', title: 'D级危房未整治预警', level: 'high',
+                issueDept: { id: 'dept-safe', name: '安全管理科' },
+                receiveTowns: ['青村镇','南桥镇'],
                 content: '该房屋鉴定为D级危房，目前仍未采取整治或拆除措施，存在重大安全隐患。',
                 suggestion: '建议立即组织人员搬离，尽快制定拆除或加固方案，并落实资金。',
-                targets: ['户主张建国', '光明村村委会', '青村镇政府'],
+                targets: ['安全管理科', '青村镇政府', '南桥镇政府'],
                 channels: ['sms', 'app', 'screen'],
                 createTime: '2026-07-11 08:30:00', status: 'sent', ruleId: 'r1',
                 pushLog: [
-                    { channel: 'sms', target: '张建国', time: '2026-07-11 08:31:00', status: '成功' },
-                    { channel: 'app', target: '光明村村委会', time: '2026-07-11 08:31:05', status: '成功' },
-                    { channel: 'screen', target: '青村镇政府大屏', time: '2026-07-11 08:31:10', status: '成功' }
+                    { channel: 'sms', target: '青村镇', time: '2026-07-11 08:31:00', status: '成功' },
+                    { channel: 'app', target: '青村镇政府', time: '2026-07-11 08:31:05', status: '成功' },
+                    { channel: 'screen', target: '南桥镇政府大屏', time: '2026-07-11 08:31:10', status: '成功' }
                 ]
             },
             {
-                id: 'w2', title: 'C级危房超期整改预警', level: 'medium', house: '南桥镇沈陆村2组', owner: '李秀英',
+                id: 'w2', title: 'C级危房超期整改预警', level: 'medium',
+                issueDept: { id: 'dept-gas', name: '燃气管理科' },
+                receiveTowns: ['南桥镇'],
                 content: '该房屋鉴定为C级危房，整改期限已超15天，尚未完成整治。',
-                suggestion: '建议督促户主尽快施工，必要时安排工匠入户评估。',
-                targets: ['户主李秀英', '沈陆村村委会'],
+                suggestion: '建议督促相关街镇尽快施工，必要时安排工匠入户评估。',
+                targets: ['南桥镇政府'],
                 channels: ['sms', 'app'],
                 createTime: '2026-07-10 14:20:00', status: 'pending', ruleId: 'r2',
                 pushLog: []
             },
             {
-                id: 'w3', title: '新增危房预警', level: 'medium', house: '庄行镇潘垫村5组', owner: '王大明',
+                id: 'w3', title: '新增危房预警', level: 'medium',
+                issueDept: { id: 'dept-municipal', name: '市政设施科' },
+                receiveTowns: ['庄行镇'],
                 content: '新排查发现该房屋存在墙体开裂、地基下沉等问题，已纳入风险档案。',
                 suggestion: '建议安排技术人员进一步鉴定，并根据结果制定整治计划。',
-                targets: ['户主王大明', '潘垫村村委会', '庄行镇政府'],
+                targets: ['庄行镇政府'],
                 channels: ['app', 'phone'],
                 createTime: '2026-07-09 09:15:00', status: 'handled', ruleId: 'r3',
                 pushLog: [
-                    { channel: 'app', target: '潘垫村村委会', time: '2026-07-09 09:16:00', status: '成功' },
+                    { channel: 'app', target: '庄行镇政府', time: '2026-07-09 09:16:00', status: '成功' },
                     { channel: 'phone', target: '庄行镇政府', time: '2026-07-09 09:20:00', status: '成功' }
                 ]
             }
@@ -504,7 +586,8 @@
             if (level && item.level !== level) return false;
             if (status && item.status !== status) return false;
             if (keyword) {
-                const text = [item.title, item.content, item.house, item.owner, item.suggestion].join(' ').toLowerCase();
+                const issueDeptName = (item.issueDept && item.issueDept.name) || '';
+                const text = [item.title, item.content, issueDeptName, (item.receiveTowns || []).join(' '), item.suggestion].join(' ').toLowerCase();
                 return text.includes(keyword);
             }
             return true;
@@ -527,11 +610,15 @@
         if (currentPage > totalPages) currentPage = totalPages || 1;
         const start = (currentPage - 1) * pageSize;
         const pageData = data.slice(start, start + pageSize);
-        tbody.innerHTML = pageData.map(item => `
+        tbody.innerHTML = pageData.map(item => {
+            const issueName = (item.issueDept && item.issueDept.name) || '-';
+            const townText = (item.receiveTowns && item.receiveTowns.length) ? item.receiveTowns.join('、') : '-';
+            return `
             <tr onclick="openDetail('${item.id}')" style="cursor:pointer;">
-                <td><span class="level-dot" style="background:${LEVELS[item.level].color};"></span>${LEVELS[item.level].label}</td>
+                <td><span class="level-badge ${LEVELS[item.level].class}">${LEVELS[item.level].label}</span></td>
                 <td>${item.title}</td>
-                <td>${item.house}<br><span style="color:var(--text-secondary);font-size:12px;">户主：${item.owner}</span></td>
+                <td>${issueName}</td>
+                <td>${townText}</td>
                 <td>${item.targets.map(t => `<div style="font-size:12px;">${t}</div>`).join('')}</td>
                 <td>${item.createTime}</td>
                 <td><span class="status-badge ${STATUSES[item.status].class}">${STATUSES[item.status].label}</span></td>
@@ -541,7 +628,7 @@
                     <button class="btn btn-outline btn-sm" onclick="openEditModal('${item.id}')"><i class="fas fa-edit"></i></button>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
         renderPagination(totalPages);
     }
 
@@ -593,26 +680,29 @@
         const newWarnings = [];
         const now = new Date();
         const timeStr = now.toISOString().replace('T', ' ').substring(0, 19);
-        const today = now.toISOString().split('T')[0];
-        const villages = ['光明村', '沈陆村', '潘垫村', '新叶村', '张塘村', '金汇村', '柘林村', '海湾村'];
-        const towns = ['青村镇', '南桥镇', '庄行镇', '四团镇', '奉城镇', '金汇镇', '柘林镇', '海湾镇'];
+        const towns = TOWNS.slice();
 
         enabledRules.forEach(rule => {
-            const idx = Math.floor(Math.random() * villages.length);
-            const village = villages[idx];
-            const town = towns[idx];
-            const house = `${town}${village}${Math.floor(Math.random() * 10) + 1}组`;
-            const owner = ['张', '李', '王', '陈', '刘', '赵'][Math.floor(Math.random() * 6)] + ['建国', '秀英', '大明', '小芳', '志强', '丽华'][Math.floor(Math.random() * 6)];
+            const dept = DEPTS[Math.floor(Math.random() * DEPTS.length)];
+            const townCount = Math.floor(Math.random() * 2) + 1;
+            const selectedTowns = [];
+            for (let i = 0; i < townCount; i++) {
+                const town = towns[Math.floor(Math.random() * towns.length)];
+                if (!selectedTowns.includes(town)) selectedTowns.push(town);
+            }
+            if (selectedTowns.length === 0) selectedTowns.push(towns[0]);
+            const townText = selectedTowns.join('、');
+            const targets = [dept.name, ...selectedTowns.map(t => t + '政府')];
 
             newWarnings.push({
                 id: 'w_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
                 title: rule.name,
                 level: rule.level,
-                house: house,
-                owner: owner,
-                content: rule.desc + '，涉及房屋位于' + house + '。',
-                suggestion: rule.level === 'high' ? '建议立即采取避险措施，组织人员撤离并制定整治方案。' : '建议尽快安排现场核查，制定整改计划。',
-                targets: [`户主${owner}`, `${village}村委会`, `${town}政府`],
+                issueDept: { id: dept.id, name: dept.name },
+                receiveTowns: selectedTowns,
+                content: rule.desc + '，下发至' + dept.name + '，接收街镇：' + townText + '。',
+                suggestion: rule.level === 'high' ? '建议立即组织相关街镇采取避险措施，制定整治方案。' : '建议尽快安排相关街镇现场核查，制定整改计划。',
+                targets: targets,
                 channels: rule.level === 'high' ? ['sms', 'app', 'phone', 'screen'] : ['sms', 'app'],
                 createTime: timeStr,
                 status: 'pending',
@@ -633,8 +723,9 @@
         document.getElementById('warningId').value = '';
         document.getElementById('wTitle').value = '';
         document.getElementById('wLevel').value = 'medium';
-        document.getElementById('wHouse').value = '';
-        document.getElementById('wOwner').value = '';
+        document.getElementById('wIssueDept').value = '';
+        selectedReceiveTowns = [];
+        updateTownPickerUI();
         document.getElementById('wContent').value = '';
         document.getElementById('wSuggestion').value = '';
         document.getElementById('wStatus').value = 'pending';
@@ -648,29 +739,49 @@
         document.getElementById('warningId').value = item.id;
         document.getElementById('wTitle').value = item.title;
         document.getElementById('wLevel').value = item.level;
-        document.getElementById('wHouse').value = item.house;
-        document.getElementById('wOwner').value = item.owner;
+        document.getElementById('wIssueDept').value = (item.issueDept && item.issueDept.name) || '';
+        selectedReceiveTowns = Array.isArray(item.receiveTowns) ? [...item.receiveTowns] : [];
+        updateTownPickerUI();
         document.getElementById('wContent').value = item.content;
         document.getElementById('wSuggestion').value = item.suggestion;
         document.getElementById('wStatus').value = item.status;
         openModal('editModal');
     }
 
+    function updateTownPickerUI() {
+        const textEl = document.getElementById('wTownText');
+        const pickerEl = document.getElementById('wTownPicker');
+        if (selectedReceiveTowns.length > 0) {
+            textEl.textContent = selectedReceiveTowns.join('、');
+            textEl.style.color = 'var(--text-primary)';
+            pickerEl.classList.add('has-value');
+        } else {
+            textEl.textContent = '请选择街镇';
+            textEl.style.color = 'var(--text-secondary)';
+            pickerEl.classList.remove('has-value');
+        }
+    }
+
     function saveWarning() {
         const title = document.getElementById('wTitle').value.trim();
         if (!title) { alert('请输入预警标题'); return; }
+        const deptName = document.getElementById('wIssueDept').value.trim();
+        if (!deptName) { alert('请选择下发科室'); return; }
+        if (selectedReceiveTowns.length === 0) { alert('请选择至少一个接收街镇'); return; }
         const id = document.getElementById('warningId').value;
         const select = document.getElementById('wChannels');
         const channels = Array.from(select.selectedOptions).map(o => o.value);
+        const dept = DEPTS.find(d => d.name === deptName) || { id: '', name: deptName };
+        const targets = [dept.name, ...selectedReceiveTowns.map(t => t + '政府')];
         const newItem = {
             id: id || 'w_' + Date.now(),
             title: title,
             level: document.getElementById('wLevel').value,
-            house: document.getElementById('wHouse').value,
-            owner: document.getElementById('wOwner').value,
+            issueDept: { id: dept.id, name: dept.name },
+            receiveTowns: [...selectedReceiveTowns],
             content: document.getElementById('wContent').value,
             suggestion: document.getElementById('wSuggestion').value,
-            targets: ['户主' + document.getElementById('wOwner').value, '村委会', '乡镇政府'].filter(Boolean),
+            targets: targets,
             channels: channels.length ? channels : ['sms', 'app'],
             createTime: id ? allWarnings.find(i => i.id === id).createTime : new Date().toISOString().replace('T', ' ').substring(0, 19),
             status: document.getElementById('wStatus').value,
@@ -694,7 +805,7 @@
         if (!item) return;
         const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
         item.pushLog = item.channels.map(ch => ({
-            channel: ch, target: item.targets[0] || '相关责任人', time: now, status: '成功'
+            channel: ch, target: (item.receiveTowns || []).join('、') || item.targets[0] || '相关责任人', time: now, status: '成功'
         }));
         item.status = 'sent';
         saveWarnings();
@@ -730,10 +841,10 @@
             <div class="detail-section">
                 <div class="detail-section-title"><i class="fas fa-info-circle"></i> 预警基本信息</div>
                 <div class="detail-grid">
-                    <div><span class="label">预警等级：</span><span class="level-dot" style="background:${LEVELS[item.level].color};"></span>${LEVELS[item.level].label}</div>
+                    <div><span class="label">预警等级：</span><span class="level-badge ${LEVELS[item.level].class}">${LEVELS[item.level].label}</span></div>
                     <div><span class="label">当前状态：</span><span class="status-badge ${STATUSES[item.status].class}">${STATUSES[item.status].label}</span></div>
-                    <div><span class="label">涉及房屋：</span>${item.house}</div>
-                    <div><span class="label">户主姓名：</span>${item.owner}</div>
+                    <div><span class="label">下发科室：</span>${(item.issueDept && item.issueDept.name) || '-'}</div>
+                    <div><span class="label">接收街镇：</span>${(item.receiveTowns && item.receiveTowns.length) ? item.receiveTowns.join('、') : '-'}</div>
                     <div><span class="label">生成时间：</span>${item.createTime}</div>
                     <div><span class="label">推送渠道：</span>${item.channels.map(c => CHANNELS[c]).join('、')}</div>
                 </div>
@@ -773,6 +884,68 @@
 
     function openModal(id) { document.getElementById(id).classList.add('open'); }
     function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    function openOrgModal() {
+        selectedIssueDept = document.getElementById('wIssueDept').value;
+        document.getElementById('orgTownSearch').value = '';
+        renderOrgDeptList();
+        renderOrgTowns();
+        openModal('orgModal');
+    }
+
+    function closeOrgModal() { closeModal('orgModal'); }
+
+    function renderOrgDeptList() {
+        const container = document.getElementById('orgDeptList');
+        container.innerHTML = DEPTS.map(dept => `
+            <div class="org-item ${dept.name === selectedIssueDept ? 'active' : ''}" onclick="selectIssueDept('${dept.name}')">
+                <input type="radio" name="orgDept" ${dept.name === selectedIssueDept ? 'checked' : ''}>
+                <span>${dept.name}</span>
+            </div>
+        `).join('');
+    }
+
+    function selectIssueDept(name) {
+        selectedIssueDept = name;
+        document.getElementById('wIssueDept').value = name;
+        renderOrgDeptList();
+        updateOrgSelectedBar();
+    }
+
+    function renderOrgTowns() {
+        const keyword = document.getElementById('orgTownSearch').value.trim().toLowerCase();
+        const container = document.getElementById('orgTownList');
+        const list = keyword ? TOWNS.filter(t => t.toLowerCase().includes(keyword)) : TOWNS;
+        container.innerHTML = list.map(town => `
+            <label class="org-item">
+                <input type="checkbox" ${selectedReceiveTowns.includes(town) ? 'checked' : ''} onchange="toggleReceiveTown('${town}', this.checked)">
+                <span>${town}</span>
+            </label>
+        `).join('');
+        updateOrgSelectedBar();
+    }
+
+    function toggleReceiveTown(town, checked) {
+        if (checked) {
+            if (!selectedReceiveTowns.includes(town)) selectedReceiveTowns.push(town);
+        } else {
+            selectedReceiveTowns = selectedReceiveTowns.filter(t => t !== town);
+        }
+        renderOrgTowns();
+    }
+
+    function updateOrgSelectedBar() {
+        const deptText = selectedIssueDept || '未选择科室';
+        const townText = selectedReceiveTowns.length ? selectedReceiveTowns.join('、') : '未选择街镇';
+        document.getElementById('orgSelectedBar').innerHTML = `<strong>科室：</strong>${deptText} <strong style="margin-left:12px;">街镇：</strong>${townText}`;
+    }
+
+    function confirmOrgSelect() {
+        if (!selectedIssueDept) { alert('请选择一个下发科室'); return; }
+        document.getElementById('wIssueDept').value = selectedIssueDept;
+        updateTownPickerUI();
+        closeOrgModal();
+    }
 
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });

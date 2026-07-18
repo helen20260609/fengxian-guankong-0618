@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>农村自建房 - 风险隐患审核</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="../js/house-arch-data.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 /* ===== Theme Variables ===== */
 :root {
@@ -116,28 +118,28 @@ body {
 .risk-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 0;
     padding: 3px 10px;
     border-radius: 4px;
     font-size: 12px;
     font-weight: 600;
 }
-.risk-badge::before {
-    content: '';
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
 .risk-badge.red {
     background: rgba(217,48,37,0.1);
     color: var(--danger);
 }
-.risk-badge.red::before { background: var(--danger); }
 .risk-badge.orange {
     background: rgba(227,116,0,0.1);
     color: var(--warning);
 }
-.risk-badge.orange::before { background: var(--warning); }
+.risk-badge.yellow {
+    background: rgba(251,188,5,0.1);
+    color: #b06000;
+}
+.risk-badge.blue {
+    background: rgba(26,115,232,0.1);
+    color: var(--primary);
+}
 
 /* Status tag */
 .status-tag {
@@ -305,6 +307,74 @@ body {
     border-radius: 50%;
     filter: blur(2px);
 }
+
+/* ===== Map Correction Toolbar ===== */
+.map-toolbar {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 6px;
+    z-index: 1000;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 2px 8px var(--shadow);
+}
+.map-toolbar button {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+.map-toolbar button:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.map-toolbar button.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+.map-toolbar button.hidden { display: none; }
+.map-toolbar .save-btn {
+    width: auto;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    gap: 6px;
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+}
+.map-toolbar .save-btn:hover {
+    background: #166534;
+    border-color: #166534;
+}
+.map-status-tip {
+    position: absolute;
+    top: 56px;
+    right: 10px;
+    background: rgba(230, 81, 0, 0.95);
+    color: #fff;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    z-index: 1000;
+    box-shadow: 0 2px 8px var(--shadow);
+    display: none;
+}
+.map-status-tip.active { display: block; }
 
 /* ===== Audit Form ===== */
 .audit-form {
@@ -1275,29 +1345,30 @@ body {
         房屋位置
     </div>
     <div class="section-body">
-        <div class="gis-map-container">
-            <div class="gis-map-placeholder">
-                <i class="fa-solid fa-map"></i>
-                <span>GIS 地图组件占位（接入高德/天地图引擎）</span>
-                <div class="gis-map-marker">
-                    <i class="fa-solid fa-location-dot"></i>
+        <div class="gis-map-container" id="houseMapContainer">
+            <div id="houseMap" style="width:100%;height:100%;"></div>
+            <div class="map-toolbar" id="mapToolbar">
+                <button type="button" id="btnLayerStreet" class="active" title="街道图" onclick="switchMapLayer('street')"><i class="fa-solid fa-road"></i></button>
+                <button type="button" id="btnLayerSatellite" title="卫星图" onclick="switchMapLayer('satellite')"><i class="fa-solid fa-satellite"></i></button>
+                <button type="button" id="btnCorrect" title="开始纠偏" onclick="toggleMapCorrection()"><i class="fa-solid fa-crosshairs"></i></button>
+                <button type="button" id="btnSaveCoord" class="save-btn hidden" title="保存坐标" onclick="saveMapCorrection()"><i class="fa-solid fa-check"></i> 保存</button>
+            </div>
+            <div class="map-status-tip" id="mapCorrectionTip">纠偏模式：拖拽标记或点击地图选点</div>
+            <div class="gis-map-info" id="mapCoordInfo">
+                <div class="gis-map-info-item">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                    <span class="coord-label">经度</span>
+                    <span class="coord-value" id="house-lng">-</span>
                 </div>
-                <div class="gis-map-info">
-                    <div class="gis-map-info-item">
-                        <i class="fa-solid fa-location-crosshairs"></i>
-                        <span class="coord-label">经度</span>
-                        <span class="coord-value" id="house-lng">-</span>
-                    </div>
-                    <div class="gis-map-info-item">
-                        <i class="fa-solid fa-location-crosshairs"></i>
-                        <span class="coord-label">纬度</span>
-                        <span class="coord-value" id="house-lat">-</span>
-                    </div>
-                    <div class="gis-map-info-item">
-                        <i class="fa-solid fa-road"></i>
-                        <span class="coord-label">位置</span>
-                        <span class="coord-value" id="house-location">-</span>
-                    </div>
+                <div class="gis-map-info-item">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                    <span class="coord-label">纬度</span>
+                    <span class="coord-value" id="house-lat">-</span>
+                </div>
+                <div class="gis-map-info-item">
+                    <i class="fa-solid fa-road"></i>
+                    <span class="coord-label">位置</span>
+                    <span class="coord-value" id="house-location">-</span>
                 </div>
             </div>
         </div>
@@ -1631,6 +1702,186 @@ function submitExpertApply() {
 
     function pad2(n) { return n < 10 ? '0' + n : n; }
 
+    // ===== Leaflet Map Correction =====
+    let houseMap = null, houseMarker = null, currentRec = null;
+    let streetLayer = null, satelliteLayer = null, offlineLayer = null, correctionMode = false;
+
+    function formatCoord(v) {
+        return (v === null || v === undefined || isNaN(v)) ? '-' : Number(v).toFixed(6);
+    }
+
+    const OfflineGridLayer = L.GridLayer.extend({
+        createTile: function(coords) {
+            const tile = document.createElement('canvas');
+            const size = this.getTileSize();
+            tile.setAttribute('width', size.x);
+            tile.setAttribute('height', size.y);
+            const ctx = tile.getContext('2d');
+            // 背景
+            ctx.fillStyle = '#f3f6f9';
+            ctx.fillRect(0, 0, size.x, size.y);
+            // 边框/网格
+            ctx.strokeStyle = '#d0dbe8';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0, 0, size.x, size.y);
+            // 文字说明
+            ctx.fillStyle = '#8ca0b3';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('离线网格底图', size.x / 2, size.y / 2 - 8);
+            ctx.fillText(`z=${coords.z} x=${coords.x} y=${coords.y}`, size.x / 2, size.y / 2 + 8);
+            return tile;
+        }
+    });
+
+    function initHouseMap(rec) {
+        if (!rec || !rec.lat || !rec.lng) return;
+        currentRec = rec;
+
+        const container = document.getElementById('houseMap');
+        if (!container) return;
+
+        if (!houseMap) {
+            houseMap = L.map('houseMap').setView([rec.lat, rec.lng], 17);
+            offlineLayer = new OfflineGridLayer({ attribution: '离线网格', maxZoom: 18 });
+            streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap',
+                maxZoom: 18
+            });
+            satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '© Esri',
+                maxZoom: 18
+            });
+            offlineLayer.addTo(houseMap);
+        } else {
+            houseMap.setView([rec.lat, rec.lng], 17);
+        }
+
+        updateHouseMarker(rec.lat, rec.lng);
+
+        houseMap.off('click');
+        houseMap.on('click', function(e) {
+            if (!correctionMode) return;
+            updateHouseMarker(e.latlng.lat, e.latlng.lng);
+            syncCoordInfo(e.latlng.lat, e.latlng.lng);
+        });
+    }
+
+    function updateHouseMarker(lat, lng) {
+        if (!houseMap) return;
+        const wasDragging = houseMarker ? houseMarker.dragging && houseMarker.dragging.enabled() : false;
+        if (houseMarker) {
+            houseMarker.setLatLng([lat, lng]);
+        } else {
+            houseMarker = L.marker([lat, lng], { draggable: correctionMode }).addTo(houseMap);
+            houseMarker.on('dragend', function(e) {
+                if (!correctionMode) return;
+                const p = e.target.getLatLng();
+                syncCoordInfo(p.lat, p.lng);
+            });
+        }
+        if (correctionMode && !wasDragging) {
+            houseMarker.dragging.enable();
+        } else if (!correctionMode && wasDragging) {
+            houseMarker.dragging.disable();
+        }
+    }
+
+    function syncCoordInfo(lat, lng) {
+        document.getElementById('house-lat').textContent = formatCoord(lat);
+        document.getElementById('house-lng').textContent = formatCoord(lng);
+    }
+
+    function switchMapLayer(layer) {
+        if (!houseMap) return;
+        if (layer === 'street') {
+            if (satelliteLayer) houseMap.removeLayer(satelliteLayer);
+            if (offlineLayer) houseMap.removeLayer(offlineLayer);
+            houseMap.addLayer(streetLayer);
+            document.getElementById('btnLayerStreet').classList.add('active');
+            document.getElementById('btnLayerSatellite').classList.remove('active');
+        } else {
+            if (streetLayer) houseMap.removeLayer(streetLayer);
+            if (offlineLayer) houseMap.removeLayer(offlineLayer);
+            houseMap.addLayer(satelliteLayer);
+            document.getElementById('btnLayerSatellite').classList.add('active');
+            document.getElementById('btnLayerStreet').classList.remove('active');
+        }
+    }
+
+    function toggleMapCorrection() {
+        correctionMode = !correctionMode;
+        const btn = document.getElementById('btnCorrect');
+        const saveBtn = document.getElementById('btnSaveCoord');
+        const tip = document.getElementById('mapCorrectionTip');
+        if (correctionMode) {
+            btn.classList.add('active');
+            btn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+            btn.title = '退出纠偏';
+            saveBtn.classList.remove('hidden');
+            tip.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
+            btn.title = '开始纠偏';
+            saveBtn.classList.add('hidden');
+            tip.classList.remove('active');
+            // 恢复原始坐标
+            if (currentRec) initHouseMap(currentRec);
+        }
+        if (houseMarker) {
+            if (correctionMode) houseMarker.dragging.enable();
+            else houseMarker.dragging.disable();
+        }
+    }
+
+    function saveMapCorrection() {
+        if (!houseMarker || !currentRec) return;
+        const pos = houseMarker.getLatLng();
+        const lat = Number(pos.lat.toFixed(6));
+        const lng = Number(pos.lng.toFixed(6));
+        currentRec.lat = lat;
+        currentRec.lng = lng;
+        syncCoordInfo(lat, lng);
+
+        // 持久化到 localStorage
+        if (typeof setHouseArchStorage === 'function' && typeof getHouseArchStorage === 'function') {
+            const all = getHouseArchStorage();
+            if (all[currentRec.no]) {
+                all[currentRec.no].lat = lat;
+                all[currentRec.no].lng = lng;
+                setHouseArchStorage(all);
+            }
+        }
+
+        // 尝试同步到服务端
+        fetch('/api/houses/' + encodeURIComponent(currentRec.no) + '/coordinates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat: lat, lng: lng })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.success) {
+                toggleMapCorrection();
+                alert('坐标纠偏已保存');
+            } else {
+                toggleMapCorrection();
+                alert('坐标已保存到本地，但服务端返回错误：' + (res.error || '未知错误'));
+            }
+        })
+        .catch(function() {
+            toggleMapCorrection();
+            alert('坐标纠偏已保存到本地');
+        });
+    }
+
+    // 暴露给 HTML onclick 使用
+    window.switchMapLayer = switchMapLayer;
+    window.toggleMapCorrection = toggleMapCorrection;
+    window.saveMapCorrection = saveMapCorrection;
+
     function formatDateTime(d) {
         if (!d) return '-';
         if (typeof d === 'string' && d.includes(' ')) return d;
@@ -1732,6 +1983,9 @@ function submitExpertApply() {
         setText('house-lng', rec.lng || '-');
         setText('house-lat', rec.lat || '-');
         setText('house-location', rec.address);
+
+        // 初始化地图
+        initHouseMap(rec);
 
         // 检查记录
         const tbody = document.getElementById('inspection-records-body');

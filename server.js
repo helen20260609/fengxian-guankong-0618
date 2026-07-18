@@ -102,6 +102,42 @@ function handleApi(req, res, urlPath) {
         return true;
     }
 
+    // POST /api/houses/:no/coordinates -> 保存房屋坐标纠偏
+    if (req.method === 'POST' && /^\/api\/houses\/[^\/]+\/coordinates$/.test(urlPath)) {
+        var no = decodeURIComponent(urlPath.replace('/api/houses/', '').replace('/coordinates', ''));
+        readJsonBody(req, function(err, body) {
+            if (err) {
+                sendJson(res, 400, { error: '请求体格式错误' });
+                return;
+            }
+            if (body === null || typeof body.lat !== 'number' || typeof body.lng !== 'number') {
+                sendJson(res, 400, { error: '缺少经纬度' });
+                return;
+            }
+            var filePath = path.join(dataDir, 'house-corrections.json');
+            fs.readFile(filePath, 'utf8', function(errRead, data) {
+                var list = [];
+                if (!errRead) {
+                    try { list = JSON.parse(data); if (!Array.isArray(list)) list = []; } catch(e) { list = []; }
+                }
+                list.push({
+                    no: no,
+                    lat: body.lat,
+                    lng: body.lng,
+                    time: new Date().toISOString()
+                });
+                fs.writeFile(filePath, JSON.stringify(list, null, 2), 'utf8', function(errWrite) {
+                    if (errWrite) {
+                        sendJson(res, 500, { error: '保存失败' });
+                        return;
+                    }
+                    sendJson(res, 200, { success: true });
+                });
+            });
+        });
+        return true;
+    }
+
     return false;
 }
 
