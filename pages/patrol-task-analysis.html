@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>农村自建房 - 巡查任务分析</title>
+<link rel="stylesheet" href="./all.min.css">
+<script src="./echarts.min.js"></script>
+<link rel="stylesheet" href="./leaflet.css">
+<script src="./leaflet.js"></script>
+<style>
+/* ===== Theme Variables ===== */
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    padding: 20px;
+    min-height: 100vh;
+}
+
+/* ===== Breadcrumb ===== */
+.breadcrumb {
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.breadcrumb a {
+    color: var(--primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb-sep { color: var(--text-secondary); opacity: 0.5; }
+
+/* ===== Page Header ===== */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.page-title {
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.page-title i { color: var(--primary); }
+
+/* ===== Main Layout ===== */
+.main-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr 300px;
+    gap: 16px;
+    height: calc(100vh - 80px);
+    min-height: 600px;
+}
+.center-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+}
+.right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+}
+
+/* ===== Panel Card ===== */
+.panel-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px var(--shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.panel-title {
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.panel-title i { color: var(--primary); }
+.panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+}
+
+/* ===== Map Container ===== */
+.map-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+#mapContainer {
+    flex: 1;
+    background: #e8eaf6;
+    position: relative;
+    min-height: 400px;
+}
+
+/* ===== Map Floating Controls ===== */
+.map-floating-layer {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: 220px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 500;
+    padding: 14px;
+}
+.map-floating-legend {
+    position: absolute;
+    right: 16px;
+    bottom: 100px;
+    width: 180px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 500;
+    padding: 14px;
+}
+.map-floating-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.map-floating-title i { color: var(--primary); }
+.map-floating-layer .layer-list { gap: 8px; }
+.map-floating-layer .layer-item {
+    padding: 10px;
+    border-radius: 6px;
+}
+.map-floating-layer .layer-icon {
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+}
+.map-floating-layer .layer-name { font-size: 13px; }
+.map-floating-layer .layer-count { font-size: 11px; }
+.map-floating-layer .layer-toggle {
+    width: 30px;
+    height: 16px;
+}
+.map-floating-layer .layer-toggle::after {
+    width: 12px;
+    height: 12px;
+    top: 2px;
+    left: 2px;
+}
+.map-floating-layer .layer-item.active .layer-toggle::after {
+    left: 16px;
+}
+.map-floating-legend .legend-list { gap: 6px; }
+.map-floating-legend .legend-item { font-size: 12px; }
+.map-floating-legend .legend-dot {
+    width: 10px;
+    height: 10px;
+}
+.map-floating-legend .legend-section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+.map-floating-legend .legend-section:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+.map-floating-legend .legend-subtitle {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+.map-floating-legend .legend-shape {
+    width: 10px;
+    height: 10px;
+    border-width: 1px;
+}
+.map-floating-legend .legend-shape.ring {
+    border-width: 2px;
+}
+.map-floating-legend .legend-shape .check {
+    font-size: 7px;
+}
+/* ===== Leaflet Map Overrides ===== */
+#mapContainer .leaflet-control-attribution {
+    font-size: 11px;
+    background: rgba(255,255,255,0.8);
+}
+#mapContainer .leaflet-tile-pane {
+    filter: none;
+}
+
+/* ===== Custom Map Markers ===== */
+.custom-marker {
+    background: transparent !important;
+    border: none !important;
+}
+.marker-shape {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+.marker-square {
+    border-radius: 5px;
+}
+.marker-check {
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* ===== Layer Control ===== */
+.layer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.layer-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg-card);
+}
+.layer-item:hover {
+    background: var(--bg-hover);
+}
+.layer-item.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+}
+.layer-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+.layer-icon.task { background: rgba(26,115,232,0.12); color: var(--primary); }
+.layer-icon.risk { background: rgba(217,48,37,0.12); color: var(--danger); }
+.layer-icon.rectify { background: rgba(30,142,62,0.12); color: var(--success); }
+.layer-info {
+    flex: 1;
+}
+.layer-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.layer-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+.layer-toggle {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--border);
+    position: relative;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+.layer-toggle::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    top: 2px;
+    left: 2px;
+    transition: all 0.2s;
+}
+.layer-item.active .layer-toggle {
+    background: var(--primary);
+}
+.layer-item.active .layer-toggle::after {
+    left: 18px;
+}
+
+/* ===== Legend ===== */
+.legend-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+.legend-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+.legend-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.legend-dot.blue { background: var(--primary); }
+.legend-dot.red { background: var(--danger); }
+.legend-dot.orange { background: var(--warning); }
+.legend-dot.yellow { background: #f9c846; }
+.legend-dot.light-blue { background: #8ecae6; }
+.legend-dot.green { background: var(--success); }
+.legend-dot.yellow-ring {
+    background: transparent;
+    border: 3px solid #f9c846;
+    box-sizing: border-box;
+}
+.legend-dot.green-ring {
+    background: rgba(217, 48, 37, 0.5);
+    border: 3px solid var(--success);
+    box-sizing: border-box;
+}
+.legend-shape {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+.legend-shape.square {
+    border-radius: 3px;
+}
+.legend-shape.ring {
+    background: transparent !important;
+    border-width: 3px;
+}
+.legend-shape .check {
+    color: #fff;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* ===== Time Axis ===== */
+.time-axis-panel {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.time-controls {
+    display: flex;
+    gap: 8px;
+}
+.time-btn {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    border-radius: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+.time-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.time-btn.play {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+.time-slider {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.time-slider input[type="range"] {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+}
+.time-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+}
+.time-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.time-granularity {
+    display: flex;
+    gap: 4px;
+}
+.granularity-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.granularity-btn.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
+/* ===== Info Card Popup ===== */
+.info-popup {
+    position: absolute;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 8px 24px var(--shadow);
+    z-index: 200;
+    width: 280px;
+    display: none;
+}
+.info-popup.show { display: block; }
+.info-popup-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+.info-popup-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+.info-popup-title {
+    font-size: 15px;
+    font-weight: 600;
+    flex: 1;
+}
+.info-popup-close {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.info-popup-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+}
+.info-row-label { color: var(--text-secondary); }
+.info-row-value { color: var(--text-primary); font-weight: 500; }
+.info-popup-footer {
+    display: flex;
+    gap: 8px;
+}
+.info-popup-footer .btn {
+    flex: 1;
+}
+
+/* ===== Stats Modal ===== */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal-content {
+    background: var(--bg-card);
+    border-radius: 12px;
+    width: 480px;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.modal-title {
+    font-size: 16px;
+    font-weight: 600;
+}
+.modal-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 6px;
+}
+.modal-close:hover { background: var(--bg-hover); }
+.modal-body {
+    padding: 20px;
+}
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.stats-item {
+    text-align: center;
+    padding: 16px;
+    background: var(--bg-hover);
+    border-radius: 8px;
+}
+.stats-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary);
+}
+.stats-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* ===== Chart Panel ===== */
+.chart-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px var(--shadow);
+}
+.chart-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.chart-title i { color: var(--primary); }
+.chart-box {
+    width: 100%;
+    height: 180px;
+}
+
+/* ===== Rank List ===== */
+.rank-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.rank-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+}
+.rank-item:hover {
+    background: var(--bg-hover);
+}
+.rank-index {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+}
+.rank-index.top1 { background: #d93025; }
+.rank-index.top2 { background: #e65100; }
+.rank-index.top3 { background: #f9c846; color: var(--text-primary); }
+.rank-index.normal { background: var(--text-secondary); }
+.rank-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+}
+.rank-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary);
+}
+.rank-bar {
+    width: 60px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.rank-bar-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 3px;
+}
+
+/* ===== Trend Panel ===== */
+.trend-panel {
+    height: 220px;
+    min-height: 220px;
+}
+.trend-panel .chart-box {
+    height: 150px;
+}
+
+/* ===== Buttons ===== */
+.btn {
+    height: 34px;
+    padding: 0 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+}
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-default {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+.btn-default:hover { background: var(--border); }
+
+/* ===== Region List ===== */
+.region-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.region-item {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.region-item:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+}
+.region-name {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.region-metrics {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.region-metrics span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+@media (max-width: 1400px) {
+    .main-layout {
+        grid-template-columns: 220px 1fr 260px;
+    }
+}
+@media (max-width: 1200px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+    .map-wrapper { min-height: 500px; }
+    .time-axis-panel { left: 12px; right: 12px; }
+    .center-column, .right-column { min-height: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== Main Layout ===== -->
+<div class="main-layout">
+    <!-- Left: Region List -->
+    <div class="panel-card">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="fas fa-map-location-dot"></i>
+                区域列表
+            </div>
+        </div>
+        <div class="panel-body">
+            <div class="region-list" id="regionList">
+            <div class="region-item" onclick="showRegionStats(&#39;南桥镇&#39;)">
+                <div class="region-name">南桥镇</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 89%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 18</span>
+                    <span><i class="fas fa-wrench"></i> 86%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;奉浦街道&#39;)">
+                <div class="region-name">奉浦街道</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 92%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 15</span>
+                    <span><i class="fas fa-wrench"></i> 89%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;金汇镇&#39;)">
+                <div class="region-name">金汇镇</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 88%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 21</span>
+                    <span><i class="fas fa-wrench"></i> 75%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;青村镇&#39;)">
+                <div class="region-name">青村镇</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 79%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 12</span>
+                    <span><i class="fas fa-wrench"></i> 71%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;四团镇&#39;)">
+                <div class="region-name">四团镇</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 80%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 14</span>
+                    <span><i class="fas fa-wrench"></i> 75%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;柘林镇&#39;)">
+                <div class="region-name">柘林镇</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 82%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 9</span>
+                    <span><i class="fas fa-wrench"></i> 80%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;庄行镇&#39;)">
+                <div class="region-name">庄行镇</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 0%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 0</span>
+                    <span><i class="fas fa-wrench"></i> 0%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;西渡街道&#39;)">
+                <div class="region-name">西渡街道</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 0%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 0</span>
+                    <span><i class="fas fa-wrench"></i> 0%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;海湾镇&#39;)">
+                <div class="region-name">海湾镇</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 0%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 0</span>
+                    <span><i class="fas fa-wrench"></i> 0%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;奉城镇&#39;)">
+                <div class="region-name">奉城镇</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 0%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 0</span>
+                    <span><i class="fas fa-wrench"></i> 0%</span>
+                </div>
+            </div>
+        
+            <div class="region-item" onclick="showRegionStats(&#39;头桥街道&#39;)">
+                <div class="region-name">头桥街道</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 0%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 0</span>
+                    <span><i class="fas fa-wrench"></i> 0%</span>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+
+    <!-- Center: Map + Trend -->
+    <div class="center-column">
+        <div class="panel-card map-wrapper">
+            <div id="mapContainer" style="z-index: 1;" class="leaflet-container leaflet-touch leaflet-retina leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" tabindex="0">
+                <!-- Floating Layer Control -->
+            <div class="map-floating-layer">
+                <div class="map-floating-title">
+                    <i class="fas fa-layer-group"></i> 图层控制
+                </div>
+                <div class="layer-list">
+                    <div class="layer-item active" onclick="toggleLayer(this, &#39;task&#39;)">
+                        <div class="layer-icon task"><i class="fas fa-clipboard-check"></i></div>
+                        <div class="layer-info">
+                            <div class="layer-name">巡查任务图层</div>
+                            <div class="layer-count">共 <span id="taskCount">156</span> 个点位</div>
+                        </div>
+                        <div class="layer-toggle"></div>
+                    </div>
+                    <div class="layer-item active" onclick="toggleLayer(this, &#39;risk&#39;)">
+                        <div class="layer-icon risk"><i class="fas fa-triangle-exclamation"></i></div>
+                        <div class="layer-info">
+                            <div class="layer-name">风险隐患图层</div>
+                            <div class="layer-count">共 <span id="riskCount">89</span> 个点位</div>
+                        </div>
+                        <div class="layer-toggle"></div>
+                    </div>
+                    <div class="layer-item active" onclick="toggleLayer(this, &#39;rectify&#39;)">
+                        <div class="layer-icon rectify"><i class="fas fa-wrench"></i></div>
+                        <div class="layer-info">
+                            <div class="layer-name">整改情况图层</div>
+                            <div class="layer-count">共 <span id="rectifyCount">67</span> 个点位</div>
+                        </div>
+                        <div class="layer-toggle"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Floating Legend -->
+            <div class="map-floating-legend">
+                <div class="map-floating-title">
+                    <i class="fas fa-map-signs"></i> 图例说明
+                </div>
+                <div class="legend-section">
+                    <div class="legend-subtitle">隐患等级（填充色）</div>
+                    <div class="legend-list">
+                        <div class="legend-item"><span class="legend-dot red"></span> 重大隐患</div>
+                        <div class="legend-item"><span class="legend-dot orange"></span> 较大隐患</div>
+                        <div class="legend-item"><span class="legend-dot yellow"></span> 一般隐患</div>
+                        <div class="legend-item"><span class="legend-dot light-blue"></span> 低隐患</div>
+                        <div class="legend-item"><span class="legend-dot blue"></span> 巡查任务</div>
+                    </div>
+                </div>
+                <div class="legend-section">
+                    <div class="legend-subtitle">整改状态（形状）</div>
+                    <div class="legend-list">
+                        <div class="legend-item"><span class="legend-shape" style="background:#d93025"></span> 未整改</div>
+                        <div class="legend-item"><span class="legend-shape ring" style="border-color:#d93025"></span> 整改中</div>
+                        <div class="legend-item"><span class="legend-shape square" style="background:#b52a21"><span class="check">✓</span></span> 已完成整改</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Popup -->
+            <div class="info-popup" id="infoPopup">
+                <div class="info-popup-header">
+                    <div class="info-popup-icon" id="popupIcon"><i class="fas fa-map-marker-alt"></i></div>
+                    <div class="info-popup-title" id="popupTitle">--</div>
+                    <button class="info-popup-close" onclick="closePopup()"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="info-popup-body" id="popupBody">
+                    <!-- JS生成 -->
+                </div>
+                <div class="info-popup-footer">
+                    <button class="btn btn-primary" onclick="viewDetail()">
+                        <i class="fas fa-eye"></i> 查看详情
+                    </button>
+                    <button class="btn btn-default" onclick="closePopup()">关闭</button>
+                </div>
+            </div>
+        <div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(0px, 0px, 0px);"><div class="leaflet-pane leaflet-tile-pane"><div class="leaflet-layer " style="z-index: 1; opacity: 1;"><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 18; transform: translate3d(475px, 86px, 0px) scale(0.5);"></div><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 19; transform: translate3d(475px, 86px, 0px) scale(1);"><img alt="" src="./rural - 巡查任务分析_files/appmaptile" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(57px, -66px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(1)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(57px, 190px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(2)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-199px, -66px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(3)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(313px, -66px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(4)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-199px, 190px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(5)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(313px, 190px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(6)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-199px, -322px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(7)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(57px, -322px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(8)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-455px, -66px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(9)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-455px, 190px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(10)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-199px, 446px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(11)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(57px, 446px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(12)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-455px, -322px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(13)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(313px, -322px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(14)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-455px, 446px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(15)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(313px, 446px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(16)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-711px, -66px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(17)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(569px, -66px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(18)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-711px, 190px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(19)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(569px, 190px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(20)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-711px, -322px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(21)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(569px, -322px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(22)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-711px, 446px, 0px); opacity: 1;"><img alt="" src="./rural - 巡查任务分析_files/appmaptile(23)" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(569px, 446px, 0px); opacity: 1;"></div></div></div><div class="leaflet-pane leaflet-overlay-pane"><svg pointer-events="none" class="leaflet-zoom-animated" width="1400" height="767" viewBox="-117 -64 1400 767" style="transform: translate3d(-117px, -64px, 0px);"><g><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#1a73e8" fill-opacity="0.85" fill-rule="evenodd" d="M771,250a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#d93025" fill-opacity="0.9" fill-rule="evenodd" d="M791,240a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#e65100" fill-opacity="0.9" fill-rule="evenodd" d="M815,202a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 "></path><path class="leaflet-interactive" stroke="#d93025" stroke-opacity="1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="#d93025" fill-opacity="0.1" fill-rule="evenodd" d="M772,248a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#1a73e8" fill-opacity="0.85" fill-rule="evenodd" d="M792,238a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#f9c846" fill-opacity="0.9" fill-rule="evenodd" d="M860,263a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 "></path><path class="leaflet-interactive" stroke="#fff" stroke-opacity="1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#8ecae6" fill-opacity="0.9" fill-rule="evenodd" d="M831,314a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 "></path></g></svg></div><div class="leaflet-pane leaflet-shadow-pane"></div><div class="leaflet-pane leaflet-marker-pane"><div class="leaflet-marker-icon custom-marker done-marker leaflet-zoom-animated leaflet-interactive" tabindex="0" role="button" style="margin-left: -9px; margin-top: -9px; width: 18px; height: 18px; transform: translate3d(897px, 297px, 0px); z-index: 297;"><div class="marker-shape marker-square" style="background:#b52a21;border-color:#b52a21"><span class="marker-check">✓</span></div></div></div><div class="leaflet-pane leaflet-tooltip-pane"></div><div class="leaflet-pane leaflet-popup-pane"></div><div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(438836px, 214827px, 0px) scale(1024);"></div></div><div class="leaflet-control-container"><div class="leaflet-top leaflet-left"><div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="http://192.168.70.210/pages/rural-patrol-analysis.html#" title="Zoom in" role="button" aria-label="Zoom in" aria-disabled="false"><span aria-hidden="true">+</span></a><a class="leaflet-control-zoom-out" href="http://192.168.70.210/pages/rural-patrol-analysis.html#" title="Zoom out" role="button" aria-label="Zoom out" aria-disabled="false"><span aria-hidden="true">−</span></a></div></div><div class="leaflet-top leaflet-right"></div><div class="leaflet-bottom leaflet-left"></div><div class="leaflet-bottom leaflet-right"><div class="leaflet-control-attribution leaflet-control"><a href="https://leafletjs.com/" title="A JavaScript library for interactive maps"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" class="leaflet-attribution-flag"><path fill="#4C7BE1" d="M0 0h12v4H0z"></path><path fill="#FFD500" d="M0 4h12v3H0z"></path><path fill="#E0BC00" d="M0 7h12v1H0z"></path></svg> Leaflet</a> <span aria-hidden="true">|</span> © 高德地图</div></div></div></div>
+
+        <!-- Time Axis -->
+        <div class="time-axis-panel">
+            <div class="time-controls">
+                <button class="time-btn" onclick="timeControl(&#39;rewind&#39;)" title="快退"><i class="fas fa-backward"></i></button>
+                <button class="time-btn play" id="playBtn" onclick="timeControl(&#39;play&#39;)" title="播放"><i class="fas fa-play"></i></button>
+                <button class="time-btn" onclick="timeControl(&#39;forward&#39;)" title="快进"><i class="fas fa-forward"></i></button>
+            </div>
+            <div class="time-slider">
+                <input type="range" id="timeSlider" min="0" max="29" value="29" oninput="onTimeChange(this.value)">
+                <div class="time-labels">
+                    <span>06-01</span>
+                    <span id="currentTime">2025-06-30</span>
+                    <span>06-30</span>
+                </div>
+            </div>
+            <div class="time-granularity">
+                <button class="granularity-btn" onclick="setGranularity(this, &#39;day&#39;)">日</button>
+                <button class="granularity-btn active" onclick="setGranularity(this, &#39;week&#39;)">周</button>
+                <button class="granularity-btn" onclick="setGranularity(this, &#39;month&#39;)">月</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trend Chart -->
+    <div class="panel-card trend-panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="fas fa-chart-line"></i>
+                近7天农村自建房巡查发现趋势
+            </div>
+        </div>
+        <div class="panel-body" style="padding-top: 0;">
+            <div class="chart-box" id="lineChart" _echarts_instance_="ec_1784510653667" style="user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); position: relative;"><div style="position: relative; width: 1127px; height: 150px; padding: 0px; margin: 0px; border-width: 0px; cursor: default;"><canvas data-zr-dom-id="zr_0" width="1803" height="240" style="position: absolute; left: 0px; top: 0px; width: 1127px; height: 150px; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); padding: 0px; margin: 0px; border-width: 0px;"></canvas></div><div class="" style="position: absolute; display: block; border-style: solid; white-space: nowrap; z-index: 9999999; box-shadow: rgba(0, 0, 0, 0.2) 1px 2px 10px; transition: opacity 0.2s cubic-bezier(0.23, 1, 0.32, 1), visibility 0.2s cubic-bezier(0.23, 1, 0.32, 1); background-color: rgb(255, 255, 255); border-width: 1px; border-radius: 4px; color: rgb(102, 102, 102); font: 14px / 21px &quot;Microsoft YaHei&quot;; padding: 10px; top: 0px; left: 0px; transform: translate3d(96px, 33px, 0px); border-color: rgb(255, 255, 255); pointer-events: none; visibility: hidden; opacity: 0;"><div style="margin: 0px 0 0;line-height:1;"><div style="margin: 0px 0 0;line-height:1;"><div style="font-size:14px;color:#666;font-weight:400;line-height:1;">06-24</div><div style="margin: 10px 0 0;line-height:1;"><div style="margin: 0px 0 0;line-height:1;"><div style="margin: 0px 0 0;line-height:1;"><span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background-color:#1a73e8;"></span><span style="float:right;margin-left:10px;font-size:14px;color:#666;font-weight:900">15</span><div style="clear:both"></div></div><div style="clear:both"></div></div><div style="clear:both"></div></div><div style="clear:both"></div></div><div style="clear:both"></div></div></div></div>
+        </div>
+    </div>
+</div>
+
+    <!-- Right: Distribution + Rank -->
+    <div class="right-column">
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fas fa-chart-pie"></i>
+                    隐患等级分布
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box" id="pieChart" style="height: 220px; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); position: relative;" _echarts_instance_="ec_1784510653666"><div style="position: relative; width: 259px; height: 220px; padding: 0px; margin: 0px; border-width: 0px; cursor: default;"><canvas data-zr-dom-id="zr_0" width="414" height="352" style="position: absolute; left: 0px; top: 0px; width: 259px; height: 220px; user-select: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); padding: 0px; margin: 0px; border-width: 0px;"></canvas></div><div class=""></div></div>
+            </div>
+        </div>
+
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fas fa-trophy"></i>
+                    乡镇/街道巡查完成排名
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="rank-list" id="rankList">
+            <div class="rank-item">
+                <div class="rank-index top1">1</div>
+                <div class="rank-name">奉浦街道</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 92%"></div></div>
+                <div class="rank-value">92%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index top2">2</div>
+                <div class="rank-name">南桥镇</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 89%"></div></div>
+                <div class="rank-value">89%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index top3">3</div>
+                <div class="rank-name">金汇镇</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 88%"></div></div>
+                <div class="rank-value">88%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index normal">4</div>
+                <div class="rank-name">柘林镇</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 82%"></div></div>
+                <div class="rank-value">82%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index normal">5</div>
+                <div class="rank-name">四团镇</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 80%"></div></div>
+                <div class="rank-value">80%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index normal">6</div>
+                <div class="rank-name">青村镇</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 79%"></div></div>
+                <div class="rank-value">79%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index normal">7</div>
+                <div class="rank-name">庄行镇</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 0%"></div></div>
+                <div class="rank-value">0%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index normal">8</div>
+                <div class="rank-name">西渡街道</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 0%"></div></div>
+                <div class="rank-value">0%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index normal">9</div>
+                <div class="rank-name">海湾镇</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 0%"></div></div>
+                <div class="rank-value">0%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index normal">10</div>
+                <div class="rank-name">奉城镇</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 0%"></div></div>
+                <div class="rank-value">0%</div>
+            </div>
+        
+            <div class="rank-item">
+                <div class="rank-index normal">11</div>
+                <div class="rank-name">头桥街道</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: 0%"></div></div>
+                <div class="rank-value">0%</div>
+            </div>
+        </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Region Stats Modal ===== -->
+<div class="modal-overlay" id="statsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title" id="modalTitle">区域统计</div>
+            <button class="modal-close" onclick="closeStatsModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="stats-grid">
+                <div class="stats-item">
+                    <div class="stats-value" id="statCompleteRate">86%</div>
+                    <div class="stats-label">巡查完成率</div>
+                </div>
+                <div class="stats-item">
+                    <div class="stats-value" id="statRiskCount">23</div>
+                    <div class="stats-label">隐患数量</div>
+                </div>
+                <div class="stats-item">
+                    <div class="stats-value" id="statRectifyRate">78%</div>
+                    <div class="stats-label">整改率</div>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title"><i class="fas fa-chart-bar"></i> 隐患等级构成</div>
+                <div class="chart-box" id="modalChart" style="height:200px"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 模拟数据：农村自建房风险巡查分析
+const mockData = {
+    regions: [
+        { name: '南桥镇', taskTotal: 320, taskDone: 285, riskCount: 18, rectifyTotal: 22, rectifyDone: 19 },
+        { name: '奉浦街道', taskTotal: 210, taskDone: 193, riskCount: 15, rectifyTotal: 18, rectifyDone: 16 },
+        { name: '金汇镇', taskTotal: 280, taskDone: 246, riskCount: 21, rectifyTotal: 20, rectifyDone: 15 },
+        { name: '青村镇', taskTotal: 195, taskDone: 154, riskCount: 12, rectifyTotal: 14, rectifyDone: 10 },
+        { name: '四团镇', taskTotal: 170, taskDone: 136, riskCount: 14, rectifyTotal: 12, rectifyDone: 9 },
+        { name: '柘林镇', taskTotal: 150, taskDone: 123, riskCount: 9, rectifyTotal: 10, rectifyDone: 8 }
+    ],
+    points: [
+        { id: 1, name: '南桥镇人民路12号自建房', type: 'task', status: 'done', lat: 30.9178, lng: 121.4589, time: '2025-06-28 14:30', person: '张建国', region: '南桥镇' },
+        { id: 2, name: '奉浦街道环城东路88号经营性自建房', type: 'risk', level: 'major', lat: 30.9234, lng: 121.4723, time: '2025-06-27 09:15', person: '李秀英', region: '奉浦街道' },
+        { id: 3, name: '金汇镇工业路45号C级危房', type: 'risk', level: 'large', lat: 30.9456, lng: 121.4891, time: '2025-06-26 16:20', person: '王志强', region: '金汇镇' },
+        { id: 4, name: '南桥镇新建中路23号隐患整改中', type: 'rectify', level: 'major', status: 'doing', lat: 30.9189, lng: 121.4601, time: '2025-06-25 10:00', person: '陈美华', region: '南桥镇' },
+        { id: 5, name: '奉浦街道八字桥村农房辅助用房', type: 'task', status: 'pending', lat: 30.9245, lng: 121.4734, time: '2025-06-29 08:30', person: '刘大海', region: '奉浦街道' },
+        { id: 6, name: '青村镇李窑村土木结构危房', type: 'risk', level: 'general', lat: 30.9100, lng: 121.5200, time: '2025-06-24 11:20', person: '孙明华', region: '青村镇' },
+        { id: 7, name: '四团镇三坎村危房整改完成', type: 'rectify', level: 'major', status: 'done', lat: 30.8900, lng: 121.5400, time: '2025-06-23 15:45', person: '赵敏', region: '四团镇' },
+        { id: 8, name: '柘林镇营房村砖木结构自建房', type: 'risk', level: 'low', lat: 30.8800, lng: 121.5000, time: '2025-06-22 13:10', person: '郑辉', region: '柘林镇' }
+    ]
+};
+
+let currentPopupPoint = null;
+let isPlaying = false;
+let playTimer = null;
+
+const MapConfig = {
+    provider: 'amap',
+    amapKey: '',
+    defaultCenter: [30.92, 121.45],
+    defaultZoom: 12
+};
+
+let mapManager = null;
+
+function init() {
+    renderRegionList();
+    initCharts();
+    initRankList();
+    initMap();
+}
+
+function renderRegionList() {
+    const container = document.getElementById('regionList');
+    const allRegions = ['南桥镇', '奉浦街道', '金汇镇', '青村镇', '四团镇', '柘林镇', '庄行镇', '西渡街道', '海湾镇', '奉城镇', '头桥街道'];
+    const regionMap = {};
+    mockData.regions.forEach(r => regionMap[r.name] = r);
+
+    container.innerHTML = allRegions.map(name => {
+        const r = regionMap[name];
+        if (!r) return `
+            <div class="region-item" onclick="showRegionStats('${name}')">
+                <div class="region-name">${name}</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> 0%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> 0</span>
+                    <span><i class="fas fa-wrench"></i> 0%</span>
+                </div>
+            </div>
+        `;
+        const completeRate = Math.round(r.taskDone / r.taskTotal * 100);
+        const rectifyRate = Math.round(r.rectifyDone / r.rectifyTotal * 100);
+        return `
+            <div class="region-item" onclick="showRegionStats('${r.name}')">
+                <div class="region-name">${r.name}</div>
+                <div class="region-metrics">
+                    <span><i class="fas fa-clipboard-check"></i> ${completeRate}%</span>
+                    <span><i class="fas fa-exclamation-triangle"></i> ${r.riskCount}</span>
+                    <span><i class="fas fa-wrench"></i> ${rectifyRate}%</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function initRankList() {
+    const container = document.getElementById('rankList');
+    if (!container) return;
+    const allRegions = ['南桥镇', '奉浦街道', '金汇镇', '青村镇', '四团镇', '柘林镇', '庄行镇', '西渡街道', '海湾镇', '奉城镇', '头桥街道'];
+    const regionMap = {};
+    mockData.regions.forEach(r => regionMap[r.name] = r);
+
+    const rankData = allRegions.map(name => {
+        const r = regionMap[name];
+        const value = r ? Math.round(r.taskDone / r.taskTotal * 100) : 0;
+        return { name, value };
+    }).sort((a, b) => b.value - a.value);
+
+    container.innerHTML = rankData.map((item, index) => {
+        const rankClass = index === 0 ? 'top1' : index === 1 ? 'top2' : index === 2 ? 'top3' : 'normal';
+        return `
+            <div class="rank-item">
+                <div class="rank-index ${rankClass}">${index + 1}</div>
+                <div class="rank-name">${item.name}</div>
+                <div class="rank-bar"><div class="rank-bar-fill" style="width: ${item.value}%"></div></div>
+                <div class="rank-value">${item.value}%</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleLayer(el, layer) {
+    el.classList.toggle('active');
+    if (mapManager && mapManager.markers) {
+        mapManager.markers.forEach(function(item) {
+            if (item.layer === layer) {
+                if (el.classList.contains('active')) {
+                    item.marker.addTo(mapManager);
+                } else {
+                    mapManager.removeLayer(item.marker);
+                }
+            }
+        });
+    }
+    console.log('切换图层:', layer, el.classList.contains('active'));
+}
+
+function showPopup(point) {
+    currentPopupPoint = point;
+    const popup = document.getElementById('infoPopup');
+    const iconMap = {
+        task: 'fa-clipboard-check',
+        risk: 'fa-triangle-exclamation',
+        rectify: 'fa-wrench'
+    };
+    const colorMap = {
+        task: 'var(--primary)',
+        risk: 'var(--danger)',
+        rectify: 'var(--success)'
+    };
+    document.getElementById('popupIcon').innerHTML = `<i class="fas ${iconMap[point.type]}"></i>`;
+    document.getElementById('popupIcon').style.background = colorMap[point.type] + '20';
+    document.getElementById('popupIcon').style.color = colorMap[point.type];
+    document.getElementById('popupTitle').textContent = point.name;
+
+    const statusText = {
+        done: '已完成', pending: '未完成', doing: '整改中'
+    };
+    const levelText = {
+        major: '重大隐患', large: '较大隐患', general: '一般隐患', low: '无风险/低隐患'
+    };
+
+    document.getElementById('popupBody').innerHTML = `
+        <div class="info-row"><span class="info-row-label">类型</span><span class="info-row-value">${point.type === 'task' ? '巡查任务' : point.type === 'risk' ? '风险隐患' : '整改情况'}</span></div>
+        <div class="info-row"><span class="info-row-label">状态</span><span class="info-row-value">${point.level ? levelText[point.level] : statusText[point.status]}</span></div>
+        <div class="info-row"><span class="info-row-label">发现时间</span><span class="info-row-value">${point.time}</span></div>
+        <div class="info-row"><span class="info-row-label">责任人</span><span class="info-row-value">${point.person}</span></div>
+        <div class="info-row"><span class="info-row-label">所属区域</span><span class="info-row-value">${point.region}</span></div>
+        <div class="info-row"><span class="info-row-label">坐标</span><span class="info-row-value">${point.lng.toFixed(4)}, ${point.lat.toFixed(4)}</span></div>
+    `;
+
+    popup.style.left = '50%';
+    popup.style.top = '50%';
+    popup.style.transform = 'translate(-50%, -50%)';
+    popup.style.margin = '0';
+    popup.classList.add('show');
+}
+
+function closePopup() {
+    document.getElementById('infoPopup').classList.remove('show');
+    currentPopupPoint = null;
+}
+
+function viewDetail() {
+    if (!currentPopupPoint) return;
+    alert('跳转到房屋详情页：' + currentPopupPoint.name + '（ID: ' + currentPopupPoint.id + '）');
+}
+
+function showRegionStats(regionName) {
+    const region = mockData.regions.find(r => r.name === regionName);
+    if (!region) return;
+    document.getElementById('modalTitle').textContent = regionName + ' - 区域统计';
+    document.getElementById('statCompleteRate').textContent = Math.round(region.taskDone / region.taskTotal * 100) + '%';
+    document.getElementById('statRiskCount').textContent = region.riskCount;
+    document.getElementById('statRectifyRate').textContent = Math.round(region.rectifyDone / region.rectifyTotal * 100) + '%';
+    document.getElementById('statsModal').classList.add('show');
+
+    setTimeout(() => {
+        initModalChart(region);
+    }, 100);
+}
+
+function closeStatsModal() {
+    document.getElementById('statsModal').classList.remove('show');
+}
+
+function timeControl(action) {
+    const slider = document.getElementById('timeSlider');
+    const playBtn = document.getElementById('playBtn');
+    if (action === 'play') {
+        isPlaying = !isPlaying;
+        playBtn.innerHTML = isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+        playBtn.classList.toggle('play', !isPlaying);
+        if (isPlaying) {
+            playTimer = setInterval(() => {
+                let val = parseInt(slider.value) + 1;
+                if (val > parseInt(slider.max)) val = 0;
+                slider.value = val;
+                onTimeChange(val);
+            }, 1000);
+        } else {
+            clearInterval(playTimer);
+        }
+    } else if (action === 'forward') {
+        let val = parseInt(slider.value) + 3;
+        if (val > parseInt(slider.max)) val = parseInt(slider.max);
+        slider.value = val;
+        onTimeChange(val);
+    } else if (action === 'rewind') {
+        let val = parseInt(slider.value) - 3;
+        if (val < 0) val = 0;
+        slider.value = val;
+        onTimeChange(val);
+    }
+}
+
+function onTimeChange(value) {
+    const date = new Date('2025-06-01');
+    date.setDate(date.getDate() + parseInt(value));
+    document.getElementById('currentTime').textContent = date.toISOString().split('T')[0];
+}
+
+function setGranularity(btn, gran) {
+    document.querySelectorAll('.granularity-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    console.log('设置时间粒度:', gran);
+}
+
+function initCharts() {
+    const pieChart = echarts.init(document.getElementById('pieChart'));
+    pieChart.setOption({
+        tooltip: { trigger: 'item' },
+        legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            center: ['50%', '45%'],
+            data: [
+                { value: 12, name: '重大隐患', itemStyle: { color: '#d93025' } },
+                { value: 23, name: '较大隐患', itemStyle: { color: '#e65100' } },
+                { value: 34, name: '一般隐患', itemStyle: { color: '#f9c846' } },
+                { value: 20, name: '无风险/低隐患', itemStyle: { color: '#1a73e8' } }
+            ],
+            label: { fontSize: 11 }
+        }]
+    });
+
+    const lineChart = echarts.init(document.getElementById('lineChart'));
+    lineChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: ['06-24', '06-25', '06-26', '06-27', '06-28', '06-29', '06-30'] },
+        yAxis: { type: 'value' },
+        series: [{
+            type: 'line',
+            data: [15, 22, 18, 25, 30, 28, 35],
+            smooth: true,
+            itemStyle: { color: '#1a73e8' },
+            areaStyle: { color: 'rgba(26,115,232,0.1)' }
+        }]
+    });
+
+    window.addEventListener('resize', () => {
+        pieChart.resize();
+        lineChart.resize();
+    });
+}
+
+function initMap() {
+    const container = document.getElementById('mapContainer');
+    if (!container) return;
+
+    mapManager = L.map('mapContainer').setView(MapConfig.defaultCenter, MapConfig.defaultZoom);
+
+    let tileUrl, attribution;
+    if (MapConfig.provider === 'amap' && MapConfig.amapKey) {
+        tileUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+        attribution = '&copy; 高德地图';
+    } else {
+        tileUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+        attribution = '&copy; 高德地图';
+    }
+
+    L.tileLayer(tileUrl, {
+        attribution: attribution,
+        maxZoom: 19,
+        subdomains: '1234'
+    }).addTo(mapManager);
+
+    mapManager.markers = [];
+    renderMapMarkers();
+
+    mapManager.on('click', function(e) {
+        if (e.originalEvent && e.originalEvent.target.closest('.info-popup')) return;
+        closePopup();
+    });
+}
+
+function renderMapMarkers() {
+    if (!mapManager) return;
+
+    const riskFillColors = {
+        major: '#d93025',
+        large: '#e65100',
+        general: '#f9c846',
+        low: '#8ecae6'
+    };
+    const doneFillColors = {
+        major: '#b52a21',
+        large: '#bf4100',
+        general: '#d4a73a',
+        low: '#7ab3cf'
+    };
+
+    mockData.points.forEach(function(point) {
+        const latlng = [point.lat, point.lng];
+        let marker;
+
+        if (point.type === 'task') {
+            marker = L.circleMarker(latlng, {
+                radius: 8,
+                fillColor: '#1a73e8',
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.85
+            });
+        } else if (point.type === 'risk') {
+            marker = L.circleMarker(latlng, {
+                radius: 8,
+                fillColor: riskFillColors[point.level] || '#8ecae6',
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.9
+            });
+        } else if (point.type === 'rectify') {
+            const levelColor = riskFillColors[point.level] || '#d93025';
+            if (point.status === 'done') {
+                const doneColor = doneFillColors[point.level] || '#b52a21';
+                marker = L.marker(latlng, {
+                    icon: L.divIcon({
+                        className: 'custom-marker done-marker',
+                        html: `<div class="marker-shape marker-square" style="background:${doneColor};border-color:${doneColor}"><span class="marker-check">✓</span></div>`,
+                        iconSize: [18, 18],
+                        iconAnchor: [9, 9]
+                    })
+                });
+            } else {
+                marker = L.circleMarker(latlng, {
+                    radius: 9,
+                    fillColor: levelColor,
+                    color: levelColor,
+                    weight: 4,
+                    opacity: 1,
+                    fillOpacity: 0.1
+                });
+            }
+        }
+
+        if (marker) {
+            marker.addTo(mapManager);
+            marker.on('click', function(e) {
+                L.DomEvent.stopPropagation(e);
+                showPopup(point);
+            });
+            mapManager.markers.push({ layer: point.type, marker: marker });
+        }
+    });
+}
+
+function initModalChart(region) {
+    const modalChart = echarts.init(document.getElementById('modalChart'));
+    modalChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: ['重大隐患', '较大隐患', '一般隐患', '无风险/低隐患'] },
+        yAxis: { type: 'value' },
+        series: [{
+            type: 'bar',
+            data: [
+                Math.round(region.riskCount * 0.15),
+                Math.round(region.riskCount * 0.25),
+                Math.round(region.riskCount * 0.40),
+                Math.round(region.riskCount * 0.20)
+            ],
+            itemStyle: {
+                color: function(params) {
+                    const colors = ['#d93025', '#e65100', '#f9c846', '#1a73e8'];
+                    return colors[params.dataIndex];
+                },
+                borderRadius: [4, 4, 0, 0]
+            }
+        }]
+    });
+}
+
+init();
+</script>
+
+
+</body></html>
