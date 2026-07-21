@@ -39,10 +39,10 @@ let footprintPolygons = [];
 let leftChart, streetRankingChart, measurePieChart;
 
 const RISK_CONFIG = {
-    danger: { label: '重大隐患', color: '#d93025', class: 'danger', shape: 'triangle' },
-    major: { label: '较大隐患', color: '#f57c00', class: 'major', shape: 'square' },
-    warning: { label: '一般隐患', color: '#f9ab00', class: 'warning', shape: 'circle' },
-    safe: { label: '安全', color: '#1a73e8', class: 'safe', shape: 'circle' }
+    danger: { label: '严重安全隐患', color: '#d93025', class: 'danger', shape: 'triangle' },
+    major: { label: '一定安全隐患', color: '#f57c00', class: 'major', shape: 'square' },
+    warning: { label: '带轻微瑕疵', color: '#f9ab00', class: 'warning', shape: 'circle' },
+    safe: { label: '未发现安全隐患', color: '#1a73e8', class: 'safe', shape: 'circle' }
 };
 
 const STATUS_CONFIG = {
@@ -85,9 +85,9 @@ const LAYER_MODES = {
     base: {
         name: '房屋底图', colorBy: 'risk', shapeBy: 'risk', statusMap: RISK_CONFIG,
         filters: [
-            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'danger', label: '重大', icon: 'fa-exclamation-triangle' },
-            { key: 'major', label: '较大', icon: 'fa-exclamation-circle' }, { key: 'warning', label: '一般', icon: 'fa-exclamation' },
-            { key: 'safe', label: '低风险', icon: 'fa-check-circle' }
+            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'danger', label: '严重安全隐患', icon: 'fa-exclamation-triangle' },
+            { key: 'major', label: '一定安全隐患', icon: 'fa-exclamation-circle' }, { key: 'warning', label: '带轻微瑕疵', icon: 'fa-exclamation' },
+            { key: 'safe', label: '未发现安全隐患', icon: 'fa-check-circle' }
         ]
     },
     governance: {
@@ -138,7 +138,7 @@ const fengxianBoundary = [
     [30.993, 121.401], [30.960, 121.370], [30.900, 121.385], [30.850, 121.435], [30.860, 121.580], [30.940, 121.600], [30.990, 121.570], [31.010, 121.480], [30.993, 121.401]
 ];
 
-function getRiskConfig(risk) { return RISK_CONFIG[risk] || RISK_CONFIG.safe; }
+function getRiskConfig(risk) { return RISK_CONFIG[risk] || RISK_CONFIG[RISK_LABEL_MAP_INV[risk]] || RISK_CONFIG.safe; }
 function getStatusConfig(governance) { return STATUS_CONFIG[governance] || STATUS_CONFIG.pending; }
 function getEliminationConfig(elimination) { return ELIMINATION_CONFIG[elimination] || ELIMINATION_CONFIG.pending; }
 function getLayerConfig() { return LAYER_MODES[currentLayer]; }

@@ -12,15 +12,16 @@ const MODULE_GOVERNANCE = ['pending', 'doing', 'done', 'overdue'];
 
 // 把房屋风险状态映射到统一风险等级（供house-arch-detail等页面使用）
 const RISK_LABEL_MAP = {
-    'danger': '重大隐患',
-    'major': '较大隐患',
-    'warning': '一般隐患',
-    'safe': '安全'
+    'danger': '严重安全隐患',
+    'major': '一定安全隐患',
+    'warning': '带轻微瑕疵',
+    'safe': '未发现安全隐患'
 };
 const RISK_LABEL_MAP_INV = {
-    '重大隐患': 'danger',
-    '较大隐患': 'major',
-    '一般隐患': 'warning',
+    '严重安全隐患': 'danger',
+    '一定安全隐患': 'major',
+    '带轻微瑕疵': 'warning',
+    '未发现安全隐患': 'safe',
     '安全': 'safe',
     '无风险': 'safe'
 };
@@ -104,7 +105,7 @@ function generateArchId(prefix) {
 // 默认单条房屋结构（兼容 house-arch-detail 的 DEFAULT_HOUSE_STATUS）
 const DEFAULT_HOUSE_STATUS = {
     no: '', name: '', owner: '', street: '', address: '', community: '', village: '',
-    riskLevel: '一般隐患', governStatus: '待整治', currentMeasure: '',
+    riskLevel: '带轻微瑕疵', governStatus: '待整治', currentMeasure: '',
     managerName: '', managerPhone: '',
     manageRecords: [], projectRecords: [], qualityTrace: [], archiveRecords: [],
     closeStatus: '未申请', closeApplyTime: '', closeAuditTime: '', closeAuditor: '',
@@ -180,7 +181,7 @@ const DEFAULT_HOUSE_STATUS = {
 };
 
 // 规范化单条记录：保持 risk/riskLevel、governance/governStatus 两对字段一致，
-// 销号通过则统一为 safe/无风险 + done/已治理，并补全编号。
+// 销号通过则统一为 safe/未发现安全隐患 + done/已治理，并补全编号。
 function normalizeHouseRecord(record) {
     if (!record) return record;
     const rec = record;
@@ -206,7 +207,7 @@ function normalizeHouseRecord(record) {
     if (rec.closeStatus === '已通过') {
         rec.risk = 'safe';
         rec.governance = 'done';
-        rec.riskLevel = '无风险';
+        rec.riskLevel = '未发现安全隐患';
         rec.governStatus = '已治理';
         rec.isRemovedFromFocus = true;
         return rec;
@@ -219,7 +220,7 @@ function normalizeHouseRecord(record) {
         rec.riskLevel = RISK_LABEL_MAP[rec.risk];
     } else {
         rec.risk = 'warning';
-        rec.riskLevel = '一般隐患';
+        rec.riskLevel = '带轻微瑕疵';
     }
 
     // 治理状态：以中文 governStatus 为准，回写 governance；若缺失则反向生成
@@ -234,7 +235,7 @@ function normalizeHouseRecord(record) {
 
     if (!rec.closeStatus) rec.closeStatus = '未申请';
     if (!rec.riskInfo) rec.riskInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskInfo));
-    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '一般隐患';
+    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '带轻微瑕疵';
     rec.riskInfo.riskStatus = rec.riskInfo.riskStatus || rec.governStatus || '待整治';
     rec.riskInfo.relatedHouse = rec.riskInfo.relatedHouse || rec.no || '';
     rec.riskInfo.relatedOwner = rec.riskInfo.relatedOwner || rec.owner || '';
@@ -787,7 +788,7 @@ function generateHouseSeed() {
             rejectReason = '整治不到位，需补充材料';
         }
 
-        // 已销号且治理完成的风险统一为 safe/无风险
+        // 已销号且治理完成的风险统一为 safe/未发现安全隐患
         if (governance === 'done' && closeStatus === '已通过') {
             risk = 'safe';
         }
@@ -801,7 +802,7 @@ function generateHouseSeed() {
         };
 
         const governStatus = STATUS_LABEL_MAP[governance];
-        const riskLevel = risk === 'safe' ? (closeStatus === '已通过' ? '无风险' : '安全') : RISK_LABEL_MAP[risk];
+        const riskLevel = RISK_LABEL_MAP[risk];
         const managerName = owner;
         const managerPhone = MANAGER_PHONES[i % MANAGER_PHONES.length];
         const responsiblePerson = RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length];

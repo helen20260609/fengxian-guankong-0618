@@ -75,10 +75,10 @@
         let currentProjectTab = 'type';
 
         const riskMap = {
-            danger: { label: '重大隐患', color: '#d93025' },
-            major: { label: '较大隐患', color: '#f57c00' },
-            warning: { label: '一般隐患', color: '#f9ab00' },
-            safe: { label: '安全', color: '#1e8e3e' }
+            danger: { label: '疑似危房', color: '#d93025' },
+            major: { label: '严重损坏房', color: '#f57c00' },
+            warning: { label: '一般损坏房', color: '#f9ab00' },
+            safe: { label: '完好房(基本完好房)', color: '#1a73e8' }
         };
 
         const houseTypeMap = {
@@ -290,23 +290,12 @@
         function renderRiskTable(data) {
             const total = data.length || 1;
             const order = ['danger', 'major', 'warning', 'safe'];
+            const tagMap = { danger: 'tag-danger', major: 'tag-major', warning: 'tag-warning', safe: 'tag-safe' };
             const tbody = document.querySelector('#riskTable tbody');
             tbody.innerHTML = order.map(risk => {
                 const count = data.filter(i => i.risk === risk).length;
-                const pct = ((count / total) * 100).toFixed(1) + '%';
-                const tagClass = risk === 'danger' ? 'tag-danger' : risk === 'major' ? 'tag-warning' : risk === 'warning' ? 'tag-warning' : 'tag-safe';
-                return `<tr><td>${riskMap[risk].label}</td><td>${count}</td><td>${pct}</td><td><span class="tag ${tagClass}">${riskMap[risk].label}</span></td></tr>`;
-            }).join('');
-        }
-
-        function renderRiskTable(data) {
-            const total = data.length || 1;
-            const order = ['danger', 'major', 'warning', 'safe'];
-            const tbody = document.querySelector('#riskTable tbody');
-            tbody.innerHTML = order.map(risk => {
-                const count = data.filter(i => i.risk === risk).length;
-                const pct = ((count / total) * 100).toFixed(1) + '%';
-                const tagClass = risk === 'danger' ? 'tag-danger' : risk === 'major' ? 'tag-warning' : risk === 'warning' ? 'tag-warning' : 'tag-safe';
+                const pct = ((count / total) * 100).toFixed(2) + '%';
+                const tagClass = tagMap[risk];
                 return `<tr><td>${riskMap[risk].label}</td><td>${count}</td><td>${pct}</td><td><span class="tag ${tagClass}">${riskMap[risk].label}</span></td></tr>`;
             }).join('');
         }
@@ -371,7 +360,7 @@
         }
 
         function pct(n, total) {
-            return total ? ((n / total) * 100).toFixed(1) + '%' : '0.0%';
+            return total ? ((n / total) * 100).toFixed(2) + '%' : '0.00%';
         }
 
         function updateMeasureSummary(records) {
@@ -391,7 +380,7 @@
                 doneMap[r.measureType] = (doneMap[r.measureType] || 0) + (r.done ? 1 : 0);
                 controlledMap[r.measureType] = (controlledMap[r.measureType] || 0) + (r.controlled ? 1 : 0);
             });
-            const doneRates = types.map(t => (doneMap[t] || 0) / typeMap[t] * 100);
+            const doneRates = types.map(t => Number(((doneMap[t] || 0) / typeMap[t] * 100).toFixed(2)));
             charts.measureType.setOption({
                 tooltip: { trigger: 'item' },
                 legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } },
@@ -444,7 +433,7 @@
                 typeMap[r.street] = typeMap[r.street] || {};
                 typeMap[r.street][r.measureType] = (typeMap[r.street][r.measureType] || 0) + 1;
             });
-            const doneRates = areas.map(a => (doneMap[a] || 0) / areaMap[a] * 100);
+            const doneRates = areas.map(a => Number(((doneMap[a] || 0) / areaMap[a] * 100).toFixed(2)));
             charts.measureArea.setOption({
                 tooltip: { trigger: 'axis' },
                 grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
@@ -499,7 +488,7 @@
                 typeMap[r.responsiblePerson] = typeMap[r.responsiblePerson] || {};
                 typeMap[r.responsiblePerson][r.measureType] = (typeMap[r.responsiblePerson][r.measureType] || 0) + 1;
             });
-            const doneRates = persons.map(p => (doneMap[p] || 0) / personMap[p] * 100);
+            const doneRates = persons.map(p => Number(((doneMap[p] || 0) / personMap[p] * 100).toFixed(2)));
             charts.measurePerson.setOption({
                 tooltip: { trigger: 'axis' },
                 grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
@@ -554,7 +543,7 @@
                 if (r.controlled) typeEffect[r.measureType].good++;
             });
             const types = Object.keys(typeEffect);
-            const goodRates = types.map(t => (typeEffect[t].good / typeEffect[t].total) * 100);
+            const goodRates = types.map(t => Number(((typeEffect[t].good / typeEffect[t].total) * 100).toFixed(2)));
             const changeMap = groupBy(records, r => r.street);
             const areas = Object.keys(changeMap);
             const changeValues = areas.map(a => records.filter(r => r.street === a).reduce((s, r) => s + r.changeCount, 0));
@@ -595,7 +584,7 @@
             const total = records.length || 1;
             tbody.innerHTML = effects.map(e => {
                 const count = effectMap[e];
-                const p = ((count / total) * 100).toFixed(1) + '%';
+                const p = ((count / total) * 100).toFixed(2) + '%';
                 return `<tr><td>${e}</td><td>${count}</td><td>${p}</td><td><span class="tag tag-info">统计</span></td></tr>`;
             }).join('');
         }
@@ -657,14 +646,14 @@
                 xAxis: { type: 'category', data: types, axisLabel: { fontSize: 11 } },
                 yAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
                 series: [{
-                    data: types.map((t, i) => Math.round((doneCounts[i] / counts[i]) * 1000) / 10), type: 'bar',
+                    data: types.map((t, i) => Number(((doneCounts[i] / counts[i]) * 100).toFixed(2))), type: 'bar',
                     itemStyle: { color: '#1e8e3e', borderRadius: [4, 4, 0, 0] },
                     label: { show: true, position: 'top', formatter: '{c}%', fontSize: 11 }
                 }]
             });
             const tbody = document.querySelector('#projectTypeTable tbody');
             tbody.innerHTML = types.map((t, i) => {
-                const rate = counts[i] ? ((doneCounts[i] / counts[i]) * 100).toFixed(1) + '%' : '0.0%';
+                const rate = counts[i] ? ((doneCounts[i] / counts[i]) * 100).toFixed(2) + '%' : '0.00%';
                 return `<tr><td>${t}</td><td>${counts[i]}</td><td>${doneCounts[i]}</td><td>${funds[i].toLocaleString()}</td><td>${rate}</td></tr>`;
             }).join('');
         }
@@ -707,14 +696,14 @@
                 xAxis: { type: 'category', data: companies, axisLabel: { rotate: 25, fontSize: 11, interval: 0 } },
                 yAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
                 series: [{
-                    data: companies.map((c, i) => counts[i] ? Math.round((doneCounts[i] / counts[i]) * 1000) / 10 : 0), type: 'bar',
+                    data: companies.map((c, i) => counts[i] ? Number(((doneCounts[i] / counts[i]) * 100).toFixed(2)) : 0), type: 'bar',
                     itemStyle: { color: '#1e8e3e', borderRadius: [4, 4, 0, 0] },
                     label: { show: true, position: 'top', formatter: '{c}%', fontSize: 11 }
                 }]
             });
             const tbody = document.querySelector('#projectCompanyTable tbody');
             tbody.innerHTML = companies.map((c, i) => {
-                const rate = counts[i] ? ((doneCounts[i] / counts[i]) * 100).toFixed(1) + '%' : '0.0%';
+                const rate = counts[i] ? ((doneCounts[i] / counts[i]) * 100).toFixed(2) + '%' : '0.00%';
                 return `<tr><td>${c}</td><td>${counts[i]}</td><td>${doneCounts[i]}</td><td>${funds[i].toLocaleString()}</td><td>${rate}</td></tr>`;
             }).join('');
         }
@@ -771,7 +760,7 @@
             const tbody = document.querySelector('#projectFundTable tbody');
             const total = records.length || 1;
             tbody.innerHTML = fundGroups.map((g, i) => {
-                const p = ((counts[i] / total) * 100).toFixed(1) + '%';
+                const p = ((counts[i] / total) * 100).toFixed(2) + '%';
                 return `<tr><td>${g}</td><td>${counts[i]}</td><td>${funds[i].toLocaleString()}</td><td>${p}</td></tr>`;
             }).join('');
         }
@@ -985,8 +974,8 @@
             const fundTotal = list.reduce((s, i) => s + (i.fundTotal || 0), 0);
             const riskDistribution = { danger: 0, major: 0, warning: 0, safe: 0 };
             list.forEach(i => { if (i.risk) riskDistribution[i.risk] = (riskDistribution[i.risk] || 0) + 1; });
-            const completionRate = totalTask ? Math.round((doneTask / totalTask) * 1000) / 10 : 0;
-            const fundUsageRate = fundTotal ? Math.round((fundUsed / fundTotal) * 1000) / 10 : 0;
+            const completionRate = totalTask ? Number((doneTask / totalTask * 100).toFixed(2)) : 0;
+            const fundUsageRate = fundTotal ? Number((fundUsed / fundTotal * 100).toFixed(2)) : 0;
             return { dimension: name, totalTask, doneTask, completionRate, overdueTask, manageMeasure, projectMeasure, fundUsed, fundTotal, fundUsageRate, riskDistribution };
         }
 
@@ -1032,8 +1021,8 @@
                 fundUsed: rows.reduce((s, r) => s + r.fundUsed, 0),
                 fundTotal: rows.reduce((s, r) => s + r.fundTotal, 0)
             };
-            totalRow.completionRate = totalRow.totalTask ? Math.round((totalRow.doneTask / totalRow.totalTask) * 1000) / 10 : 0;
-            totalRow.fundUsageRate = totalRow.fundTotal ? Math.round((totalRow.fundUsed / totalRow.fundTotal) * 1000) / 10 : 0;
+            totalRow.completionRate = totalRow.totalTask ? Number((totalRow.doneTask / totalRow.totalTask * 100).toFixed(2)) : 0;
+            totalRow.fundUsageRate = totalRow.fundTotal ? Number((totalRow.fundUsed / totalRow.fundTotal * 100).toFixed(2)) : 0;
 
             const kpiHtml = `<div class="report-section"><div class="report-section-title"><i class="fas fa-chart-bar"></i> 核心指标</div><div class="report-kpi-grid">
                 <div class="report-kpi"><div class="report-kpi-value">${totalRow.totalTask}</div><div class="report-kpi-label">整治任务总量</div></div>
