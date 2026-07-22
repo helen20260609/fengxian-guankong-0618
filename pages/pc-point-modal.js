@@ -176,8 +176,8 @@ function buildAbnormalDetail(item) {
                     </div>
                 </div>
                 <div class="form-row">
-                    <label class="form-label">隐患等级</label>
-                    <div class="fake-input">${item.riskLevel || '较大风险'}</div>
+                    <label class="form-label">风险等级</label>
+                    <div class="fake-input">${item.riskLevel || '—'}</div>
                 </div>
                 <div class="form-row">
                     <label class="form-label">隐患描述</label>

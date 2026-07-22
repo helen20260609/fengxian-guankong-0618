@@ -115,7 +115,7 @@ new_body = '''<body>
                 <span class="info-value" id="base-riskType">-</span>
             </div>
             <div class="info-item">
-                <span class="info-label">隐患等级</span>
+                <span class="info-label">风险等级</span>
                 <span class="info-value" id="base-riskLevel"><span class="risk-badge red">-</span></span>
             </div>
             <div class="info-item">
@@ -770,9 +770,9 @@ function formatDateTime(d) {
     return dt.getFullYear() + '-' + pad2(dt.getMonth() + 1) + '-' + pad2(dt.getDate()) + ' ' + pad2(dt.getHours()) + ':' + pad2(dt.getMinutes());
 }
 function mapRiskClass(level) {
-    if (level === '重大隐患') return 'red';
-    if (level === '较大隐患') return 'orange';
-    if (level === '一般隐患') return 'yellow';
+    if (level === '疑似危房') return 'red';
+    if (level === '严重损坏房') return 'orange';
+    if (level === '一般损坏房') return 'yellow';
     return 'blue';
 }
 function mapStatus(status) {
@@ -807,8 +807,8 @@ function addDays(dateStr, days) {
 function getDeadlineByLevel(level, reportTime) {
     const base = new Date(reportTime || Date.now());
     let days = 7;
-    if (level === '重大隐患') days = 1;
-    else if (level === '较大隐患') days = 3;
+    if (level === '疑似危房') days = 1;
+    else if (level === '严重损坏房') days = 3;
     base.setDate(base.getDate() + days);
     return formatDateTime(base) + '（' + days + '天）';
 }
@@ -826,7 +826,7 @@ function loadData() {
     const firstHazard = (rec.hazards && rec.hazards[0]) || {};
     const firstInspection = (rec.inspectionRecords && rec.inspectionRecords[0]) || {};
     const reportTime = firstInspection.reportTime || (firstInspection.checkDate ? firstInspection.checkDate + ' 09:00' : '2025-06-01 09:00');
-    const level = riskInfo.riskLevel || rec.riskLevel || '一般隐患';
+    const level = riskInfo.riskLevel || rec.riskLevel || '一般损坏房';
 
     // 基础信息
     setText('base-riskName', riskInfo.riskName || rec.name + ' 风险隐患');

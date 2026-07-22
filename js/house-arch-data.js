@@ -10,20 +10,30 @@ const MODULE_COMMUNITIES = ['张翁庙村', '洪庙村', '五四村', '新寺村
 const MODULE_RISKS = ['danger', 'major', 'warning', 'safe'];
 const MODULE_GOVERNANCE = ['pending', 'doing', 'done', 'overdue'];
 
-// 把房屋风险状态映射到统一风险等级（供house-arch-detail等页面使用）
+// 把房屋风险状态映射到统一风险等级（内部数据层）
 const RISK_LABEL_MAP = {
-    'danger': '严重安全隐患',
-    'major': '一定安全隐患',
-    'warning': '带轻微瑕疵',
-    'safe': '未发现安全隐患'
+    'danger': '疑似危房',
+    'major': '严重损坏房',
+    'warning': '一般损坏房',
+    'safe': '完好房(基本完好房)'
 };
 const RISK_LABEL_MAP_INV = {
-    '严重安全隐患': 'danger',
-    '一定安全隐患': 'major',
-    '带轻微瑕疵': 'warning',
-    '未发现安全隐患': 'safe',
+    '疑似危房': 'danger',
+    '严重损坏房': 'major',
+    '一般损坏房': 'warning',
+    '完好房(基本完好房)': 'safe',
     '安全': 'safe',
     '无风险': 'safe'
+};
+
+// 农村自建房展示用风险等级：与数据层保持一致（已统一为风险等级）
+const HAZARD_TO_RISK_LEVEL = {
+    '疑似危房': '疑似危房',
+    '严重损坏房': '严重损坏房',
+    '一般损坏房': '一般损坏房',
+    '完好房(基本完好房)': '完好房(基本完好房)',
+    '安全': '完好房(基本完好房)',
+    '无风险': '完好房(基本完好房)'
 };
 const STATUS_LABEL_MAP = {
     'pending': '待整治',
@@ -105,7 +115,7 @@ function generateArchId(prefix) {
 // 默认单条房屋结构（兼容 house-arch-detail 的 DEFAULT_HOUSE_STATUS）
 const DEFAULT_HOUSE_STATUS = {
     no: '', name: '', owner: '', street: '', address: '', community: '', village: '',
-    riskLevel: '带轻微瑕疵', governStatus: '待整治', currentMeasure: '',
+    riskLevel: '一般损坏房', governStatus: '待整治', currentMeasure: '',
     managerName: '', managerPhone: '',
     manageRecords: [], projectRecords: [], qualityTrace: [], archiveRecords: [],
     closeStatus: '未申请', closeApplyTime: '', closeAuditTime: '', closeAuditor: '',
@@ -181,7 +191,7 @@ const DEFAULT_HOUSE_STATUS = {
 };
 
 // 规范化单条记录：保持 risk/riskLevel、governance/governStatus 两对字段一致，
-// 销号通过则统一为 safe/未发现安全隐患 + done/已治理，并补全编号。
+// 销号通过则统一为 safe/完好房(基本完好房) + done/已治理，并补全编号。
 function normalizeHouseRecord(record) {
     if (!record) return record;
     const rec = record;
@@ -203,27 +213,35 @@ function normalizeHouseRecord(record) {
     if (!rec.riskClassification) rec.riskClassification = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskClassification));
     if (!rec.emergencyResponse) rec.emergencyResponse = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.emergencyResponse));
 
-    // 销号已通过：强制无风险/已治理
+    // 销号已通过：强制无风险/已治理，但保留原始风险等级用于统计
     if (rec.closeStatus === '已通过') {
+        rec.originalRisk = rec.originalRisk || rec.risk || 'warning';
+        rec.originalRiskLevel = rec.originalRiskLevel || rec.riskLevel || RISK_LABEL_MAP[rec.risk] || '完好房(基本完好房)';
         rec.risk = 'safe';
         rec.governance = 'done';
-        rec.riskLevel = '未发现安全隐患';
+        rec.riskLevel = '完好房(基本完好房)';
         rec.governStatus = '已治理';
         rec.isRemovedFromFocus = true;
+        rec.riskDisplayLevel = HAZARD_TO_RISK_LEVEL[rec.originalRiskLevel] || rec.originalRiskLevel;
         return rec;
     }
 
-    // 风险等级：以中文 riskLevel 为准，回写 risk；若 riskLevel 缺失则反向生成
+    // 风险等级：以中文 riskLevel（风险等级）为准，回写 risk；若 riskLevel 缺失则反向生成
     if (rec.riskLevel && RISK_LABEL_MAP_INV[rec.riskLevel]) {
         rec.risk = RISK_LABEL_MAP_INV[rec.riskLevel];
     } else if (rec.risk && RISK_LABEL_MAP[rec.risk]) {
         rec.riskLevel = RISK_LABEL_MAP[rec.risk];
     } else {
         rec.risk = 'warning';
-        rec.riskLevel = '带轻微瑕疵';
+        rec.riskLevel = '一般损坏房';
     }
 
-    // 治理状态：以中文 governStatus 为准，回写 governance；若缺失则反向生成
+    // 保留原始风险信息（便于销号后追溯）
+    rec.originalRisk = rec.originalRisk || rec.risk;
+    rec.originalRiskLevel = rec.originalRiskLevel || rec.riskLevel;
+
+    // 农村自建房风险等级：与数据层保持一致（已统一）
+    rec.riskDisplayLevel = HAZARD_TO_RISK_LEVEL[rec.riskLevel] || rec.riskLevel;
     if (rec.governStatus && STATUS_LABEL_MAP_INV[rec.governStatus]) {
         rec.governance = STATUS_LABEL_MAP_INV[rec.governStatus];
     } else if (rec.governance && STATUS_LABEL_MAP[rec.governance]) {
@@ -235,7 +253,7 @@ function normalizeHouseRecord(record) {
 
     if (!rec.closeStatus) rec.closeStatus = '未申请';
     if (!rec.riskInfo) rec.riskInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskInfo));
-    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '带轻微瑕疵';
+    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '一般损坏房';
     rec.riskInfo.riskStatus = rec.riskInfo.riskStatus || rec.governStatus || '待整治';
     rec.riskInfo.relatedHouse = rec.riskInfo.relatedHouse || rec.no || '';
     rec.riskInfo.relatedOwner = rec.riskInfo.relatedOwner || rec.owner || '';
@@ -690,7 +708,6 @@ function generateCloseApplyForRecord(record) {
 }
 
 // ---------------- 种子数据生成 ----------------
-// 生成 85 条 NF-2025-XXXXX 数据，携带完整工作流、隐患、措施、资金、销号等统计字段
 function generateHouseSeed() {
     const streets = MODULE_STREETS;
     const communities = MODULE_COMMUNITIES;
@@ -705,7 +722,8 @@ function generateHouseSeed() {
 
     const names = [
         '李家宅基','贤城小区','张家宅基','新城小区','陈家宅基','华城小区','赵家宅基','海城小区','周家宅基','联城小区',
-        '徐家宅基','悦城小区','朱家宅基','湖城小区','胡家宅基','桂城小区','何家宅基','阳城小区','罗家宅基','绿城小区'
+        '徐家宅基','悦城小区','朱家宅基','湖城小区','胡家宅基','桂城小区','何家宅基','阳城小区','罗家宅基','绿城小区',
+        '马家宅基','南庭小区','高家宅基','北城小区','孙家宅基','东苑小区','吴家宅基','西亭小区','郑家宅基','中城小区'
     ];
     const owners = [
         '李骏勇','王超','张涛建','刘东','陈玲','杨城磊','黄刚安','赵超岩','周堂','吴基轩',
@@ -716,15 +734,37 @@ function generateHouseSeed() {
         '余轩培','潘慧','杜娟泰','戴春瑞','夏强骏','钟珍','汪娜寿','田静','任莲云','姜祥',
         '范国昊','方春懿','石凤超','姚霖宇','谭凯静','廖硕秋','邹骥','熊毅','金雪刚','陆文英',
         '郝霖祥','孔娜昊','白琴','崔禧','康倩嘉','毛骥瑞','邱崇云','秦铭珍','江文宸','史熠',
-        '顾骏','侯瑞烁','邵顺','孟祥华','龙洋顺'
+        '顾骏','侯瑞烁','邵顺','孟祥华','龙洋顺','肖泽宇','钱文昊','严志强','温婷婷','安志远'
     ];
     const categories = ['农村自建房', '城镇自建房'];
     const structTypes = ['砖混', '砖木', '框架'];
 
-    for (let i = 1; i <= 85; i++) {
+    // 真实的农村自建房风险分布：安全/轻微瑕疵占多数，危房占少数
+    const RISK_DISTRIBUTION = [
+        { risk: 'danger',  governanceWeights: { done: 0.35, doing: 0.30, overdue: 0.20, pending: 0.15 }, ratio: 0.10 }, // 疑似危房
+        { risk: 'major',   governanceWeights: { done: 0.30, doing: 0.40, overdue: 0.15, pending: 0.15 }, ratio: 0.15 }, // 严重损坏房
+        { risk: 'warning', governanceWeights: { done: 0.45, doing: 0.25, overdue: 0.10, pending: 0.20 }, ratio: 0.25 }, // 一般损坏房 / 带轻微瑕疵
+        { risk: 'warning', governanceWeights: { done: 0.70, doing: 0.15, overdue: 0.05, pending: 0.10 }, ratio: 0.15 }, // 带轻微瑕疵
+        { risk: 'safe',    governanceWeights: { done: 1.0 },                                 ratio: 0.35 }  // 未发现安全隐患
+    ];
+
+    const weightedPick = (weights) => {
+        const keys = Object.keys(weights);
+        const vals = keys.map(k => weights[k]);
+        const sum = vals.reduce((a, b) => a + b, 0);
+        let r = Math.random() * sum;
+        for (let i = 0; i < keys.length; i++) {
+            r -= vals[i];
+            if (r <= 0) return keys[i];
+        }
+        return keys[keys.length - 1];
+    };
+
+    const seedCount = 120;
+    for (let i = 1; i <= seedCount; i++) {
         const no = generateNo(i);
         const nameIdx = (i - 1) % names.length;
-        const name = names[nameIdx] + (i > 20 ? '·' + i + '号' : i + '号');
+        const name = names[nameIdx] + (i > 30 ? '·' + i + '号' : i + '号');
         const street = streets[(i - 1) % streets.length];
         const community = communities[(i - 1) % communities.length];
         const address = '上海市奉贤区' + street + community + (i * 3) + '号';
@@ -733,20 +773,21 @@ function generateHouseSeed() {
         const year = 1970 + (i % 45);
         const owner = owners[i - 1] || '未知';
 
-        // 风险/治理状态分布：重大/较大/一般/安全 大致 2:2:3:1
-        let risk, governance;
-        const r = i % 8;
-        if (r === 0 || r === 1) { risk = 'danger'; governance = i % 3 === 0 ? 'done' : (i % 3 === 1 ? 'doing' : 'overdue'); }
-        else if (r === 2 || r === 3) { risk = 'major'; governance = i % 4 === 0 ? 'done' : 'doing'; }
-        else if (r === 4 || r === 5 || r === 6) { risk = 'warning'; governance = i % 5 === 0 ? 'done' : 'pending'; }
-        else { risk = 'safe'; governance = 'done'; }
+        // 按真实分布抽取风险与治理状态
+        const bucket = weightedPick(Object.fromEntries(RISK_DISTRIBUTION.map((r, idx) => [idx, r.ratio])));
+        const riskConfig = RISK_DISTRIBUTION[bucket];
+        let risk = riskConfig.risk;
+        let governance = weightedPick(riskConfig.governanceWeights);
 
-        const totalTask = risk === 'safe' ? 0 : (1 + (i % 4));
-        const doneTask = governance === 'done' ? totalTask : (governance === 'doing' ? Math.floor(totalTask * 0.5) : 0);
-        const manageMeasure = totalTask > 0 ? (1 + (i % 2)) : 0;
-        const projectMeasure = totalTask > 0 ? (1 + (i % 3)) : 0;
-        const fundTotal = totalTask > 0 ? (30000 + (i * 2500)) : 0;
-        const fundUsed = Math.round(fundTotal * (doneTask / (totalTask || 1)));
+        // 安全房统一治理完成
+        if (risk === 'safe') governance = 'done';
+
+        const totalTask = risk === 'safe' ? 0 : (1 + (i % 4) + (risk === 'danger' ? 2 : 0));
+        const doneTask = governance === 'done' ? totalTask : (governance === 'doing' ? Math.max(1, Math.floor(totalTask * (0.3 + (i % 5) * 0.15))) : 0);
+        const manageMeasure = totalTask > 0 ? (1 + (i % 2) + (risk === 'danger' ? 1 : 0)) : 0;
+        const projectMeasure = totalTask > 0 ? (1 + (i % 3) + (risk === 'danger' ? 1 : 0)) : 0;
+        const fundTotal = totalTask > 0 ? (25000 + (i * 1800) + (risk === 'danger' ? 30000 : risk === 'major' ? 15000 : 0)) : 0;
+        const fundUsed = Math.round(fundTotal * (doneTask / (totalTask || 1)) * (0.8 + (i % 4) * 0.05));
         const overdue = governance === 'overdue';
 
         // 坐标：按编号种子随机，保证在奉贤区范围内
@@ -770,7 +811,7 @@ function generateHouseSeed() {
         let auditOpinion = '';
         let rejectReason = '';
         if (governance === 'done') {
-            closeStatus = i % 2 === 0 ? '已通过' : '待审核';
+            closeStatus = i % 3 === 0 ? '已通过' : (i % 3 === 1 ? '待审核' : '审核中');
             applyTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(1 + (i % 28));
             if (closeStatus === '已通过') {
                 auditTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(2 + (i % 27));
@@ -788,11 +829,6 @@ function generateHouseSeed() {
             rejectReason = '整治不到位，需补充材料';
         }
 
-        // 已销号且治理完成的风险统一为 safe/未发现安全隐患
-        if (governance === 'done' && closeStatus === '已通过') {
-            risk = 'safe';
-        }
-
         const eliminationInfo = {
             applyTime: applyTime || null,
             reviewTime: auditTime || null,
@@ -803,15 +839,23 @@ function generateHouseSeed() {
 
         const governStatus = STATUS_LABEL_MAP[governance];
         const riskLevel = RISK_LABEL_MAP[risk];
+
+        // 已销号且治理完成：展示用安全，但保留原始风险用于统计/追溯
+        const isClosed = governance === 'done' && closeStatus === '已通过';
+        const originalRisk = risk;
+        const originalRiskLevel = riskLevel;
+        const displayRisk = isClosed ? 'safe' : risk;
+        const displayRiskLevel = isClosed ? '完好房(基本完好房)' : riskLevel;
+
         const managerName = owner;
         const managerPhone = MANAGER_PHONES[i % MANAGER_PHONES.length];
         const responsiblePerson = RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length];
         const responsibleDept = street + '城建中心';
 
-        const manageRecords = generateManageRecords(no, risk, governance, doneTask, totalTask, i);
-        const projectRecords = generateProjectRecordsLocal(no, risk, governance, projectMeasure, i, fundTotal);
-        const qualityTrace = generateQualityTrace(no, risk, governance, projectMeasure, i);
-        const archiveRecords = generateArchiveRecords(no, risk, governance, closeStatus, i);
+        const manageRecords = generateManageRecords(no, originalRisk, governance, doneTask, totalTask, i);
+        const projectRecords = generateProjectRecordsLocal(no, originalRisk, governance, projectMeasure, i, fundTotal);
+        const qualityTrace = generateQualityTrace(no, originalRisk, governance, projectMeasure, i);
+        const archiveRecords = generateArchiveRecords(no, originalRisk, governance, closeStatus, i);
 
         // 全要素档案字段
         const village = VILLAGES[(i - 1) % VILLAGES.length];
@@ -877,8 +921,7 @@ function generateHouseSeed() {
             foundationType: foundationType,
             seismicInfo: '未做抗震专项设计',
             maxSpan: (3.6 + (i % 5) * 0.3).toFixed(1) + 'm',
-            expansionStatus: expansionStatus,
-            decorationStatus: decorationStatus,
+            expansionStatus: expansionStatus, decorationStatus: decorationStatus,
             remark: ''
         };
 
@@ -902,25 +945,25 @@ function generateHouseSeed() {
             });
         }
 
-        const inspectionRecords = generateInspectionRecords(no, risk, i);
-        const appraisalReports = generateAppraisalReports(no, risk, governance, i);
-        const patrolRecords = generatePatrolRecords(no, risk, governance, i);
-        const riskIdentification = generateRiskIdentification(no, risk, i);
+        const inspectionRecords = generateInspectionRecords(no, originalRisk, i);
+        const appraisalReports = generateAppraisalReports(no, originalRisk, governance, i);
+        const patrolRecords = generatePatrolRecords(no, originalRisk, governance, i);
+        const riskIdentification = generateRiskIdentification(no, originalRisk, i);
         const riskClassification = {
-            level: riskLevel,
-            basis: '依据《农村住房危险性鉴定标准》综合评定为' + riskLevel,
+            level: originalRiskLevel,
+            basis: '依据《农村住房危险性鉴定标准》综合评定为' + originalRiskLevel,
             assessTime: inspectionRecords.length ? inspectionRecords[0].checkDate : '',
             assessor: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length]
         };
-        const emergencyResponse = generateEmergencyResponse(no, risk, governance, i);
+        const emergencyResponse = generateEmergencyResponse(no, originalRisk, governance, i);
         const photos = generateHousePhotos(no, i);
         const riskPart = HAZARD_PARTS[i % HAZARD_PARTS.length];
         const riskType = HAZARD_TYPES[(i + 3) % HAZARD_TYPES.length];
         const riskInfo = {
             riskNo: 'RSK-' + no,
-            riskName: name + ' ' + RISK_LABEL_MAP[risk] + '风险',
+            riskName: name + ' ' + originalRiskLevel + '风险',
             riskType: riskType,
-            riskLevel: riskLevel,
+            riskLevel: originalRiskLevel,
             discoveryTime: inspectionRecords.length ? inspectionRecords[0].checkDate : '',
             discoveryMethod: '排查发现',
             discoverer: inspectionRecords.length ? inspectionRecords[0].checker : '',
@@ -941,7 +984,10 @@ function generateHouseSeed() {
             no, name, owner, street, community, address, village,
             category: struct,
             houseType: category,
-            riskLevel, risk,
+            riskLevel: displayRiskLevel,
+            risk: displayRisk,
+            originalRisk,
+            originalRiskLevel,
             governStatus, governance,
             closeStatus,
             closeApplyTime: applyTime, closeAuditTime: auditTime, closeAuditor: auditor,
@@ -965,7 +1011,7 @@ function generateHouseSeed() {
     return data;
 }
 
-// 初始化种子：若 localStorage 为空则写入 85 条数据；否则规范化已有数据
+// 初始化种子Storage 为空则写入 85 条数据；否则规范化已有数据
 function initHouseArchSeed() {
     const all = getHouseArchStorage();
     if (Object.keys(all).length === 0) {

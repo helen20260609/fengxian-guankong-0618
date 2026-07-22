@@ -1095,6 +1095,15 @@ body {
                     </select>
                 </div>
                 <div class="form-item col-2">
+                    <label class="form-label">紧急程度 <span class="required">*</span></label>
+                    <select class="form-select" id="taskUrgency">
+                        <option value="">请选择</option>
+                        <option value="high">高</option>
+                        <option value="medium">中</option>
+                        <option value="low">低</option>
+                    </select>
+                </div>
+                <div class="form-item col-2">
                     <label class="form-label">指派人员 <span class="required">*</span></label>
                     <div class="person-input-trigger" id="personTrigger" onclick="openOrgModal()">
                         <span class="placeholder" id="personPlaceholder">请选择巡查人员</span>
@@ -1230,6 +1239,10 @@ body {
                 <div class="form-item">
                     <label class="form-label">任务类型</label>
                     <div class="form-input" style="background:var(--bg-hover);" id="confirmType">-</div>
+                </div>
+                <div class="form-item">
+                    <label class="form-label">紧急程度</label>
+                    <div class="form-input" style="background:var(--bg-hover);" id="confirmUrgency">-</div>
                 </div>
                 <div class="form-item">
                     <label class="form-label">任务时限</label>
@@ -1621,6 +1634,18 @@ function updateStepper() {
 }
 
 function nextStep() {
+    if (currentStep === 1) {
+        const name = document.getElementById('taskName').value.trim();
+        const type = document.getElementById('taskType').value;
+        const urgency = document.getElementById('taskUrgency').value;
+        const person = selectedPersons.length;
+        const start = document.getElementById('taskStartDate').value;
+        const end = document.getElementById('taskEndDate').value;
+        if (!name || !type || !urgency || !person || !start || !end) {
+            alert('请填写所有必填项');
+            return;
+        }
+    }
     if (currentStep < totalSteps) {
         currentStep++;
         updateStepper();
@@ -1643,6 +1668,47 @@ function saveDraft() {
 }
 
 function confirmPublish() {
+    const name = document.getElementById('taskName').value.trim();
+    const type = document.getElementById('taskType').value;
+    const urgency = document.getElementById('taskUrgency').value;
+    const urgencyLabel = urgency === 'high' ? '高' : urgency === 'medium' ? '中' : '低';
+    const person = selectedPersons.length > 0 ? selectedPersons.map(p => p.name).join('、') : '';
+    const start = document.getElementById('taskStartDate').value;
+    const end = document.getElementById('taskEndDate').value;
+    const desc = document.getElementById('taskDesc').value;
+
+    if (!name || !type || !urgency || !person || !start || !end) {
+        alert('请填写所有必填项');
+        return;
+    }
+
+    const typeMap = { routine: '日常巡查', special: '专项巡查', temporary: '临时巡查' };
+    const newTask = {
+        id: Date.now(),
+        no: 'RW-' + Date.now(),
+        name: name,
+        type: type,
+        typeLabel: typeMap[type],
+        urgency: urgency,
+        urgencyLabel: urgencyLabel,
+        person: person,
+        startDate: start,
+        endDate: end,
+        status: 'issued',
+        statusLabel: '待接收',
+        statusClass: 'issued',
+        inspected: 0,
+        total: selectedProjects.length || 0,
+        hiddenCount: 0,
+        hiddenFixed: 0,
+        desc: desc
+    };
+
+    // 存储到 localStorage，列表页读取后展示
+    const stored = JSON.parse(localStorage.getItem('rural_patrol_tasks') || '[]');
+    stored.unshift(newTask);
+    localStorage.setItem('rural_patrol_tasks', JSON.stringify(stored));
+
     if (confirm('确认发布该风险巡查任务？发布后任务将立即生效。')) {
         alert('任务发布成功！');
         // Return to list page
@@ -2093,6 +2159,8 @@ function updateConfirmInfo() {
     const name = document.getElementById('taskName').value || '-';
     const typeMap = { routine: '日常巡查', special: '专项巡查', temporary: '临时巡查' };
     const type = typeMap[document.getElementById('taskType').value] || '-';
+    const urgencyMap = { high: '高', medium: '中', low: '低' };
+    const urgency = urgencyMap[document.getElementById('taskUrgency').value] || '-';
     const start = document.getElementById('taskStartDate').value || '-';
     const end = document.getElementById('taskEndDate').value || '-';
     const person = selectedPersons.length > 0 ? selectedPersons.map(p => p.name).join('、') : '-';
@@ -2101,6 +2169,7 @@ function updateConfirmInfo() {
 
     document.getElementById('confirmName').textContent = name;
     document.getElementById('confirmType').textContent = type;
+    document.getElementById('confirmUrgency').textContent = urgency;
     document.getElementById('confirmPeriod').textContent = start !== '-' ? `${start} 至 ${end}` : '-';
     document.getElementById('confirmPerson').textContent = person;
     document.getElementById('confirmDesc').textContent = desc;

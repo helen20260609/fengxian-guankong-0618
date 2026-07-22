@@ -115,10 +115,10 @@ body {
     flex-direction: column;
     gap: 6px;
     flex: 1;
-    min-width: 160px;
+    min-width: 120px;
 }
 .filter-item.wide {
-    min-width: 260px;
+    min-width: 200px;
     flex: 1.5;
 }
 .filter-item label {
@@ -137,9 +137,16 @@ body {
     outline: none;
     transition: border-color 0.2s;
     font-family: inherit;
+    min-width: 90px;
 }
 .filter-input:focus,
 .filter-select:focus { border-color: var(--primary); }
+
+/* Urgency */
+.urgency-badge { display: inline-flex; align-items: center; justify-content: center; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.urgency-high { color: var(--danger); background: rgba(217,48,37,0.10); }
+.urgency-medium { color: #c78000; background: rgba(199,128,0,0.10); }
+.urgency-low { color: var(--success); background: rgba(30,142,62,0.10); }
 .filter-actions {
     display: flex;
     gap: 8px;
@@ -519,7 +526,16 @@ body {
             <label>巡查人员</label>
             <input type="text" class="filter-input" id="filterPerson" placeholder="请输入巡查人员">
         </div>
-        <div class="filter-item wide">
+        <div class="filter-item" style="min-width:120px;">
+            <label>紧急程度</label>
+            <select class="filter-select" id="filterUrgency">
+                <option value="">全部</option>
+                <option value="高">高</option>
+                <option value="中">中</option>
+                <option value="低">低</option>
+            </select>
+        </div>
+        <div class="filter-item wide" style="min-width:200px;">
             <label>任务开始时间</label>
             <div style="display:flex;align-items:center;gap:6px">
                 <input type="date" class="filter-input" id="filterStartDateFrom" style="flex:1">
@@ -549,6 +565,7 @@ body {
             <thead>
                 <tr>
                     <th>任务名称</th>
+                    <th>紧急程度</th>
                     <th>关联项目数</th>
                     <th>巡查人员</th>
                     <th>开始时间</th>
@@ -652,6 +669,7 @@ let tasks = [
     {
         id: 1, name: '南桥路燃气调压站日常巡查',
         type: 'routine', typeLabel: '日常巡查',
+        urgency: 'high', urgencyLabel: '高', urgencyClass: 'urgency-high',
         archiveCount: 3,
         person: '张建国',
         inspected: 8, total: 10,
@@ -662,6 +680,7 @@ let tasks = [
     {
         id: 2, name: '奉浦大道商业综合体专项巡查',
         type: 'special', typeLabel: '专项巡查',
+        urgency: 'medium', urgencyLabel: '中', urgencyClass: 'urgency-medium',
         archiveCount: 5,
         person: '李明华',
         inspected: 12, total: 15,
@@ -672,6 +691,7 @@ let tasks = [
     {
         id: 3, name: '金海社区燃气管道季度检查',
         type: 'seasonal', typeLabel: '季节性巡查',
+        urgency: 'low', urgencyLabel: '低', urgencyClass: 'urgency-low',
         archiveCount: 2,
         person: '王志强',
         inspected: 20, total: 20,
@@ -682,6 +702,7 @@ let tasks = [
     {
         id: 4, name: '海湾旅游区供气站安全巡查',
         type: 'routine', typeLabel: '日常巡查',
+        urgency: 'low', urgencyLabel: '低', urgencyClass: 'urgency-low',
         archiveCount: 1,
         person: '陈秀英',
         inspected: 6, total: 6,
@@ -692,6 +713,7 @@ let tasks = [
     {
         id: 5, name: '青村镇老旧小区管网应急排查',
         type: 'emergency', typeLabel: '应急巡查',
+        urgency: 'high', urgencyLabel: '高', urgencyClass: 'urgency-high',
         archiveCount: 4,
         person: '刘大伟',
         inspected: 3, total: 10,
@@ -730,6 +752,7 @@ function renderTasks(data) {
         return `
         <tr>
             <td><strong>${t.name}</strong></td>
+            <td><span class="urgency-badge ${t.urgencyClass || 'urgency-medium'}">${t.urgencyLabel || '中'}</span></td>
             <td><span style="color:var(--primary);font-weight:600;">${t.archiveCount}</span> 个项目</td>
             <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>${t.person}</td>
             <td>${t.startDate || '-'}</td>
@@ -775,13 +798,18 @@ function applyFilter() {
     const type = document.getElementById('filterType').value;
     const name = document.getElementById('filterName').value.toLowerCase();
     const person = document.getElementById('filterPerson').value.toLowerCase();
-    const startDate = document.getElementById('filterStartDate').value;
+    const urgency = document.getElementById('filterUrgency').value;
+    const startDateFrom = document.getElementById('filterStartDateFrom').value;
+    const startDateTo = document.getElementById('filterStartDateTo').value;
 
     const filtered = tasks.filter(t => {
         const matchType = !type || t.type === type;
         const matchName = !name || t.name.toLowerCase().includes(name);
         const matchPerson = !person || t.person.toLowerCase().includes(person);
-        return matchType && matchName && matchPerson;
+        const matchUrgency = !urgency || (t.urgencyLabel === urgency || (urgency === '高' && t.urgency === 'high') || (urgency === '中' && t.urgency === 'medium') || (urgency === '低' && t.urgency === 'low'));
+        const matchDateFrom = !startDateFrom || (t.startDate && t.startDate >= startDateFrom);
+        const matchDateTo = !startDateTo || (t.startDate && t.startDate <= startDateTo);
+        return matchType && matchName && matchPerson && matchUrgency && matchDateFrom && matchDateTo;
     });
 
     renderTasks(filtered);
@@ -791,6 +819,7 @@ function resetFilter() {
     document.getElementById('filterType').value = '';
     document.getElementById('filterName').value = '';
     document.getElementById('filterPerson').value = '';
+    document.getElementById('filterUrgency').value = '';
     document.getElementById('filterStartDateFrom').value = '';
     document.getElementById('filterStartDateTo').value = '';
     renderTasks(tasks);
@@ -841,6 +870,9 @@ function saveTask() {
         name: name,
         type: type,
         typeLabel: typeMap[type],
+        urgency: 'medium',
+        urgencyLabel: '中',
+        urgencyClass: 'urgency-medium',
         archiveCount: parseInt(document.getElementById('taskArchiveCount').value) || 0,
         person: person,
         inspected: 0,
@@ -859,7 +891,7 @@ function saveTask() {
 function viewTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task) {
-        alert(`任务详情：\n名称：${task.name}\n类型：${task.typeLabel}\n关联项目：${task.archiveCount}个\n巡查人员：${task.person}\n进度：${task.inspected}/${task.total}\n状态：${task.statusLabel}\n发现隐患：${task.hiddenCount}个`);
+        alert(`任务详情：\n名称：${task.name}\n类型：${task.typeLabel}\n紧急程度：${task.urgencyLabel || '中'}\n关联项目：${task.archiveCount}个\n巡查人员：${task.person}\n进度：${task.inspected}/${task.total}\n状态：${task.statusLabel}\n发现隐患：${task.hiddenCount}个`);
     }
 }
 

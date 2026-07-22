@@ -291,9 +291,8 @@
             </select>
             <select class="filter-select" id="filterHouseType">
                 <option value="">房屋类型</option>
-                <option value="自住">仅自住</option>
-                <option value="自住兼经营">自住+经营</option>
-                <option value="农房辅助用房">农房辅助用房</option>
+                <option value="农村自建房">农村自建房</option>
+                <option value="城镇自建房">城镇自建房</option>
             </select>
             <select class="filter-select" id="filterStructure">
                 <option value="">全部结构形式</option>
@@ -311,10 +310,10 @@
             </select>
             <select class="filter-select" id="filterRiskLevel">
                 <option value="">全部风险等级</option>
-                <option value="重大隐患">疑似危房</option>
-                <option value="较大隐患">严重损坏房</option>
-                <option value="一般隐患">一般损坏房</option>
-                <option value="安全">完好房(基本完好房)</option>
+                <option value="疑似危房">疑似危房</option>
+                <option value="严重损坏房">严重损坏房</option>
+                <option value="一般损坏房">一般损坏房</option>
+                <option value="完好房(基本完好房)">完好房(基本完好房)</option>
             </select>
         </div>
         <div class="filter-right">
@@ -606,12 +605,13 @@ function passFilter(r) {
     const fs = document.getElementById('filterStructure').value;
     const fy = document.getElementById('filterYear').value;
     const fr = document.getElementById('filterRiskLevel').value;
+    const riskDisplay = r.riskDisplayLevel || (typeof HAZARD_TO_RISK_LEVEL !== 'undefined' ? HAZARD_TO_RISK_LEVEL[r.riskLevel] : r.riskLevel) || '未知';
     if (ft && townLabel(r) !== ft) return false;
     if (fv && villageLabel(r) !== fv) return false;
     if (fh && (r.houseType || r.category) !== fh) return false;
     if (fs && structureLabel(r) !== fs) return false;
     if (fy && yearGroup(r.year) !== fy) return false;
-    if (fr && r.riskLevel !== fr) return false;
+    if (fr && riskDisplay !== fr) return false;
     return true;
 }
 
@@ -623,9 +623,10 @@ function computeMetrics(records) {
             recurrenceRate: 0, reliefRate: 0, satisfaction: 0
         };
     }
-    const riskTasks = records.filter(r => r.risk !== 'safe' && r.totalTask > 0);
+    // 需要整改的房屋：原始风险为非安全，且总任务>0
+    const riskTasks = records.filter(r => (r.originalRisk || r.risk) !== 'safe' && r.totalTask > 0);
     const completeRate = riskTasks.length
-        ? riskTasks.reduce((s, r) => s + (r.doneTask / r.totalTask), 0) / riskTasks.length
+        ? riskTasks.reduce((s, r) => s + ((r.doneTask || 0) / r.totalTask), 0) / riskTasks.length
         : 0;
 
     const timelyRate = riskTasks.length
@@ -651,9 +652,14 @@ function computeMetrics(records) {
         }, 0) / riskTasks.length
         : 0;
 
-    const dangerHouses = records.filter(r => r.riskLevel === '重大隐患' || r.riskLevel === '较大隐患');
+    // 危房：以原始风险等级（销号前）判定 C/D 级危房
+    const dangerHouses = records.filter(r => {
+        const originalLevel = r.originalRiskLevel || r.riskLevel;
+        const riskDisplay = HAZARD_TO_RISK_LEVEL && HAZARD_TO_RISK_LEVEL[originalLevel] ? HAZARD_TO_RISK_LEVEL[originalLevel] : originalLevel;
+        return riskDisplay === '疑似危房' || riskDisplay === '严重损坏房';
+    });
     const reliefRate = dangerHouses.length
-        ? dangerHouses.filter(r => r.closeStatus === '已通过' || r.riskLevel === '安全' || r.riskLevel === '无风险').length / dangerHouses.length
+        ? dangerHouses.filter(r => r.closeStatus === '已通过').length / dangerHouses.length
         : 0;
 
     // satisfaction: weighted by complete & timely & effective, plus random base
@@ -684,7 +690,14 @@ function groupByDimension(records, mode) {
         case 'type': return groupBy(records, r => r.houseType || r.category || '未知');
         case 'year': return groupBy(records, r => yearGroup(r.year));
         case 'structure': return groupBy(records, structureLabel);
-        case 'risk': return groupBy(records, r => r.riskLevel || '未知');
+        case 'risk': {
+            const riskDisplayOf = r => {
+                if (r.riskDisplayLevel) return r.riskDisplayLevel;
+                const level = r.originalRiskLevel || r.riskLevel || '未知';
+                return HAZARD_TO_RISK_LEVEL && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
+            };
+            return groupBy(records, riskDisplayOf);
+        }
         default: return groupBy(records, townLabel);
     }
 }
@@ -839,20 +852,25 @@ function initChart(id, option) {
 }
 
 function renderRiskDist(records) {
-    const groups = groupBy(records, r => r.riskLevel || '未知');
-    const order = ['重大隐患', '较大隐患', '一般隐患', '安全', '无风险'];
-    const labelMap = {
-        '重大隐患': '疑似危房',
-        '较大隐患': '严重损坏房',
-        '一般隐患': '一般损坏房',
-        '安全': '完好房(基本完好房)',
-        '无风险': '完好房(基本完好房)'
+    // 风险等级已统一至数据层；销号房屋使用原始风险等级回溯
+    const riskDisplayOf = r => {
+        if (r.riskDisplayLevel) return r.riskDisplayLevel;
+        const level = r.originalRiskLevel || r.riskLevel || '未知';
+        return HAZARD_TO_RISK_LEVEL && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
     };
-    const data = order.filter(k => groups[k]).map(k => ({ value: groups[k].length, name: labelMap[k] || k }));
+    const groups = groupBy(records, riskDisplayOf);
+    const order = ['疑似危房', '严重损坏房', '一般损坏房', '完好房(基本完好房)'];
+    const colorMap = {
+        '疑似危房': '#d93025',
+        '严重损坏房': '#e65100',
+        '一般损坏房': '#f9c846',
+        '完好房(基本完好房)': '#1e8e3e'
+    };
+    const data = order.filter(k => groups[k]).map(k => ({ value: groups[k].length, name: k, itemStyle: { color: colorMap[k] } }));
     initChart('chartRiskDist', {
         tooltip: { trigger: 'item', formatter: function(p) { return p.name + ': ' + p.value + ' (' + p.percent.toFixed(1) + '%)'; } },
         legend: { bottom: 0, textStyle: { color: getThemeColors().text } },
-        color: ['#d93025', '#e65100', '#f9c846', '#1a73e8', '#1e8e3e'],
+        color: ['#d93025', '#e65100', '#f9c846', '#1e8e3e'],
         series: [{
             type: 'pie', radius: ['40%', '65%'], center: ['50%', '45%'],
             label: { color: getThemeColors().text },
@@ -1019,13 +1037,18 @@ function renderRankChart(records) {
 }
 
 function renderHeatmap(records) {
-    // Use village x risk-level matrix
+    // 行政村 × 风险等级矩阵；销号房屋使用原始风险等级
+    const riskDisplayOf = r => {
+        if (r.riskDisplayLevel) return r.riskDisplayLevel;
+        const level = r.originalRiskLevel || r.riskLevel || '未知';
+        return HAZARD_TO_RISK_LEVEL && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
+    };
     const villages = [...new Set(records.map(villageLabel))].sort();
-    const levels = ['重大隐患', '较大隐患', '一般隐患'];
+    const levels = ['疑似危房', '严重损坏房', '一般损坏房', '完好房(基本完好房)'];
     const data = [];
     villages.forEach((v, y) => {
         levels.forEach((lvl, x) => {
-            const count = records.filter(r => villageLabel(r) === v && r.riskLevel === lvl).length;
+            const count = records.filter(r => villageLabel(r) === v && riskDisplayOf(r) === lvl).length;
             data.push([x, y, count]);
         });
     });

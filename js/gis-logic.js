@@ -39,10 +39,10 @@ let footprintPolygons = [];
 let leftChart, streetRankingChart, measurePieChart;
 
 const RISK_CONFIG = {
-    danger: { label: '严重安全隐患', color: '#d93025', class: 'danger', shape: 'triangle' },
-    major: { label: '一定安全隐患', color: '#f57c00', class: 'major', shape: 'square' },
-    warning: { label: '带轻微瑕疵', color: '#f9ab00', class: 'warning', shape: 'circle' },
-    safe: { label: '未发现安全隐患', color: '#1a73e8', class: 'safe', shape: 'circle' }
+    danger: { label: '疑似危房', color: '#d93025', class: 'danger', shape: 'triangle' },
+    major: { label: '严重损坏房', color: '#f57c00', class: 'major', shape: 'square' },
+    warning: { label: '一般损坏房', color: '#f9ab00', class: 'warning', shape: 'circle' },
+    safe: { label: '完好房(基本完好房)', color: '#1a73e8', class: 'safe', shape: 'circle' }
 };
 
 const STATUS_CONFIG = {
@@ -85,9 +85,9 @@ const LAYER_MODES = {
     base: {
         name: '房屋底图', colorBy: 'risk', shapeBy: 'risk', statusMap: RISK_CONFIG,
         filters: [
-            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'danger', label: '严重安全隐患', icon: 'fa-exclamation-triangle' },
-            { key: 'major', label: '一定安全隐患', icon: 'fa-exclamation-circle' }, { key: 'warning', label: '带轻微瑕疵', icon: 'fa-exclamation' },
-            { key: 'safe', label: '未发现安全隐患', icon: 'fa-check-circle' }
+            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'danger', label: '疑似危房', icon: 'fa-exclamation-triangle' },
+            { key: 'major', label: '严重损坏房', icon: 'fa-exclamation-circle' }, { key: 'warning', label: '一般损坏房', icon: 'fa-exclamation' },
+            { key: 'safe', label: '完好房(基本完好房)', icon: 'fa-check-circle' }
         ]
     },
     governance: {
@@ -381,7 +381,7 @@ function buildHousePopup(item, idx) {
     const hazardsHtml = item.hazards && item.hazards.length ? '<ul>' + item.hazards.map(h => '<li>' + h.part + '：' + h.type + '（' + h.level + '）</li>').join('') + '</ul>' : '<p style="color:var(--text-secondary);font-size:12px;">暂无隐患</p>';
     return '<div style="min-width:260px;max-width:320px;">' +
         '<div class="popup-section">' +
-        '<span class="popup-status-tag" style="color:' + riskCfg.color + ';background:' + hexToRgba(riskCfg.color, 0.12) + '">' + getShapeHtml(riskCfg.shape, riskCfg.color, 10) + ' 隐患等级：' + riskCfg.label + '</span>' +
+        '<span class="popup-status-tag" style="color:' + riskCfg.color + ';background:' + hexToRgba(riskCfg.color, 0.12) + '">' + getShapeHtml(riskCfg.shape, riskCfg.color, 10) + ' 风险等级：' + riskCfg.label + '</span>' +
         '<span class="popup-status-tag" style="color:' + statusCfg.color + ';background:' + hexToRgba(statusCfg.color, 0.12) + '">整治状态：' + statusCfg.label + '</span>' +
         '</div>' +
         '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-home"></i> 基本信息</div>' +
@@ -441,7 +441,7 @@ function renderLegend() {
     } else {
         html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">颜色：状态</div>';
         Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
-        html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：隐患等级</div>';
+        html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：风险等级</div>';
         Object.keys(RISK_CONFIG).forEach(key => { const cfg = RISK_CONFIG[key]; html += '<div class="legend-item"><span class="legend-symbol" style="color:' + cfg.color + '">' + getShapeHtml(cfg.shape, cfg.color, 12) + '</span><span>' + cfg.label + '</span></div>'; });
         html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">图斑：房屋占地轮廓</div>';
         html += '<div class="legend-item"><span class="legend-dot" style="background:#1a73e8;"></span><span>颜色随状态变化</span></div>';
@@ -665,7 +665,7 @@ function switchTab(tab) {
     if (tab === 'basic') {
         body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">房屋名称</div><div class="arch-value">' + item.name + '</div></div><div class="arch-row"><div class="arch-label">房屋编号</div><div class="arch-value">' + item.no + '</div></div><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
     } else if (tab === 'hazard') {
-        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">危险等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level).class + '">' + getRiskConfig(h.level).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
+        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">风险等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level).class + '">' + getRiskConfig(h.level).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
     } else if (tab === 'measure') {
         body.innerHTML = '<div class="arch-section">' + (item.measures && item.measures.length ? item.measures.map(m => '<div class="arch-row"><div class="arch-label">' + (m.type === 'management' ? '管理' : '工程') + '措施</div><div class="arch-value">' + m.name + '</div></div><div class="arch-row"><div class="arch-label">当前状态</div><div class="arch-value"><span class="risk-tag ' + (m.status === 'done' ? 'safe' : m.status === 'doing' ? 'doing' : 'pending') + '">' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无整治措施</div></div>') + '</div>';
     } else if (tab === 'progress') {

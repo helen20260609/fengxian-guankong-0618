@@ -6,7 +6,7 @@ html = open('e:/风险管控0618/pages/patrol-task-config.html', 'rb').read().de
 # 乡镇、行政村、风险等级、房屋类型、结构类型、巡查人员选项（供替换数据使用）
 TOWNS = ['南桥镇', '奉城镇', '四团镇', '柘林镇', '庄行镇', '金汇镇', '青村镇', '海湾镇']
 VILLAGES = ['张翁庙村', '洪庙村', '五四村', '新寺村', '潘垫村', '明星村', '李窑村', '星火村', '杨王村', '久茂村', '三坎村', '营房村']
-RISK_LEVELS = ['重大隐患', '较大隐患', '一般隐患', '无风险']
+RISK_LEVELS = ['疑似危房', '严重损坏房', '一般损坏房', '完好房(基本完好房)']
 HOUSE_TYPES = ['自住', '自住兼经营', '农房辅助用房']
 STRUCTURES = ['砖混结构', '框架结构', '砖木结构', '土木结构']
 PERSONS = ['张建国', '李秀英', '王志强', '陈美华', '刘大海', '孙明华', '赵敏', '周强', '吴芳', '郑辉']
@@ -54,10 +54,10 @@ html = html.replace('placeholder="搜索配置名称、巡查单位、巡查人�
 
 # 4. 替换筛选选项
 # 紧急程度选项 -> 风险等级
-html = html.replace('<option value="极高">极高</option>', '<option value="重大隐患">重大隐患</option>')
-html = html.replace('<option value="高">高</option>', '<option value="较大隐患">较大隐患</option>')
-html = html.replace('<option value="中">中</option>', '<option value="一般隐患">一般隐患</option>')
-html = html.replace('<option value="低">低</option>', '<option value="无风险">无风险</option>')
+html = html.replace('<option value="极高">极高</option>', '<option value="疑似危房">疑似危房</option>')
+html = html.replace('<option value="高">高</option>', '<option value="严重损坏房">严重损坏房</option>')
+html = html.replace('<option value="中">中</option>', '<option value="一般损坏房">一般损坏房</option>')
+html = html.replace('<option value="低">低</option>', '<option value="完好房(基本完好房)">完好房(基本完好房)</option>')
 html = html.replace('<option value="">全部紧急程度</option>', '<option value="">全部风险等级</option>')
 
 # 巡查单位选项 -> 乡镇/街道
