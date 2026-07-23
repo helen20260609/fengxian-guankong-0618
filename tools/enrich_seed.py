@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 重构 js/house-arch-data.js 的 generateHouseSeed 函数，生成更丰富的模拟数据。
-- 风险等级：疑似危房 / 严重损坏房 / 一般损坏房 / 未发现安全隐患 / 带轻微瑕疵
+- 风险等级：疑似危房 / 严重损坏房 / 一般损坏房 / 完好房(基本完好房)
 - 治理状态：待整治 / 整治中 / 已整治 / 逾期未整治
 - 销号状态：未申请 / 审核中 / 已通过 / 待审核 / 已驳回
 - 分布更真实：高风险房屋占少数，低风险/安全占多数
@@ -46,13 +46,13 @@ new_func = '''function generateHouseSeed() {
     const categories = ['农村自建房', '城镇自建房'];
     const structTypes = ['砖混', '砖木', '框架'];
 
-    // 真实的农村自建房风险分布：安全/轻微瑕疵占多数，危房占少数
+    // 真实的农村自建房风险分布：完好房/一般损坏房占多数，危房占少数
     const RISK_DISTRIBUTION = [
         { risk: 'danger',  governanceWeights: { done: 0.35, doing: 0.30, overdue: 0.20, pending: 0.15 }, ratio: 0.10 }, // 疑似危房
         { risk: 'major',   governanceWeights: { done: 0.30, doing: 0.40, overdue: 0.15, pending: 0.15 }, ratio: 0.15 }, // 严重损坏房
-        { risk: 'warning', governanceWeights: { done: 0.45, doing: 0.25, overdue: 0.10, pending: 0.20 }, ratio: 0.25 }, // 一般损坏房 / 带轻微瑕疵
-        { risk: 'warning', governanceWeights: { done: 0.70, doing: 0.15, overdue: 0.05, pending: 0.10 }, ratio: 0.15 }, // 带轻微瑕疵
-        { risk: 'safe',    governanceWeights: { done: 1.0 },                                 ratio: 0.35 }  // 未发现安全隐患
+        { risk: 'warning', governanceWeights: { done: 0.45, doing: 0.25, overdue: 0.10, pending: 0.20 }, ratio: 0.25 }, // 一般损坏房（高整治权重）
+        { risk: 'warning', governanceWeights: { done: 0.70, doing: 0.15, overdue: 0.05, pending: 0.10 }, ratio: 0.15 }, // 一般损坏房（低整治权重）
+        { risk: 'safe',    governanceWeights: { done: 1.0 },                                 ratio: 0.35 }  // 完好房(基本完好房)
     ];
 
     const weightedPick = (weights) => {
@@ -136,7 +136,7 @@ new_func = '''function generateHouseSeed() {
             rejectReason = '整治不到位，需补充材料';
         }
 
-        // 已销号且治理完成的风险统一为 safe/未发现安全隐患
+        // 已销号且治理完成的风险统一为 safe/完好房(基本完好房)
         if (governance === 'done' && closeStatus === '已通过') {
             risk = 'safe';
         }
@@ -338,4 +338,4 @@ with open(FILE, 'w', encoding='utf-8') as f:
 print('已更新 generateHouseSeed：120条记录，风险分布更丰富')
 
 # 输出替换后的数据分布预览
-print('风险分布权重：疑似危房10% | 严重损坏房15% | 一般损坏房25% | 带轻微瑕疵15% | 安全35%')
+print('风险分布权重：疑似危房10% | 严重损坏房15% | 一般损坏房25% | 完好房(基本完好房)35%')

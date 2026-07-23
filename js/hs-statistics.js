@@ -296,7 +296,7 @@
                 const count = data.filter(i => i.risk === risk).length;
                 const pct = ((count / total) * 100).toFixed(2) + '%';
                 const tagClass = tagMap[risk];
-                return `<tr><td>${riskMap[risk].label}</td><td>${count}</td><td>${pct}</td><td><span class="tag ${tagClass}">${riskMap[risk].label}</span></td></tr>`;
+                return `<tr><td><span class="tag ${tagClass}">${riskMap[risk].label}</span></td><td>${count}</td><td>${pct}</td></tr>`;
             }).join('');
         }
 
