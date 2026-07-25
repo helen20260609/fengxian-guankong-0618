@@ -365,6 +365,13 @@ body {
 .status-tag.processing { background: rgba(0,151,167,0.12); color: var(--secondary); }
 .status-tag.completed { background: rgba(30,142,62,0.12); color: var(--success); }
 
+/* ===== Risk Tag ===== */
+.risk-tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.risk-tag.red { background: rgba(217,48,37,0.12); color: var(--danger); }
+.risk-tag.orange { background: rgba(230,81,0,0.12); color: var(--warning); }
+.risk-tag.yellow { background: rgba(199,128,0,0.12); color: #c78000; }
+.risk-tag.blue { background: rgba(26,115,232,0.12); color: var(--primary); }
+
 /* ===== Table ===== */
 .data-table {
  width: 100%;
@@ -965,8 +972,121 @@ window.addEventListener('message', function(e) {
  }
 });
 
-// Demo task data
-const taskData = {
+// ===== Load task data from localStorage by URL id =====
+function loadTaskDataFromStorage() {
+ const params = new URLSearchParams(window.location.search);
+ const taskId = parseInt(params.get('id'), 10);
+ let stored = null;
+ try {
+  const raw = localStorage.getItem('patrolTasks');
+  if (raw) {
+   const tasks = JSON.parse(raw);
+   if (Array.isArray(tasks)) {
+    stored = tasks.find(t => Number(t.id) === taskId) || null;
+   }
+  }
+ } catch (e) { console.warn('读取任务数据失败', e); }
+ return stored;
+}
+
+function makeNoLabel(t) {
+ if (t.no) return t.no;
+ const d = t.createTime ? t.createTime.split(' ')[0] : '2025-06-01';
+ const idx = String(t.id || 0).slice(-3).padStart(3, '0');
+ return 'FX-RW-' + d.replace(/-/g, '') + '-' + idx;
+}
+
+function makeScopeData(t) {
+ // 优先使用任务内选中的项目生成巡查点
+ const projects = Array.isArray(t.selectedProjects) ? t.selectedProjects : [];
+ const projectIds = Array.isArray(t.selectedProjectIds)
+  ? t.selectedProjectIds
+  : (t.selectedProjects ? t.selectedProjects.map(p => p.id) : []);
+ if (projects.length > 0) {
+  return projects.map((p, i) => {
+   const rd = p.riskDistribution || { red: 0, orange: 0, yellow: 0, blue: 0 };
+   const totalRisk = rd.red + rd.orange + rd.yellow + rd.blue;
+   let risk = 'low', riskLabel = '一般损坏房';
+   if (rd.red > 0) { risk = 'high'; riskLabel = '疑似危房'; }
+   else if (rd.orange > 0) { risk = 'medium'; riskLabel = '严重损坏房'; }
+   else if (rd.yellow > 0) { risk = 'medium'; riskLabel = '一般损坏房'; }
+   return {
+    id: p.id || i + 1,
+    name: p.name || '巡查点' + (i + 1),
+    type: p.typeLabel || '农村自建房',
+    company: p.enterprise || p.regionLabel || t.unitName || '巡查单位',
+    address: p.address || (p.regionLabel || '') + (p.name || ''),
+    risk: risk,
+    riskLabel: riskLabel,
+    riskDistribution: rd,
+    status: 'pending',
+    statusLabel: '待巡查',
+    time: '-',
+    checkItems: []
+   };
+  });
+ }
+
+ // 如果没有具体项目，按任务覆盖范围生成一个占位巡查点
+ const count = t.archiveCount || t.houseCount || t.total || 1;
+ const scopeName = t.name ? t.name.replace(/巡查|排查|检查/g, '') : '巡查范围';
+ return [{
+  id: 1,
+  name: scopeName + '（共' + count + '处）',
+  type: t.typeLabel || '农村自建房',
+  company: t.unitName || '巡查单位',
+  address: t.village || t.town || '-',
+  risk: 'low',
+  riskLabel: '一般损坏房',
+  riskDistribution: { red: 0, orange: 0, yellow: 0, blue: count },
+  status: 'pending',
+  statusLabel: '待巡查',
+  time: '-',
+  checkItems: []
+ }];
+}
+
+function makeIssueData(t) {
+ const hiddenCount = Number(t.hiddenCount) || 0;
+ if (hiddenCount <= 0) return [];
+ const issues = [];
+ for (let i = 0; i < hiddenCount; i++) {
+  issues.push({
+   id: i + 1,
+   main: '农村自建房结构',
+   sub: i % 2 === 0 ? '墙体/梁柱' : '构件（节点）',
+   content: i % 2 === 0 ? '强度不足' : '连接节点不牢',
+   scope: Array.isArray(t.selectedProjects) && t.selectedProjects[i]
+    ? t.selectedProjects[i].name
+    : '巡查范围',
+   risk: i % 3 === 0 ? 'high' : 'medium',
+   riskLabel: i % 3 === 0 ? '疑似危房' : '严重损坏房',
+   status: 'pending-audit',
+   statusLabel: '待审核',
+   foundTime: t.createTime ? t.createTime.split(' ')[0] + ' 09:30' : '2025-06-02 09:30',
+   deadline: t.endDate ? t.endDate + ' 18:00:00' : '2025-06-10 18:00:00'
+  });
+ }
+ return issues;
+}
+
+function makeTimelineData(t) {
+ const createTime = t.createTime || '2025-06-01 09:30';
+ const date = createTime.split(' ')[0];
+ return [
+  { title: '任务创建', operator: t.createBy || '系统管理员', time: createTime, desc: '创建巡查任务：' + t.name, type: 'completed' },
+  { title: '任务下发', operator: t.createBy || '系统管理员', time: date + ' 10:15', desc: '将任务下发至' + (t.unitName || '巡查单位'), type: 'completed' },
+  { title: '任务接收', operator: t.person || '巡查人员', time: date + ' 10:20', desc: '接收任务，确认巡查范围和时间安排', type: 'completed' },
+  { title: '人员分配', operator: t.person || '巡查人员', time: date + ' 14:00', desc: '分配巡查人员：' + (t.person || '待分配'), type: 'completed' },
+  { title: '开始执行', operator: t.person || '巡查人员', time: date + ' 08:30', desc: '开始现场巡查', type: t.status === 'completed' ? 'completed' : 'active' },
+  { title: '问题上报', operator: t.person || '巡查人员', time: date + ' 09:00', desc: '上报隐患情况', type: t.status === 'completed' ? 'completed' : 'active' }
+ ];
+}
+
+const storedTask = loadTaskDataFromStorage();
+
+// Demo fallback task data
+const fallbackTaskData = {
  id: 5,
  no: 'FX-RW-2025-005',
  name: '青村镇农村自建房房屋结构应急排查',
@@ -990,16 +1110,56 @@ const taskData = {
  createBy: '系统管理员'
 };
 
+let taskData;
+if (storedTask) {
+ const statusMap = {
+  draft: { label: '草稿', cls: 'draft' },
+  issued: { label: '已下发', cls: 'issued' },
+  processing: { label: '进行中', cls: 'processing' },
+  pending: { label: '待接收', cls: 'pending-assign' },
+  completed: { label: '已完成', cls: 'completed' },
+  rejected: { label: '已退回', cls: 'pending-assign' }
+ };
+ const s = statusMap[storedTask.status] || { label: storedTask.statusLabel || '进行中', cls: storedTask.statusClass || 'processing' };
+ taskData = {
+  id: storedTask.id,
+  no: makeNoLabel(storedTask),
+  name: storedTask.name,
+  type: storedTask.type || 'temporary',
+  typeLabel: storedTask.typeLabel || '临时巡查',
+  urgency: storedTask.urgency || 'medium',
+  urgencyLabel: storedTask.urgencyLabel || '中',
+  archiveCount: storedTask.archiveCount || storedTask.houseCount || storedTask.total || 1,
+  unit: storedTask.unitName || storedTask.unit || '农村自建房管理办公室',
+  person: storedTask.person || '待分配',
+  inspected: Number(storedTask.inspected) || 0,
+  total: Number(storedTask.total) || (storedTask.archiveCount || storedTask.houseCount || 1),
+  status: storedTask.status || 'processing',
+  statusLabel: s.label,
+  statusClass: s.cls,
+  hiddenCount: Number(storedTask.hiddenCount) || 0,
+  hiddenFixed: Number(storedTask.hiddenFixed) || 0,
+  startDate: storedTask.startDate || '-',
+  endDate: storedTask.endDate || '-',
+  desc: storedTask.desc || '-',
+  createTime: storedTask.createTime || '-',
+  createBy: storedTask.createBy || '系统管理员',
+  finishTime: storedTask.finishTime || ''
+ };
+} else {
+ taskData = fallbackTaskData;
+}
+
 // Status flow steps
 const flowSteps = [
- { key: 'draft', label: '任务创建', icon: 'fa-pen', time: '2025-06-01 09:30' },
- { key: 'issued', label: '待接收', icon: 'fa-paper-plane', time: '2025-06-01 10:15' },
- { key: 'processing', label: '进行中', icon: 'fa-spinner', time: '2025-06-02 08:30' },
+ { key: 'draft', label: '任务创建', icon: 'fa-pen', time: taskData.createTime },
+ { key: 'issued', label: '待接收', icon: 'fa-paper-plane', time: null },
+ { key: 'processing', label: '进行中', icon: 'fa-spinner', time: null },
  { key: 'completed', label: '已完成', icon: 'fa-check', time: null }
 ];
 
-// Scope data
-const scopeData = [
+// Scope / Issue / Timeline data
+const scopeData = storedTask ? makeScopeData(storedTask) : [
  { id: 1, name: '青村镇解放路120号自建房', type: '农村自建房', company: '青村镇村镇建设管理办公室', address: '青村镇解放路120号', risk: 'high', riskLabel: '疑似危房', riskDistribution: { red: 1, orange: 0, yellow: 0, blue: 0 }, status: 'pending', statusLabel: '待巡查', time: '-', checkItems: [
   { id: 1, main: '农村自建房结构', sub: '墙体/梁柱', content: '墙体、梁柱、基础构件缺陷', risk: '房屋结构用材不符合国家相关规范要求形成管体破裂', accident: '坍塌、人员伤亡', level: 'orange', result: 'normal' },
   { id: 2, main: '农村自建房结构', sub: '墙体/梁柱', content: '强度不足', risk: '结构强度检测不符合国家相关规范要求', accident: '坍塌、人员伤亡', level: 'yellow', result: 'abnormal' }
@@ -1011,14 +1171,12 @@ const scopeData = [
  { id: 4, name: '青村镇光明路200号自建房', type: '农村自建房', company: '青村镇村镇建设管理办公室', address: '青村镇光明路200号', risk: 'low', riskLabel: '一般损坏房', riskDistribution: { red: 0, orange: 0, yellow: 0, blue: 1 }, status: 'pending', statusLabel: '待巡查', time: '-', checkItems: []}
 ];
 
-// Issue data
-const issueData = [
+const issueData = storedTask ? makeIssueData(storedTask) : [
  { id: 1, main: '农村自建房结构', sub: '墙体/梁柱', content: '强度不足', scope: '青村镇解放路120号自建房', risk: 'high', riskLabel: '疑似危房', status: 'pending-audit', statusLabel: '待审核', foundTime: '2025-06-02 09:30', deadline: '2025-06-10 18:00:00' },
  { id: 2, main: '农村自建房结构', sub: '构件（节点）', content: '连接节点不牢', scope: '青村镇人民路88号隐患点', risk: 'medium', riskLabel: '严重损坏房', status: 'pending-handle', statusLabel: '待处置', foundTime: '2025-06-02 10:45', deadline: '2025-06-15 18:00:00' }
 ];
 
-// Timeline data
-const timelineData = [
+const timelineData = storedTask ? makeTimelineData(storedTask) : [
  { title: '任务创建', operator: '系统管理员', time: '2025-06-01 09:30', desc: '创建巡查任务：青村镇农村自建房房屋结构应急排查', type: 'completed' },
  { title: '任务下发', operator: '系统管理员', time: '2025-06-01 10:15', desc: '将任务下发至农村自建房管理办公室', type: 'completed' },
  { title: '任务接收', operator: '刘大伟', time: '2025-06-01 10:20', desc: '接收任务，确认巡查范围和时间安排', type: 'completed' },

@@ -1168,27 +1168,142 @@ body {
 </div>
 
 <script>
-// 模拟数据：农村自建房风险巡查分析
-const mockData = {
-    regions: [
-        { name: '南桥镇', taskTotal: 320, taskDone: 285, riskCount: 18, rectifyTotal: 22, rectifyDone: 19 },
-        { name: '奉浦街道', taskTotal: 210, taskDone: 193, riskCount: 15, rectifyTotal: 18, rectifyDone: 16 },
-        { name: '金汇镇', taskTotal: 280, taskDone: 246, riskCount: 21, rectifyTotal: 20, rectifyDone: 15 },
-        { name: '青村镇', taskTotal: 195, taskDone: 154, riskCount: 12, rectifyTotal: 14, rectifyDone: 10 },
-        { name: '四团镇', taskTotal: 170, taskDone: 136, riskCount: 14, rectifyTotal: 12, rectifyDone: 9 },
-        { name: '柘林镇', taskTotal: 150, taskDone: 123, riskCount: 9, rectifyTotal: 10, rectifyDone: 8 }
-    ],
-    points: [
-        { id: 1, name: '南桥镇人民路12号自建房', type: 'task', status: 'done', lat: 30.9178, lng: 121.4589, time: '2025-06-28 14:30', person: '张建国', region: '南桥镇' },
-        { id: 2, name: '奉浦街道环城东路88号经营性自建房', type: 'risk', level: 'major', lat: 30.9234, lng: 121.4723, time: '2025-06-27 09:15', person: '李秀英', region: '奉浦街道' },
-        { id: 3, name: '金汇镇工业路45号C级危房', type: 'risk', level: 'large', lat: 30.9456, lng: 121.4891, time: '2025-06-26 16:20', person: '王志强', region: '金汇镇' },
-        { id: 4, name: '南桥镇新建中路23号隐患整改中', type: 'rectify', level: 'major', status: 'doing', lat: 30.9189, lng: 121.4601, time: '2025-06-25 10:00', person: '陈美华', region: '南桥镇' },
-        { id: 5, name: '奉浦街道八字桥村农房辅助用房', type: 'task', status: 'pending', lat: 30.9245, lng: 121.4734, time: '2025-06-29 08:30', person: '刘大海', region: '奉浦街道' },
-        { id: 6, name: '青村镇李窑村土木结构危房', type: 'risk', level: 'general', lat: 30.9100, lng: 121.5200, time: '2025-06-24 11:20', person: '孙明华', region: '青村镇' },
-        { id: 7, name: '四团镇三坎村危房整改完成', type: 'rectify', level: 'major', status: 'done', lat: 30.8900, lng: 121.5400, time: '2025-06-23 15:45', person: '赵敏', region: '四团镇' },
-        { id: 8, name: '柘林镇营房村砖木结构自建房', type: 'risk', level: 'low', lat: 30.8800, lng: 121.5000, time: '2025-06-22 13:10', person: '郑辉', region: '柘林镇' }
-    ]
+// 从 localStorage 加载真实任务数据
+const allRegions = ['南桥镇', '奉浦街道', '金汇镇', '青村镇', '四团镇', '柘林镇', '庄行镇', '西渡街道', '海湾镇', '奉城镇', '头桥街道', '金海街道'];
+const townCoordinates = {
+    '南桥镇': { lat: 30.9178, lng: 121.4589 },
+    '奉浦街道': { lat: 30.9234, lng: 121.4723 },
+    '金汇镇': { lat: 30.9456, lng: 121.4891 },
+    '青村镇': { lat: 30.9100, lng: 121.5200 },
+    '四团镇': { lat: 30.8900, lng: 121.5400 },
+    '柘林镇': { lat: 30.8800, lng: 121.5000 },
+    '庄行镇': { lat: 30.9000, lng: 121.4000 },
+    '西渡街道': { lat: 30.9400, lng: 121.4300 },
+    '海湾镇': { lat: 30.8500, lng: 121.5000 },
+    '奉城镇': { lat: 30.9000, lng: 121.5700 },
+    '头桥街道': { lat: 30.9500, lng: 121.5800 },
+    '金海街道': { lat: 30.9100, lng: 121.4700 }
 };
+
+function getTasksFromStorage() {
+    try {
+        const raw = localStorage.getItem('patrolTasks');
+        return JSON.parse(raw || '[]') || [];
+    } catch (e) {
+        console.error('读取 patrolTasks 失败', e);
+        return [];
+    }
+}
+
+function isTaskCompleted(t) {
+    return t.status === 'completed' || t.statusLabel === '已完成' || t.statusClass === 'success' || /完成|done/.test(String(t.statusLabel || t.status));
+}
+
+function isRiskTask(t) {
+    return t.type === 'risk' || /风险|专项/.test(String(t.typeLabel || ''));
+}
+
+function isRectifyTask(t) {
+    return t.type === 'rectify' || /整改/.test(String(t.typeLabel || ''));
+}
+
+function riskLevelFromTask(t) {
+    const level = String(t.riskLevel || t.urgency || '');
+    if (/重大|高|一级|red|major/.test(level)) return 'major';
+    if (/较大|中|二级|orange|large/.test(level)) return 'large';
+    if (/一般|低|三级|yellow|general/.test(level)) return 'general';
+    return 'low';
+}
+
+function generateMockData() {
+    const tasks = getTasksFromStorage();
+
+    // 按街镇聚合统计
+    const regionMap = {};
+    allRegions.forEach(name => {
+        regionMap[name] = { name, taskTotal: 0, taskDone: 0, riskCount: 0, rectifyTotal: 0, rectifyDone: 0 };
+    });
+
+    tasks.forEach(t => {
+        const region = t.town || '南桥镇';
+        if (!regionMap[region]) regionMap[region] = { name: region, taskTotal: 0, taskDone: 0, riskCount: 0, rectifyTotal: 0, rectifyDone: 0 };
+        const r = regionMap[region];
+        r.taskTotal++;
+        if (isTaskCompleted(t)) r.taskDone++;
+        r.riskCount += (parseInt(t.hiddenCount, 10) || 0);
+        r.rectifyTotal += (parseInt(t.hiddenCount, 10) || 0);
+        r.rectifyDone += (parseInt(t.hiddenFixed, 10) || 0);
+    });
+
+    // 没有真实数据时给出默认演示数据，保证页面不空
+    const hasData = tasks.length > 0;
+    const regions = allRegions.map(name => regionMap[name]).filter(r => hasData ? r.taskTotal > 0 : true);
+    if (!hasData) {
+        return {
+            regions: [
+                { name: '南桥镇', taskTotal: 320, taskDone: 285, riskCount: 18, rectifyTotal: 22, rectifyDone: 19 },
+                { name: '奉浦街道', taskTotal: 210, taskDone: 193, riskCount: 15, rectifyTotal: 18, rectifyDone: 16 },
+                { name: '金汇镇', taskTotal: 280, taskDone: 246, riskCount: 21, rectifyTotal: 20, rectifyDone: 15 },
+                { name: '青村镇', taskTotal: 195, taskDone: 154, riskCount: 12, rectifyTotal: 14, rectifyDone: 10 },
+                { name: '四团镇', taskTotal: 170, taskDone: 136, riskCount: 14, rectifyTotal: 12, rectifyDone: 9 },
+                { name: '柘林镇', taskTotal: 150, taskDone: 123, riskCount: 9, rectifyTotal: 10, rectifyDone: 8 }
+            ],
+            points: [
+                { id: 1, name: '南桥镇人民路12号自建房', type: 'task', status: 'done', lat: 30.9178, lng: 121.4589, time: '2025-06-28 14:30', person: '张建国', region: '南桥镇' },
+                { id: 2, name: '奉浦街道环城东路88号经营性自建房', type: 'risk', level: 'major', lat: 30.9234, lng: 121.4723, time: '2025-06-27 09:15', person: '李秀英', region: '奉浦街道' },
+                { id: 3, name: '金汇镇工业路45号C级危房', type: 'risk', level: 'large', lat: 30.9456, lng: 121.4891, time: '2025-06-26 16:20', person: '王志强', region: '金汇镇' },
+                { id: 4, name: '南桥镇新建中路23号隐患整改中', type: 'rectify', level: 'major', status: 'doing', lat: 30.9189, lng: 121.4601, time: '2025-06-25 10:00', person: '陈美华', region: '南桥镇' },
+                { id: 5, name: '奉浦街道八字桥村农房辅助用房', type: 'task', status: 'pending', lat: 30.9245, lng: 121.4734, time: '2025-06-29 08:30', person: '刘大海', region: '奉浦街道' },
+                { id: 6, name: '青村镇李窑村土木结构危房', type: 'risk', level: 'general', lat: 30.9100, lng: 121.5200, time: '2025-06-24 11:20', person: '孙明华', region: '青村镇' },
+                { id: 7, name: '四团镇三坎村危房整改完成', type: 'rectify', level: 'major', status: 'done', lat: 30.8900, lng: 121.5400, time: '2025-06-23 15:45', person: '赵敏', region: '四团镇' },
+                { id: 8, name: '柘林镇营房村砖木结构自建房', type: 'risk', level: 'low', lat: 30.8800, lng: 121.5000, time: '2025-06-22 13:10', person: '郑辉', region: '柘林镇' }
+            ]
+        };
+    }
+
+    // 根据真实任务生成地图点位（按任务或关联房屋）
+    let pointId = 1;
+    const points = [];
+    tasks.forEach(t => {
+        const region = t.town || '南桥镇';
+        const base = townCoordinates[region] || townCoordinates['南桥镇'];
+        const person = t.person || '待分配';
+        const time = t.createTime || (t.startDate ? t.startDate + ' 08:00' : '-');
+        const projects = Array.isArray(t.selectedProjects) ? t.selectedProjects : [];
+        const projectList = projects.length > 0 ? projects : [{ id: t.id, name: t.name || (region + '巡查任务') }];
+
+        projectList.forEach((p, idx) => {
+            const offset = (idx + 1) * 0.003;
+            const lat = base.lat + (Math.random() - 0.5) * 0.008 + offset * (idx % 2 === 0 ? 1 : -1);
+            const lng = base.lng + (Math.random() - 0.5) * 0.008 + offset * (idx % 2 === 0 ? -1 : 1);
+
+            let type = 'task';
+            if (isRiskTask(t)) type = 'risk';
+            else if (isRectifyTask(t)) type = 'rectify';
+
+            let level = riskLevelFromTask(t);
+            let status = isTaskCompleted(t) ? 'done' : 'pending';
+            if (type === 'rectify' && !isTaskCompleted(t)) status = 'doing';
+
+            points.push({
+                id: pointId++,
+                name: p.name || (region + ' ' + (type === 'task' ? '巡查点' : type === 'risk' ? '风险点' : '整改点')),
+                type: type,
+                level: type === 'risk' || type === 'rectify' ? level : undefined,
+                status: type === 'task' || type === 'rectify' ? status : undefined,
+                lat: parseFloat(lat.toFixed(6)),
+                lng: parseFloat(lng.toFixed(6)),
+                time: time,
+                person: person,
+                region: region
+            });
+        });
+    });
+
+    return { regions, points };
+}
+
+let mockData = generateMockData();
 
 let currentPopupPoint = null;
 let isPlaying = false;
@@ -1212,7 +1327,6 @@ function init() {
 
 function renderRegionList() {
     const container = document.getElementById('regionList');
-    const allRegions = ['南桥镇', '奉浦街道', '金汇镇', '青村镇', '四团镇', '柘林镇', '庄行镇', '西渡街道', '海湾镇', '奉城镇', '头桥街道'];
     const regionMap = {};
     mockData.regions.forEach(r => regionMap[r.name] = r);
 
@@ -1246,7 +1360,6 @@ function renderRegionList() {
 function initRankList() {
     const container = document.getElementById('rankList');
     if (!container) return;
-    const allRegions = ['南桥镇', '奉浦街道', '金汇镇', '青村镇', '四团镇', '柘林镇', '庄行镇', '西渡街道', '海湾镇', '奉城镇', '头桥街道'];
     const regionMap = {};
     mockData.regions.forEach(r => regionMap[r.name] = r);
 
