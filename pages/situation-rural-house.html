@@ -9,7 +9,6 @@
     <script src="../js/third-party-data.js"></script>
     <script src="../js/house-arch-data.js"></script>
     <script src="../js/echarts.min.js"></script>
-    <script src="https://webapi.amap.com/maps?v=2.0&key=YOUR_AMAP_KEY"></script>
     <style>
         :root {
             --primary: #1a73e8;
@@ -223,7 +222,34 @@
         }
         .legend-item { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
         .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
-        #mapContainer { flex: 1; width: 100%; }
+        #mapContainer { flex: 1; width: 100%; position: relative; overflow: hidden; }
+        .mock-map { width: 100%; height: 100%; position: relative; background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fc 100%); }
+        .mock-map svg { width: 100%; height: 100%; display: block; }
+        .mock-grid { stroke: #d4e3f3; stroke-width: 1; stroke-dasharray: 4 4; }
+        .mock-region { fill: rgba(26, 115, 232, 0.04); stroke: #bcd6f0; stroke-width: 1.5; }
+        .mock-cluster {
+            cursor: pointer;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+            transition: transform 0.2s;
+        }
+        .mock-cluster:hover { transform: scale(1.08); }
+        .mock-cluster-circle { stroke: #fff; stroke-width: 2; }
+        .mock-cluster-text { font-size: 11px; font-weight: 600; fill: #fff; text-anchor: middle; dominant-baseline: middle; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .mock-cluster-sub { font-size: 9px; fill: rgba(255,255,255,0.9); text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+        .mock-point { cursor: pointer; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); transition: transform 0.15s; }
+        .mock-point:hover { transform: scale(1.3); }
+        .mock-heat { pointer-events: none; mix-blend-mode: multiply; }
+        .map-watermark {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            font-size: 12px;
+            color: #8da8c4;
+            background: rgba(255,255,255,0.7);
+            padding: 4px 10px;
+            border-radius: 12px;
+            pointer-events: none;
+        }
         .map-switch {
             position: absolute;
             bottom: 20px;
@@ -761,21 +787,28 @@
             renderAll();
         }
 
-        // 地图初始化（高德地图）
+        // 地图范围（奉贤区示意）
+        const MAP_BOUNDS = { minLng: 121.35, maxLng: 121.60, minLat: 30.80, maxLat: 31.05 };
+        const MAP_VIEW = { w: 1000, h: 800 };
+        const STREET_MOCK_POSITIONS = {
+            '南桥镇': { x: 520, y: 380 }, '奉城镇': { x: 720, y: 360 }, '庄行镇': { x: 320, y: 420 },
+            '金汇镇': { x: 620, y: 280 }, '青村镇': { x: 680, y: 520 }, '柘林镇': { x: 400, y: 580 },
+            '四团镇': { x: 820, y: 480 }, '海湾镇': { x: 580, y: 680 }, '西渡街道': { x: 420, y: 260 },
+            '奉浦街道': { x: 500, y: 300 }, '海湾旅游区': { x: 650, y: 720 }, '头桥街道': { x: 780, y: 300 },
+            '金海街道': { x: 560, y: 340 }
+        };
+        function lngToX(lng) { return (lng - MAP_BOUNDS.minLng) / (MAP_BOUNDS.maxLng - MAP_BOUNDS.minLng) * MAP_VIEW.w; }
+        function latToY(lat) { return MAP_VIEW.h - (lat - MAP_BOUNDS.minLat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat) * MAP_VIEW.h; }
+
+        // 地图初始化（示意地图，不依赖高德）
         function initMap() {
-            try {
-                map = new AMap.Map('mapContainer', {
-                    zoom: 11,
-                    center: [121.47, 30.92],
-                    mapStyle: 'amap://styles/whitesmoke'
-                });
-            } catch (e) {
-                // 无高德 key 时显示占位
-                document.getElementById('mapContainer').innerHTML =
-                    '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f5f9ff;color:#5f6b7a">' +
-                    '<div style="text-align:center"><i class="fas fa-map-marked-alt" style="font-size:48px;color:#1a73e8;margin-bottom:16px"></i>' +
-                    '<div>请配置高德地图 Key 后显示地图</div></div></div>';
-            }
+            const container = document.getElementById('mapContainer');
+            container.innerHTML =
+                '<div class="mock-map" id="mockMap">' +
+                '<svg id="mockSvg" viewBox="0 0 ' + MAP_VIEW.w + ' ' + MAP_VIEW.h + '" preserveAspectRatio="xMidYMid meet"></svg>' +
+                '<div class="map-watermark"><i class="fas fa-info-circle"></i> 示意地图（非真实地理底图）</div>' +
+                '</div>';
+            renderMap();
         }
 
         function renderAll() {
@@ -931,26 +964,47 @@
             applyFilters();
         }
 
-        // 地图渲染
+        // 地图渲染（示意地图）
         function renderMap() {
-            if (!map) return;
-            // 清除已有覆盖物
-            map.clearMap();
-            markers = [];
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+            svg.innerHTML = '';
+
+            // 背景网格
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            defs.innerHTML =
+                '<radialGradient id="heatGrad" cx="50%" cy="50%" r="50%">' +
+                '<stop offset="0%" stop-color="#e53935" stop-opacity="0.55"/>' +
+                '<stop offset="60%" stop-color="#ff7043" stop-opacity="0.25"/>' +
+                '<stop offset="100%" stop-color="#e53935" stop-opacity="0"/>' +
+                '</radialGradient>';
+            svg.appendChild(defs);
+
+            // 网格线
+            for (let i = 0; i <= 10; i++) {
+                const x = (MAP_VIEW.w / 10) * i;
+                const y = (MAP_VIEW.h / 10) * i;
+                const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                vLine.setAttribute('x1', x); vLine.setAttribute('y1', 0); vLine.setAttribute('x2', x); vLine.setAttribute('y2', MAP_VIEW.h);
+                vLine.setAttribute('class', 'mock-grid');
+                svg.appendChild(vLine);
+                const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                hLine.setAttribute('x1', 0); hLine.setAttribute('y1', y); hLine.setAttribute('x2', MAP_VIEW.w); hLine.setAttribute('y2', y);
+                hLine.setAttribute('class', 'mock-grid');
+                svg.appendChild(hLine);
+            }
 
             if (state.mapMode === 'heatmap') {
-                renderHeatmap();
+                renderHeatmap(svg);
+            } else if (state.street) {
+                renderStreetPoints(svg, filteredData);
             } else {
-                if (state.street) {
-                    renderStreetPoints(filteredData);
-                } else {
-                    renderDistrictAggregation();
-                }
+                renderDistrictAggregation(svg);
             }
         }
 
         // 区级聚合：按镇街画圆
-        function renderDistrictAggregation() {
+        function renderDistrictAggregation(svg) {
             const streetMap = {};
             filteredData.forEach(d => {
                 if (!streetMap[d.street]) {
@@ -963,105 +1017,86 @@
             });
 
             Object.values(streetMap).forEach(s => {
-                const centerLng = s.lngs.reduce((a, b) => a + b, 0) / s.lngs.length;
-                const centerLat = s.lats.reduce((a, b) => a + b, 0) / s.lats.length;
                 const maxRisk = s.risk.danger > 0 ? 'danger' : (s.risk.major > 0 ? 'major' : (s.risk.warning > 0 ? 'warning' : 'safe'));
                 const riskCount = s.risk.danger + s.risk.major + s.risk.warning;
-                const radius = Math.max(18, Math.min(45, 12 + riskCount * 1.5));
+                const radius = Math.max(22, Math.min(48, 14 + riskCount * 1.5));
+                const pos = STREET_MOCK_POSITIONS[s.street] || { x: MAP_VIEW.w / 2, y: MAP_VIEW.h / 2 };
+                const cx = pos.x;
+                const cy = pos.y;
 
-                const circle = new AMap.CircleMarker({
-                    center: [centerLng, centerLat],
-                    radius: radius,
-                    fillColor: RISK_CONFIG[maxRisk].color,
-                    fillOpacity: 0.85,
-                    strokeColor: '#fff',
-                    strokeWeight: 2,
-                    extData: s,
-                    cursor: 'pointer'
-                });
-                circle.on('click', () => drillToStreet(s.street));
-                circle.setMap(map);
-                markers.push(circle);
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('class', 'mock-cluster');
+                g.setAttribute('transform', 'translate(' + cx + ',' + cy + ')');
+                g.onclick = () => drillToStreet(s.street);
 
-                // 文字标签
-                const label = new AMap.Text({
-                    text: s.street + '\n' + riskCount + '栋',
-                    position: [centerLng, centerLat],
-                    style: { 'background-color': 'transparent', 'border': 'none', 'color': '#fff', 'font-size': '11px', 'text-align': 'center', 'font-weight': '600', 'text-shadow': '0 1px 2px rgba(0,0,0,0.3)' },
-                    offset: new AMap.Pixel(0, -8)
-                });
-                label.on('click', () => drillToStreet(s.street));
-                label.setMap(map);
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', radius);
+                circle.setAttribute('fill', RISK_CONFIG[maxRisk].color);
+                circle.setAttribute('class', 'mock-cluster-circle');
+                g.appendChild(circle);
+
+                const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text1.setAttribute('y', -3);
+                text1.setAttribute('class', 'mock-cluster-text');
+                text1.textContent = s.street;
+                g.appendChild(text1);
+
+                const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text2.setAttribute('y', 10);
+                text2.setAttribute('class', 'mock-cluster-sub');
+                text2.textContent = riskCount + '栋';
+                g.appendChild(text2);
+
+                svg.appendChild(g);
             });
-
-            if (filteredData.length > 0) {
-                map.setFitView(null, false, [40, 40, 40, 40]);
-            }
         }
 
         // 镇级点位
-        function renderStreetPoints(data) {
+        function renderStreetPoints(svg, data) {
             data.forEach(d => {
                 const cfg = RISK_CONFIG[d.risk];
-                const marker = new AMap.Marker({
-                    position: [d.lng, d.lat],
-                    icon: createRiskIcon(cfg.color),
-                    extData: d,
-                    offset: new AMap.Pixel(-10, -20),
-                    cursor: 'pointer'
-                });
-                marker.on('click', e => showPopup(d, e.pixel));
-                marker.setMap(map);
-                markers.push(marker);
+                const cx = lngToX(d.lng);
+                const cy = latToY(d.lat);
+                const color = cfg.color;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('class', 'mock-point');
+                g.setAttribute('transform', 'translate(' + cx + ',' + cy + ')');
+                g.onclick = (e) => { e.stopPropagation(); showPopup(d, e); };
+
+                // 定位针形状
+                const pin = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                pin.setAttribute('d', 'M0,-20 C-8,-20 -12,-12 -12,-6 C-12,4 0,18 0,18 C0,18 12,4 12,-6 C12,-12 8,-20 0,-20 Z');
+                pin.setAttribute('fill', color);
+                pin.setAttribute('stroke', '#fff');
+                pin.setAttribute('stroke-width', '1.5');
+                g.appendChild(pin);
+
+                const inner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                inner.setAttribute('r', 3);
+                inner.setAttribute('cy', -8);
+                inner.setAttribute('fill', '#fff');
+                g.appendChild(inner);
+
+                svg.appendChild(g);
             });
-
-            if (data.length > 0) {
-                map.setFitView(null, false, [60, 60, 60, 60]);
-            }
-        }
-
-        function createRiskIcon(color) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 24; canvas.height = 30;
-            const ctx = canvas.getContext('2d');
-            ctx.beginPath();
-            ctx.moveTo(12, 30);
-            ctx.quadraticCurveTo(0, 14, 0, 10);
-            ctx.arc(12, 10, 10, Math.PI, 0);
-            ctx.quadraticCurveTo(24, 14, 12, 30);
-            ctx.fillStyle = color;
-            ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(12, 10, 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#fff';
-            ctx.fill();
-            return new AMap.Icon({ image: canvas.toDataURL(), size: new AMap.Size(24, 30), imageSize: new AMap.Size(24, 30) });
         }
 
         // 热力图
-        function renderHeatmap() {
+        function renderHeatmap(svg) {
             const heatData = filteredData
                 .filter(d => d.risk !== 'safe')
-                .map(d => ({ lng: d.lng, lat: d.lat, count: d.risk === 'danger' ? 10 : (d.risk === 'major' ? 7 : 4) }));
+                .map(d => ({ x: lngToX(d.lng), y: latToY(d.lat), count: d.risk === 'danger' ? 10 : (d.risk === 'major' ? 7 : 4) }));
 
-            // 简单热力：用大量半透明圆点模拟
             heatData.forEach(p => {
-                const circle = new AMap.CircleMarker({
-                    center: [p.lng, p.lat],
-                    radius: 25,
-                    fillColor: '#e53925',
-                    fillOpacity: 0.15,
-                    strokeColor: 'transparent'
-                });
-                circle.setMap(map);
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', p.x);
+                circle.setAttribute('cy', p.y);
+                circle.setAttribute('r', 22 + p.count);
+                circle.setAttribute('fill', 'url(#heatGrad)');
+                circle.setAttribute('class', 'mock-heat');
+                svg.appendChild(circle);
             });
-
-            if (filteredData.length > 0) {
-                map.setFitView(null, false, [40, 40, 40, 40]);
-            }
         }
 
         function switchMapMode(mode) {
@@ -1089,7 +1124,7 @@
         }
 
         // 弹窗
-        function showPopup(d, pixel) {
+        function showPopup(d, event) {
             const popup = document.getElementById('housePopup');
             const cfg = RISK_CONFIG[d.risk];
             document.getElementById('popupTitle').textContent = d.name;
@@ -1100,6 +1135,7 @@
             document.getElementById('popupDetail').href = 'rural-house-detail.html?no=' + d.no;
 
             const mapRect = document.getElementById('mapContainer').getBoundingClientRect();
+            const pixel = event ? { x: event.clientX - mapRect.left, y: event.clientY - mapRect.top } : { x: mapRect.width / 2, y: mapRect.height / 2 };
             popup.style.left = Math.min(pixel.x + 20, mapRect.width - 300) + 'px';
             popup.style.top = Math.min(pixel.y + 20, mapRect.height - 220) + 'px';
             popup.style.display = 'block';
@@ -1134,6 +1170,13 @@
         function closeDrawer() {
             document.getElementById('rightDrawer').classList.remove('open');
         }
+
+        // 点击空白关闭弹窗
+        document.getElementById('mapContainer').addEventListener('click', (e) => {
+            if (e.target.id === 'mapContainer' || e.target.id === 'mockMap' || e.target.id === 'mockSvg') {
+                document.getElementById('housePopup').style.display = 'none';
+            }
+        });
 
         window.addEventListener('resize', () => {
             riskRingChart && riskRingChart.resize();
