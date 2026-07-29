@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>选择巡查领域</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.domain-page-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--card); }
+
+.domain-scroll { flex: 1; overflow-y: auto; padding: 14px; }
+.domain-scroll::-webkit-scrollbar { width: 4px; }
+.domain-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,.2); border-radius: 2px; }
+.domain-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.domain-card { background: var(--card); border-radius: 10px; box-shadow: 0 2px 10px var(--shadow); border: 1px solid var(--border); padding: 18px 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; transition: all .15s; }
+.domain-card:active { transform: scale(.96); }
+.domain-card .dc-icon { width: 50px; height: 50px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 21px; }
+.domain-card .dc-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.domain-card .dc-desc { font-size: 11px; color: var(--text2); text-align: center; line-height: 1.4; }
+.domain-card .dc-badge { margin-top: 4px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; background: rgba(var(--primary-rgb),.10); color: var(--primary); }
+
+.empty-state { padding: 60px 20px; }
+
+
+/* ===== 标准顶部导航（方案①：绝对居中标题） ===== */
+.page-hero { display: flex; align-items: center; justify-content: center; padding: calc(34px + 16px) 18px 42px; }
+.page-hero .ph-back { position: absolute; left: 14px; top: calc(34px + 16px); margin: 0; display: flex; align-items: center; justify-content: center; height: 32px; }
+.page-hero .ph-title { position: absolute; left: 50%; top: calc(34px + 16px); transform: translateX(-50%); text-align: center; line-height: 32px; width: 70%; z-index: 2; }
+.page-hero .hero-title { display: contents; }
+.page-hero .ph-sub { position: static; text-align: center; font-size: 12.5px; opacity: .85; margin-top: 40px; width: 100%; z-index: 2; }
+.page-hero .hero-stats-v2 { position: relative; z-index: 2; width: 100%; margin-top: 40px; }
+.page-hero .ph-action { position: absolute; right: 14px; top: calc(34px + 16px); margin: 0; display: flex; align-items: center; height: 32px; z-index: 2; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">选择巡查领域</div>
+            <div class="ph-sub">请先选择要巡查的业务领域</div>
+    </div>
+
+    <div class="domain-page-body">
+        <div class="domain-scroll" id="domainScroll">
+            <div class="domain-grid" id="domainGrid">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var domainDesc = {
+        build: '建筑工地、基坑、脚手架、起重吊装等',
+        foundation: '基坑监测、支护体系、地下水',
+        traffic: '道路交通、公共交通、轨道交通',
+        curtain: '玻璃幕墙、支撑结构、连接件',
+        gas: '燃气管线、场站、用户、施工监护',
+        falling: '高空坠物、户外广告、临边防护',
+        selfbuild: '自建房结构、裂缝、倾斜、加层'
+    };
+    var domainColor = {
+        build: 'ic-blue',
+        foundation: 'ic-cyan',
+        traffic: 'ic-orange',
+        curtain: 'ic-indigo',
+        gas: 'ic-red',
+        falling: 'ic-purple',
+        selfbuild: 'ic-teal'
+    };
+
+    var container = document.getElementById('domainGrid');
+    Object.keys(RiskData.domains).forEach(function(key, idx) {
+        var d = RiskData.domains[key];
+        var tasks = DataStore.domainInspectionTasks && DataStore.domainInspectionTasks[key] ? DataStore.domainInspectionTasks[key].length : 0;
+        var html = '<div class="domain-card tap anim d' + (idx % 5 + 1) + '" onclick="App.go(\'inspection-tasks.html?domain=' + key + '\')">' +
+            '<div class="dc-icon ' + (domainColor[key] || 'ic-blue') + '"><i class="fa-solid ' + d.icon + '"></i></div>' +
+            '<div class="dc-name">' + App.escapeHtml(d.name) + '</div>' +
+            '<div class="dc-desc">' + App.escapeHtml(domainDesc[key] || '') + '</div>' +
+            (tasks ? '<div class="dc-badge">' + tasks + ' 个任务</div>' : '') +
+            '</div>';
+        container.insertAdjacentHTML('beforeend', html);
+    });
+})();
+</script>
+</body>
+</html>

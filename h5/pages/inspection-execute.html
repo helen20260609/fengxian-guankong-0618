@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>现场巡查</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.execute-page-body { padding: 0 14px 14px; }
+.execute-page-body.scrollable-body { flex: 1; overflow-y: auto; scrollbar-width: none; }
+.execute-page-body.scrollable-body::-webkit-scrollbar { display: none; }
+
+.task-summary { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.task-summary .ts-title { font-size: 14px; font-weight: 700; }
+.task-summary .ts-meta { font-size: 11px; color: var(--text2); margin-top: 6px; }
+.task-summary .ts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
+.task-summary .ts-item { background: var(--bg-dark); border-radius: 5px; padding: 8px; }
+.task-summary .ts-item.full { grid-column: 1 / -1; }
+.task-summary .ts-item .ts-label { font-size: 10px; color: var(--text2); margin-bottom: 4px; }
+.task-summary .ts-item .ts-value { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.task-summary .ts-progress { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.task-summary .ts-progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.task-summary .ts-progress-inner { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--primary), var(--secondary)); }
+.task-summary .ts-progress-text { font-size: 11px; color: var(--text2); white-space: nowrap; }
+
+.risk-list-card { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.risk-list-card .rl-project { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.risk-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.risk-item:last-child { border-bottom: none; padding-bottom: 0; }
+.risk-item .ri-name { font-size: 12px; font-weight: 600; flex: 1; line-height: 1.4; }
+.risk-item .ri-type { font-size: 10px; color: var(--text2); margin-top: 2px; }
+.risk-item .ri-meta { font-size: 10px; color: var(--text2); margin-top: 4px; line-height: 1.4; }
+.risk-badge-sm { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+.risk-badge-sm.red { background: rgba(217,48,37,.10); color: var(--dot-red); }
+.risk-badge-sm.orange { background: rgba(227,116,0,.10); color: var(--dot-orange); }
+.risk-badge-sm.yellow { background: rgba(249,171,0,.12); color: #c68400; }
+.risk-badge-sm.blue { background: rgba(26,115,232,.10); color: var(--dot-blue); }
+.empty-state-sm { text-align: center; padding: 20px; color: var(--text2); font-size: 12px; }
+.transfer-record-item { background: var(--bg-dark); border-radius: 5px; padding: 10px; margin-bottom: 8px; font-size: 11px; }
+.transfer-record-item .tr-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.transfer-record-item .tr-person { font-weight: 600; color: var(--text-primary); }
+.transfer-record-item .tr-time { font-size: 10px; color: var(--text2); }
+.transfer-record-item .tr-reason { color: var(--text2); line-height: 1.4; margin-top: 4px; }
+
+.checklist { padding: 0 0 10px; }
+.point-card { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border); box-shadow: 0 2px 8px var(--shadow); }
+.point-card .pc-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.point-card .pc-title { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; line-height: 1.4; }
+.point-card .pc-order { width: 20px; height: 20px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.point-card .pc-risk { font-size: 10px; color: var(--text2); background: var(--bg-dark); padding: 2px 8px; border-radius: 3px; flex-shrink: 0; }
+.point-card .pc-checklist { margin: 6px 0 0; padding-left: 26px; font-size: 11px; color: var(--text2); line-height: 1.6; }
+.point-card .pc-checklist li { margin-bottom: 2px; }
+.point-card .pc-history { background: rgba(var(--warning-rgb),.08); border-radius: 5px; padding: 8px 10px; margin-top: 10px; font-size: 10px; color: var(--text2); }
+.point-card .pc-history .ph-title { font-weight: 600; margin-bottom: 4px; }
+.point-card .pc-result { display: flex; gap: 8px; margin-top: 12px; }
+.point-card .pc-result label { flex: 1; padding: 7px 0; text-align: center; border-radius: 5px; border: 1px solid var(--border); font-size: 11px; cursor: pointer; }
+.point-card .pc-result input { display: none; }
+.point-card .pc-result input:checked + .rs-normal { background: rgba(var(--success-rgb),.14); color: var(--success); border-color: var(--success); font-weight: 600; }
+.point-card .pc-result input:checked + .rs-abnormal { background: rgba(var(--danger-rgb),.12); color: var(--danger); border-color: var(--danger); font-weight: 600; }
+.point-card .pc-result input:checked + .rs-review { background: rgba(var(--warning-rgb),.15); color: var(--warning); border-color: var(--warning); font-weight: 600; }
+
+.check-item { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.check-item .ci-name { font-size: 13px; font-weight: 600; }
+.check-item .ci-result { display: flex; gap: 10px; margin-top: 10px; }
+.check-item .ci-result label { flex: 1; padding: 8px 0; text-align: center; border-radius: 5px; border: 1px solid var(--border); font-size: 12px; cursor: pointer; }
+.check-item .ci-result input { display: none; }
+.check-item .ci-result input:checked + .rs-normal { background: rgba(var(--success-rgb),.14); color: var(--success); border-color: var(--success); font-weight: 600; }
+.check-item .ci-result input:checked + .rs-abnormal { background: rgba(var(--danger-rgb),.12); color: var(--danger); border-color: var(--danger); font-weight: 600; }
+.check-item .ci-result input:checked + .rs-review { background: rgba(var(--warning-rgb),.15); color: var(--warning); border-color: var(--warning); font-weight: 600; }
+
+.photo-section { padding: 0 0 14px; }
+.photo-section .ps-title { font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+
+.location-bar { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--border); font-size: 12px; color: var(--text2); }
+.location-bar i { color: var(--primary); }
+
+.bottom-actions { position: sticky; bottom: 0; margin-top: auto; width: 100%; max-width: 390px; padding: 12px 14px calc(12px + var(--safe-bottom)); background: var(--card); border-top: 1px solid var(--border); display: flex; gap: 10px; z-index: 100; }
+.bottom-actions .btn { flex: 1; }
+
+.hero-stats-v2 .hs-value { color: #fff; }
+
+/* 复查设置面板 */
+.review-section { background: rgba(var(--warning-rgb),.06); border-radius: 8px; padding: 12px; margin-bottom: 12px; border: 1px solid rgba(var(--warning-rgb),.2); }
+.review-section .ss-title { color: var(--warning); }
+
+/* ===== 标准顶部导航（方案①：绝对居中标题） ===== */
+.page-hero { display: flex; align-items: center; justify-content: center; padding: calc(34px + 12px) 14px 24px; }
+.page-hero .ph-back { position: absolute; left: 14px; top: calc(34px + 12px); margin: 0; display: flex; align-items: center; justify-content: center; height: 32px; }
+.page-hero .ph-title { position: absolute; left: 50%; top: calc(34px + 12px); transform: translateX(-50%); text-align: center; line-height: 32px; width: 70%; z-index: 2; }
+.page-hero .hero-title { display: contents; }
+.page-hero .ph-sub { position: static; text-align: center; font-size: 12.5px; opacity: .85; margin-top: 28px; width: 100%; z-index: 2; }
+.page-hero .hero-stats-v2 { position: relative; z-index: 2; width: 100%; margin-top: 28px; }
+.page-hero .ph-action { position: absolute; right: 14px; top: calc(34px + 12px); margin: 0; display: flex; align-items: center; height: 32px; z-index: 2; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">现场巡查</div>
+            <div class="ph-sub" id="heroTaskMeta">--</div>
+        <div class="ph-action tap" onclick="saveDraft()"><i class="fa-solid fa-floppy-disk"></i> 暂存</div>
+    </div>
+
+    <div class="execute-page-body scrollable-body">
+        <!-- 定位 -->
+        <div class="location-bar anim d1">
+            <i class="fa-solid fa-location-crosshairs"></i>
+            <div id="locationText" style="flex:1">GPS 定位中...</div>
+            <div class="loc-refresh tap" onclick="refreshLocation()" style="color:var(--primary)"><i class="fa-solid fa-rotate"></i></div>
+        </div>
+
+        <!-- 任务概况 -->
+        <div class="task-summary anim d1" id="taskSummary">
+            <div class="ts-title" id="tsTitle">--</div>
+            <div class="ts-meta" id="tsMeta">--</div>
+            <div class="ts-grid">
+                <div class="ts-item"><div class="ts-label">巡查人员</div><div class="ts-value" id="tsPerson">--</div></div>
+                <div class="ts-item"><div class="ts-label">任务类型</div><div class="ts-value" id="tsType">--</div></div>
+                <div class="ts-item"><div class="ts-label">起止时间</div><div class="ts-value" id="tsDate">--</div></div>
+                <div class="ts-item"><div class="ts-label">关联项目</div><div class="ts-value" id="tsArchive">--</div></div>
+                <div class="ts-item full">
+                    <div class="ts-label">巡查进度</div>
+                    <div class="ts-progress">
+                        <div class="ts-progress-bar"><div class="ts-progress-inner" id="tsProgressBar" style="width:0%"></div></div>
+                        <div class="ts-progress-text" id="tsProgressText">0/0</div>
+                    </div>
+                </div>
+                <div class="ts-item full" id="tsDescItem" style="display:none">
+                    <div class="ts-label">任务描述</div>
+                    <div class="ts-value" id="tsDesc" style="font-weight:400;line-height:1.5">--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sheet-section">
+            <div class="ss-title"><i class="fa-solid fa-triangle-exclamation"></i> 关联项目风险清单</div>
+            <div id="riskListContainer">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
+        <div class="sheet-section">
+            <div class="ss-title"><i class="fa-solid fa-location-dot"></i> 巡查风险点位（按路线顺序）</div>
+            <div class="checklist" id="checklist">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
+        <div class="sheet-section">
+            <div class="ss-title"><i class="fa-solid fa-camera"></i> 现场照片</div>
+            <div class="photo-grid" id="photoGrid">
+                <div class="photo-add tap" onclick="takePhoto()"><i class="fa-solid fa-camera"></i></div>
+            </div>
+        </div>
+
+        <div class="sheet-section">
+            <div class="ss-title"><i class="fa-solid fa-film"></i> 多媒体记录</div>
+            <div style="display:flex;gap:10px">
+                <button class="btn btn-outline" style="flex:1;font-size: 12px" onclick="recordVideo()"><i class="fa-solid fa-video"></i> 录像</button>
+                <button class="btn btn-outline" style="flex:1;font-size: 12px" onclick="recordAudio()"><i class="fa-solid fa-microphone"></i> 录音</button>
+            </div>
+            <div id="mediaList" style="margin-top:10px"></div>
+        </div>
+
+        <!-- 复查设置 -->
+        <div class="sheet-section review-section" id="reviewSection" style="display:none">
+            <div class="ss-title"><i class="fa-solid fa-calendar-check"></i> 复查设置</div>
+            <div class="form-item" style="margin-bottom:10px">
+                <label>复查时间 <span class="req">*</span></label>
+                <input type="datetime-local" id="reviewDateTime">
+            </div>
+            <div class="form-item" style="margin-bottom:0">
+                <label>复查要求</label>
+                <textarea rows="3" id="reviewRequirements" placeholder="填写复查的具体要求..."></textarea>
+            </div>
+        </div>
+
+        <!-- 文字描述 -->
+        <div class="form-item" style="margin-bottom:14px">
+            <label>巡查记录</label>
+            <textarea rows="4" id="recordDesc" placeholder="记录现场情况...">现场情况正常，未发现明显异常。</textarea>
+        </div>
+
+        <div class="sheet-section" id="transferRecordSection" style="display:none">
+            <div class="ss-title"><i class="fa-solid fa-share-from-square"></i> 转派记录</div>
+            <div id="transferRecords">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+    </div>
+
+    <!-- 底部操作 -->
+    <div class="bottom-actions">
+        <button class="btn btn-outline" style="flex:1" onclick="App.back()">取消</button>
+        <button class="btn btn-outline" style="flex:1;color:var(--primary);border-color:var(--primary)" onclick="openTransferModal()"><i class="fa-solid fa-share"></i> 转派</button>
+        <button class="btn btn-primary" style="flex:1.2" onclick="submitTask()">提交结果</button>
+    </div>
+
+    </div>
+</div>
+
+<!-- 转派弹窗 -->
+<div class="modal-mask" id="transferModal">
+    <div class="modal-sheet">
+        <div class="sheet-header">
+            <div class="sheet-title">转派任务</div>
+            <div class="sheet-close tap" onclick="closeTransferModal()"><i class="fa-solid fa-xmark"></i></div>
+        </div>
+        <div class="form-item">
+            <label>选择接收人 <span class="req">*</span></label>
+            <select id="transferTo">
+                <option value="">请选择同事</option>
+                <!-- 动态填充 -->
+            </select>
+        </div>
+        <div class="form-item">
+            <label>转派原因 <span class="req">*</span></label>
+            <textarea rows="3" id="transferReason" placeholder="请输入转派原因..."></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="confirmTransfer()">确认转派</button>
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var taskId = App.getQuery('id') || 'GAS-2025-001';
+    var task = DataStore.getTask(taskId) || DataStore.inspectionTasks[DataStore.inspectionTasks.length - 1];
+
+    document.getElementById('heroTaskMeta').innerHTML = App.escapeHtml(task.title) + ' · <span class="risk-badge ' + task.priority + '" style="margin-right:8px">' + levelName(task.priority) + '</span>' +
+        '<i class="fa-solid fa-location-dot"></i> ' + App.escapeHtml(task.area) + ' · 截止 ' + App.formatDate(task.deadline, 'MM-dd hh:mm');
+
+    renderTaskSummary();
+
+    function renderTaskSummary() {
+        var typeMap = { daily: '日常巡检', special: '专项巡查', temporary: '临时巡查', review: '复查任务' };
+        document.getElementById('tsTitle').textContent = task.title;
+        document.getElementById('tsMeta').innerHTML = '<i class="fa-solid fa-user"></i> ' + (task.person || '待分配') +
+            ' · <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning)"></i> 发现隐患 ' + (task.hiddenCount || 0) + ' 个' +
+            (task.projectName ? ' · <i class="fa-solid fa-building"></i> ' + App.escapeHtml(task.projectName) : '');
+        document.getElementById('tsPerson').textContent = task.person || '待分配';
+        document.getElementById('tsType').textContent = typeMap[task.type] || task.type;
+        document.getElementById('tsDate').textContent = (task.startDate || '-') + ' 至 ' + (task.endDate || '-');
+        document.getElementById('tsArchive').textContent = (task.archiveCount || 0) + ' 个项目';
+        var inspected = task.inspected || 0;
+        var total = task.total || task.points.length || 1;
+        var pct = Math.round(inspected / total * 100);
+        document.getElementById('tsProgressBar').style.width = pct + '%';
+        document.getElementById('tsProgressText').textContent = inspected + '/' + total + ' (' + pct + '%)';
+        if (task.desc) {
+            document.getElementById('tsDescItem').style.display = 'block';
+            document.getElementById('tsDesc').textContent = task.desc;
+        }
+        renderRiskList();
+    }
+
+    function renderRiskList() {
+        var container = document.getElementById('riskListContainer');
+        if (!task.risks || !task.risks.length) {
+            container.innerHTML = '<div class="empty-state-sm"><i class="fa-regular fa-folder-open" style="display:block;font-size: 22px;margin-bottom:6px;opacity:.3"></i>暂无关联风险清单</div>';
+            return;
+        }
+        var html = '<div class="risk-list-card anim d2">' +
+            '<div class="rl-project"><i class="fa-solid fa-building" style="color:var(--primary)"></i> ' + App.escapeHtml(task.projectName || '关联项目') + '</div>';
+        task.risks.forEach(function(r) {
+            html += '<div class="risk-item">' +
+                '<div style="flex:1;min-width:0">' +
+                '<div class="ri-name">' + App.escapeHtml(r.name) + '</div>' +
+                '<div class="ri-type">' + App.escapeHtml(r.type) + '</div>' +
+                '<div class="ri-meta"><i class="fa-solid fa-shield-halved"></i> ' + App.escapeHtml(r.measures) + '</div>' +
+                '</div>' +
+                '<span class="risk-badge-sm ' + r.level + '" style="margin-top:2px"><span class="risk-dot ' + r.level + '"></span> ' + (r.levelLabel || levelName(r.level)) + '</span>' +
+                '</div>';
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    // 转派功能
+    function initTransferModal() {
+        var select = document.getElementById('transferTo');
+        var persons = DataStore.contacts || [];
+        persons.forEach(function(p) {
+            var opt = document.createElement('option');
+            opt.value = p.name;
+            opt.textContent = p.name + '（' + (p.dept || p.position || '') + '）';
+            select.appendChild(opt);
+        });
+    }
+
+    window.openTransferModal = function() {
+        document.getElementById('transferModal').classList.add('show');
+    };
+
+    window.closeTransferModal = function() {
+        document.getElementById('transferModal').classList.remove('show');
+        document.getElementById('transferTo').value = '';
+        document.getElementById('transferReason').value = '';
+    };
+
+    window.confirmTransfer = function() {
+        var to = document.getElementById('transferTo').value;
+        var reason = document.getElementById('transferReason').value.trim();
+        if (!to) { App.showToast('请选择接收人'); return; }
+        if (!reason) { App.showToast('请填写转派原因'); return; }
+
+        var fromPerson = task.person || '待分配';
+        var now = new Date();
+        var record = {
+            from: fromPerson,
+            to: to,
+            reason: reason,
+            time: App.formatDate(now, 'yyyy-MM-dd hh:mm')
+        };
+
+        var records = getTransferRecords();
+        records.push(record);
+        localStorage.setItem('transfer-records-' + task.id, JSON.stringify(records));
+
+        // 同步回写 DataStore，确保任务列表页显示最新人员
+        var storeTask = DataStore.getTask(task.id);
+        if (storeTask) {
+            storeTask.person = to;
+            if (!storeTask.transferHistory) storeTask.transferHistory = [];
+            storeTask.transferHistory.push({
+                from: fromPerson,
+                to: to,
+                reason: reason,
+                time: now.toISOString()
+            });
+        }
+
+        // 更新当前任务显示为最新接收人
+        task.person = to;
+        renderTaskSummary();
+        renderTransferRecords();
+        closeTransferModal();
+        App.showToast('任务已转派给 ' + to);
+    };
+
+    function getTransferRecords() {
+        var saved = localStorage.getItem('transfer-records-' + task.id);
+        try { return saved ? JSON.parse(saved) : []; } catch (e) { return []; }
+    }
+
+    function renderTransferRecords() {
+        var records = getTransferRecords();
+        var section = document.getElementById('transferRecordSection');
+        var container = document.getElementById('transferRecords');
+        if (!records.length) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = 'block';
+        container.innerHTML = records.map(function(r) {
+            return '<div class="transfer-record-item">' +
+                '<div class="tr-head"><span class="tr-person">' + App.escapeHtml(r.from) + ' → ' + App.escapeHtml(r.to) + '</span><span class="tr-time">' + App.escapeHtml(r.time) + '</span></div>' +
+                '<div class="tr-reason">原因：' + App.escapeHtml(r.reason) + '</div>' +
+                '</div>';
+        }).join('');
+    }
+
+    initTransferModal();
+    renderTransferRecords();
+
+    var currentLocation = null;
+    var photos = [];
+    var medias = [];
+
+    // GPS 定位
+    function refreshLocation() {
+        document.getElementById('locationText').textContent = 'GPS 定位中...';
+        App.getLocation().then(function(loc) {
+            currentLocation = loc;
+            var deviation = loc.accuracy;
+            var warn = deviation > 100 ? ' <span style="color:var(--danger)">偏差过大</span>' : '';
+            document.getElementById('locationText').innerHTML = App.escapeHtml(loc.address) + '（精度 ' + deviation + 'm）' + warn;
+            if (deviation > 100) {
+                App.showToast('定位偏差过大，请地图选点纠偏');
+            }
+        });
+    }
+    window.refreshLocation = refreshLocation;
+    refreshLocation();
+
+    // 渲染检查要点 / 风险点位
+    var checklist = document.getElementById('checklist');
+    task.points.forEach(function(p, idx) {
+        if (typeof p === 'object' && p.checkpoints) {
+            var historyHtml = '';
+            if (p.history && p.history.length) {
+                historyHtml = '<div class="pc-history"><div class="ph-title"><i class="fa-solid fa-clock-rotate-left"></i> 历史问题</div>' +
+                    p.history.map(function(h) { return '<div>· ' + App.escapeHtml(h) + '</div>'; }).join('') + '</div>';
+            }
+            var checkpointsHtml = '<ol class="pc-checklist">' + p.checkpoints.map(function(c) { return '<li>' + App.escapeHtml(c) + '</li>'; }).join('') + '</ol>';
+            var html = '<div class="point-card anim">' +
+                '<div class="pc-header">' +
+                '<div class="pc-title"><span class="pc-order">' + (p.order || (idx + 1)) + '</span> ' + App.escapeHtml(p.name) + '</div>' +
+                '<span class="pc-risk">' + App.escapeHtml(p.riskType) + '</span>' +
+                '</div>' +
+                checkpointsHtml +
+                historyHtml +
+                '<div class="pc-result">' +
+                '<label><input type="radio" name="result-' + idx + '" value="normal"' + (p.checked ? ' checked' : '') + ' onchange="updateReviewPanel()"><span class="rs-normal">正常</span></label>' +
+                '<label><input type="radio" name="result-' + idx + '" value="abnormal" onchange="updateReviewPanel()"><span class="rs-abnormal">异常</span></label>' +
+                '<label><input type="radio" name="result-' + idx + '" value="review" onchange="updateReviewPanel()"><span class="rs-review">需复查</span></label>' +
+                '</div>' +
+                '</div>';
+            checklist.insertAdjacentHTML('beforeend', html);
+        } else {
+            var name = typeof p === 'string' ? p : p.name;
+            var html = '<div class="check-item anim">' +
+                '<div class="ci-name">' + (idx + 1) + '. ' + App.escapeHtml(name) + '</div>' +
+                '<div class="ci-result">' +
+                '<label><input type="radio" name="result-' + idx + '" value="normal"' + (p.checked ? ' checked' : '') + ' onchange="updateReviewPanel()"><span class="rs-normal">正常</span></label>' +
+                '<label><input type="radio" name="result-' + idx + '" value="abnormal" onchange="updateReviewPanel()"><span class="rs-abnormal">异常</span></label>' +
+                '<label><input type="radio" name="result-' + idx + '" value="review" onchange="updateReviewPanel()"><span class="rs-review">需复查</span></label>' +
+                '</div>' +
+                '</div>';
+            checklist.insertAdjacentHTML('beforeend', html);
+        }
+    });
+
+    // 点位结果变化时控制复查面板显示（radio 直接绑定 onchange）
+    window.updateReviewPanel = function() {
+        var hasReview = false;
+        var nodes = document.querySelectorAll('.pc-result input[value="review"]:checked, .ci-result input[value="review"]:checked');
+        for (var i = 0; i < nodes.length; i++) { hasReview = true; break; }
+        var section = document.getElementById('reviewSection');
+        if (section) section.style.display = hasReview ? 'block' : 'none';
+    };
+
+    // 收集各点位检查结果
+    function collectPointResults() {
+        var results = [];
+        task.points.forEach(function(p, idx) {
+            var card = document.querySelectorAll('.point-card, .check-item')[idx];
+            var checked = card ? card.querySelector('input[type="radio"]:checked') : null;
+            results.push({
+                pointIndex: idx,
+                pointName: p.name || p,
+                riskType: p.riskType || '',
+                result: checked ? checked.value : '',
+                riskId: p.riskId || ''
+            });
+        });
+        return results;
+    }
+
+    // 照片水印
+    function addWatermark(base64, text) {
+        return new Promise(function(resolve) {
+            var img = new Image();
+            img.onload = function() {
+                var canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                var ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillStyle = 'rgba(255,255,255,.9)';
+                ctx.fillRect(10, img.height - 50, ctx.measureText(text).width + 16, 36);
+                ctx.fillStyle = '#333';
+                ctx.fillText(text, 18, img.height - 26);
+                resolve(canvas.toDataURL('image/jpeg'));
+            };
+            img.src = base64;
+        });
+    }
+
+    window.takePhoto = function() {
+        App.takePhoto().then(function(url) {
+            var text = DataStore.user.name + ' ' + App.formatDate(new Date(), 'yyyy-MM-dd hh:mm') + ' ' + (currentLocation ? currentLocation.address : '');
+            addWatermark(url, text).then(function(watermarked) {
+                photos.push(watermarked);
+                renderPhotoGrid();
+            });
+        });
+    };
+
+    window.removePhoto = function(idx) {
+        App.confirm('确认删除该照片？', function() {
+            photos.splice(idx, 1);
+            renderPhotoGrid();
+        });
+    };
+
+    function renderPhotoGrid() {
+        var html = '<div class="photo-add tap" onclick="takePhoto()"><i class="fa-solid fa-camera"></i></div>';
+        photos.forEach(function(p, i) {
+            html += '<div class="photo-thumb" style="background-image:url(' + p + ')"><div class="remove" onclick="removePhoto(' + i + ')"><i class="fa-solid fa-xmark"></i></div></div>';
+        });
+        document.getElementById('photoGrid').innerHTML = html;
+    }
+
+    window.recordVideo = function() {
+        App.recordVideo().then(function(v) {
+            medias.push({ type: 'video', duration: v.duration });
+            renderMediaList();
+        });
+    };
+
+    window.recordAudio = function() {
+        App.recordAudio().then(function(a) {
+            medias.push({ type: 'audio', duration: a.duration });
+            renderMediaList();
+        });
+    };
+
+    function renderMediaList() {
+        document.getElementById('mediaList').innerHTML = medias.map(function(m, i) {
+            var icon = m.type === 'video' ? 'fa-video' : 'fa-microphone';
+            var label = m.type === 'video' ? '录像' : '录音';
+            return '<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg-hover);border-radius: 5px;margin-bottom:6px">' +
+                '<i class="fa-solid ' + icon + '" style="color:var(--primary)"></i>' +
+                '<div style="flex:1;font-size: 12px">' + label + ' ' + (i + 1) + '</div>' +
+                '<div style="font-size: 11px;color:var(--text2)">' + m.duration + 's</div>' +
+                '<i class="fa-solid fa-xmark" style="color:var(--danger);padding:4px" onclick="removeMedia(' + i + ')"></i>' +
+            '</div>';
+        }).join('');
+    }
+
+    window.removeMedia = function(idx) {
+        App.confirm('确认删除该多媒体记录？', function() {
+            medias.splice(idx, 1);
+            renderMediaList();
+        });
+    };
+
+    window.saveDraft = function() {
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('保存草稿...');
+        setTimeout(function() {
+            var data = {
+                photos: photos,
+                medias: medias,
+                desc: document.getElementById('recordDesc').value,
+                location: currentLocation,
+                pointResults: collectPointResults(),
+                reviewDate: document.getElementById('reviewDateTime').value,
+                reviewRequirements: document.getElementById('reviewRequirements').value
+            };
+            localStorage.setItem('inspection-draft-' + task.id, JSON.stringify(data));
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            App.showToast('已暂存，可继续执行');
+        }, 600);
+    };
+
+    // 加载暂存
+    (function loadDraft() {
+        var saved = localStorage.getItem('inspection-draft-' + task.id);
+        if (!saved) return;
+        try {
+            var draft = JSON.parse(saved);
+            photos = draft.photos || [];
+            medias = draft.medias || [];
+            document.getElementById('recordDesc').value = draft.desc || '';
+            currentLocation = draft.location;
+
+            // 恢复点位检查结果
+            if (draft.pointResults) {
+                draft.pointResults.forEach(function(pr) {
+                    var card = document.querySelectorAll('.point-card, .check-item')[pr.pointIndex];
+                    if (card && pr.result) {
+                        var radio = card.querySelector('input[value="' + pr.result + '"]');
+                        if (radio) radio.checked = true;
+                    }
+                });
+                updateReviewPanel();
+            }
+
+            // 恢复复查设置
+            if (draft.reviewDate) {
+                document.getElementById('reviewDateTime').value = draft.reviewDate;
+                document.getElementById('reviewRequirements').value = draft.reviewRequirements || '';
+            }
+
+            renderPhotoGrid();
+            renderMediaList();
+        } catch (e) {}
+    })();
+
+    window.submitTask = function() {
+        var btn = document.activeElement;
+        var pointResults = collectPointResults();
+        var unchecked = pointResults.filter(function(p) { return !p.result; });
+        if (unchecked.length) {
+            App.showToast('还有 ' + unchecked.length + ' 个点位未检查');
+            return;
+        }
+
+        var abnormalItems = pointResults.filter(function(p) { return p.result === 'abnormal'; });
+        var reviewItems = pointResults.filter(function(p) { return p.result === 'review'; });
+
+        if (abnormalItems.length) {
+            var abnormalNames = abnormalItems.map(function(p) { return p.pointName; }).join(',');
+            App.confirm('检测到 ' + abnormalItems.length + ' 项异常，是否转为隐患上报？', function() {
+                App.go('hidden-danger-report.html?taskId=' + task.id + '&abnormalPoints=' + encodeURIComponent(abnormalNames));
+            });
+            return;
+        }
+
+        if (reviewItems.length) {
+            var reviewDate = document.getElementById('reviewDateTime').value;
+            if (!reviewDate) {
+                App.showToast('请设置复查时间');
+                document.getElementById('reviewSection').style.display = 'block';
+                document.getElementById('reviewDateTime').focus();
+                return;
+            }
+        }
+
+        if (btn) btn.disabled = true;
+        App.showLoading('提交巡查结果...');
+        setTimeout(function() {
+            var submitTime = new Date().toISOString();
+            var conclusion = reviewItems.length ? 'review' : 'normal';
+            var executionRecord = {
+                taskId: task.id,
+                taskTitle: task.title,
+                taskType: task.type,
+                area: task.area,
+                inspector: task.person || DataStore.user.name,
+                pointResults: pointResults,
+                photos: photos,
+                medias: medias,
+                location: currentLocation,
+                recordDesc: document.getElementById('recordDesc').value,
+                conclusion: conclusion,
+                reviewDate: conclusion === 'review' ? new Date(document.getElementById('reviewDateTime').value).toISOString() : '',
+                reviewRequirements: conclusion === 'review' ? document.getElementById('reviewRequirements').value : '',
+                submitTime: submitTime
+            };
+
+            DataStore.addInspectionRecord(executionRecord);
+
+            // 清理草稿
+            localStorage.removeItem('inspection-draft-' + task.id);
+
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            App.showToast(conclusion === 'review' ? '已提交复查任务' : '巡查结果已提交');
+            setTimeout(function() { App.back(); }, 1200);
+        }, 600);
+    };
+
+    function levelName(level) {
+        var map = { red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色' };
+        return map[level] || level;
+    }
+})();
+</script>
+</body>
+</html>

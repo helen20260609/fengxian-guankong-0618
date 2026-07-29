@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>预警中心</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.chart-card {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 10px var(--shadow);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+}
+.chart-card .cc-title { font-size: 13px; font-weight: 700; }
+.chart-card .cc-sub { font-size: 11px; color: var(--primary); }
+
+.warning-page-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--card); }
+
+.warning-list { padding: 0 0 14px; }
+.warning-list .wl-title { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+
+.empty-state { padding: 40px 0; text-align: center; color: var(--text2); }
+.empty-state i { font-size: 38px; margin-bottom: 10px; }
+.empty-title { font-size: 13px; }
+
+.hero-stats-v2 .hs-value { color: #fff; }
+.hero-stats-v2 .hs-value.red { color: #fff; }
+.page-hero .ph-sub { position: static; text-align: center; font-size: 12.5px; opacity: .85; margin-top: 40px; width: 100%; z-index: 2; }
+.page-hero .hero-stats-v2 { position: relative; z-index: 2; width: 100%; margin-top: 40px; }
+.page-hero .ph-action { position: absolute; right: 14px; top: calc(34px + 16px); margin: 0; display: flex; align-items: center; height: 32px; z-index: 2; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">预警中心</div>
+            <div class="ph-sub">未处置预警按等级排序，红色优先</div>
+        <div class="hero-stats-v2" style="margin-top:16px">
+            <div class="hs-item"><div class="hs-value red" id="statRed">--</div><div class="hs-label">红色</div></div>
+            <div class="hs-item"><div class="hs-value orange" id="statOrange">--</div><div class="hs-label">橙色</div></div>
+            <div class="hs-item"><div class="hs-value yellow" id="statYellow">--</div><div class="hs-label">黄色</div></div>
+            <div class="hs-item"><div class="hs-value blue" id="statBlue">--</div><div class="hs-label">蓝色</div></div>
+        </div>
+    </div>
+
+    <div class="warning-page-body">
+        <div class="search-bar">
+            <div class="search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="searchInput" placeholder="搜索预警名称、区域、指标">
+            </div>
+        </div>
+
+        <div class="filter-tabs" id="warningTabs">
+            <div class="filter-tab active" data-tab="pending">未处置</div>
+            <div class="filter-tab" data-tab="history">历史预警</div>
+        </div>
+
+        <div class="split-main" id="warningMain" style="padding-top:0">
+            <div class="chart-card anim d1 tap" onclick="App.go('warning-signs.html')">
+                <div class="cc-title"><i class="fa-solid fa-chart-area"></i> 近 7 天预警趋势图</div>
+                <div class="cc-sub">查看预警体征仪表盘 <i class="fa-solid fa-chevron-right"></i></div>
+            </div>
+
+            <div class="warning-list anim d2">
+                <div class="wl-title" id="listTitle">未处置预警</div>
+                <div id="warningList">
+                    <!-- 动态填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var currentTab = 'pending';
+    var keyword = '';
+    var allWarnings = DataStore.warnings;
+
+    function getWarnings() {
+        var list = allWarnings.filter(function(w) {
+            if (currentTab === 'pending') return w.status !== 'closed';
+            return w.status === 'closed';
+        });
+        if (keyword) {
+            var kw = keyword.toLowerCase();
+            list = list.filter(function(w) {
+                var text = (w.title + ' ' + w.location + ' ' + (w.indicator || '') + ' ' + (w.description || '')).toLowerCase();
+                return text.indexOf(kw) !== -1;
+            });
+        }
+        list.sort(function(a, b) {
+            var order = { red: 0, orange: 1, yellow: 2, blue: 3 };
+            return order[a.level] - order[b.level];
+        });
+        return list;
+    }
+
+    function renderStats() {
+        document.getElementById('statRed').textContent = countByLevel('red');
+        document.getElementById('statOrange').textContent = countByLevel('orange');
+        document.getElementById('statYellow').textContent = countByLevel('yellow');
+        document.getElementById('statBlue').textContent = countByLevel('blue');
+    }
+
+    function render() {
+        var warnings = getWarnings();
+        var container = document.getElementById('warningList');
+        document.getElementById('listTitle').textContent = currentTab === 'pending' ? '未处置预警' : '历史预警';
+
+        if (warnings.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fa-regular fa-bell-slash"></i><div class="empty-title">暂无相关预警</div></div>';
+            return;
+        }
+
+        container.innerHTML = warnings.map(function(w) {
+            var statusText = { pending: '待确认', dispatched: '已分派', handling: '处置中', accepting: '待验收', closed: '已闭环' }[w.status] || w.status;
+            var statusClass = { pending: 'pending', dispatched: 'handling', handling: 'handling', accepting: 'handling', closed: 'closed' }[w.status] || 'pending';
+            return '<div class="warning-item-v2 tap anim" onclick="App.go(\'warning-detail.html?id=' + w.id + '\')">' +
+                '<div class="wi-dot ' + w.level + '"></div>' +
+                '<div class="wi-body">' +
+                '<div class="wi-title">' + App.escapeHtml(w.title) + '</div>' +
+                '<div class="wi-meta">' +
+                '<i class="fa-solid fa-layer-group"></i> ' + (RiskData.domains[w.domain] ? RiskData.domains[w.domain].name : w.domain) +
+                ' · <i class="fa-solid fa-location-dot"></i> ' + App.escapeHtml(w.location) +
+                ' · ' + App.relativeTime(w.time) +
+                '</div>' +
+                '<div class="wi-tag ' + statusClass + '" style="margin-top:6px">' + statusText + '</div>' +
+                '</div>' +
+                '</div>';
+        }).join('');
+    }
+
+    function countByLevel(level) {
+        return DataStore.warnings.filter(function(w) { return w.level === level && w.status !== 'closed'; }).length;
+    }
+
+    function levelName(level) {
+        var map = { red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色' };
+        return map[level] || level;
+    }
+
+    document.getElementById('warningTabs').addEventListener('click', function(e) {
+        var tab = e.target.closest('.filter-tab');
+        if (!tab) return;
+        document.querySelectorAll('#warningTabs .filter-tab').forEach(function(t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        currentTab = tab.dataset.tab;
+        render();
+    });
+
+    document.getElementById('searchInput').addEventListener('input', App.debounce(function() {
+        keyword = this.value.trim();
+        render();
+    }, 400));
+
+    renderStats();
+    render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>事件分类展示</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+.page-body { padding-bottom: 20px; }
+.detail-tabs { margin: 14px 14px 0; }
+.stat-grid-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 14px; }
+.stat-card-sm { background: var(--card); border-radius: 8px; padding: 14px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); text-align: center; }
+.stat-card-sm .value { font-size: 21px; font-weight: 800; color: var(--primary); }
+.stat-card-sm .label { font-size: 11px; color: var(--text2); margin-top: 4px; }
+.chart-card { background: var(--card); border-radius: 10px; margin: 0 14px 14px; padding: 14px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.chart-card .cc-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.chart-box { width: 100%; height: 180px; }
+.event-list { padding: 0 14px; }
+.event-item { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.event-item .ei-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.event-item .ei-title { font-size: 13px; font-weight: 700; flex: 1; line-height: 1.4; }
+.event-item .ei-meta { font-size: 11px; color: var(--text2); margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
+.empty-state { padding: 40px 0; }
+.compare-bar { display: flex; gap: 10px; padding: 0 14px 14px; }
+.compare-bar select { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--card); color: var(--text-primary); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="nav-bar" id="navBar"></div>
+
+    <div class="page-body">
+        <div class="detail-tabs anim d1">
+            <div class="detail-tab active" onclick="switchTab(0)">已处置事件</div>
+            <div class="detail-tab" onclick="switchTab(1)">全期事件</div>
+        </div>
+
+        <!-- 已处置事件 -->
+        <div class="tab-panel active" id="panelDisposed">
+            <div class="stat-grid-4 anim d2">
+                <div class="stat-card-sm"><div class="value" id="disposedTotal">--</div><div class="label">处置总数</div></div>
+                <div class="stat-card-sm"><div class="value" id="onTimeRate">--</div><div class="label">按时处置率</div></div>
+                <div class="stat-card-sm"><div class="value" id="avgTime">--</div><div class="label">平均处置时长(h)</div></div>
+                <div class="stat-card-sm"><div class="value" id="recurrenceRate">--</div><div class="label">复发率</div></div>
+            </div>
+
+            <div class="chart-card anim d3">
+                <div class="cc-title">处置结果分布</div>
+                <div class="chart-box" id="resultChart"></div>
+            </div>
+
+            <div class="chart-card anim d4">
+                <div class="cc-title">各部门处置排名</div>
+                <div class="chart-box" id="deptChart"></div>
+            </div>
+
+            <div class="event-list anim d5" id="disposedList"></div>
+        </div>
+
+        <!-- 全期事件 -->
+        <div class="tab-panel" id="panelAll" style="display:none">
+            <div class="stat-grid-4 anim d2">
+                <div class="stat-card-sm"><div class="value" id="allTotal">--</div><div class="label">事件总数</div></div>
+                <div class="stat-card-sm"><div class="value" id="redCount">--</div><div class="label">红色事件</div></div>
+                <div class="stat-card-sm"><div class="value" id="buildCount">--</div><div class="label">建筑工地</div></div>
+                <div class="stat-card-sm"><div class="value" id="closedRate">--</div><div class="label">闭环率</div></div>
+            </div>
+
+            <div class="compare-bar anim d3">
+                <select id="periodA">
+                    <option value="本月">本月</option>
+                    <option value="上月">上月</option>
+                    <option value="本季度">本季度</option>
+                </select>
+                <span style="color:var(--text2);font-size: 12px">对比</span>
+                <select id="periodB">
+                    <option value="上月">上月</option>
+                    <option value="本季度">本季度</option>
+                    <option value="上半年">上半年</option>
+                </select>
+            </div>
+
+            <div class="chart-card anim d4">
+                <div class="cc-title">事件趋势</div>
+                <div class="chart-box" id="trendChart"></div>
+            </div>
+
+            <div class="chart-card anim d5">
+                <div class="cc-title">事件类型分布</div>
+                <div class="chart-box" id="typeChart"></div>
+            </div>
+
+            <div class="event-list anim d5" id="allList"></div>
+        </div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    App.renderNavBar('事件分类展示');
+
+    var allEvents = DataStore.hiddenDangers.concat(DataStore.decisionEvents.map(function(de) {
+        return {
+            id: de.id, title: de.title, type: de.category, level: de.level, region: de.region,
+            status: de.status, time: de.time, responsible: de.responsible, disposalRate: de.disposalRate
+        };
+    }));
+
+    var levelName = { red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色' };
+    var statusName = { reported: '待处置', auditing: '审核中', dispatched: '已分派', handling: '处置中', accepting: '验收中', closed: '已闭环', disposed: '已处置' };
+    var typeLabel = { emergency: '突发事件', traffic: '道路交通', safety: '安全隐患', weather: '气象预警' };
+
+    function initDisposed() {
+        var disposed = allEvents.filter(function(e) { return e.status === 'closed' || e.status === 'disposed'; });
+        var total = disposed.length;
+        var onTime = Math.round(total * 0.93);
+        var avg = 4.2;
+        var recurrence = 4;
+
+        document.getElementById('disposedTotal').textContent = total;
+        document.getElementById('onTimeRate').textContent = '93%';
+        document.getElementById('avgTime').textContent = avg;
+        document.getElementById('recurrenceRate').textContent = recurrence + '%';
+
+        // 处置结果分布
+        var resultChart = echarts.init(document.getElementById('resultChart'));
+        resultChart.setOption({
+            tooltip: { trigger: 'item' },
+            series: [{
+                type: 'pie',
+                radius: ['40%', '65%'],
+                center: ['50%', '50%'],
+                label: { show: true, formatter: '{b}\n{d}%', fontSize: 11 },
+                data: [
+                    { value: Math.round(total * 0.88), name: '合格' },
+                    { value: Math.round(total * 0.12), name: '不合格' }
+                ],
+                color: ['#22c55e', '#ef4444']
+            }]
+        });
+
+        // 部门排名
+        var deptChart = echarts.init(document.getElementById('deptChart'));
+        deptChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: 10, right: 20, top: 10, bottom: 20, containLabel: true },
+            xAxis: { type: 'value', show: false },
+            yAxis: { type: 'category', data: ['施工单位', '燃气公司', '交警支队', '物业', '区应急局'], axisLine: { show: false }, axisTick: { show: false } },
+            series: [{
+                type: 'bar',
+                data: [42, 38, 35, 30, 28],
+                itemStyle: { borderRadius: [0, 8, 8, 0], color: '#3b82f6' },
+                label: { show: true, position: 'right', fontSize: 11 }
+            }]
+        });
+
+        // 列表
+        document.getElementById('disposedList').innerHTML = disposed.map(function(e, idx) {
+            return renderEventItem(e, idx);
+        }).join('');
+    }
+
+    function initAll() {
+        var total = allEvents.length;
+        var redCount = allEvents.filter(function(e) { return e.level === 'red'; }).length;
+        var buildCount = allEvents.filter(function(e) { return e.domain === 'build' || e.type === '脚手架工程' || e.type === '基坑工程'; }).length;
+        var closed = allEvents.filter(function(e) { return e.status === 'closed' || e.status === 'disposed'; }).length;
+
+        document.getElementById('allTotal').textContent = total;
+        document.getElementById('redCount').textContent = redCount;
+        document.getElementById('buildCount').textContent = buildCount;
+        document.getElementById('closedRate').textContent = Math.round(closed / total * 100) + '%';
+
+        // 趋势
+        var trendChart = echarts.init(document.getElementById('trendChart'));
+        trendChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: 10, right: 10, top: 20, bottom: 20, containLabel: true },
+            xAxis: { type: 'category', data: ['1月','2月','3月','4月','5月','6月'], axisLine: { lineStyle: { color: '#ccc' } } },
+            yAxis: { type: 'value', splitLine: { lineStyle: { color: '#eee' } } },
+            series: [
+                { name: '事件数', type: 'line', smooth: true, data: [12, 15, 18, 14, 20, 22], itemStyle: { color: '#3b82f6' } },
+                { name: '处置数', type: 'line', smooth: true, data: [10, 14, 16, 13, 19, 21], itemStyle: { color: '#22c55e' } }
+            ]
+        });
+
+        // 类型分布
+        var typeChart = echarts.init(document.getElementById('typeChart'));
+        typeChart.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { bottom: 0, icon: 'circle', itemWidth: 8, itemHeight: 8, textStyle: { fontSize: 11 } },
+            series: [{
+                type: 'pie',
+                radius: ['40%', '65%'],
+                center: ['50%', '45%'],
+                label: { show: false },
+                data: Object.keys(DataStore.eventCategories).map(function(k) {
+                    return { value: DataStore.eventCategories[k].year, name: typeLabel[k] };
+                }),
+                color: ['#ef4444', '#f97316', '#eab308', '#3b82f6']
+            }]
+        });
+
+        // 列表
+        document.getElementById('allList').innerHTML = allEvents.map(function(e, idx) {
+            return renderEventItem(e, idx);
+        }).join('');
+    }
+
+    function renderEventItem(e, idx) {
+        var status = statusName[e.status] || e.status;
+        var tagCls = e.status === 'closed' || e.status === 'disposed' ? 'closed' : 'handling';
+        var levelText = levelName[e.level] || e.level;
+        return '<div class="event-item anim d' + (idx % 5 + 1) + ">" +
+            '<div class="ei-top">' +
+                '<div class="ei-title">' + App.escapeHtml(e.title) + '</div>' +
+                '<span class="status-tag ' + tagCls + '" style="margin-left:8px;flex-shrink:0">' + status + '</span>' +
+            '</div>' +
+            '<div class="ei-meta">' +
+                '<span class="risk-badge ' + e.level + '"><span class="risk-dot ' + e.level + '" style="margin-right:4px"></span>' + levelText + '</span>' +
+                '<span><i class="fa-solid fa-location-dot"></i> ' + App.escapeHtml(e.region || '未知区域') + '</span>' +
+                '<span><i class="fa-solid fa-clock"></i> ' + App.relativeTime(e.time) + '</span>' +
+                '<span><i class="fa-solid fa-user"></i> ' + App.escapeHtml(e.responsible || '待分配') + '</span>' +
+            '</div>' +
+        '</div>';
+    }
+
+    window.switchTab = function(idx) {
+        document.querySelectorAll('.detail-tab').forEach(function(t, i) { t.classList.toggle('active', i === idx); });
+        document.getElementById('panelDisposed').style.display = idx === 0 ? 'block' : 'none';
+        document.getElementById('panelAll').style.display = idx === 1 ? 'block' : 'none';
+    };
+
+    initDisposed();
+    initAll();
+})();
+</script>
+</body>
+</html>

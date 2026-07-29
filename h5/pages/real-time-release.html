@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>实时发布</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.page-body { padding-bottom: calc(var(--tab-bar-height) + var(--safe-bottom) + 20px); }
+.search-bar { margin: 14px 14px 0; }
+.pill-nav { margin: 12px 14px 4px; }
+.release-list { padding: 0 14px 14px; }
+.release-card { background: var(--card); border-radius: 10px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); position: relative; }
+.release-card.unread { border-left: 4px solid var(--primary); }
+.release-card.red { border-left: 4px solid var(--danger); }
+.release-card.orange { border-left: 4px solid var(--orange); }
+.release-card.blue { border-left: 4px solid var(--primary); }
+.rc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.rc-type { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.rc-type.warning { background: rgba(var(--danger-rgb),.12); color: var(--danger); }
+.rc-type.notice { background: rgba(var(--orange-rgb),.12); color: var(--orange); }
+.rc-type.tip { background: rgba(var(--primary-rgb),.12); color: var(--primary); }
+.rc-time { font-size: 11px; color: var(--text2); white-space: nowrap; }
+.rc-title { font-size: 14px; font-weight: 700; margin-top: 10px; line-height: 1.4; }
+.rc-meta { font-size: 11px; color: var(--text2); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+.rc-summary { font-size: 12px; color: var(--text-primary); margin-top: 8px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rc-unread { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+
+.modal-sheet .detail-section { margin-bottom: 16px; }
+.modal-sheet .detail-section .ds-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+.modal-sheet .detail-section .ds-value { font-size: 13px; color: var(--text-primary); line-height: 1.6; }
+.modal-sheet .detail-badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 6px; margin-right: 6px; }
+
+.page-hero .ph-action { font-size: 13px; }
+.page-hero .ph-sub { position: static; text-align: center; font-size: 12.5px; opacity: .85; margin-top: 40px; width: 100%; z-index: 2; }
+.page-hero .hero-stats-v2 { position: relative; z-index: 2; width: 100%; margin-top: 40px; }
+.page-hero .ph-action { position: absolute; right: 14px; top: calc(34px + 16px); margin: 0; display: flex; align-items: center; height: 32px; z-index: 2; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">实时发布</div>
+            <div class="ph-sub">预警信息、通知公告、工作提示</div>
+        <div class="ph-action tap" onclick="markAllRead()"><i class="fa-solid fa-check-double"></i> 全部已读</div>
+    </div>
+
+    <div class="page-body">
+        <div class="search-bar anim d1">
+            <div class="search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" class="search-input" id="searchInput" placeholder="搜索标题、内容、发布单位">
+            </div>
+        </div>
+
+        <div class="pill-nav anim d2">
+            <div class="pill active" data-type="all" onclick="filterType(this,'all')">全部</div>
+            <div class="pill" data-type="warning" onclick="filterType(this,'warning')">预警信息</div>
+            <div class="pill" data-type="notice" onclick="filterType(this,'notice')">通知公告</div>
+            <div class="pill" data-type="tip" onclick="filterType(this,'tip')">工作提示</div>
+        </div>
+
+        <div class="release-list anim d3" id="releaseList"></div>
+    </div>
+
+    <!-- 详情弹窗 -->
+    <div class="modal-mask" id="detailModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title">发布详情</div>
+                <div class="sheet-close tap" onclick="closeDetail()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div id="detailBody"></div>
+        </div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    // 状态栏时间
+
+    var currentType = 'all';
+    var keyword = '';
+
+    var typeMap = {
+        warning: { cls: 'warning', label: '预警信息' },
+        notice: { cls: 'notice', label: '通知公告' },
+        tip: { cls: 'tip', label: '工作提示' }
+    };
+
+    var levelMap = {
+        red: { cls: 'danger', label: '紧急' },
+        orange: { cls: 'warning', label: '重要' },
+        blue: { cls: 'primary', label: '提示' }
+    };
+
+    function getFilteredList() {
+        return DataStore.realTimeReleases.filter(function(item) {
+            if (currentType !== 'all' && item.type !== currentType) return false;
+            if (keyword) {
+                var k = keyword.toLowerCase();
+                return (item.title + item.content + item.unit).toLowerCase().indexOf(k) !== -1;
+            }
+            return true;
+        }).sort(function(a, b) { return new Date(b.time) - new Date(a.time); });
+    }
+
+    function renderList() {
+        var list = getFilteredList();
+        var container = document.getElementById('releaseList');
+        if (!list.length) {
+            container.innerHTML = '<div class="empty-state"><i class="fa-regular fa-folder-open" style="font-size: 38px;color:var(--text2)"></i><div style="margin-top:10px;color:var(--text2)">暂无相关信息</div></div>';
+            return;
+        }
+        container.innerHTML = list.map(function(item, idx) {
+            var t = typeMap[item.type] || typeMap.notice;
+            var unreadDot = !item.read ? '<div class="rc-unread"></div>' : '';
+            var cls = item.read ? '' : 'unread';
+            if (item.level) cls += ' ' + (item.level === 'orange' ? 'orange' : (item.level === 'red' ? 'red' : 'blue'));
+            return '<div class="release-card ' + cls + ' tap anim d' + (idx % 5 + 1) + '" onclick="openDetail(\'' + item.id + '\')">' +
+                unreadDot +
+                '<div class="rc-head">' +
+                    '<span class="rc-type ' + t.cls + '">' + t.label + '</span>' +
+                    '<span class="rc-time">' + App.relativeTime(item.time) + '</span>' +
+                '</div>' +
+                '<div class="rc-title">' + App.escapeHtml(item.title) + '</div>' +
+                '<div class="rc-meta">' +
+                    '<span><i class="fa-solid fa-building"></i> ' + App.escapeHtml(item.unit) + '</span>' +
+                    '<span><i class="fa-solid fa-location-dot"></i> ' + App.escapeHtml(item.region) + '</span>' +
+                    '<span><i class="fa-solid fa-flag"></i> ' + App.escapeHtml(item.status) + '</span>' +
+                '</div>' +
+                '<div class="rc-summary">' + App.escapeHtml(item.content) + '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    window.filterType = function(el, type) {
+        currentType = type;
+        document.querySelectorAll('.pill-nav .pill').forEach(function(p) { p.classList.remove('active'); });
+        el.classList.add('active');
+        renderList();
+    };
+
+    window.openDetail = function(id) {
+        var item = DataStore.getRealTimeRelease(id);
+        if (!item) return;
+        DataStore.markReleaseRead(id);
+        var t = typeMap[item.type] || typeMap.notice;
+        var l = levelMap[item.level] || levelMap.blue;
+        var html = '<div class="detail-section">' +
+                '<div class="ds-label">发布类型 / 紧急程度</div>' +
+                '<div class="ds-value">' +
+                    '<span class="detail-badge" style="background:rgba(var(--' + (l.cls === 'danger' ? 'danger' : (l.cls === 'primary' ? 'primary' : 'warning')) + '-rgb),.12);color:var(--' + (l.cls === 'danger' ? 'danger' : (l.cls === 'primary' ? 'primary' : 'orange')) + ')">' + t.label + '</span>' +
+                    '<span class="detail-badge" style="background:rgba(var(--' + (l.cls === 'danger' ? 'danger' : (l.cls === 'primary' ? 'primary' : 'warning')) + '-rgb),.12);color:var(--' + (l.cls === 'danger' ? 'danger' : (l.cls === 'primary' ? 'primary' : 'orange')) + ')">' + l.label + '</span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="detail-section">' +
+                '<div class="ds-label">标题</div>' +
+                '<div class="ds-value" style="font-weight:700;font-size: 15px">' + App.escapeHtml(item.title) + '</div>' +
+            '</div>' +
+            '<div class="detail-section">' +
+                '<div class="ds-label">发布单位 / 时间</div>' +
+                '<div class="ds-value">' + App.escapeHtml(item.unit) + ' · ' + App.formatDate(item.time, 'yyyy-MM-dd hh:mm') + '</div>' +
+            '</div>' +
+            '<div class="detail-section">' +
+                '<div class="ds-label">关联区域</div>' +
+                '<div class="ds-value">' + App.escapeHtml(item.region) + '</div>' +
+            '</div>' +
+            '<div class="detail-section">' +
+                '<div class="ds-label">内容</div>' +
+                '<div class="ds-value">' + App.escapeHtml(item.content) + '</div>' +
+            '</div>' +
+            '<div class="detail-section">' +
+                '<div class="ds-label">处置状态 / 联系人</div>' +
+                '<div class="ds-value">' + App.escapeHtml(item.status) + ' · ' + App.escapeHtml(item.contact) + '</div>' +
+            '</div>';
+        document.getElementById('detailBody').innerHTML = html;
+        document.getElementById('detailModal').classList.add('show');
+        renderList();
+    };
+
+    window.closeDetail = function() {
+        document.getElementById('detailModal').classList.remove('show');
+    };
+
+    window.markAllRead = function() {
+        DataStore.markAllReleasesRead();
+        renderList();
+        App.showToast('已全部标记为已读');
+    };
+
+    document.getElementById('searchInput').addEventListener('input', function(e) {
+        keyword = e.target.value.trim();
+        renderList();
+    });
+
+    renderList();
+})();
+</script>
+</body>
+</html>

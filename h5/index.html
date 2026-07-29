@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>城市风险通 · 首页</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/h5-frame.css">
+<style>
+/* 首页 v2 少量补充样式 */
+body { background: var(--bg-dark); }
+
+/* 普通用户首页：使用 pic/背景图.jpg 替换蓝色渐变背景 */
+.public-home .home-hero-v2 {
+    background: url('../pic/背景图.jpg') center/cover no-repeat;
+    padding: calc(34px + 28px) 18px 36px;
+}
+.public-home .home-hero-v2::after { display: none; }
+
+/* 背景图白色蒙层，可通过 --hero-overlay-opacity 调整透明度（0~1） */
+.public-home .home-hero-v2::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #fff;
+    opacity: var(--hero-overlay-opacity, 0.2);
+    z-index: 0;
+}
+
+/* 顶部用户信息 */
+.public-home .hero-user { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; position: relative; z-index: 1; cursor: pointer; }
+.public-home .hero-user .user-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.75); display: flex; align-items: center; justify-content: center; color: #07387b; font-size: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+.public-home .hero-user .user-role { font-size: 13px; font-weight: 600; color: #07387b; }
+
+/* 标题下移并改为深蓝色 */
+.public-home .home-hero-v2 .hero-title-group { margin-top: 6px; }
+.public-home .home-hero-v2 .hero-title-group h1,
+.public-home .home-hero-v2 .hero-title-group p { color: #07387b; }
+
+/* 巡查人员首页：背景图与普通用户保持一致 */
+.staff-home.role-inspector .home-hero-v2 {
+    background: url('../pic/背景图.jpg') center/cover no-repeat;
+}
+.staff-home.role-inspector .home-hero-v2::after { display: none; }
+.staff-home.role-inspector .home-hero-v2::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #fff;
+    opacity: var(--hero-overlay-opacity, 0.2);
+    z-index: 0;
+}
+.staff-home.role-inspector .home-hero-v2 .hero-header { position: relative; z-index: 1; }
+.staff-home.role-inspector .home-hero-v2 .hero-title-group h1,
+.staff-home.role-inspector .home-hero-v2 .hero-title-group p { color: #07387b; }
+.staff-home.role-inspector .home-hero-v2 .hero-icon { color: #07387b; }
+
+/* 天气气温 */
+.wc-temp-range { font-size: 13px; opacity: .9; margin-top: 4px; }
+.wc-temp-range span { margin: 0 2px; }
+
+/* 天气卡片查看详情 */
+.weather-card { position: relative; }
+.weather-card .wc-more {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    font-size: 12px;
+    opacity: .85;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* 静态天气预警卡片隐藏，仅保留顶部轮播条 */
+.weather-warnings { display: none; }
+
+/* 重点天气预警滚动条 */
+.warning-marquee {
+    margin: -8px 14px 14px;
+    background: linear-gradient(90deg, #dc2626, #ea580c);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    z-index: 2;
+}
+.warning-marquee i { margin-left: 12px; flex-shrink: 0; font-size: 14px; }
+.warning-marquee .marquee-track {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+.warning-marquee .marquee-content {
+    display: inline-block;
+    white-space: nowrap;
+    padding-left: 100%;
+    animation: marquee-scroll 16s linear infinite;
+}
+@keyframes marquee-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+}
+
+#staffWeatherSection { margin-bottom: 8px; }
+#staffWeatherSection .weather-card { margin: 0 14px 14px; }
+#staffWeatherSection .warning-marquee { margin-top: 0; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <!-- 普通用户首页 -->
+    <div class="public-home" id="publicHome" style="display:none">
+        <div class="home-hero-v2">
+            <div class="hero-user tap" onclick="App.go('pages/mine.html')">
+                <div class="user-avatar"><i class="fa-solid" id="userAvatarIcon"></i></div>
+                <div class="user-role" id="userRole">--</div>
+            </div>
+            <div class="hero-header">
+                <div class="hero-title-group">
+                    <h1>城市风险通</h1>
+                    <p>城市治理风险综合监测预警平台</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 重点天气预警滚动条 -->
+        <div class="warning-marquee anim d1" id="warningMarquee" style="display:none">
+            <i class="fa-solid fa-bullhorn"></i>
+            <div class="marquee-track">
+                <div class="marquee-content" id="marqueeContent"></div>
+            </div>
+        </div>
+
+        <!-- 天气卡片 -->
+        <div class="weather-card tap anim d1" onclick="App.go('pages/weather-detail.html')">
+            <div class="wc-location"><i class="fa-solid fa-location-dot"></i> <span id="weatherLocation">--</span></div>
+            <div class="wc-main">
+                <i class="fa-solid" id="weatherIcon"></i>
+                <div>
+                    <div class="wc-temp"><span id="weatherTemp">--</span>°</div>
+                    <div class="wc-temp-range"><span id="weatherTempMax">--</span>° / <span id="weatherTempMin">--</span>°</div>
+                    <div class="wc-desc" id="weatherDesc">--</div>
+                </div>
+            </div>
+            <div class="wc-more"><i class="fa-solid fa-chevron-right"></i> 查看详情</div>
+        </div>
+
+        <!-- 天气预警 -->
+        <div class="weather-warnings" id="weatherWarnings"></div>
+
+        <!-- 快捷入口 -->
+        <div class="public-quick-grid anim d2">
+            <div class="pqg-item tap" onclick="App.go('pages/snap-report.html')">
+                <div class="pqg-icon ic-purple"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <div class="pqg-label">隐患上报</div>
+            </div>
+            <div class="pqg-item tap" onclick="App.go('pages/my-feedback.html')">
+                <div class="pqg-icon ic-orange"><i class="fa-solid fa-comments"></i></div>
+                <div class="pqg-label">我的反馈</div>
+            </div>
+            <div class="pqg-item tap" onclick="App.go('pages/knowledge-laws.html')">
+                <div class="pqg-icon ic-blue"><i class="fa-solid fa-scale-balanced"></i></div>
+                <div class="pqg-label">法律法规</div>
+            </div>
+            <div class="pqg-item tap" onclick="App.go('pages/knowledge-policies.html')">
+                <div class="pqg-icon ic-green"><i class="fa-solid fa-file-lines"></i></div>
+                <div class="pqg-label">政策要求</div>
+            </div>
+            <div class="pqg-item tap" onclick="App.go('pages/knowledge-standards.html')">
+                <div class="pqg-icon ic-purple"><i class="fa-solid fa-ruler-combined"></i></div>
+                <div class="pqg-label">标准规范</div>
+            </div>
+            <div class="pqg-item tap" onclick="App.go('pages/knowledge-flood-typhoon.html')">
+                <div class="pqg-icon ic-cyan"><i class="fa-solid fa-cloud-showers-heavy"></i></div>
+                <div class="pqg-label">防汛防台</div>
+            </div>
+        </div>
+
+        <!-- 知识推荐 -->
+        <div class="knowledge-section anim d3">
+            <div class="ks-head">
+                <div class="ks-title">知识推荐</div>
+                <div class="ks-more tap" onclick="App.go('pages/knowledge-laws.html')">查看更多 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i></div>
+            </div>
+            <div id="knowledgeRecommend"></div>
+        </div>
+    </div>
+
+    <!-- 管理人员/巡查/企业首页 -->
+    <div class="staff-home" id="staffHome" style="display:none">
+    <div class="home-hero-v2">
+        <div class="hero-header">
+            <div class="hero-title-group">
+                <h1>城市风险通</h1>
+                <p>城市治理风险综合监测预警平台</p>
+            </div>
+            <div class="hero-icon tap" onclick="App.go('pages/mine.html')">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+        </div>
+        <div class="hero-stats-v2" id="heroStatsV2">
+            <div class="hs-item tap anim d1" onclick="App.go('pages/hidden-danger-manage.html')">
+                <div class="hs-value" id="todoCount">12</div>
+                <div class="hs-label">巡查任务</div>
+            </div>
+            <div class="hs-item tap anim d2" onclick="App.go('pages/warning-center.html')">
+                <div class="hs-value" id="warningCount2">3</div>
+                <div class="hs-label">预警信息</div>
+            </div>
+            <div class="hs-item tap anim d3" onclick="App.go('pages/inspection-domains.html')">
+                <div class="hs-value" id="inspectionCount">8</div>
+                <div class="hs-label">今日巡查</div>
+            </div>
+            <div class="hs-item tap anim d4" onclick="App.go('pages/region-management.html')">
+                <div class="hs-value" id="regionTotalCount">86</div>
+                <div class="hs-label">管辖区域</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 巡查人员天气模块（与普通用户一致） -->
+    <div id="staffWeatherSection" style="display:none">
+        <div class="warning-marquee anim d1" id="staffWarningMarquee" style="display:none">
+            <i class="fa-solid fa-bullhorn"></i>
+            <div class="marquee-track">
+                <div class="marquee-content" id="staffMarqueeContent"></div>
+            </div>
+        </div>
+
+        <div class="weather-card tap anim d1" onclick="App.go('pages/weather-detail.html')">
+            <div class="wc-location"><i class="fa-solid fa-location-dot"></i> <span id="staffWeatherLocation">--</span></div>
+            <div class="wc-main">
+                <i class="fa-solid" id="staffWeatherIcon"></i>
+                <div>
+                    <div class="wc-temp"><span id="staffWeatherTemp">--</span>°</div>
+                    <div class="wc-temp-range"><span id="staffWeatherTempMax">--</span>° / <span id="staffWeatherTempMin">--</span>°</div>
+                    <div class="wc-desc" id="staffWeatherDesc">--</div>
+                </div>
+            </div>
+            <div class="wc-more"><i class="fa-solid fa-chevron-right"></i> 查看详情</div>
+        </div>
+
+        <div class="weather-warnings" id="staffWeatherWarnings"></div>
+    </div>
+
+    <!-- 白色内容区 -->
+    <div class="content-sheet">
+
+        <!-- 常用功能（可编辑） -->
+        <div class="section-v2 anim d1">
+            <div class="sv2-head">
+                <div class="sv2-title">常用功能</div>
+                <div class="sv2-more tap" id="editHomeAppsBtn">编辑</div>
+            </div>
+            <div class="quick-apps" id="inspectorAppGrid">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
+        <!-- 风险总览 -->
+        <div class="section-v2 anim d2">
+            <div class="sv2-head">
+                <div class="sv2-title">风险总览</div>
+                <div class="sv2-more tap" onclick="App.go('pages/risk-list.html')">查看全部 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i></div>
+            </div>
+            <div class="risk-overview-card">
+                <div class="risk-bar" id="riskBar">
+                    <div class="rb-segment rb-red" id="riskBarRed"></div>
+                    <div class="rb-segment rb-orange" id="riskBarOrange"></div>
+                    <div class="rb-segment rb-yellow" id="riskBarYellow"></div>
+                    <div class="rb-segment rb-blue" id="riskBarBlue"></div>
+                </div>
+                <div class="risk-summary-v2">
+                    <div class="rs-item">
+                        <div class="rs-value red" id="riskRed">15</div>
+                        <div class="rs-label">红色</div>
+                    </div>
+                    <div class="rs-item">
+                        <div class="rs-value orange" id="riskOrange">28</div>
+                        <div class="rs-label">橙色</div>
+                    </div>
+                    <div class="rs-item">
+                        <div class="rs-value yellow" id="riskYellow">42</div>
+                        <div class="rs-label">黄色</div>
+                    </div>
+                    <div class="rs-item">
+                        <div class="rs-value blue" id="riskBlue">86</div>
+                        <div class="rs-label">蓝色</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 最新预警 -->
+        <div class="section-v2 anim d3">
+            <div class="sv2-head">
+                <div class="sv2-title">最新预警</div>
+                <div class="sv2-more tap" onclick="App.go('pages/warning-center.html')">查看全部 <i class="fa-solid fa-chevron-right" style="font-size:10px"></i></div>
+            </div>
+            <div class="warning-list-v2" id="warningList">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
+    </div>
+
+    </div>
+    <!-- /staff-home -->
+
+    <!-- 底部标签栏 -->
+    <div class="tab-bar" id="tabBar"></div>
+
+    </div>
+</div>
+<script src="assets/js/theme.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/risk-data.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function() {
+    // 状态栏时间
+    var now = new Date();
+    var hours = String(now.getHours()).padStart(2, '0');
+    var minutes = String(now.getMinutes()).padStart(2, '0');
+    document.getElementById('statusTime').textContent = hours + ':' + minutes;
+
+    var role = App.role || DataStore.user.role || 'public';
+    App.state = DataStore.stats;
+
+    if (role === 'public') {
+        // 显示普通用户首页
+        document.getElementById('publicHome').style.display = 'block';
+        document.getElementById('staffHome').style.display = 'none';
+
+        // 当前用户头像与角色
+        var user = DataStore.user;
+        document.getElementById('userAvatarIcon').className = 'fa-solid ' + (user.avatar || 'fa-user');
+        document.getElementById('userRole').textContent = user.roleLabel || '普通用户';
+
+        // 天气数据
+        var w = DataStore.weather;
+        document.getElementById('weatherLocation').textContent = w.location;
+        document.getElementById('weatherIcon').className = 'fa-solid ' + w.current.icon;
+        document.getElementById('weatherTemp').textContent = w.current.temp;
+        document.getElementById('weatherTempMax').textContent = w.current.tempMax;
+        document.getElementById('weatherTempMin').textContent = w.current.tempMin;
+        document.getElementById('weatherDesc').textContent = w.current.desc;
+
+        // 重点天气预警滚动条（台风、暴雨、大风、雷电、高温、寒潮）
+        var marqueeTypes = ['typhoon', 'rainstorm', 'gale', 'thunderstorm', 'highTemperature', 'coldWave'];
+        var marqueeWarnings = (w.warnings || []).filter(function(item) {
+            return marqueeTypes.indexOf(item.type) !== -1;
+        });
+        if (marqueeWarnings.length) {
+            var marqueeText = marqueeWarnings.map(function(item) {
+                return '【' + App.escapeHtml(item.label) + '】' + App.escapeHtml(item.text);
+            }).join(' 　 ');
+            document.getElementById('marqueeContent').textContent = marqueeText;
+            document.getElementById('warningMarquee').style.display = 'flex';
+        }
+
+        // 知识推荐（取各类最新一条，最多 3 条）
+        var allKnowledge = [].concat(
+            DataStore.knowledge.laws,
+            DataStore.knowledge.policies,
+            DataStore.knowledge.standards,
+            DataStore.knowledge.floodTyphoon
+        ).filter(function(item) { return item.auditStatus === 'approved'; });
+        var recommends = allKnowledge.slice(0, 3);
+        var typeMap = {
+            law: { cls: 'law', icon: 'fa-scale-balanced', type: 'laws' },
+            policy: { cls: 'policy', icon: 'fa-file-lines', type: 'policies' },
+            standard: { cls: 'standard', icon: 'fa-ruler-combined', type: 'standards' },
+            floodTyphoon: { cls: 'flood', icon: 'fa-cloud-showers-heavy', type: 'floodTyphoon' }
+        };
+        document.getElementById('knowledgeRecommend').innerHTML = recommends.map(function(item) {
+            var t = typeMap[item.type] || typeMap.law;
+            return '<div class="knowledge-card tap" onclick="App.go(\'pages/knowledge-detail.html?type=' + t.type + '&id=' + item.id + '\')">' +
+                '<div class="kc-tag ' + t.cls + '"><i class="fa-solid ' + t.icon + '"></i> ' + App.escapeHtml(item.category) + '</div>' +
+                '<div class="kc-title">' + App.escapeHtml(item.title) + '</div>' +
+                '<div class="kc-meta">' + App.escapeHtml(item.organ) + ' · ' + item.pubDate + '</div>' +
+            '</div>';
+        }).join('');
+    } else {
+        // 显示管理人员/巡查/企业首页
+        document.getElementById('publicHome').style.display = 'none';
+        document.getElementById('staffHome').style.display = 'block';
+        document.getElementById('staffHome').className = 'staff-home role-' + role;
+
+        // 巡查/管理/企业人员显示天气模块
+        if (role === 'inspector' || role === 'manager' || role === 'enterprise') {
+            document.getElementById('staffWeatherSection').style.display = 'block';
+            var w = DataStore.weather;
+            document.getElementById('staffWeatherLocation').textContent = w.location;
+            document.getElementById('staffWeatherIcon').className = 'fa-solid ' + w.current.icon;
+            document.getElementById('staffWeatherTemp').textContent = w.current.temp;
+            document.getElementById('staffWeatherTempMax').textContent = w.current.tempMax;
+            document.getElementById('staffWeatherTempMin').textContent = w.current.tempMin;
+            document.getElementById('staffWeatherDesc').textContent = w.current.desc;
+
+            var marqueeTypes = ['typhoon', 'rainstorm', 'gale', 'thunderstorm', 'highTemperature', 'coldWave'];
+            var marqueeWarnings = (w.warnings || []).filter(function(item) {
+                return marqueeTypes.indexOf(item.type) !== -1;
+            });
+            if (marqueeWarnings.length) {
+                var marqueeText = marqueeWarnings.map(function(item) {
+                    return '【' + App.escapeHtml(item.label) + '】' + App.escapeHtml(item.text);
+                }).join(' 　 ');
+                document.getElementById('staffMarqueeContent').textContent = marqueeText;
+                document.getElementById('staffWarningMarquee').style.display = 'flex';
+            }
+        }
+
+        // 巡查人员常用功能
+        if (role === 'inspector') {
+            // 隐藏 Hero 统计浮卡，数量改为常用功能角标
+            document.getElementById('heroStatsV2').style.display = 'none';
+
+            var selectedIds = App.getInspectorHomeApps();
+            var gridContainer = document.getElementById('inspectorAppGrid');
+            var editBtn = document.getElementById('editHomeAppsBtn');
+
+            function findApp(id) {
+                return App.getInspectorAppPool().find(function(a) { return a.id === id; });
+            }
+
+            function getInspectorBadge(id) {
+                var count = 0;
+                if (id === 'todo') count = DataStore.stats.todo;
+                else if (id === 'warning') count = DataStore.stats.warning;
+                else if (id === 'patrol') count = DataStore.stats.inspection;
+                else if (id === 'region') {
+                    var regions = DataStore.regionStats[role] || DataStore.regionStats.inspector;
+                    count = regions.reduce(function(sum, r) { return sum + r.count; }, 0);
+                }
+                return count > 0 ? '<span class="qa-badge">' + count + '</span>' : '';
+            }
+
+            gridContainer.innerHTML = selectedIds.map(findApp).filter(Boolean).map(function(app) {
+                var badge = getInspectorBadge(app.id);
+                return '<div class="qa-item tap" onclick="App.go(\'' + app.href + '\')">' +
+                    '<div class="qa-icon">' + badge + '<i class="fa-solid ' + app.icon + '" style="position:relative;z-index:1"></i></div>' +
+                    '<div class="qa-label">' + App.escapeHtml(app.label) + '</div>' +
+                '</div>';
+            }).join('');
+
+            // 编辑：跳转到巡查人员工作台添加模式
+            editBtn.onclick = function() {
+                App.go('pages/workspace-inspector.html?mode=addToHome');
+            };
+        } else if (role === 'manager' || role === 'enterprise') {
+            // 管理/企业人员：常用功能数据与工作台共享
+            // 隐藏 Hero 统计浮卡（数量改为常用功能角标），与巡查人员首页一致
+            document.getElementById('heroStatsV2').style.display = 'none';
+            var homeSelectedIds = App.getHomeApps(role);
+            var homeGrid = document.getElementById('inspectorAppGrid');
+            var homeEditBtn = document.getElementById('editHomeAppsBtn');
+            var homePool = App.getHomeAppPool(role);
+
+            function homeFindApp(id) {
+                return homePool.find(function(a) { return a.id === id; });
+            }
+
+            function getHomeBadge(id) {
+                var count = 0;
+                if (id === 'todo') count = DataStore.stats.todo;
+                else if (id === 'warning-center') count = DataStore.stats.warning;
+                return count > 0 ? '<span class="qa-badge">' + count + '</span>' : '';
+            }
+
+            homeGrid.innerHTML = homeSelectedIds.map(homeFindApp).filter(Boolean).map(function(app) {
+                var badge = getHomeBadge(app.id);
+                return '<div class="qa-item tap" onclick="App.go(\'' + app.href + '\')">' +
+                    '<div class="qa-icon">' + badge + '<i class="fa-solid ' + app.icon + '" style="position:relative;z-index:1"></i></div>' +
+                    '<div class="qa-label">' + App.escapeHtml(app.label) + '</div>' +
+                '</div>';
+            }).join('');
+
+            // 编辑：跳转到对应角色工作台并自动打开应用编辑器
+            homeEditBtn.onclick = function() {
+                App.go('pages/workspace-' + role + '.html?mode=edit');
+            };
+        } else {
+            // 其他角色保持原有 6 项快捷功能
+            document.getElementById('inspectorAppGrid').innerHTML =
+                '<div class="qa-item tap" onclick="App.go(\'pages/inspection-domains.html\')"><div class="qa-icon"><i class="fa-solid fa-clipboard-list"></i></div><div class="qa-label">巡查任务</div></div>' +
+                '<div class="qa-item tap" onclick="App.go(\'pages/risk-list.html\')"><div class="qa-icon"><i class="fa-solid fa-book-open"></i></div><div class="qa-label">风险清单</div></div>' +
+                '<div class="qa-item tap" onclick="App.go(\'pages/snap-report.html\')"><div class="qa-icon"><i class="fa-solid fa-camera"></i></div><div class="qa-label">随手拍</div></div>' +
+                '<div class="qa-item tap" onclick="App.go(\'pages/knowledge-laws.html\')"><div class="qa-icon"><i class="fa-solid fa-scale-balanced"></i></div><div class="qa-label">知识栏目</div></div>' +
+                '<div class="qa-item tap" onclick="App.go(\'pages/monitoring.html\')"><div class="qa-icon"><i class="fa-solid fa-tower-broadcast"></i></div><div class="qa-label">监测要素</div></div>' +
+                '<div class="qa-item tap" onclick="App.go(\'pages/hidden-danger-report.html\')"><div class="qa-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="qa-label">隐患上报</div></div>' +
+                '<div class="qa-item tap" onclick="App.go(\'pages/gas-monitor-list.html\')"><div class="qa-icon"><i class="fa-solid fa-tower-broadcast"></i></div><div class="qa-label">风险隐患监测</div></div>';
+            document.querySelector('.section-v2 .sv2-head').style.display = 'none';
+        }
+
+        // 填充 Hero 统计数据
+        document.getElementById('todoCount').textContent = DataStore.stats.todo;
+        document.getElementById('warningCount2').textContent = DataStore.stats.warning;
+        document.getElementById('inspectionCount').textContent = DataStore.stats.inspection;
+
+        // 计算管辖区域风险总数（按角色）
+        var regions = DataStore.regionStats[role] || DataStore.regionStats.inspector;
+        var regionTotal = regions.reduce(function(sum, r) { return sum + r.count; }, 0);
+        document.getElementById('regionTotalCount').textContent = regionTotal;
+
+        // 风险总览数字与进度条（基于 RiskData 全量数据聚合）
+        var allRisks = RiskData.getAll ? RiskData.getAll() : [];
+        var levelCount = { red: 0, orange: 0, yellow: 0, blue: 0 };
+        allRisks.forEach(function(item) {
+            if (levelCount[item.level] !== undefined) levelCount[item.level]++;
+        });
+        // 兜底：如果数据为空，使用展示数据
+        var showRed = levelCount.red || 15;
+        var showOrange = levelCount.orange || 28;
+        var showYellow = levelCount.yellow || 42;
+        var showBlue = levelCount.blue || 86;
+        var total = showRed + showOrange + showYellow + showBlue;
+
+        document.getElementById('riskRed').textContent = showRed;
+        document.getElementById('riskOrange').textContent = showOrange;
+        document.getElementById('riskYellow').textContent = showYellow;
+        document.getElementById('riskBlue').textContent = showBlue;
+
+        document.getElementById('riskBarRed').style.width = (showRed / total * 100) + '%';
+        document.getElementById('riskBarOrange').style.width = (showOrange / total * 100) + '%';
+        document.getElementById('riskBarYellow').style.width = (showYellow / total * 100) + '%';
+        document.getElementById('riskBarBlue').style.width = (showBlue / total * 100) + '%';
+
+        // 填充最新预警（取最新 3 条）
+        var warningList = document.getElementById('warningList');
+        warningList.innerHTML = '';
+        var tagMap = {
+            pending: { cls: 'pending', label: '待处置' },
+            dispatched: { cls: 'handling', label: '处置中' },
+            handling: { cls: 'handling', label: '处置中' },
+            closed: { cls: 'notice', label: '已闭环' }
+        };
+        var dotMap = { red: 'red', orange: 'orange', yellow: 'yellow', blue: 'blue' };
+        DataStore.warnings.slice(0, 3).forEach(function(w) {
+            var tag = tagMap[w.status] || tagMap.pending;
+            var dot = dotMap[w.level] || 'blue';
+            var html = '<div class="warning-item-v2 tap" onclick="App.go(\'pages/warning-center.html\')">' +
+                '<div class="wi-dot ' + dot + '"></div>' +
+                '<div class="wi-body">' +
+                    '<div class="wi-title">' + App.escapeHtml(w.title) + '</div>' +
+                    '<div class="wi-meta">' + App.escapeHtml(w.location) + ' · ' + App.relativeTime(w.time) + '</div>' +
+                    '<span class="wi-tag ' + tag.cls + '">' + tag.label + '</span>' +
+                '</div>' +
+            '</div>';
+            warningList.insertAdjacentHTML('beforeend', html);
+        });
+    }
+
+    // 渲染底部 Tab Bar
+    App.renderTabBar('home');
+})();
+</script>
+</body>
+</html>

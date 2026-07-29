@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>一张图</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+.map-hero { background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%); padding: 16px 18px 30px; color: #fff; position: relative; }
+.map-hero .map-back { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 17px; margin-bottom: 12px; }
+.map-hero .map-title { font-size: 19px; font-weight: 700; }
+.map-hero .map-sub { font-size: 12.5px; opacity: .85; margin-top: 5px; }
+
+.map-body { margin: -16px 14px 14px; position: relative; z-index: 2; padding-bottom: calc(var(--tab-bar-height) + var(--safe-bottom) + 20px); }
+
+.map-card { background: var(--card); border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.08); border: 1px solid var(--border); overflow: hidden; position: relative; }
+.map-toolbar { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.map-toolbar .layer-tag { padding: 5px 12px; border-radius: 8px; font-size: 11px; border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 5px; }
+.map-toolbar .layer-tag.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.map-toolbar .layer-tag .dot { width: 7px; height: 7px; border-radius: 50%; }
+
+#mapContainer { width: 100%; height: 420px; background: var(--bg-dark); }
+
+.time-axis { padding: 12px 14px; border-top: 1px solid var(--border); }
+.time-axis .ta-top { display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); margin-bottom: 4px; }
+.time-axis input[type="range"] { width: 100%; }
+.time-axis .ta-controls { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.time-axis .ta-play { width: 32px; height: 32px; border-radius: 50%; border: none; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.time-axis .ta-play:active { transform: scale(0.95); }
+.time-axis .ta-speed { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+.time-axis .ta-speed:active { transform: scale(0.95); }
+.time-axis .ta-status { flex: 1; text-align: center; font-size: 11px; color: var(--text-secondary); }
+
+.map-info-card { position: absolute; left: 14px; right: 14px; bottom: 108px; background: var(--card); border-radius: 10px; padding: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.12); border: 1px solid var(--border); display: none; z-index: 100; }
+.map-info-card.show { display: block; }
+.map-info-card .mic-title { font-size: 14px; font-weight: 700; }
+.map-info-card .mic-meta { font-size: 11px; color: var(--text-secondary); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+.map-info-card .mic-close { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+
+.region-stats { background: var(--card); border-radius: 10px; padding: 14px; box-shadow: 0 2px 10px var(--shadow); border: 1px solid var(--border); margin-top: 14px; }
+.region-stats .rs-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.region-stats .rs-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.region-stats .rs-item:last-child { border-bottom: none; }
+.region-stats .rs-bar { height: 4px; background: var(--bg-dark); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+.region-stats .rs-bar-inner { height: 100%; background: var(--primary); border-radius: 2px; }
+
+.custom-marker { transition: transform 0.2s; }
+.custom-marker:hover { transform: scale(1.15); z-index: 1000 !important; }
+.marker-inner { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: #fff; font-size: 11px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); border: 2px solid #fff; box-sizing: border-box; }
+.marker-circle { border-radius: 50%; }
+.marker-diamond { transform: rotate(45deg); border-radius: 4px; }
+.marker-diamond i { transform: rotate(-45deg); }
+.marker-square { border-radius: 4px; }
+
+@keyframes marker-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.marker-danger-red .marker-inner { animation: marker-pulse 2s infinite; }
+
+.leaflet-popup-content-wrapper { border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+.leaflet-popup-content { margin: 10px 14px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="map-hero">
+        <div class="map-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="map-title">一张图</div>
+        <div class="map-sub">巡查任务 · 风险隐患 · 整改情况 全景展示</div>
+    </div>
+
+    <div class="map-body">
+        <div class="map-card anim d1">
+            <div class="map-toolbar">
+                <div class="layer-tag active" data-layer="task" onclick="toggleLayer(this,'task')"><span class="dot" style="background:#3b82f6"></span>巡查任务</div>
+                <div class="layer-tag active" data-layer="danger" onclick="toggleLayer(this,'danger')"><span class="dot" style="background:#ef4444"></span>风险隐患</div>
+                <div class="layer-tag active" data-layer="rectification" onclick="toggleLayer(this,'rectification')"><span class="dot" style="background:#22c55e"></span>整改情况</div>
+            </div>
+            <div id="mapContainer"></div>
+            <div class="time-axis">
+                <div class="ta-top">
+                    <span>00:00</span>
+                    <span id="timeAxisLabel">当前时刻</span>
+                    <span>24:00</span>
+                </div>
+                <input type="range" min="0" max="24" value="24" id="timeSlider">
+                <div class="ta-controls">
+                    <button class="ta-play" id="playBtn"><i class="fa-solid fa-play" id="playIcon"></i></button>
+                    <button class="ta-speed" id="speedBtn">1x</button>
+                    <div class="ta-status" id="playbackStatus">已显示全部数据</div>
+                </div>
+            </div>
+
+            <div class="map-info-card" id="mapInfoCard">
+                <div class="mic-close tap" onclick="closeInfoCard()"><i class="fa-solid fa-xmark"></i></div>
+                <div class="mic-title" id="micTitle">--</div>
+                <div class="mic-meta" id="micMeta">--</div>
+            </div>
+        </div>
+
+        <div class="region-stats anim d2">
+            <div class="rs-title">区域统计</div>
+            <div id="regionStatsList"></div>
+        </div>
+    </div>
+
+    </div>
+</div>
+
+    <!-- 区域详情弹窗 -->
+    <div class="modal-mask" id="regionModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title" id="regionModalTitle">区域详情</div>
+                <div class="sheet-close tap" onclick="closeRegionModal()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="chart-card" style="margin:0 0 14px;padding:14px;background:var(--card);border-radius: 10px;box-shadow:0 2px 8px var(--shadow);border:1px solid var(--border)">
+                <div style="font-size: 13px;font-weight:700;margin-bottom:10px">任务完成排名</div>
+                <div id="regionRankChart" style="width:100%;height:160px"></div>
+            </div>
+            <div class="chart-card" style="margin:0;padding:14px;background:var(--card);border-radius: 10px;box-shadow:0 2px 8px var(--shadow);border:1px solid var(--border)">
+                <div style="font-size: 13px;font-weight:700;margin-bottom:10px">风险等级分布</div>
+                <div id="regionPieChart" style="width:100%;height:160px"></div>
+            </div>
+        </div>
+    </div>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var MapConfig = {
+        provider: 'osm',
+        amapKey: '',
+        tiandituKey: '',
+        defaultCenter: [30.92, 121.45],
+        defaultZoom: 12
+    };
+
+    var rawPoints = DataStore.oneMapPoints;
+    var layers = { task: true, danger: true, rectification: true };
+    var currentHour = 24;
+
+    function flattenPoints() {
+        return [].concat(
+            rawPoints.inspectionTasks.map(function(p) { return Object.assign({ layer: 'task' }, p); }),
+            rawPoints.hiddenDangers.map(function(p) { return Object.assign({ layer: 'danger' }, p); }),
+            rawPoints.rectifications.map(function(p) { return Object.assign({ layer: 'rectification' }, p); })
+        );
+    }
+
+    var allPoints = flattenPoints();
+
+    // ===== MapManager =====
+    var MapManager = {
+        map: null,
+        markers: [],
+
+        init: function() {
+            this.map = L.map('mapContainer').setView(MapConfig.defaultCenter, MapConfig.defaultZoom);
+
+            var tileUrl, attribution;
+            if (MapConfig.provider === 'amap' && MapConfig.amapKey) {
+                tileUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+                attribution = '&copy; 高德地图';
+            } else if (MapConfig.provider === 'tianditu' && MapConfig.tiandituKey) {
+                tileUrl = 'https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=' + MapConfig.tiandituKey;
+                attribution = '&copy; 天地图';
+            } else {
+                tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+                attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+            }
+
+            L.tileLayer(tileUrl, {
+                attribution: attribution,
+                maxZoom: 19,
+                subdomains: MapConfig.provider === 'osm' ? 'abc' : '1234'
+            }).addTo(this.map);
+
+            this.map.on('moveend zoomend', this.onViewportChange.bind(this));
+            this.renderMarkers();
+        },
+
+        onViewportChange: function() {
+            this.renderMarkers();
+        },
+
+        getFilteredPoints: function() {
+            var bounds = this.map.getBounds();
+            var self = this;
+            return allPoints.filter(function(p) {
+                if (!layers[p.layer]) return false;
+                if (currentHour < 24 && p.time) {
+                    var t = new Date(p.time);
+                    var cutoff = new Date();
+                    cutoff.setHours(currentHour, 0, 0, 0);
+                    if (t > cutoff) return false;
+                }
+                return bounds.contains([p.lat, p.lng]);
+            });
+        },
+
+        renderMarkers: function() {
+            var self = this;
+            this.markers.forEach(function(m) { self.map.removeLayer(m); });
+            this.markers = [];
+
+            var filtered = this.getFilteredPoints();
+            document.getElementById('playbackStatus').textContent = '视口内 ' + filtered.length + ' 个点位';
+
+            filtered.forEach(function(p) {
+                var icon = self.createIcon(p);
+                var marker = L.marker([p.lat, p.lng], { icon: icon }).addTo(self.map);
+                marker.on('click', function() { self.showInfoCard(p); });
+                marker.pointData = p;
+                self.markers.push(marker);
+            });
+        },
+
+        createIcon: function(p) {
+            var color, iconClass, shape, extraClass = '';
+            if (p.layer === 'task') {
+                color = '#3b82f6';
+                iconClass = 'fa-clipboard-check';
+                shape = 'marker-circle';
+            } else if (p.layer === 'danger') {
+                var colorMap = { red: '#ef4444', orange: '#f97316', yellow: '#eab308', blue: '#3b82f6' };
+                color = colorMap[p.level] || '#ef4444';
+                iconClass = 'fa-triangle-exclamation';
+                shape = 'marker-diamond';
+                if (p.level === 'red') extraClass = ' marker-danger-red';
+            } else {
+                color = p.status === 'completed' ? '#22c55e' : '#eab308';
+                iconClass = 'fa-check-circle';
+                shape = 'marker-square';
+            }
+
+            return L.divIcon({
+                className: 'custom-marker' + extraClass,
+                html: '<div class="marker-inner ' + shape + '" style="background:' + color + '"><i class="fa-solid ' + iconClass + '"></i></div>',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14],
+                popupAnchor: [0, -14]
+            });
+        },
+
+        showInfoCard: function(p) {
+            var statusText = { pending: '待执行', ongoing: '执行中', completed: '已完成', processing: '整改中', handling: '处置中', dispatched: '已派单', closed: '已闭环' }[p.status] || p.status;
+            document.getElementById('micTitle').textContent = p.name;
+            document.getElementById('micMeta').innerHTML = '<span><i class="fa-solid fa-layer-group"></i> ' + (p.type === 'task' ? '巡查任务' : (p.type === 'danger' ? '风险隐患' : '整改情况')) + '</span>' +
+                '<span><i class="fa-solid fa-location-dot"></i> ' + App.escapeHtml(p.area || '未知区域') + '</span>' +
+                '<span><i class="fa-solid fa-flag"></i> ' + statusText + '</span>' +
+                '<span><i class="fa-solid fa-user"></i> ' + App.escapeHtml(p.responsible) + '</span>';
+            document.getElementById('mapInfoCard').classList.add('show');
+        }
+    };
+
+    // ===== TimelinePlayer =====
+    var TimelinePlayer = {
+        isPlaying: false,
+        speeds: [1, 2, 4],
+        speedIndex: 0,
+        intervalId: null,
+        baseInterval: 1000,
+
+        init: function() {
+            var self = this;
+            document.getElementById('playBtn').addEventListener('click', function() { self.toggle(); });
+            document.getElementById('speedBtn').addEventListener('click', function() { self.cycleSpeed(); });
+            document.getElementById('timeSlider').addEventListener('input', function(e) {
+                self.pause();
+                self.setHour(parseInt(e.target.value));
+            });
+        },
+
+        toggle: function() {
+            this.isPlaying ? this.pause() : this.play();
+        },
+
+        play: function() {
+            this.isPlaying = true;
+            document.getElementById('playIcon').className = 'fa-solid fa-pause';
+            if (currentHour >= 24) currentHour = 0;
+            var self = this;
+            this.intervalId = setInterval(function() {
+                currentHour++;
+                if (currentHour > 24) {
+                    currentHour = 24;
+                    self.pause();
+                }
+                self.updateUI();
+                MapManager.renderMarkers();
+            }, this.baseInterval / this.speeds[this.speedIndex]);
+        },
+
+        pause: function() {
+            this.isPlaying = false;
+            document.getElementById('playIcon').className = 'fa-solid fa-play';
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+                this.intervalId = null;
+            }
+        },
+
+        cycleSpeed: function() {
+            this.speedIndex = (this.speedIndex + 1) % this.speeds.length;
+            var speed = this.speeds[this.speedIndex];
+            document.getElementById('speedBtn').textContent = speed + 'x';
+            if (this.isPlaying) {
+                this.pause();
+                this.play();
+            }
+        },
+
+        setHour: function(h) {
+            currentHour = h;
+            this.updateUI();
+            MapManager.renderMarkers();
+        },
+
+        updateUI: function() {
+            document.getElementById('timeSlider').value = currentHour;
+            document.getElementById('timeAxisLabel').textContent = currentHour < 24 ? ('截至 ' + String(currentHour).padStart(2, '0') + ':00') : '当前时刻';
+        }
+    };
+
+    window.toggleLayer = function(el, layer) {
+        layers[layer] = !layers[layer];
+        el.classList.toggle('active', layers[layer]);
+        MapManager.renderMarkers();
+    };
+
+    window.closeInfoCard = function() {
+        document.getElementById('mapInfoCard').classList.remove('show');
+    };
+
+    // 区域统计（动态计算）
+    var regionStats = [
+        { name: '南桥镇', taskDone: 12, riskCount: 5, rectRate: 80 },
+        { name: '奉城镇', taskDone: 9, riskCount: 4, rectRate: 75 },
+        { name: '庄行镇', taskDone: 6, riskCount: 2, rectRate: 90 },
+        { name: '海湾镇', taskDone: 8, riskCount: 3, rectRate: 85 }
+    ];
+    var totalCount = regionStats.reduce(function(s, r) { return s + r.riskCount; }, 0);
+    document.getElementById('regionStatsList').innerHTML = regionStats.map(function(r) {
+        var percent = Math.round(r.riskCount / totalCount * 100);
+        return '<div class="rs-item tap" onclick="openRegionModal(\'' + r.name + '\')" style="cursor:pointer">' +
+            '<span>' + r.name + '</span><span>' + r.riskCount + ' 项</span>' +
+        '</div>' +
+        '<div class="rs-bar"><div class="rs-bar-inner" style="width:' + percent + '%"></div></div>';
+    }).join('');
+
+    window.openRegionModal = function(regionName) {
+        document.getElementById('regionModalTitle').textContent = regionName + ' 区域详情';
+        document.getElementById('regionModal').classList.add('show');
+        setTimeout(function() {
+            var rankChart = echarts.init(document.getElementById('regionRankChart'));
+            rankChart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: 10, right: 20, top: 10, bottom: 20, containLabel: true },
+                xAxis: { type: 'value', show: false },
+                yAxis: { type: 'category', data: ['街道C', '街道B', '街道A'], axisLine: { show: false }, axisTick: { show: false } },
+                series: [{ type: 'bar', data: [8, 10, 12], itemStyle: { borderRadius: [0, 8, 8, 0], color: '#3b82f6' }, label: { show: true, position: 'right', fontSize: 11 } }]
+            });
+            var pieChart = echarts.init(document.getElementById('regionPieChart'));
+            pieChart.setOption({
+                tooltip: { trigger: 'item' },
+                series: [{
+                    type: 'pie', radius: ['40%', '65%'], center: ['50%', '50%'],
+                    label: { show: false },
+                    data: [
+                        { value: 2, name: '红色' }, { value: 3, name: '橙色' },
+                        { value: 4, name: '黄色' }, { value: 1, name: '蓝色' }
+                    ],
+                    color: ['#ef4444', '#f97316', '#eab308', '#3b82f6']
+                }]
+            });
+        }, 0);
+    };
+
+    window.closeRegionModal = function() {
+        document.getElementById('regionModal').classList.remove('show');
+    };
+
+    MapManager.init();
+    TimelinePlayer.init();
+})();
+</script>
+</body>
+</html>

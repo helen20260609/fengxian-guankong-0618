@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>辅助决策信息</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+.page-body { padding-bottom: 20px; }
+.category-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 14px; }
+.category-card { background: var(--card); border-radius: 10px; padding: 14px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.category-card .cc-icon { width: 36px; height: 36px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 15px; margin-bottom: 10px; }
+.category-card .cc-title { font-size: 12px; color: var(--text2); }
+.category-card .cc-num { font-size: 24px; font-weight: 800; margin-top: 4px; }
+.category-card .cc-foot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; }
+.category-card .cc-mom { font-weight: 700; }
+.category-card .cc-mom.up { color: var(--danger); }
+.category-card .cc-mom.down { color: var(--success); }
+.category-card .cc-rate { color: var(--text2); }
+
+.chart-card { background: var(--card); border-radius: 10px; margin: 0 14px 14px; padding: 14px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.chart-card .cc-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+#categoryChart { width: 100%; height: 220px; }
+
+.filter-row { display: flex; gap: 8px; padding: 0 14px 12px; overflow-x: auto; }
+.filter-row .filter-chip { flex-shrink: 0; padding: 6px 12px; border-radius: 8px; font-size: 11px; border: 1px solid var(--border); color: var(--text-secondary); background: var(--card); }
+.filter-row .filter-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+.event-list { padding: 0 14px; }
+.event-item { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.event-item .ei-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.event-item .ei-title { font-size: 13px; font-weight: 700; flex: 1; line-height: 1.4; }
+.event-item .ei-meta { font-size: 11px; color: var(--text2); margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
+.empty-state { padding: 40px 0; }
+.page-hero .ph-sub { position: static; text-align: center; font-size: 12.5px; opacity: .85; margin-top: 40px; width: 100%; z-index: 2; }
+.page-hero .hero-stats-v2 { position: relative; z-index: 2; width: 100%; margin-top: 40px; }
+.page-hero .ph-action { position: absolute; right: 14px; top: calc(34px + 16px); margin: 0; display: flex; align-items: center; height: 32px; z-index: 2; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">辅助决策</div>
+            <div class="ph-sub">突发事件态势与综合研判</div>
+    </div>
+
+    <div class="page-body">
+        <div class="category-grid anim d1" id="categoryGrid"></div>
+
+        <div class="chart-card anim d2">
+            <div class="cc-title">事件类型分布</div>
+            <div id="categoryChart"></div>
+        </div>
+
+        <div class="filter-row anim d3">
+            <div class="filter-chip active" data-filter="all" onclick="filterEvents(this,'all')">全部</div>
+            <div class="filter-chip" data-filter="emergency" onclick="filterEvents(this,'emergency')">突发事件</div>
+            <div class="filter-chip" data-filter="traffic" onclick="filterEvents(this,'traffic')">道路交通</div>
+            <div class="filter-chip" data-filter="safety" onclick="filterEvents(this,'safety')">安全隐患</div>
+            <div class="filter-chip" data-filter="weather" onclick="filterEvents(this,'weather')">气象预警</div>
+        </div>
+
+        <div class="event-list anim d4" id="eventList"></div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var currentFilter = 'all';
+
+    var categoryConfig = {
+        emergency: { label: '突发事件', icon: 'fa-bolt', color: '#ef4444', bg: 'rgba(239,68,68,.12)' },
+        traffic: { label: '道路交通', icon: 'fa-car', color: '#f97316', bg: 'rgba(249,115,22,.12)' },
+        safety: { label: '安全隐患', icon: 'fa-triangle-exclamation', color: '#eab308', bg: 'rgba(234,179,8,.12)' },
+        weather: { label: '气象预警', icon: 'fa-cloud-showers-heavy', color: '#3b82f6', bg: 'rgba(59,130,246,.12)' }
+    };
+
+    var levelName = { red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色' };
+    var statusName = { disposed: '已处置', handling: '处置中', pending: '待处置' };
+
+    function renderCategories() {
+        var html = '';
+        Object.keys(DataStore.eventCategories).forEach(function(key, idx) {
+            var cfg = categoryConfig[key];
+            var d = DataStore.eventCategories[key];
+            var momIcon = d.mom >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down';
+            var momCls = d.mom >= 0 ? 'up' : 'down';
+            var momText = (d.mom >= 0 ? '+' : '') + d.mom + '%';
+            html += '<div class="category-card tap anim d' + (idx + 1) + '" onclick="scrollToEvents(\'' + key + '\')">' +
+                '<div class="cc-icon" style="background:' + cfg.bg + ';color:' + cfg.color + '"><i class="fa-solid ' + cfg.icon + '"></i></div>' +
+                '<div class="cc-title">' + cfg.label + '</div>' +
+                '<div class="cc-num">' + d.month + '</div>' +
+                '<div class="cc-foot">' +
+                    '<span class="cc-mom ' + momCls + "><i class=\"fa-solid " + momIcon + '" style="margin-right:4px"></i>' + momText + '</span>' +
+                    '<span class="cc-rate">处置率 ' + d.rate + '%</span>' +
+                '</div>' +
+            '</div>';
+        });
+        document.getElementById('categoryGrid').innerHTML = html;
+    }
+
+    function renderChart() {
+        var chart = echarts.init(document.getElementById('categoryChart'));
+        var data = Object.keys(DataStore.eventCategories).map(function(key) {
+            return { value: DataStore.eventCategories[key].year, name: categoryConfig[key].label };
+        });
+        chart.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { bottom: 0, icon: 'circle', itemWidth: 8, itemHeight: 8, textStyle: { fontSize: 11 } },
+            series: [{
+                type: 'pie',
+                radius: ['40%', '65%'],
+                center: ['50%', '45%'],
+                avoidLabelOverlap: false,
+                label: { show: false },
+                data: data,
+                color: ['#ef4444', '#f97316', '#eab308', '#3b82f6']
+            }]
+        });
+    }
+
+    function getFilteredEvents() {
+        return DataStore.decisionEvents.filter(function(item) {
+            if (currentFilter !== 'all' && item.category !== currentFilter) return false;
+            return true;
+        }).sort(function(a, b) { return new Date(b.time) - new Date(a.time); });
+    }
+
+    function renderEvents() {
+        var list = getFilteredEvents();
+        var container = document.getElementById('eventList');
+        if (!list.length) {
+            container.innerHTML = '<div class="empty-state"><i class="fa-regular fa-folder-open" style="font-size: 38px;color:var(--text2)"></i><div style="margin-top:10px;color:var(--text2)">暂无相关事件</div></div>';
+            return;
+        }
+        container.innerHTML = list.map(function(item, idx) {
+            var cfg = categoryConfig[item.category] || categoryConfig.safety;
+            return '<div class="event-item anim d' + (idx % 5 + 1) + ">" +
+                '<div class="ei-top">' +
+                    '<div class="ei-title">' + App.escapeHtml(item.title) + '</div>' +
+                    '<span class="risk-badge ' + item.level + '" style="margin-left:8px;flex-shrink:0"><span class="risk-dot ' + item.level + '" style="margin-right:4px"></span>' + levelName[item.level] + '</span>' +
+                '</div>' +
+                '<div class="ei-meta">' +
+                    '<span style="color:' + cfg.color + '"><i class="fa-solid ' + cfg.icon + '" style="margin-right:4px"></i>' + cfg.label + '</span>' +
+                    '<span><i class="fa-solid fa-location-dot"></i> ' + App.escapeHtml(item.region) + '</span>' +
+                    '<span><i class="fa-solid fa-clock"></i> ' + App.relativeTime(item.time) + '</span>' +
+                    '<span><i class="fa-solid fa-flag"></i> ' + statusName[item.status] + '</span>' +
+                '</div>' +
+                '<div style="font-size: 11px;color:var(--text2);margin-top:6px">' + App.escapeHtml(item.description) + '</div>' +
+                '<div style="font-size: 11px;color:var(--text2);margin-top:6px">责任单位：' + App.escapeHtml(item.responsible) + ' · 处置率 ' + item.disposalRate + '%</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    window.filterEvents = function(el, filter) {
+        currentFilter = filter;
+        document.querySelectorAll('.filter-row .filter-chip').forEach(function(c) { c.classList.remove('active'); });
+        el.classList.add('active');
+        renderEvents();
+    };
+
+    window.scrollToEvents = function(filter) {
+        currentFilter = filter;
+        document.querySelectorAll('.filter-row .filter-chip').forEach(function(c) {
+            c.classList.toggle('active', c.getAttribute('data-filter') === filter);
+        });
+        renderEvents();
+        document.getElementById('eventList').scrollIntoView({ behavior: 'smooth' });
+    };
+
+    renderCategories();
+    renderChart();
+    renderEvents();
+})();
+</script>
+</body>
+</html>

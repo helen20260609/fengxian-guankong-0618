@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>政策要求</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.knowledge-hero { background: linear-gradient(135deg,#60a5fa 0%,#3b82f6 50%,#1d4ed8 100%); margin-top: -34px; padding: calc(34px + 16px) 18px 42px; color: #fff; position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; }
+.knowledge-hero::before { content: ''; position: absolute; width: 160px; height: 160px; right: -50px; top: -20px; background: radial-gradient(circle,rgba(255,255,255,.18),transparent 70%); border-radius: 50%; }
+.knowledge-hero .kh-back { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 17px; position: relative; z-index: 2; flex-shrink: 0; }
+.knowledge-hero h1 { font-size: 19px; font-weight: 700; position: relative; z-index: 2; }
+
+.law-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--card); }
+.law-body .search-bar { margin: 14px 14px 0; box-shadow: none; border: none; padding: 0; background: transparent; flex-shrink: 0; }
+
+.filter-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.filter-tab { flex: 1; text-align: center; padding: 12px 8px; font-size: 13px; font-weight: 500; color: var(--text-secondary); position: relative; cursor: pointer; transition: all .2s; }
+.filter-tab.active { color: var(--primary); font-weight: 700; }
+.filter-tab.active::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: 0; height: 3px; border-radius: 2px; background: var(--primary); }
+
+.split-layout { display: flex; flex: 1; overflow: hidden; }
+.split-sidebar { width: 100px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: rgba(var(--primary-rgb),.02); }
+.split-sidebar::-webkit-scrollbar { display: none; }
+.s-item { padding: 14px 10px; font-size: 12px; color: var(--text-secondary); text-align: center; border-left: 3px solid transparent; cursor: pointer; transition: all .15s; line-height: 1.3; }
+.s-item.active { color: var(--primary); font-weight: 700; background: rgba(var(--primary-rgb),.08); border-left-color: var(--primary); }
+
+.split-main { flex: 1; overflow-y: auto; padding: 14px; background: var(--card); }
+.split-main::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="knowledge-hero">
+        <div class="kh-back tap" onclick="App.go('../index.html')"><i class="fa-solid fa-chevron-left"></i></div>
+        <h1>政策要求</h1>
+    </div>
+
+    <div class="law-body">
+        <div class="search-bar">
+            <div class="search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="searchInput" placeholder="搜索政策名称、发布机关、关键词">
+            </div>
+        </div>
+
+        <div class="filter-tabs" id="filterTabs">
+            <div class="filter-tab active" data-tab="domain">按业务领域</div>
+            <div class="filter-tab" data-tab="category">按政策类型</div>
+        </div>
+
+        <div class="split-layout">
+            <div class="split-sidebar" id="splitSidebar">
+                <!-- 动态填充 -->
+            </div>
+            <div class="split-main" id="knowledgeList">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-bar" id="tabBar"></div>
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var list = DataStore.knowledge.policies.filter(function(item) { return item.auditStatus === 'approved'; });
+    var tabs = {
+        domain: ['建筑工地', '玻璃幕墙', '燃气', '自建房', '交通', '交运中心', '高坠'],
+        category: ['指导意见', '实施方案', '管理办法']
+    };
+    var currentTab = 'domain';
+    var currentValue = tabs.domain[0];
+    var keyword = '';
+    var sidebar = document.getElementById('splitSidebar');
+    var container = document.getElementById('knowledgeList');
+
+    function matchesTab(item) {
+        if (currentTab === 'domain') {
+            if (currentValue === '燃气') {
+                return item.domain === '燃气' || item.domain === '燃气安全';
+            }
+            return item.domain === currentValue;
+        }
+        return item.category === currentValue;
+    }
+
+    function matchesKeyword(item, kw) {
+        if (!kw) return true;
+        var text = (item.title + ' ' + item.organ + ' ' + (item.summary || '') + ' ' + (item.domain || '') + ' ' + (item.category || '')).toLowerCase();
+        return text.indexOf(kw.toLowerCase()) !== -1;
+    }
+
+    function renderSidebar() {
+        sidebar.innerHTML = tabs[currentTab].map(function(val) {
+            var active = val === currentValue ? ' active' : '';
+            return '<div class="s-item' + active + '" data-value="' + App.escapeHtml(val) + '">' + App.escapeHtml(val) + '</div>';
+        }).join('');
+    }
+
+    function render() {
+        var filtered = list.filter(function(item) {
+            if (keyword) return matchesKeyword(item, keyword);
+            return matchesTab(item);
+        });
+        if (!filtered.length) {
+            container.innerHTML = '<div class="empty-state-sm"><i class="fa-regular fa-folder-open"></i>暂无相关政策</div>';
+            return;
+        }
+        container.innerHTML = filtered.map(function(item) {
+            return '<div class="knowledge-card tap" onclick="App.go(\'knowledge-detail.html?type=policies&id=' + item.id + '\')">' +
+                '<div class="kc-tag policy"><i class="fa-solid fa-file-lines"></i> ' + App.escapeHtml(item.category) + '</div>' +
+                '<div class="kc-title">' + App.escapeHtml(item.title) + '</div>' +
+                '<div class="kc-meta">' + App.escapeHtml(item.organ) + ' · ' + item.pubDate + '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    document.getElementById('filterTabs').addEventListener('click', function(e) {
+        var tab = e.target.closest('.filter-tab');
+        if (!tab) return;
+        document.querySelectorAll('.filter-tab').forEach(function(t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        currentTab = tab.dataset.tab;
+        currentValue = tabs[currentTab][0];
+        renderSidebar();
+        render();
+    });
+
+    sidebar.addEventListener('click', function(e) {
+        var item = e.target.closest('.s-item');
+        if (!item) return;
+        document.querySelectorAll('.s-item').forEach(function(s) { s.classList.remove('active'); });
+        item.classList.add('active');
+        currentValue = item.dataset.value;
+        render();
+    });
+
+    document.getElementById('searchInput').addEventListener('input', function() {
+        keyword = this.value.trim();
+        render();
+    });
+
+    renderSidebar();
+    render();
+    App.renderTabBar('home');
+})();
+</script>
+</body>
+</html>

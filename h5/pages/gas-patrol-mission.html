@@ -1,0 +1,530 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>巡查任务</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/tokens.css">
+    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../assets/css/h5-frame.css">
+    <style>
+        .law-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: hidden;
+            padding: var(--space);
+            background: var(--bg-dark);
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .law-body::-webkit-scrollbar { display: none; }
+
+        .task-list-wrapper {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            margin: 0 calc(-1 * var(--space));
+            padding: 0 var(--space);
+        }
+        .task-list-wrapper::-webkit-scrollbar { display: none; }
+
+        .kpi-value.total { color: var(--text-primary); }
+        .kpi-value.ongoing { color: var(--primary); }
+        .kpi-value.overdue { color: var(--dot-red); }
+        .kpi-value.completed { color: var(--success); }
+
+        .kpi-row { margin-bottom: 12px; }
+
+        .search-filter-area { margin-bottom: 12px; }
+        .search-bar {
+            display: flex;
+            align-items: center;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 8px;
+            padding: 0 12px 0 0;
+            height: 40px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .search-bar .domain-select {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 8px 0 12px;
+            border-right: 1px solid var(--input-border);
+            height: 24px;
+            font-size: 13px;
+            color: var(--text-primary);
+            background: transparent;
+            white-space: nowrap;
+            cursor: pointer;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 2;
+        }
+        .search-bar .domain-select i { font-size: 10px; color: var(--text2); margin: 0; }
+        .search-bar input {
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            color: var(--text-primary);
+            flex: 1;
+            outline: none;
+            height: 100%;
+            padding-left: 12px;
+        }
+        .search-bar .search-icon { color: var(--text2); font-size: 14px; margin: 0 8px 0 4px; }
+
+        .quick-filter-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .quick-filter-bar::-webkit-scrollbar { display: none; }
+        .filter-btn {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text2);
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .filter-btn.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .task-list { display: flex; flex-direction: column; gap: 10px; padding-bottom: var(--space); }
+        .task-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 14px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 2px 10px var(--shadow);
+            border: 1px solid var(--border);
+        }
+        .task-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            border-radius: 12px 0 0 12px;
+        }
+        .task-card.urgent-high::before { background: var(--dot-red); }
+        .task-card.urgent-medium::before { background: var(--dot-orange); }
+        .task-card.urgent-low::before { background: var(--success); }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        .task-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+            line-height: 1.4;
+        }
+        .task-type-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: 8px;
+            white-space: nowrap;
+        }
+        .task-type-tag.daily { background: rgba(26,115,232,0.12); color: var(--primary); }
+        .task-type-tag.special { background: rgba(217,48,37,0.12); color: var(--dot-red); }
+        .task-type-tag.temporary { background: rgba(249,171,0,0.16); color: #c68400; }
+        .task-type-tag.review { background: rgba(30,142,62,0.12); color: var(--success); }
+
+        .task-info-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: var(--text-primary);
+        }
+        .task-info-row i {
+            font-size: 12px;
+            color: var(--text2);
+            width: 14px;
+            text-align: center;
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+        .task-info-row .label {
+            color: var(--text2);
+            flex-shrink: 0;
+            white-space: nowrap;
+            min-width: 70px;
+        }
+        .task-info-row .value { flex: 1; line-height: 1.5; }
+        .town-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            flex: 1;
+        }
+        .town-tag {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            background: var(--bg-dark);
+            color: var(--text2);
+        }
+
+        .task-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+        .deadline { font-size: 11px; color: var(--text2); }
+        .deadline.overdue { color: var(--dot-red); font-weight: 600; }
+        .overdue-tag {
+            display: inline-block;
+            background: rgba(217,48,37,0.12);
+            color: var(--dot-red);
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 6px;
+            font-weight: 600;
+        }
+
+        .bottom-spacer { height: 20px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+        .empty-state i { font-size: 48px; margin-bottom: 16px; color: var(--border); }
+        .empty-state p { font-size: 14px; }
+
+        .picker-list { display: flex; flex-direction: column; gap: 4px; }
+        .picker-item { padding: 12px 16px; border-radius: var(--radius-sm); font-size: 14px; color: var(--text-primary); cursor: pointer; }
+        .picker-item.active { color: var(--primary); font-weight: 600; background: rgba(var(--primary-rgb), .1); }
+        .sheet-close { font-size: 16px; color: var(--text2); cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="side-button side-button-left mute"></div>
+        <div class="side-button side-button-left volume-up"></div>
+        <div class="side-button side-button-left volume-down"></div>
+        <div class="side-button side-button-right power"></div>
+        <div class="phone-home-indicator"></div>
+        <div class="phone-shell">
+            <div class="status-bar light">
+                <span class="sb-time" id="statusTime">9:41</span>
+                <span class="sb-icons">
+                    <i class="fa-solid fa-signal"></i>
+                    <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                    <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+                </span>
+            </div>
+
+            <div class="page-hero">
+                <div class="hero-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+                <div class="hero-title">
+                    <h1>巡查任务</h1>
+                </div>
+                <div class="hero-space"></div>
+            </div>
+
+            <div class="law-body">
+                <!-- KPI 卡片 -->
+<div class="kpi-row anim d1">
+                        <div class="kpi-card">
+                            <div class="kpi-value total">24</div>
+                            <div class="kpi-label">总计</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-value ongoing">8</div>
+                            <div class="kpi-label">进行中</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-value overdue">3</div>
+                            <div class="kpi-label">已逾期</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-value completed">13</div>
+                            <div class="kpi-label">已完成</div>
+                    </div>
+                </div>
+
+                <!-- 搜索筛选 -->
+                <div class="anim d2">
+                    <div class="search-filter-area">
+                        <div class="search-bar">
+                            <div class="domain-select" id="domainSelect" onclick="openDomainPicker(event)">
+                                <span id="domainLabel">全部领域</span>
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </div>
+                            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                            <input type="text" placeholder="搜索任务名称、街镇...">
+                        </div>
+                    </div>
+
+                    <!-- Tab 标签 -->
+                    <div class="quick-filter-bar">
+                        <button class="filter-btn" data-type="daily" onclick="toggleTaskFilter(this)">日常巡查</button>
+                        <button class="filter-btn" data-type="special" onclick="toggleTaskFilter(this)">专项巡查</button>
+                        <button class="filter-btn" data-type="temporary" onclick="toggleTaskFilter(this)">临时巡查</button>
+                        <button class="filter-btn" data-type="review" onclick="toggleTaskFilter(this)">复查任务</button>
+                    </div>
+                </div>
+
+                <!-- 任务列表 -->
+                <div class="task-list-wrapper">
+                    <div class="task-list anim d3" id="taskList">
+                    <!-- 任务卡片 1 - 高紧急度 -->
+                    <div class="task-card urgent-high" data-type="temporary">
+                        <div class="task-header">
+                            <div class="task-name">青村镇老旧小区管网应急排查</div>
+                            <div class="task-type-tag temporary">临时巡查</div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span class="label">巡查街镇：</span>
+                            <div class="town-tags">
+                                <span class="town-tag">青村镇</span>
+                                <span class="town-tag">奉浦街道</span>
+                            </div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-diagram-project"></i>
+                            <span class="label">巡查点位数：</span>
+                            <span class="value">3 个点位</span>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                            <span class="label">任务要求：</span>
+                            <span class="value">对老旧小区燃气管道进行全面排查，重点检查泄漏隐患</span>
+                        </div>
+                        <div class="task-footer">
+                            <div class="deadline overdue">
+                                <i class="fa-regular fa-clock"></i> 截止日期：2025-06-10<span class="overdue-tag">已逾期</span>
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="App.go('gas-task-details.html')">
+                                <i class="fa-solid fa-play" style="margin-right:4px;"></i>执行
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 任务卡片 2 - 高紧急度 -->
+                    <div class="task-card urgent-high" data-type="special">
+                        <div class="task-header">
+                            <div class="task-name">奉浦大道商业综合体专项巡查</div>
+                            <div class="task-type-tag special">专项巡查</div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span class="label">巡查街镇：</span>
+                            <div class="town-tags">
+                                <span class="town-tag">奉浦街道</span>
+                            </div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-diagram-project"></i>
+                            <span class="label">巡查点位数：</span>
+                            <span class="value">5 个点位</span>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                            <span class="label">任务要求：</span>
+                            <span class="value">商业综合体消防安全专项检查，包括疏散通道、消防设施</span>
+                        </div>
+                        <div class="task-footer">
+                            <div class="deadline">
+                                <i class="fa-regular fa-clock"></i> 截止日期：2025-06-20
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="App.go('gas-task-details.html')">
+                                <i class="fa-solid fa-play" style="margin-right:4px;"></i>执行
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 任务卡片 3 - 中紧急度 -->
+                    <div class="task-card urgent-medium" data-type="daily">
+                        <div class="task-header">
+                            <div class="task-name">南桥镇商业街区燃气设施巡检</div>
+                            <div class="task-type-tag daily">日常巡查</div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span class="label">巡查街镇：</span>
+                            <div class="town-tags">
+                                <span class="town-tag">南桥镇</span>
+                                <span class="town-tag">青村镇</span>
+                            </div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-diagram-project"></i>
+                            <span class="label">巡查点位数：</span>
+                            <span class="value">2 个点位</span>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                            <span class="label">任务要求：</span>
+                            <span class="value">商业街区燃气设施日常巡检，检查管道、阀门、计量表</span>
+                        </div>
+                        <div class="task-footer">
+                            <div class="deadline">
+                                <i class="fa-regular fa-clock"></i> 截止日期：2025-06-05
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="App.go('gas-task-details.html')">
+                                <i class="fa-solid fa-play" style="margin-right:4px;"></i>执行
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 任务卡片 4 - 低紧急度 -->
+                    <div class="task-card urgent-low" data-type="daily">
+                        <div class="task-header">
+                            <div class="task-name">金海社区燃气管道季度检查</div>
+                            <div class="task-type-tag daily">日常巡查</div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span class="label">巡查街镇：</span>
+                            <div class="town-tags">
+                                <span class="town-tag">金海社区</span>
+                            </div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-diagram-project"></i>
+                            <span class="label">巡查点位数：</span>
+                            <span class="value">4 个点位</span>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                            <span class="label">任务要求：</span>
+                            <span class="value">社区燃气管道季度例行检查，记录运行状态</span>
+                        </div>
+                        <div class="task-footer">
+                            <div class="deadline">
+                                <i class="fa-regular fa-clock"></i> 截止日期：2025-06-10
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="App.go('gas-task-details.html')">
+                                <i class="fa-solid fa-play" style="margin-right:4px;"></i>执行
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 任务卡片 5 - 低紧急度 -->
+                    <div class="task-card urgent-low" data-type="review">
+                        <div class="task-header">
+                            <div class="task-name">四团镇燃气管网隐患排查复查</div>
+                            <div class="task-type-tag review">复查任务</div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span class="label">巡查街镇：</span>
+                            <div class="town-tags">
+                                <span class="town-tag">四团镇</span>
+                                <span class="town-tag">海湾镇</span>
+                            </div>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-diagram-project"></i>
+                            <span class="label">巡查点位数：</span>
+                            <span class="value">6 个点位</span>
+                        </div>
+                        <div class="task-info-row">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                            <span class="label">任务要求：</span>
+                            <span class="value">对前期排查发现的隐患点进行复查，确认整改情况</span>
+                        </div>
+                        <div class="task-footer">
+                            <div class="deadline">
+                                <i class="fa-regular fa-clock"></i> 截止日期：2025-06-25
+                            </div>
+                            <button class="btn btn-sm btn-primary" onclick="App.go('gas-task-details.html')">
+                                <i class="fa-solid fa-play" style="margin-right:4px;"></i>执行
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bottom-spacer"></div>
+                </div>
+            </div>
+        </div>
+        <!-- 手机壳 Home 指示条和刘海已改用真实元素，见 phone-frame 同级 -->
+    </div>
+
+    <script src="../assets/js/theme.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/risk-data.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        // 领域枚举
+        const domains = ['全部领域', '建筑工地', '基坑', '玻璃幕墙', '燃气', '高坠', '交通', '城镇自建房', '农村自建房'];
+        let selectedDomain = '全部领域';
+
+        // 打开领域选择器
+        function openDomainPicker(event) {
+            if (event) event.stopPropagation();
+            const items = domains.map(function(d) {
+                return '<div class="picker-item ' + (d === selectedDomain ? 'active' : '') + '" onclick="selectDomain(\'' + d + '\')">' + d + '</div>';
+            }).join('');
+            const mask = document.createElement('div');
+            mask.className = 'modal-mask show';
+            mask.innerHTML = '<div class="modal-sheet"><div class="sheet-header"><div class="sheet-title">选择领域</div><div class="sheet-close" onclick="this.closest(\'.modal-mask\').remove()">\u2715</div></div><div class="picker-list">' + items + '</div></div>';
+            document.querySelector('.phone-shell').appendChild(mask);
+            mask.addEventListener('click', function(e) { if (e.target === mask) mask.remove(); });
+            document.querySelector('.phone-shell').style.overflowY = 'hidden';
+        }
+
+        function selectDomain(domain) {
+            selectedDomain = domain;
+            document.getElementById('domainLabel').textContent = domain;
+            document.querySelector('.modal-mask').remove();
+            document.querySelector('.phone-shell').style.overflowY = 'auto';
+            applyFilters();
+        }
+
+        // Tab 切换功能
+        function toggleTaskFilter(btn) {
+            btn.classList.toggle('active');
+            applyFilters();
+        }
+
+        // 搜索筛选
+        document.querySelector('.search-bar input').addEventListener('input', function() {
+            applyFilters();
+        });
+
+        function applyFilters() {
+            const keyword = document.querySelector('.search-bar input').value.toLowerCase();
+            const activeTypes = Array.from(document.querySelectorAll('.filter-btn.active')).map(function(btn) { return btn.dataset.type; });
+            const cards = document.querySelectorAll('.task-card');
+
+            cards.forEach(function(card) {
+                const text = card.textContent.toLowerCase();
+                const type = card.dataset.type;
+                const matchKeyword = text.includes(keyword);
+                const matchType = activeTypes.length === 0 || activeTypes.indexOf(type) > -1;
+                card.style.display = (matchKeyword && matchType) ? 'block' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>

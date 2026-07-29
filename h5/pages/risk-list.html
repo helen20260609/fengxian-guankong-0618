@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>风险清单</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.filter-chips { display: flex; gap: 8px; overflow-x: auto; padding: 0 14px 12px; scrollbar-width: none; }
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chips .chip { flex-shrink: 0; padding: 5px 12px; border-radius: 10px; font-size: 11px; border: 1px solid var(--border); background: var(--card); color: var(--text-primary); display: flex; align-items: center; gap: 4px; }
+.filter-chips .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.filter-chips .chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+.load-more { text-align: center; padding: 16px; color: var(--text2); font-size: 11px; }
+.load-more i { margin-right: 4px; }
+
+.empty-state { padding: 60px 20px; }
+
+.hero-stats-v2 .hs-value { color: #fff; }
+.hero-stats-v2 .hs-value.red { color: #fff; }
+
+.risk-page-body { flex: 1; min-height: 0; }
+.split-main { padding-top: 14px; overflow-y: auto; scrollbar-width: none; }
+.split-main::-webkit-scrollbar { display: none; }
+.page-hero .ph-sub { position: static; text-align: center; font-size: 12.5px; opacity: .85; margin-top: 40px; width: 100%; z-index: 2; }
+.page-hero .hero-stats-v2 { position: relative; z-index: 2; width: 100%; margin-top: 40px; }
+.page-hero .ph-action { position: absolute; right: 14px; top: calc(34px + 16px); margin: 0; display: flex; align-items: center; height: 32px; z-index: 2; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title" id="pageTitle">风险清单</div>
+        <div class="hero-stats-v2" style="margin-top:16px">
+            <div class="hs-item"><div class="hs-value" id="statTotal">--</div><div class="hs-label" data-level="total">全部风险</div></div>
+            <div class="hs-item"><div class="hs-value red" id="statRed">--</div><div class="hs-label" data-level="red">红色</div></div>
+            <div class="hs-item"><div class="hs-value orange" id="statOrange">--</div><div class="hs-label" data-level="orange">橙色</div></div>
+            <div class="hs-item"><div class="hs-value yellow" id="statYellow">--</div><div class="hs-label" data-level="yellow">黄色</div></div>
+        </div>
+        <div id="pickHint" style="display:none;margin-top:10px;font-size: 12px;color:#fff;opacity:.9;text-align:center">请点击列表项选择关联风险</div>
+    </div>
+
+    <div class="risk-page-body">
+        <div class="search-bar">
+            <div class="search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="searchInput" placeholder="搜索风险名称、部位、关键词">
+            </div>
+        </div>
+
+        <div class="filter-chips" id="levelFilter">
+            <div class="chip active" data-level="">全部</div>
+            <div class="chip" data-level="red"><span class="dot" style="background:var(--dot-red)"></span>红色</div>
+            <div class="chip" data-level="orange"><span class="dot" style="background:var(--dot-orange)"></span>橙色</div>
+            <div class="chip" data-level="yellow"><span class="dot" style="background:var(--dot-yellow)"></span>黄色</div>
+            <div class="chip" data-level="blue"><span class="dot" style="background:var(--dot-blue)"></span>蓝色</div>
+        </div>
+
+        <div class="split-layout">
+            <div class="split-main" id="riskMain">
+                <div id="riskList">
+                    <!-- 动态填充 -->
+                </div>
+                <div class="load-more" id="loadMore" onclick="loadMore()">
+                    <i class="fa-solid fa-chevron-down"></i> 加载更多
+                </div>
+            </div>
+        </div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var currentDomain = App.getQuery('domain') || '';
+    var currentLevel = App.getQuery('level') || '';
+    var isPickMode = App.getQuery('mode') === 'pick';
+    var keyword = '';
+    var pageSize = 10;
+    var currentPage = 1;
+
+    if (!currentDomain) {
+        var redirectMode = isPickMode ? '?mode=pick' : '';
+        App.go('risk-domain-select.html' + redirectMode);
+        return;
+    }
+
+    var isSelfbuild = currentDomain === 'selfbuild';
+    var selfbuildLevelNames = {
+        red: '疑似危房',
+        orange: '严重损坏房',
+        yellow: '一般损坏房',
+        blue: '完好房(基本完好房)'
+    };
+
+    function updateLevelLabels() {
+        if (!isSelfbuild) return;
+        document.querySelectorAll('#levelFilter .chip[data-level]').forEach(function(c) {
+            var lv = c.dataset.level;
+            if (!lv) return;
+            var name = selfbuildLevelNames[lv] || '';
+            var dot = c.querySelector('.dot');
+            c.textContent = '';
+            if (dot) c.appendChild(dot);
+            c.appendChild(document.createTextNode(name));
+        });
+        document.querySelectorAll('.hero-stats-v2 .hs-label[data-level]').forEach(function(l) {
+            var lv = l.dataset.level;
+            if (lv && selfbuildLevelNames[lv]) l.textContent = selfbuildLevelNames[lv];
+        });
+    }
+
+    var domainName = (RiskData.domains[currentDomain] || {}).name || '风险清单';
+
+    if (isPickMode) {
+        document.getElementById('pageTitle').textContent = '选择风险类型';
+        document.getElementById('pickHint').style.display = 'block';
+    } else {
+        document.getElementById('pageTitle').textContent = domainName;
+    }
+
+    function renderStats() {
+        var all = RiskData.getAll ? RiskData.getAll() : [];
+        var counts = { red: 0, orange: 0, yellow: 0, blue: 0 };
+        all.forEach(function(item) {
+            if (counts[item.level] !== undefined) counts[item.level]++;
+        });
+        document.getElementById('statTotal').textContent = all.length;
+        document.getElementById('statRed').textContent = counts.red;
+        document.getElementById('statOrange').textContent = counts.orange;
+        document.getElementById('statYellow').textContent = counts.yellow;
+    }
+
+    // 等级筛选高亮
+    document.querySelectorAll('#levelFilter .chip').forEach(function(c) {
+        if (c.dataset.level === currentLevel) {
+            c.classList.add('active');
+            document.querySelector('#levelFilter .chip[data-level=""]').classList.remove('active');
+        }
+        c.addEventListener('click', function() {
+            document.querySelectorAll('#levelFilter .chip').forEach(function(x) { x.classList.remove('active'); });
+            this.classList.add('active');
+            currentLevel = this.dataset.level;
+            currentPage = 1;
+            renderList(true);
+        });
+    });
+
+    window.handleSearch = function() {
+        keyword = document.getElementById('searchInput').value.trim();
+        currentPage = 1;
+        renderList(true);
+    };
+
+    window.loadMore = function() {
+        currentPage++;
+        renderList(false);
+    };
+
+    function renderList(clear) {
+        var container = document.getElementById('riskList');
+        if (clear) container.innerHTML = '';
+
+        var list = RiskData.getList(currentDomain, { level: currentLevel, keyword: keyword });
+        var total = list.length;
+        var start = (currentPage - 1) * pageSize;
+        var pageItems = list.slice(start, start + pageSize);
+
+        if (total === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fa-regular fa-folder-open"></i><div class="empty-title">未找到相关风险</div><div class="empty-desc">请尝试切换领域、等级或搜索关键词</div></div>';
+            document.getElementById('loadMore').style.display = 'none';
+            return;
+        }
+
+        pageItems.forEach(function(item) {
+            var clickAction = isPickMode
+                ? 'onclick="pickRisk(\'' + item.id + '\')"'
+                : 'onclick="App.go(\'risk-detail.html?id=' + item.id + '\')"';
+            var html = '<div class="risk-card-item tap anim" ' + clickAction + '>' +
+                '<div class="rc-header">' +
+                '<div class="rc-title">' + App.escapeHtml(item.riskIdentify.length > 40 ? item.riskIdentify.slice(0, 40) + '…' : item.riskIdentify) + '</div>' +
+                '<span class="risk-badge ' + item.level + '" style="flex-shrink:0"><span class="risk-dot ' + item.level + '"></span> ' + levelName(item.level) + '</span>' +
+                '</div>' +
+                '<div class="rc-meta">' +
+                '<span><i class="fa-solid fa-layer-group"></i> ' + App.escapeHtml(item.main) + '</span>' +
+                '<span><i class="fa-solid fa-tag"></i> ' + App.escapeHtml(item.sub) + '</span>' +
+                '</div>' +
+                '<div class="rc-desc">' + App.escapeHtml(item.content) + '</div>' +
+                '</div>';
+            container.insertAdjacentHTML('beforeend', html);
+        });
+
+        if (start + pageSize >= total) {
+            document.getElementById('loadMore').style.display = 'none';
+        } else {
+            document.getElementById('loadMore').style.display = 'block';
+        }
+    }
+
+    function levelName(level) {
+        if (isSelfbuild && selfbuildLevelNames[level]) {
+            return selfbuildLevelNames[level];
+        }
+        var map = { red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色' };
+        return map[level] || level;
+    }
+
+    window.pickRisk = function(id) {
+        var risk = RiskData.getDetail(id);
+        if (!risk) return;
+        localStorage.setItem('risk-pick-data', JSON.stringify({
+            riskId: id,
+            riskIdentify: risk.riskIdentify,
+            main: risk.main,
+            sub: risk.sub,
+            content: risk.content,
+            level: risk.level,
+            accident: risk.accident,
+            measures: risk.measures,
+            basis: risk.basis,
+            domain: risk.domain,
+            timestamp: Date.now()
+        }));
+        App.back();
+    };
+
+    document.getElementById('searchInput').addEventListener('input', App.debounce(handleSearch, 400));
+
+    updateLevelLabels();
+    renderStats();
+    renderList(true);
+})();
+</script>
+</body>
+</html>

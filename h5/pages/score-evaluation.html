@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>分数评价</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+.page-body { padding-bottom: 20px; }
+.score-hero { background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%); padding: 24px 18px; color: #fff; text-align: center; }
+.score-hero .sh-num { font-size: 54px; font-weight: 800; line-height: 1; }
+.score-hero .sh-label { font-size: 13px; opacity: .9; margin-top: 8px; }
+.score-hero .sh-level { display: inline-block; margin-top: 12px; padding: 4px 16px; border-radius: 12px; font-size: 13px; font-weight: 700; background: rgba(255,255,255,.2); }
+
+.dimension-list { padding: 14px; }
+.dim-item { background: var(--card); border-radius: 8px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.dim-item .di-top { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+.dim-item .di-top .label { color: var(--text2); }
+.dim-item .di-top .value { font-weight: 700; }
+.dim-item .di-bar { height: 8px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; }
+.dim-item .di-fill { height: 100%; border-radius: 4px; }
+.dim-item .di-weight { font-size: 11px; color: var(--text2); margin-top: 6px; }
+
+.chart-card { background: var(--card); border-radius: 10px; margin: 0 14px 14px; padding: 14px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.chart-card .cc-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.chart-box { width: 100%; height: 220px; }
+
+.eval-list { padding: 0 14px; }
+.eval-item { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.eval-item.low { border-left: 4px solid var(--danger); }
+.eval-item .ei-top { display: flex; justify-content: space-between; align-items: center; }
+.eval-item .ei-title { font-size: 13px; font-weight: 700; }
+.eval-item .ei-score { font-size: 17px; font-weight: 800; }
+.eval-item .ei-score.low { color: var(--danger); }
+.eval-item .ei-meta { font-size: 11px; color: var(--text2); margin-top: 6px; }
+.eval-item .ei-reason { font-size: 11px; color: var(--danger); margin-top: 6px; }
+.section-title { font-size: 14px; font-weight: 700; margin: 20px 14px 12px; }
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 14px 14px; }
+.stat-box { background: var(--card); border-radius: 8px; padding: 14px; text-align: center; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.stat-box .value { font-size: 19px; font-weight: 800; color: var(--primary); }
+.stat-box .label { font-size: 11px; color: var(--text2); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="nav-bar" id="navBar"></div>
+
+    <div class="page-body">
+        <div class="score-hero">
+            <div class="sh-num" id="avgScore">--</div>
+            <div class="sh-label">综合评估得分</div>
+            <div class="sh-level" id="avgLevel">--</div>
+        </div>
+
+        <div class="section-title">维度得分</div>
+        <div class="dimension-list anim d1" id="dimensionList"></div>
+
+        <div class="chart-card anim d2">
+            <div class="cc-title">维度雷达图</div>
+            <div class="chart-box" id="radarChart"></div>
+        </div>
+
+        <div class="section-title">统计分析</div>
+        <div class="stat-row anim d3">
+            <div class="stat-box"><div class="value" id="evalCount">--</div><div class="label">评价数</div></div>
+            <div class="stat-box"><div class="value" id="lowCount">--</div><div class="label">低分预警</div></div>
+            <div class="stat-box"><div class="value" id="goodRate">--</div><div class="label">优良率</div></div>
+        </div>
+
+        <div class="chart-card anim d4">
+            <div class="cc-title">部门得分排名</div>
+            <div class="chart-box" id="rankChart"></div>
+        </div>
+
+        <div class="section-title">评分明细</div>
+        <div class="eval-list anim d5" id="evalList"></div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    App.renderNavBar('分数评价');
+
+    var scores = DataStore.scoreEvaluations;
+    var dims = DataStore.assessment.dimensions;
+    var colors = ['var(--primary)', 'var(--warning)', 'var(--success)', 'var(--danger)'];
+
+    function levelClass(score) {
+        if (score >= 90) return '优';
+        if (score >= 75) return '良';
+        if (score >= 60) return '中';
+        return '差';
+    }
+
+    var avgScore = Math.round(scores.reduce(function(s, item) { return s + item.score; }, 0) / scores.length);
+    document.getElementById('avgScore').textContent = avgScore;
+    document.getElementById('avgLevel').textContent = levelClass(avgScore);
+
+    // 维度得分
+    var dimContainer = document.getElementById('dimensionList');
+    Object.keys(dims).forEach(function(key, idx) {
+        var d = dims[key];
+        var html = '<div class="dim-item">' +
+            '<div class="di-top">' +
+                '<span class="label">' + d.label + '（权重 ' + d.weight + '%）</span>' +
+                '<span class="value">' + d.score + '</span>' +
+            '</div>' +
+            '<div class="di-bar"><div class="di-fill" style="width:' + d.score + '%;background:' + colors[idx % colors.length] + '"></div></div>' +
+        '</div>';
+        dimContainer.insertAdjacentHTML('beforeend', html);
+    });
+
+    // 雷达图
+    var radarChart = echarts.init(document.getElementById('radarChart'));
+    radarChart.setOption({
+        tooltip: {},
+        radar: {
+            indicator: Object.keys(dims).map(function(k) { return { name: dims[k].label, max: 100 }; }),
+            radius: '65%',
+            splitNumber: 4,
+            axisName: { fontSize: 11 }
+        },
+        series: [{
+            type: 'radar',
+            data: [{
+                value: Object.keys(dims).map(function(k) { return dims[k].score; }),
+                name: '当前得分',
+                areaStyle: { color: 'rgba(59,130,246,.2)' },
+                lineStyle: { color: '#3b82f6' },
+                itemStyle: { color: '#3b82f6' }
+            }]
+        }]
+    });
+
+    // 统计
+    var lowCount = scores.filter(function(s) { return s.score < 60; }).length;
+    var goodCount = scores.filter(function(s) { return s.score >= 75; }).length;
+    document.getElementById('evalCount').textContent = scores.length;
+    document.getElementById('lowCount').textContent = lowCount;
+    document.getElementById('goodRate').textContent = Math.round(goodCount / scores.length * 100) + '%';
+
+    // 部门排名
+    var rankChart = echarts.init(document.getElementById('rankChart'));
+    var deptData = scores.slice().sort(function(a, b) { return a.score - b.score; });
+    rankChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 10, right: 20, top: 10, bottom: 20, containLabel: true },
+        xAxis: { type: 'value', max: 100, show: false },
+        yAxis: { type: 'category', data: deptData.map(function(s) { return s.unit; }), axisLine: { show: false }, axisTick: { show: false } },
+        series: [{
+            type: 'bar',
+            data: deptData.map(function(s) { return s.score; }),
+            itemStyle: {
+                borderRadius: [0, 8, 8, 0],
+                color: function(params) { return params.value < 60 ? '#ef4444' : '#3b82f6'; }
+            },
+            label: { show: true, position: 'right', fontSize: 11 }
+        }]
+    });
+
+    // 评分明细
+    document.getElementById('evalList').innerHTML = scores.map(function(s, idx) {
+        var isLow = s.score < 60;
+        var level = levelClass(s.score);
+        return '<div class="eval-item ' + (isLow ? 'low' : '') + ' anim d' + (idx % 5 + 1) + ">" +
+            '<div class="ei-top">' +
+                '<div class="ei-title">' + App.escapeHtml(s.title) + '</div>' +
+                '<div class="ei-score ' + (isLow ? 'low' : '') + '" style="color:' + (isLow ? 'var(--danger)' : 'var(--primary)') + '">' + s.score + '</div>' +
+            '</div>' +
+            '<div class="ei-meta">' + App.escapeHtml(s.unit) + ' · 等级 ' + level + '</div>' +
+            '<div class="ei-meta">' +
+                '及时 ' + s.timeliness + ' · 规范 ' + s.compliance + ' · 有效 ' + s.effectiveness + ' · 资源 ' + s.resource +
+            '</div>' +
+            (s.reason ? '<div class="ei-reason"><i class="fa-solid fa-circle-exclamation"></i> ' + App.escapeHtml(s.reason) + '</div>' : '') +
+        '</div>';
+    }).join('');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>防汛情况管理</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+
+.phone-shell { display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.content-sheet.page-body-sheet { flex: 1; overflow-y: auto; overflow-x: hidden; margin-top: 0; padding-top: 18px; border-radius: 0; box-shadow: none; border: none; background: transparent; scrollbar-width: none; -ms-overflow-style: none; }
+.content-sheet.page-body-sheet::-webkit-scrollbar { display: none; }
+
+/* 搜索栏 */
+.content-sheet .search-bar { align-items: center; gap: 10px; margin: 4px 16px 14px; background: transparent; box-shadow: none; border: none; padding: 0; }
+.content-sheet .search-input-wrapper { display: flex; align-items: center; background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); min-height: 40px; position: relative; }
+.content-sheet .search-input-wrapper input { background: transparent; border-color: transparent; height: 40px; padding: 0 30px 0 38px; flex: 1; width: 100%; min-width: 0; }
+.content-sheet .filter-trigger {
+    flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 40px; padding: 0 14px; background: var(--card); color: var(--text2); font-size: 13px;
+    border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 2px 8px var(--shadow); cursor: pointer;
+    transition: all .15s;
+}
+.content-sheet .filter-trigger:active { transform: scale(.96); }
+.search-input-wrapper .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; color: var(--text2); }
+.search-input-wrapper .clear-btn {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    width: 18px; height: 18px; border-radius: 50%; background: var(--text2); color: #fff; font-size: 10px;
+    display: none; align-items: center; justify-content: center; cursor: pointer; border: none; padding: 0;
+}
+
+/* 汇总 */
+.summary-bar { font-size: 13px; color: var(--text2); margin: 0 16px 12px; }
+.summary-bar strong { color: var(--text-primary); font-weight: 700; }
+
+/* 列表卡片 */
+.report-card { background: var(--card); border-radius: 14px; box-shadow: 0 2px 10px var(--shadow); border: 1px solid var(--border); padding: 14px; margin: 0 0 12px; cursor: pointer; transition: transform .12s; }
+.report-card:active { transform: scale(.99); }
+
+.card-main { display: flex; align-items: flex-start; gap: 12px; }
+.date-box {
+    flex-shrink: 0; width: 54px; height: 54px; border-radius: 12px; background: #e8f2fe;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; color: #1a73e8;
+}
+.date-box .day { font-size: 22px; font-weight: 800; line-height: 1; }
+.date-box .month { font-size: 12px; font-weight: 600; margin-top: 2px; }
+
+.card-info { flex: 1; min-width: 0; }
+.info-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.town-name { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+
+.reporter-line { font-size: 13px; color: var(--text2); margin-top: 6px; }
+
+/* 指标网格 */
+.kpi-grid-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.kpi-mini { text-align: center; }
+.kpi-mini .value { font-size: 17px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+.kpi-mini .value.orange { color: #e65100; }
+.kpi-mini .value.red { color: #d93025; }
+.kpi-mini .label { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text2); }
+.empty-state i { font-size: 48px; margin-bottom: 12px; opacity: .5; }
+.empty-state .empty-title { font-size: 15px; color: var(--text-primary); margin-bottom: 6px; }
+.empty-state .empty-desc { font-size: 13px; }
+.bottom-spacer { height: 20px; }
+
+/* 筛选抽屉 */
+.modal-sheet {
+    position: absolute; left: 0; bottom: 0; width: 100%; max-height: 80%; display: flex !important;
+    flex-direction: column; opacity: 0; pointer-events: none; transform: translateY(100%);
+    transition: transform .25s ease, opacity .25s ease; z-index: 1001; background: var(--card);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0; scrollbar-width: none; -ms-overflow-style: none;
+}
+.modal-sheet::-webkit-scrollbar { display: none; }
+.modal-sheet.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.modal-mask { display: none; opacity: 0; transition: opacity .25s ease; z-index: 1000; }
+.modal-mask.show { display: block; opacity: 1; }
+.sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sheet-title { font-size: 16px; font-weight: 700; }
+.sheet-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--text2); cursor: pointer; }
+.sheet-body { padding: 16px; flex: 1; overflow-y: auto; min-height: 0; scrollbar-width: none; -ms-overflow-style: none; }
+.sheet-body::-webkit-scrollbar { display: none; }
+.filter-section { margin-bottom: 18px; }
+.filter-section .filter-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px; }
+.filter-section .filter-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.filter-chip { padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text-primary); cursor: pointer; transition: all .15s; }
+.filter-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.sheet-footer { display: flex; gap: 12px; padding: 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.sheet-footer .btn { flex: 1; height: 44px; border-radius: 10px; }
+
+.selected-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 16px 12px; }
+.tag { background: rgba(var(--primary-rgb),.08); color: var(--primary); border: 1px solid rgba(var(--primary-rgb),.18); border-radius: 999px; padding: 4px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.tag i { cursor: pointer; font-size: 10px; }
+
+:root[data-theme="dark"] .date-box { background: rgba(var(--primary-rgb),.15); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="phone-shell">
+        <div class="top-sticky">
+            <div class="status-bar light">
+                <span class="sb-time" id="statusTime">9:41</span>
+                <span class="sb-icons">
+                    <i class="fa-solid fa-signal"></i>
+                    <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                    <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+                </span>
+            </div>
+            <div class="page-hero">
+                <div class="ph-back" onclick="App.back()">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </div>
+                <div class="ph-title">防汛情况管理</div>
+            </div>
+        </div>
+
+        <div class="content-sheet page-body-sheet">
+            <div class="search-bar">
+                <div class="search-input-wrapper" style="flex:1">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="搜索日期/单位/上报人/电话" autocomplete="off">
+                    <button class="clear-btn" id="clearSearch" onclick="clearSearch(event)"><i class="fa-solid fa-times"></i></button>
+                </div>
+                <div class="filter-trigger" id="filterTrigger" onclick="openDrawer()">
+                    <i class="fa-solid fa-sliders"></i> 筛选
+                </div>
+            </div>
+
+            <div class="selected-tags" id="selectedTags"></div>
+
+            <div class="summary-bar" id="summaryBar">共 <strong>0</strong> 条上报记录</div>
+
+            <div class="card-list" id="cardList"></div>
+
+            <div class="empty-state" id="empty" style="display:none">
+                <i class="fa-regular fa-folder-open"></i>
+                <div class="empty-title">暂无符合条件的上报记录</div>
+                <div class="empty-desc">请调整筛选或搜索条件</div>
+            </div>
+            <div class="bottom-spacer"></div>
+        </div>
+
+        <div class="modal-mask" id="drawerOverlay" onclick="closeDrawer()"></div>
+        <div class="modal-sheet" id="drawer">
+            <div class="sheet-header">
+                <div class="sheet-title">筛选条件</div>
+                <div class="sheet-close" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="sheet-body" id="drawerBody"></div>
+            <div class="sheet-footer">
+                <button class="btn btn-outline" onclick="resetFilters()">重置</button>
+                <button class="btn btn-primary" onclick="confirmFilters()">确定</button>
+            </div>
+        </div>
+    </div>
+    <div class="phone-home-indicator"></div>
+</div>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function(){
+    var allData = [
+        {
+            id: '1', town: '奉城镇', reporter: '李娜', role: '城建中心职员', reportUnit: '奉城镇防汛办', phone: '13801710002',
+            date: '2026-07-19', day: '19', month: '07月',
+            duty: 16, patrol: 8, disasterCount: 1
+        },
+        {
+            id: '2', town: '南桥镇', reporter: '张伟', role: '防汛办副主任', reportUnit: '南桥镇防汛办', phone: '13901710001',
+            date: '2026-07-19', day: '19', month: '07月',
+            duty: 24, patrol: 15, disasterCount: 3
+        }
+    ];
+
+    var selectedTown = '';
+
+    var townOptions = ['全部'].concat(allData.map(function(i){ return i.town; }).filter(function(v, i, a){ return a.indexOf(v) === i; }));
+
+    function getFilteredData() {
+        var keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+        return allData.filter(function(item){
+            if (keyword) {
+                var hay = [item.date, item.town, item.reporter, item.reportUnit, item.phone].join(' ').toLowerCase();
+                if (hay.indexOf(keyword) === -1) return false;
+            }
+            if (selectedTown && selectedTown !== '全部' && item.town !== selectedTown) return false;
+            return true;
+        });
+    }
+
+    function renderCard(item) {
+        return '<div class="report-card" onclick="goDetail(\'' + item.id + '\')">' +
+            '<div class="card-main">' +
+                '<div class="date-box">' +
+                    '<div class="day">' + item.day + '</div>' +
+                    '<div class="month">' + item.month + '</div>' +
+                '</div>' +
+                '<div class="card-info">' +
+                    '<div class="info-head">' +
+                        '<div class="town-name">' + App.escapeHtml(item.town) + '</div>' +
+                    '</div>' +
+                    '<div class="reporter-line">' + App.escapeHtml(item.reporter) + ' · ' + App.escapeHtml(item.reportUnit) + '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="kpi-grid-mini">' +
+                '<div class="kpi-mini"><div class="value">' + item.duty + '</div><div class="label">值班（人次）</div></div>' +
+                '<div class="kpi-mini"><div class="value">' + item.patrol + '</div><div class="label">巡查（人次）</div></div>' +
+                '<div class="kpi-mini"><div class="value red">' + item.disasterCount + '</div><div class="label">受灾数</div></div>' +
+            '</div>' +
+        '</div>';
+    }
+
+    function renderList() {
+        var data = getFilteredData();
+        var container = document.getElementById('cardList');
+        container.innerHTML = data.map(renderCard).join('');
+        document.getElementById('summaryBar').innerHTML = '共 <strong>' + data.length + '</strong> 条上报记录 · 涉及 <strong>' + data.length + '</strong> 家单位';
+        document.getElementById('empty').style.display = data.length === 0 ? 'block' : 'none';
+    }
+
+    window.goDetail = function(id) {
+        App.go('flood-situation-report-detail.html?id=' + id);
+    };
+
+    function updateSearchClear() {
+        var btn = document.getElementById('clearSearch');
+        btn.style.display = document.getElementById('searchInput').value ? 'flex' : 'none';
+    }
+
+    window.clearSearch = function(e) {
+        e.stopPropagation();
+        document.getElementById('searchInput').value = '';
+        updateSearchClear();
+        renderList();
+    };
+
+    document.getElementById('searchInput').addEventListener('input', function() {
+        updateSearchClear();
+        renderList();
+    });
+
+    function renderSelectedTags() {
+        var container = document.getElementById('selectedTags');
+        if (selectedTown && selectedTown !== '全部') {
+            container.innerHTML = '<span class="tag">街镇：' + App.escapeHtml(selectedTown) + '<i class="fa-solid fa-times" onclick="removeFilter()"></i></span>';
+        } else {
+            container.innerHTML = '';
+        }
+    }
+
+    window.removeFilter = function() {
+        selectedTown = '';
+        renderSelectedTags();
+        renderDrawer();
+        renderList();
+    };
+
+    window.openDrawer = function() {
+        document.getElementById('drawerOverlay').classList.add('show');
+        document.getElementById('drawer').classList.add('show');
+    };
+
+    window.closeDrawer = function() {
+        document.getElementById('drawerOverlay').classList.remove('show');
+        document.getElementById('drawer').classList.remove('show');
+    };
+
+    function renderDrawer() {
+        var html = '<div class="filter-section">' +
+            '<div class="filter-title">所属街镇</div>' +
+            '<div class="filter-options">';
+        townOptions.forEach(function(opt) {
+            var active = selectedTown === opt ? ' active' : '';
+            html += '<span class="filter-chip' + active + '" onclick="selectChip(\'' + opt + '\')">' + opt + '</span>';
+        });
+        html += '</div></div>';
+        document.getElementById('drawerBody').innerHTML = html;
+    }
+
+    window.selectChip = function(value) {
+        selectedTown = selectedTown === value ? '' : value;
+        renderDrawer();
+    };
+
+    window.confirmFilters = function() {
+        renderSelectedTags();
+        closeDrawer();
+        renderList();
+    };
+
+    window.resetFilters = function() {
+        selectedTown = '';
+        renderDrawer();
+        renderSelectedTags();
+        renderList();
+    };
+
+    function updateTime() {
+        var now = new Date();
+        var h = now.getHours(), m = now.getMinutes();
+        document.getElementById('statusTime').textContent = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    }
+    updateTime();
+    setInterval(updateTime, 60000);
+
+    renderDrawer();
+    renderSelectedTags();
+    renderList();
+})();
+</script>
+</body>
+</html>
