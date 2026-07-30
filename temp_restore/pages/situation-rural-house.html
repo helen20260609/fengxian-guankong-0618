@@ -1,0 +1,1737 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>农村自建房安全风险一张图 - 风险态势感知</title>
+    <link rel="stylesheet" href="all.min.css">
+    <script src="../js/third-party-data.js"></script>
+    <script src="../js/house-arch-data.js"></script>
+    <script src="../js/echarts.min.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-light: #e8f0fe;
+            --primary-dark: #1557b0;
+            --secondary: #00b4d8;
+            --bg-dark: #f0f4f8;
+            --bg-card: #ffffff;
+            --text-primary: #0d1b2a;
+            --text-secondary: #5f6b7a;
+            --border: #dbe4ed;
+            --shadow: 0 4px 20px rgba(13, 71, 161, 0.08);
+            --radius: 10px;
+            --danger: #e53935;
+            --major: #f57c00;
+            --warning: #f9a825;
+            --safe: #1a73e8;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+        }
+        .page-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+
+        /* 顶部面包屑 + 筛选 */
+        .topbar {
+            background: linear-gradient(90deg, #ffffff 0%, #f5f9ff 100%);
+            border-bottom: 1px solid var(--border);
+            box-shadow: 0 2px 8px rgba(13, 71, 161, 0.06);
+            z-index: 10;
+        }
+        .breadcrumb {
+            padding: 10px 24px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .breadcrumb a { color: var(--text-secondary); text-decoration: none; }
+        .breadcrumb span.current { color: var(--primary); font-weight: 600; }
+        .filter-bar {
+            padding: 10px 24px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-group label { font-size: 13px; color: var(--text-secondary); }
+        .filter-select, .filter-input {
+            padding: 7px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            background: #fff;
+            color: var(--text-primary);
+            min-width: 130px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .filter-select:focus, .filter-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1); }
+        .filter-tag {
+            padding: 5px 12px;
+            border-radius: 14px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .filter-tag:hover { border-color: var(--primary); color: var(--primary); }
+        .filter-tag.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .filter-tag.active.danger { background: var(--danger); border-color: var(--danger); }
+        .filter-tag.active.major { background: var(--major); border-color: var(--major); }
+        .filter-tag.active.warning { background: var(--warning); border-color: var(--warning); }
+        .filter-tag.active.safe { background: var(--safe); border-color: var(--safe); }
+
+        /* 主体 */
+        .main-body { flex: 1; display: flex; overflow: hidden; gap: 12px; padding: 12px; }
+
+        /* 左侧边栏 */
+        .left-panel {
+            width: 340px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 12px 14px;
+            flex-shrink: 0;
+        }
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title i { color: var(--primary); }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .stat-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .stat-card {
+            background: linear-gradient(135deg, #f5f9ff 0%, #ffffff 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 4px;
+            text-align: center;
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(13, 71, 161, 0.12); }
+        .stat-card.danger { background: linear-gradient(135deg, #ffefef 0%, #ffffff 100%); border-color: rgba(229, 57, 53, 0.3); }
+        .stat-card.danger .stat-value { background: none; -webkit-text-fill-color: var(--danger); }
+        .stat-card .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.2;
+        }
+        .stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+        .stat-unit { font-size: 10px; color: var(--text-secondary); margin-left: 2px; }
+        .stat-trend {
+            font-size: 10px;
+            color: #1e8e3e;
+            margin-top: 2px;
+        }
+        .stat-trend.down { color: var(--danger); }
+        .chart-box { width: 100%; height: 200px; }
+        .chart-box-sm { width: 100%; height: 90px; }
+        .chart-box-md { width: 100%; height: 110px; }
+        .chart-box-wide { width: 120px; height: 90px; flex-shrink: 0; }
+        .chart-box-lg { width: 100%; height: 150px; }
+        .mini-ring { width: 46px; height: 46px; flex-shrink: 0; }
+        .progress-bar {
+            width: 100%; height: 6px; background: #eef2f7; border-radius: 3px; overflow: hidden; margin-top: 4px;
+        }
+        .progress-bar-fill {
+            height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--primary), var(--secondary));
+            transition: width 0.6s ease;
+        }
+        .stat-flex { display: flex; align-items: center; justify-content: space-between; }
+        .stat-flex-text { flex: 1; }
+        .stat-sub-list { margin-top: 6px; }
+        .stat-sub-item {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 11px; padding: 4px 0; border-bottom: 1px dashed var(--border);
+        }
+        .stat-sub-item:last-child { border-bottom: none; }
+        .stat-sub-item .label { color: var(--text-secondary); }
+        .stat-sub-item .value { color: var(--text-primary); font-weight: 600; }
+        .stat-sub-item .value.warn { color: var(--warning); }
+        .stat-sub-item .value.danger { color: var(--danger); }
+
+        /* 中间地图 */
+        .map-panel {
+            flex: 1;
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+        .map-toolbar {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+        }
+        .map-toolbar > * { pointer-events: auto; }
+        .breadcrumb-level {
+            background: rgba(255,255,255,0.95);
+            padding: 8px 14px;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .breadcrumb-level a { color: var(--primary); cursor: pointer; text-decoration: none; }
+        .breadcrumb-level span { color: var(--text-secondary); }
+        .map-legend {
+            background: rgba(255,255,255,0.95);
+            padding: 10px 14px;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            font-size: 12px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+        #mapContainer { flex: 1; width: 100%; position: relative; overflow: hidden; }
+        .mock-map { width: 100%; height: 100%; position: relative; background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fc 100%); }
+        .mock-map svg { width: 100%; height: 100%; display: block; }
+        .mock-grid { stroke: #d4e3f3; stroke-width: 1; stroke-dasharray: 4 4; }
+        .mock-region { fill: rgba(26, 115, 232, 0.04); stroke: #bcd6f0; stroke-width: 1.5; }
+        .mock-cluster {
+            cursor: pointer;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+            transition: transform 0.2s;
+        }
+        .mock-cluster:hover { transform: scale(1.08); }
+        .mock-cluster-circle { stroke: #fff; stroke-width: 2; }
+        .mock-cluster-text { font-size: 11px; font-weight: 600; fill: #fff; text-anchor: middle; dominant-baseline: middle; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .mock-cluster-sub { font-size: 9px; fill: rgba(255,255,255,0.9); text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+        .mock-point { cursor: pointer; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); transition: transform 0.15s; }
+        .mock-point:hover { transform: scale(1.3); }
+        .mock-heat { pointer-events: none; mix-blend-mode: multiply; }
+        .mock-boundary {
+            fill: rgba(26, 115, 232, 0.04);
+            stroke: rgba(26, 115, 232, 0.35);
+            stroke-width: 1.5;
+            cursor: pointer;
+            transition: fill 0.2s;
+        }
+        .mock-boundary:hover { fill: rgba(26, 115, 232, 0.12); stroke: rgba(26, 115, 232, 0.6); }
+        .mock-boundary.active { fill: rgba(26, 115, 232, 0.18); stroke: var(--primary); stroke-width: 2; }
+        .mock-boundary-label {
+            font-size: 11px;
+            fill: var(--text-secondary);
+            pointer-events: none;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            font-weight: 500;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+        }
+        .mock-point { cursor: pointer; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2)); transition: all 0.15s; }
+        .mock-point:hover { transform: scale(1.3); }
+        .mock-point.dim { opacity: 0.25; }
+        .mock-point.highlight { animation: pointPulse 1.2s infinite; }
+        @keyframes pointPulse {
+            0% { filter: drop-shadow(0 0 0 rgba(229,57,53,0.6)); transform: scale(1); }
+            50% { filter: drop-shadow(0 0 8px rgba(229,57,53,0.9)); transform: scale(1.5); }
+            100% { filter: drop-shadow(0 0 0 rgba(229,57,53,0.6)); transform: scale(1); }
+        }
+        .map-watermark {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            font-size: 12px;
+            color: #8da8c4;
+            background: rgba(255,255,255,0.7);
+            padding: 4px 10px;
+            border-radius: 12px;
+            pointer-events: none;
+        }
+        /* 图表切换按钮 */
+        .chart-toggle { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+        .chart-toggle button {
+            width: 24px; height: 24px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text-secondary);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+        }
+        .chart-toggle button:hover { border-color: var(--primary); color: var(--primary); }
+        .chart-toggle button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        /* 底部核心指标面板 */
+        .map-stats-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 16px;
+            right: 140px;
+            z-index: 100;
+            background: rgba(255,255,255,0.98);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(13, 71, 161, 0.12);
+            padding: 12px 14px;
+        }
+        .map-stats-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .map-stats-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .map-stats-title i { color: var(--primary); }
+        .map-stats-scope {
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: var(--primary-light);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        .map-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+            gap: 8px;
+        }
+        .map-stat-card {
+            background: linear-gradient(135deg, #f5f9ff 0%, #ffffff 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 7px 4px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .map-stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(13,71,161,0.12); }
+        .map-stat-card.danger { background: linear-gradient(135deg, #ffefef 0%, #ffffff 100%); border-color: rgba(229,57,53,0.25); }
+        .map-stat-card.major { background: linear-gradient(135deg, #fff4e5 0%, #ffffff 100%); border-color: rgba(245,124,0,0.25); }
+        .map-stat-card.warning { background: linear-gradient(135deg, #fffbe6 0%, #ffffff 100%); border-color: rgba(249,168,37,0.25); }
+        .map-stat-card.safe { background: linear-gradient(135deg, #e8f0fe 0%, #ffffff 100%); border-color: rgba(26,115,232,0.25); }
+        .map-stat-card.active { box-shadow: 0 0 0 2px var(--primary); }
+        .map-stat-value { font-size: 16px; font-weight: 700; line-height: 1.2; }
+        .map-stat-label { font-size: 10px; color: var(--text-secondary); margin-top: 3px; }
+
+        .map-zoom-control {
+            position: absolute;
+            bottom: 70px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(255,255,255,0.95);
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+        }
+        .map-zoom-control button {
+            width: 32px; height: 32px; border: none; background: transparent;
+            color: var(--text-secondary); font-size: 16px; cursor: pointer;
+        }
+        .map-zoom-control button:first-child { border-bottom: 1px solid var(--border); }
+        .map-zoom-control button:hover { color: var(--primary); background: var(--primary-light); }
+        .map-switch {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(255,255,255,0.95);
+            padding: 6px;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .map-switch button {
+            padding: 6px 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .map-switch button.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+
+        /* 信息卡片弹窗 */
+        .house-popup {
+            position: absolute;
+            z-index: 200;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            width: 280px;
+            overflow: hidden;
+            display: none;
+        }
+        .popup-header {
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            color: #fff;
+            padding: 12px 16px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .popup-body { padding: 14px 16px; font-size: 13px; }
+        .popup-row { display: flex; justify-content: space-between; margin: 6px 0; }
+        .popup-row .label { color: var(--text-secondary); }
+        .popup-row .value { color: var(--text-primary); font-weight: 500; }
+        .popup-footer {
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+            text-align: right;
+        }
+        .popup-footer a {
+            display: inline-block;
+            padding: 6px 14px;
+            background: var(--primary);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .popup-footer a:hover { background: var(--primary-dark); }
+        .risk-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            color: #fff;
+        }
+
+        /* 右侧详情抽屉 */
+        .right-drawer {
+            width: 340px;
+            flex-shrink: 0;
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 16px;
+            overflow-y: auto;
+            display: none;
+        }
+        .right-drawer.open { display: block; }
+        .drawer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .drawer-title { font-size: 15px; font-weight: 600; }
+        .drawer-close { cursor: pointer; color: var(--text-secondary); }
+        .info-section { margin-bottom: 16px; }
+        .info-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .info-item { display: flex; justify-content: space-between; font-size: 12px; margin: 6px 0; }
+        .info-item .label { color: var(--text-secondary); }
+        .info-item .value { color: var(--text-primary); max-width: 60%; text-align: right; }
+        .btn-primary {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background: var(--primary);
+            color: #fff;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-top: 12px;
+        }
+        .btn-primary:hover { background: var(--primary-dark); }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #c5d3e3; border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <div class="topbar">
+            <div class="breadcrumb">
+                <a href="index.html"><i class="fas fa-home"></i></a>
+                <i class="fas fa-chevron-right" style="font-size:10px"></i>
+                <span>风险态势感知</span>
+                <i class="fas fa-chevron-right" style="font-size:10px"></i>
+                <span class="current">农村自建房安全风险一张图</span>
+            </div>
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <label>所属镇街：</label>
+                    <select id="streetFilter" class="filter-select">
+                        <option value="">全区</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>隐患等级：</label>
+                    <span class="filter-tag" data-risk="danger">疑似危房</span>
+                    <span class="filter-tag" data-risk="major">严重损坏房</span>
+                    <span class="filter-tag" data-risk="warning">一般损坏房</span>
+                    <span class="filter-tag" data-risk="safe">完好房</span>
+                </div>
+                <div class="filter-group">
+                    <label>整治状态：</label>
+                    <select id="statusFilter" class="filter-select">
+                        <option value="">全部</option>
+                        <option value="pending">待整治</option>
+                        <option value="doing">整治中</option>
+                        <option value="done">已整治</option>
+                        <option value="overdue">逾期未整治</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-body">
+            <div class="left-panel">
+                <!-- 风险总览 -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-chart-pie"></i>风险总览</div>
+                    <div class="stat-grid-3">
+                        <div class="stat-card">
+                            <div class="stat-value" id="ovTotal">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">农村自建房数</div>
+                            <div class="stat-trend"><i class="fas fa-arrow-up"></i> 纳入监管</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="ovInspected">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">已排查数</div>
+                            <div class="stat-trend" id="ovInspectedRate">占比 0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="ovCoverage">0%</div>
+                            <div class="stat-label">排查覆盖率</div>
+                            <div class="stat-trend">本季度</div>
+                        </div>
+                        <div class="stat-card danger" id="cardDanger" onclick="filterByRisk('danger')">
+                            <div class="stat-value" id="ovDanger">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">疑似危房数</div>
+                            <div class="stat-trend down" id="ovDangerRate">占比 0%</div>
+                        </div>
+                        <div class="stat-card" id="cardMajor" onclick="filterByRisk('major')">
+                            <div class="stat-value" id="ovMajor">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">严重损坏房数</div>
+                            <div class="stat-trend" id="ovMajorRate">占比 0%</div>
+                        </div>
+                        <div class="stat-card" id="cardWarning" onclick="filterByRisk('warning')">
+                            <div class="stat-value" id="ovWarning">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">一般损坏房数</div>
+                            <div class="stat-trend" id="ovWarningRate">占比 0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 风险等级情况 -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-exclamation-triangle"></i>风险等级情况</div>
+                    <div class="stat-flex">
+                        <div class="stat-flex-text">
+                            <div class="stat-sub-item">
+                                <span class="label"><i class="fas fa-circle" style="color:#e53935;font-size:8px"></i> 疑似危房</span>
+                                <span class="value danger" id="riskCountDanger">0</span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label"><i class="fas fa-circle" style="color:#f57c00;font-size:8px"></i> 严重损坏房</span>
+                                <span class="value" id="riskCountMajor">0</span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label"><i class="fas fa-circle" style="color:#f9a825;font-size:8px"></i> 一般损坏房</span>
+                                <span class="value" id="riskCountWarning">0</span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label"><i class="fas fa-circle" style="color:#1a73e8;font-size:8px"></i> 完好房</span>
+                                <span class="value" id="riskCountSafe">0</span>
+                            </div>
+                        </div>
+                        <div id="riskRingChart" class="mini-ring"></div>
+                    </div>
+                </div>
+
+                <!-- 动态巡查 -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-walking"></i>动态巡查</div>
+                    <div class="stat-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="patrolCount">0<span class="stat-unit">次</span></div>
+                            <div class="stat-label">巡查次数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="patrolHouse">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">巡查房屋栋数</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px">
+                        <div class="stat-flex">
+                            <span style="font-size:12px;color:var(--text-secondary)">巡查覆盖率</span>
+                            <span style="font-size:13px;font-weight:600;color:var(--primary)" id="patrolCoverage">0%</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-bar-fill" id="patrolCoverageBar" style="width:0%"></div></div>
+                    </div>
+                    <div class="stat-sub-list">
+                        <div class="stat-sub-item">
+                            <span class="label">经判定无隐患销号数</span>
+                            <span class="value" id="patrolNoRisk">0</span>
+                        </div>
+                        <div class="stat-sub-item">
+                            <span class="label">鉴定为 AB 级数</span>
+                            <span class="value" id="patrolAB">0</span>
+                        </div>
+                        <div class="stat-sub-item">
+                            <span class="label">需专业人员复核数</span>
+                            <span class="value warn" id="patrolReview">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 排查情况 -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-clipboard-check"></i>排查情况</div>
+                    <div class="stat-flex">
+                        <div class="stat-flex-text">
+                            <div class="stat-sub-item">
+                                <span class="label">已排查建筑数量</span>
+                                <span class="value" id="screenTotal">0<span class="stat-unit">栋</span></span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label">已排查建筑面积</span>
+                                <span class="value" id="screenArea">0<span class="stat-unit">㎡</span></span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label">初判存在隐患数</span>
+                                <span class="value" id="screenRisk">0</span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label">初判隐患占比</span>
+                                <span class="value" id="screenRiskRate">0%</span>
+                            </div>
+                        </div>
+                        <div id="screenRingChart" class="mini-ring"></div>
+                    </div>
+                </div>
+
+                <!-- 风险治理措施 -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-tools"></i>风险治理措施</div>
+                    <div class="stat-flex" style="margin-bottom:8px">
+                        <div class="stat-flex-text">
+                            <div class="stat-flex">
+                                <span style="font-size:12px;font-weight:600">整体整治完成率</span>
+                                <span style="font-size:14px;font-weight:700;color:var(--primary)" id="governDoneRate">0%</span>
+                            </div>
+                            <div class="progress-bar"><div class="progress-bar-fill" id="governDoneBar" style="width:0%"></div></div>
+                        </div>
+                        <div id="governBarChart" class="chart-box-wide"></div>
+                    </div>
+                </div>
+
+                <!-- 整改情况 -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-check-double"></i>整改情况</div>
+                    <div class="stat-flex">
+                        <div class="stat-flex-text">
+                            <div class="stat-sub-item">
+                                <span class="label">完整整治数</span>
+                                <span class="value" id="rectDone">0</span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label">未完整整治数</span>
+                                <span class="value danger" id="rectUndone">0</span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label">鉴定 AB 级排除数</span>
+                                <span class="value" id="rectAB">0</span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label">评估排除数</span>
+                                <span class="value" id="rectEval">0</span>
+                            </div>
+                            <div class="stat-sub-item">
+                                <span class="label">采取整治措施数</span>
+                                <span class="value" id="rectMeasure">0</span>
+                            </div>
+                        </div>
+                        <div id="rectRingChart" class="mini-ring"></div>
+                    </div>
+                </div>
+
+                <!-- 镇街排名 / 隐患等级分布 -->
+                <div class="card">
+                    <div class="card-title" style="justify-content:space-between">
+                        <span id="chartCardTitle"><i class="fas fa-chart-bar"></i>镇街房屋数量排名</span>
+                        <div class="chart-toggle">
+                            <button id="btnStreetBar" class="active" onclick="switchChartMode('street')" title="镇街排名"><i class="fas fa-chart-bar"></i></button>
+                            <button id="btnRiskPie" onclick="switchChartMode('risk')" title="隐患等级分布"><i class="fas fa-chart-pie"></i></button>
+                        </div>
+                    </div>
+                    <div id="streetBarChart" class="chart-box-lg"></div>
+                </div>
+            </div>
+
+            <div class="map-panel">
+                <div class="map-toolbar">
+                    <div class="breadcrumb-level">
+                        <a onclick="backToDistrict()">奉贤区</a>
+                        <span id="levelArrow" style="display:none">/</span>
+                        <span id="levelStreet" style="color:var(--text-primary);font-weight:500"></span>
+                    </div>
+                    <div class="map-legend">
+                        <div class="legend-item"><div class="legend-dot" style="background:#e53935"></div><span>疑似危房</span></div>
+                        <div class="legend-item"><div class="legend-dot" style="background:#f57c00"></div><span>严重损坏房</span></div>
+                        <div class="legend-item"><div class="legend-dot" style="background:#f9a825"></div><span>一般损坏房</span></div>
+                        <div class="legend-item"><div class="legend-dot" style="background:#1a73e8"></div><span>完好房</span></div>
+                    </div>
+                </div>
+                <div id="mapContainer">
+                    <div class="map-zoom-control">
+                        <button onclick="zoomMap(1.2)">+</button>
+                        <button onclick="zoomMap(0.8)">−</button>
+                    </div>
+
+                    <div class="map-stats-panel">
+                        <div class="map-stats-header">
+                            <div class="map-stats-title"><i class="fas fa-eye"></i>当前视图统计</div>
+                            <div class="map-stats-scope" id="statsScope">全区</div>
+                        </div>
+                        <div class="map-stats-grid">
+                            <div class="map-stat-card" id="msTotal" onclick="highlightRiskOnMap('all')">
+                                <div class="map-stat-value" id="vpTotal">0</span></div>
+                                <div class="map-stat-label">房屋总数</div>
+                            </div>
+                            <div class="map-stat-card" id="msArea" onclick="highlightRiskOnMap('all')">
+                                <div class="map-stat-value" id="vpArea">0㎡</div>
+                                <div class="map-stat-label">总建筑面积</div>
+                            </div>
+                            <div class="map-stat-card" id="msRural" onclick="highlightRiskOnMap('all')">
+                                <div class="map-stat-value" id="vpRural">0</div>
+                                <div class="map-stat-label">农村自建房数</div>
+                            </div>
+                            <div class="map-stat-card danger" id="msDanger" onclick="highlightRiskOnMap('danger')">
+                                <div class="map-stat-value" id="vpDanger" style="color:var(--danger)">0</div>
+                                <div class="map-stat-label">疑似危房数</div>
+                            </div>
+                            <div class="map-stat-card major" id="msMajor" onclick="highlightRiskOnMap('major')">
+                                <div class="map-stat-value" id="vpMajor" style="color:var(--major)">0</div>
+                                <div class="map-stat-label">严重损坏房数</div>
+                            </div>
+                            <div class="map-stat-card warning" id="msWarning" onclick="highlightRiskOnMap('warning')">
+                                <div class="map-stat-value" id="vpWarning" style="color:var(--warning)">0</div>
+                                <div class="map-stat-label">一般损坏房数</div>
+                            </div>
+                            <div class="map-stat-card safe" id="msSafe" onclick="highlightRiskOnMap('safe')">
+                                <div class="map-stat-value" id="vpSafe" style="color:var(--safe)">0</div>
+                                <div class="map-stat-label">完好房数</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="map-switch">
+                    <button id="btnScatter" class="active" onclick="switchMapMode('scatter')">点位图</button>
+                    <button id="btnHeatmap" onclick="switchMapMode('heatmap')">热力图</button>
+                </div>
+
+                <div id="housePopup" class="house-popup">
+                    <div class="popup-header" id="popupTitle">房屋名称</div>
+                    <div class="popup-body">
+                        <div class="popup-row"><span class="label">隐患等级</span><span class="value" id="popupRisk"></span></div>
+                        <div class="popup-row"><span class="label">所属镇街</span><span class="value" id="popupStreet"></span></div>
+                        <div class="popup-row"><span class="label">建筑层数</span><span class="value" id="popupFloors"></span></div>
+                        <div class="popup-row"><span class="label">建筑面积</span><span class="value" id="popupArea"></span></div>
+                        <div class="popup-row"><span class="label">排查时间</span><span class="value" id="popupTime"></span></div>
+                        <div class="popup-row"><span class="label">排查结论</span><span class="value" id="popupConclusion"></span></div>
+                    </div>
+                    <div class="popup-footer">
+                        <a id="popupDetail" href="#" target="_blank">查看详情</a>
+                    </div>
+                </div>
+            </div>
+
+            <div id="rightDrawer" class="right-drawer">
+                <div class="drawer-header">
+                    <div class="drawer-title" id="drawerTitle">房屋档案</div>
+                    <div class="drawer-close" onclick="closeDrawer()"><i class="fas fa-times"></i></div>
+                </div>
+                <div id="drawerContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 颜色配置
+        const RISK_CONFIG = {
+            danger: { label: '疑似危房', color: '#e53935', class: 'danger' },
+            major:  { label: '严重损坏房', color: '#f57c00', class: 'major' },
+            warning:{ label: '一般损坏房', color: '#f9a825', class: 'warning' },
+            safe:   { label: '完好房', color: '#1a73e8', class: 'safe' }
+        };
+        const STATUS_CONFIG = {
+            pending: { label: '待整治', color: '#9aa0a6' },
+            doing:   { label: '整治中', color: '#f9a825' },
+            done:    { label: '已整治', color: '#1e8e3e' },
+            overdue: { label: '逾期未整治', color: '#e53935' }
+        };
+
+        // 状态
+        let allData = [];
+        let filteredData = [];
+        let state = {
+            street: '',
+            riskLevels: [],
+            governStatus: '',
+            mapMode: 'scatter'
+        };
+        let map = null;
+        let markers = [];
+        let heatmapLayer = null;
+        let currentStreetCenter = null;
+        let riskPieChart = null;
+        let streetBarChart = null;
+        let riskRingChart = null;
+        let screenRingChart = null;
+        let governBarChart = null;
+        let rectRingChart = null;
+        let riskDistributionChart = null;
+
+        // 示意地图视图状态
+        let mapViewState = { scale: 1, tx: 0, ty: 0, minScale: 0.6, maxScale: 6 };
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let mapLayer = null;
+        let mapBoundaryLayer = null;
+        let mapContentLayer = null;
+        let chartMode = 'street';
+        let activeHighlightRisk = null;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initHouseArchSeed();
+            loadData();
+            initStreetFilter();
+            initEventListeners();
+            initMap();
+            renderAll();
+        });
+
+        function loadData() {
+            const records = getAllHouseRecords();
+            // 只取农村自建房
+            allData = records.filter(r => r.houseType === '农村自建房' || r.category === '农村自建房').map(r => ({
+                no: r.no,
+                name: r.name || r.overview?.houseName || '未命名',
+                street: r.street || '',
+                community: r.community || '',
+                address: r.address || '',
+                risk: r.originalRisk || r.risk || 'safe',
+                riskLevel: r.originalRiskLevel || r.riskLevel || '完好房(基本完好房)',
+                governStatus: r.governStatus || '待整治',
+                governance: r.governance || 'pending',
+                lat: parseFloat(r.lat) || 30.92,
+                lng: parseFloat(r.lng) || 121.47,
+                inspectionTime: r.inspectionRecords?.[0]?.checkDate || '—',
+                conclusion: r.inspectionRecords?.[0]?.conclusion || r.riskInfo?.riskDesc || '—',
+                year: r.year || (r.overview?.builtYear) || '—',
+                floors: r.structure?.floors || '—',
+                area: r.structure?.buildingArea || '—',
+                owner: r.owner || '—',
+                inspectionRecords: r.inspectionRecords || [],
+                patrolCount: parseInt(r.patrolCount) || Math.floor(Math.random() * 5) + 1,
+                buildingArea: parseFloat(r.buildingArea) || (parseFloat(r.structure?.buildingArea) || 80 + Math.floor(Math.random() * 120)),
+                reviewNeeded: r.reviewNeeded || Math.random() > 0.85,
+                abLevel: r.abLevel || Math.random() > 0.7,
+                noRiskClosed: r.noRiskClosed || Math.random() > 0.9
+            }));
+            filteredData = [...allData];
+        }
+
+        function computeStats(data) {
+            const total = data.length;
+            const inspected = data.filter(d => d.inspectionRecords?.length > 0).length;
+            const coverage = total ? (inspected / total * 100).toFixed(1) : 0;
+            const danger = data.filter(d => d.risk === 'danger').length;
+            const major = data.filter(d => d.risk === 'major').length;
+            const warning = data.filter(d => d.risk === 'warning').length;
+            const safe = data.filter(d => d.risk === 'safe').length;
+            const riskCount = danger + major + warning;
+            const area = data.reduce((sum, d) => sum + (d.buildingArea || 0), 0);
+            const done = data.filter(d => d.governance === 'done').length;
+            const undone = data.filter(d => d.governance !== 'done' && d.risk !== 'safe').length;
+            const doing = data.filter(d => d.governance === 'doing').length;
+            const pending = data.filter(d => d.governance === 'pending').length;
+
+            const patrolCount = data.reduce((sum, d) => sum + (d.patrolCount || 0), 0);
+            const patrolHouse = data.filter(d => (d.patrolCount || 0) > 0).length;
+            const patrolCoverage = total ? (patrolHouse / total * 100).toFixed(1) : 0;
+            const noRiskClosed = data.filter(d => d.noRiskClosed).length;
+            const abLevel = data.filter(d => d.abLevel).length;
+            const reviewNeeded = data.filter(d => d.reviewNeeded).length;
+
+            const rectAB = Math.floor(abLevel * 0.8);
+            const rectEval = Math.floor(noRiskClosed * 0.7);
+            const rectMeasure = done + doing;
+
+            return {
+                total, inspected, coverage, danger, major, warning, safe, riskCount,
+                area, done, undone, doing, pending, patrolCount, patrolHouse, patrolCoverage,
+                noRiskClosed, abLevel, reviewNeeded, rectAB, rectEval, rectMeasure
+            };
+        }
+
+        let _cachedStats = null;
+        function generateStats() {
+            if (!_cachedStats) _cachedStats = computeStats(allData);
+            return _cachedStats;
+        }
+
+        function initStreetFilter() {
+            const streets = [...new Set(allData.map(d => d.street).filter(Boolean))].sort();
+            const select = document.getElementById('streetFilter');
+            streets.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                select.appendChild(opt);
+            });
+        }
+
+        function initEventListeners() {
+            document.getElementById('streetFilter').addEventListener('change', e => {
+                state.street = e.target.value;
+                if (state.street) {
+                    drillToStreet(state.street);
+                } else {
+                    backToDistrict();
+                }
+            });
+
+            document.querySelectorAll('.filter-tag[data-risk]').forEach(tag => {
+                tag.addEventListener('click', () => {
+                    tag.classList.toggle('active');
+                    state.riskLevels = Array.from(document.querySelectorAll('.filter-tag[data-risk].active')).map(t => t.dataset.risk);
+                    applyFilters();
+                });
+            });
+
+            document.getElementById('statusFilter').addEventListener('change', e => {
+                state.governStatus = e.target.value;
+                applyFilters();
+            });
+
+            document.addEventListener('click', e => {
+                const popup = document.getElementById('housePopup');
+                if (!popup.contains(e.target)) {
+                    popup.style.display = 'none';
+                }
+            });
+        }
+
+        function applyFilters() {
+            filteredData = allData.filter(d => {
+                if (state.street && d.street !== state.street) return false;
+                if (state.riskLevels.length > 0 && !state.riskLevels.includes(d.risk)) return false;
+                if (state.governStatus && d.governance !== state.governStatus) return false;
+                return true;
+            });
+            renderAll();
+        }
+
+        // 地图范围（奉贤区示意）
+        const MAP_BOUNDS = { minLng: 121.35, maxLng: 121.60, minLat: 30.80, maxLat: 31.05 };
+        const MAP_VIEW = { w: 1000, h: 800 };
+        const STREET_MOCK_POSITIONS = {
+            '南桥镇': { x: 520, y: 380 }, '奉城镇': { x: 720, y: 360 }, '庄行镇': { x: 320, y: 420 },
+            '金汇镇': { x: 620, y: 280 }, '青村镇': { x: 680, y: 520 }, '柘林镇': { x: 400, y: 580 },
+            '四团镇': { x: 820, y: 480 }, '海湾镇': { x: 580, y: 680 }, '西渡街道': { x: 420, y: 260 },
+            '奉浦街道': { x: 500, y: 300 }, '海湾旅游区': { x: 650, y: 720 }, '头桥街道': { x: 780, y: 300 },
+            '金海街道': { x: 560, y: 340 }
+        };
+        // 各镇街示意边界多边形（viewBox 坐标），用于边界划分展示
+        const STREET_BOUNDARIES = {
+            '南桥镇': [[440,300],[600,300],[620,420],[540,480],[460,440]],
+            '奉城镇': [[680,260],[820,280],[840,400],[760,460],[680,420]],
+            '庄行镇': [[220,360],[380,340],[420,460],[300,520],[220,480]],
+            '金汇镇': [[560,180],[700,200],[720,280],[620,300],[560,260]],
+            '青村镇': [[620,440],[760,460],[780,580],[660,600],[600,520]],
+            '柘林镇': [[320,500],[480,480],[540,600],[420,660],[320,620]],
+            '四团镇': [[780,420],[920,400],[940,520],[840,560],[760,500]],
+            '海湾镇': [[500,620],[640,620],[660,760],[520,780],[460,680]],
+            '西渡街道': [[360,180],[500,200],[520,300],[420,320],[340,280]],
+            '奉浦街道': [[480,240],[580,240],[600,320],[500,340],[460,280]],
+            '海湾旅游区': [[640,640],[780,620],[800,760],[680,780],[620,700]],
+            '头桥街道': [[720,220],[860,200],[880,300],[780,320],[700,280]],
+            '金海街道': [[560,300],[660,300],[680,380],[580,400],[540,340]]
+        };
+        function lngToX(lng) { return (lng - MAP_BOUNDS.minLng) / (MAP_BOUNDS.maxLng - MAP_BOUNDS.minLng) * MAP_VIEW.w; }
+        function latToY(lat) { return MAP_VIEW.h - (lat - MAP_BOUNDS.minLat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat) * MAP_VIEW.h; }
+
+        // 地图初始化（示意地图，不依赖高德）
+        function initMap() {
+            const container = document.getElementById('mapContainer');
+            let mockMap = document.getElementById('mockMap');
+            if (!mockMap) {
+                const html =
+                    '<div class="mock-map" id="mockMap">' +
+                    '<svg id="mockSvg" viewBox="0 0 ' + MAP_VIEW.w + ' ' + MAP_VIEW.h + '" preserveAspectRatio="xMidYMid meet">' +
+                    '<g id="mapLayer"><g id="mapBoundaryLayer"></g><g id="mapContentLayer"></g></g>' +
+                    '</svg>' +
+                    '<div class="map-watermark"><i class="fas fa-info-circle"></i> 示意地图（非真实地理底图）</div>' +
+                    '</div>';
+                container.insertAdjacentHTML('afterbegin', html);
+                mockMap = document.getElementById('mockMap');
+            }
+            mapLayer = document.getElementById('mapLayer');
+            mapBoundaryLayer = document.getElementById('mapBoundaryLayer');
+            mapContentLayer = document.getElementById('mapContentLayer');
+            setupMapInteraction();
+            renderMap();
+        }
+
+        // 地图缩放/平移交互
+        function setupMapInteraction() {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+            svg.addEventListener('wheel', e => {
+                e.preventDefault();
+                const rect = svg.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const factor = e.deltaY < 0 ? 1.15 : 0.87;
+                zoomMapAt(factor, mx, my);
+            }, { passive: false });
+
+            svg.addEventListener('mousedown', e => {
+                if (e.button !== 0) return;
+                isDragging = true;
+                dragStart = { x: e.clientX - mapViewState.tx, y: e.clientY - mapViewState.ty };
+                svg.style.cursor = 'grabbing';
+            });
+            window.addEventListener('mousemove', e => {
+                if (!isDragging) return;
+                mapViewState.tx = e.clientX - dragStart.x;
+                mapViewState.ty = e.clientY - dragStart.y;
+                clampMapView();
+                applyMapTransform();
+            });
+            window.addEventListener('mouseup', () => { isDragging = false; svg.style.cursor = 'grab'; });
+            svg.style.cursor = 'grab';
+        }
+
+        function zoomMap(factor) {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+            const rect = svg.getBoundingClientRect();
+            zoomMapAt(factor, rect.width / 2, rect.height / 2);
+        }
+
+        function zoomMapAt(factor, cx, cy) {
+            const newScale = Math.max(mapViewState.minScale, Math.min(mapViewState.maxScale, mapViewState.scale * factor));
+            if (newScale === mapViewState.scale) return;
+            // 以 (cx, cy) 为中心缩放
+            mapViewState.tx = cx - (cx - mapViewState.tx) * (newScale / mapViewState.scale);
+            mapViewState.ty = cy - (cy - mapViewState.ty) * (newScale / mapViewState.scale);
+            mapViewState.scale = newScale;
+            clampMapView();
+            applyMapTransform();
+        }
+
+        function applyMapTransform() {
+            if (mapLayer) {
+                mapLayer.setAttribute('transform', 'translate(' + mapViewState.tx + ',' + mapViewState.ty + ') scale(' + mapViewState.scale + ')');
+            }
+            updateViewportStats();
+        }
+
+        function fitStreetView(street) {
+            const boundary = STREET_BOUNDARIES[street];
+            if (!boundary || !boundary.length) return;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            boundary.forEach(([x, y]) => {
+                minX = Math.min(minX, x); minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+            });
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+            const rect = svg.getBoundingClientRect();
+            const bw = maxX - minX, bh = maxY - minY;
+            const padding = 80;
+            const scaleX = (rect.width - padding * 2) / bw;
+            const scaleY = (rect.height - padding * 2) / bh;
+            const newScale = Math.max(0.8, Math.min(mapViewState.maxScale, Math.min(scaleX, scaleY)));
+            mapViewState.scale = newScale;
+            mapViewState.tx = (rect.width - (minX + maxX) * newScale) / 2;
+            mapViewState.ty = (rect.height - (minY + maxY) * newScale) / 2;
+            clampMapView();
+            applyMapTransform();
+        }
+
+        function clampMapView() {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+            const rect = svg.getBoundingClientRect();
+            const scaledW = MAP_VIEW.w * mapViewState.scale;
+            const scaledH = MAP_VIEW.h * mapViewState.scale;
+            // 允许留一定空白，但避免地图完全拖出可视区
+            const minX = Math.min(0, rect.width - scaledW - 80);
+            const maxX = Math.max(0, 80);
+            const minY = Math.min(0, rect.height - scaledH - 80);
+            const maxY = Math.max(0, 80);
+            mapViewState.tx = Math.max(minX, Math.min(maxX, mapViewState.tx));
+            mapViewState.ty = Math.max(minY, Math.min(maxY, mapViewState.ty));
+        }
+
+        // 计算当前视图范围内可见的房屋数据（模拟空间查询）
+        function getVisibleData() {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return filteredData;
+            const rect = svg.getBoundingClientRect();
+            const invScale = 1 / mapViewState.scale;
+            const viewBoxX = -mapViewState.tx * invScale;
+            const viewBoxY = -mapViewState.ty * invScale;
+            const viewBoxW = rect.width * invScale;
+            const viewBoxH = rect.height * invScale;
+            // 区级视图按镇街中心计算可见性，镇级视图按真实经纬度计算
+            return filteredData.filter(d => {
+                let x, y;
+                if (state.street) {
+                    x = lngToX(d.lng);
+                    y = latToY(d.lat);
+                } else {
+                    x = STREET_MOCK_POSITIONS[d.street]?.x ?? MAP_VIEW.w / 2;
+                    y = STREET_MOCK_POSITIONS[d.street]?.y ?? MAP_VIEW.h / 2;
+                }
+                return x >= viewBoxX && x <= viewBoxX + viewBoxW && y >= viewBoxY && y <= viewBoxY + viewBoxH;
+            });
+        }
+
+        function updateViewportStats() {
+            const scopeName = state.street || '全区';
+            document.getElementById('statsScope').textContent = scopeName;
+
+            let visible;
+            if (state.street) {
+                // 镇级视图：显示当前街道全部过滤后数据
+                visible = filteredData;
+            } else {
+                // 区级视图：仅统计视图范围内数据
+                visible = getVisibleData();
+            }
+            const total = visible.length;
+            const area = visible.reduce((sum, d) => sum + (d.buildingArea || 0), 0);
+            const rural = visible.filter(d => d.houseType === '农村自建房' || !d.houseType).length;
+            const danger = visible.filter(d => d.risk === 'danger').length;
+            const major = visible.filter(d => d.risk === 'major').length;
+            const warning = visible.filter(d => d.risk === 'warning').length;
+            const safe = visible.filter(d => d.risk === 'safe').length;
+
+            document.getElementById('vpTotal').textContent = total;
+            document.getElementById('vpArea').textContent = Math.round(area).toLocaleString() + '㎡';
+            document.getElementById('vpRural').textContent = rural;
+            document.getElementById('vpDanger').textContent = danger;
+            document.getElementById('vpMajor').textContent = major;
+            document.getElementById('vpWarning').textContent = warning;
+            const vpSafe = document.getElementById('vpSafe');
+            if (vpSafe) vpSafe.textContent = safe;
+
+            // 高亮状态同步
+            document.querySelectorAll('.map-stat-card').forEach(c => c.classList.remove('active'));
+            if (activeHighlightRisk) {
+                const ms = document.getElementById('ms' + activeHighlightRisk[0].toUpperCase() + activeHighlightRisk.slice(1));
+                if (ms) ms.classList.add('active');
+            }
+        }
+
+        // 点击视图统计指标，高亮地图上对应风险等级的点位
+        function highlightRiskOnMap(risk) {
+            activeHighlightRisk = (risk === 'all') ? null : risk;
+            updateViewportStats();
+            document.querySelectorAll('.mock-point').forEach(el => {
+                const pointRisk = el.dataset.risk;
+                if (risk === 'all' || pointRisk === risk) {
+                    el.classList.remove('dim');
+                    if (risk !== 'all') el.classList.add('highlight');
+                    else el.classList.remove('highlight');
+                } else {
+                    el.classList.add('dim');
+                    el.classList.remove('highlight');
+                }
+            });
+            document.querySelectorAll('.mock-cluster').forEach(el => {
+                if (risk === 'all') {
+                    el.classList.remove('dim');
+                } else {
+                    el.classList.add('dim');
+                }
+            });
+            // 3 秒后清除高亮
+            setTimeout(() => {
+                activeHighlightRisk = null;
+                updateViewportStats();
+                document.querySelectorAll('.mock-point, .mock-cluster').forEach(el => {
+                    el.classList.remove('dim', 'highlight');
+                });
+            }, 3000);
+        }
+
+        function renderAll() {
+            renderStats();
+            renderCharts();
+            renderMap();
+        }
+
+        // 核心指标
+        function renderStats() {
+            const stats = generateStats();
+            const total = filteredData.length;
+            const riskCount = filteredData.filter(d => d.risk !== 'safe').length;
+            const doneCount = filteredData.filter(d => d.governance === 'done').length;
+            const needTreat = filteredData.filter(d => d.risk !== 'safe').length || 1;
+
+            // 风险总览
+            document.getElementById('ovTotal').innerHTML = total + '<span class="stat-unit">栋</span>';
+            document.getElementById('ovInspected').innerHTML = stats.inspected + '<span class="stat-unit">栋</span>';
+            document.getElementById('ovInspectedRate').textContent = total ? '占比 ' + (stats.inspected / total * 100).toFixed(1) + '%' : '占比 0%';
+            document.getElementById('ovCoverage').textContent = stats.coverage + '%';
+            document.getElementById('ovDanger').innerHTML = stats.danger + '<span class="stat-unit">栋</span>';
+            document.getElementById('ovDangerRate').textContent = total ? '占比 ' + (stats.danger / total * 100).toFixed(1) + '%' : '占比 0%';
+            document.getElementById('ovMajor').innerHTML = stats.major + '<span class="stat-unit">栋</span>';
+            document.getElementById('ovMajorRate').textContent = total ? '占比 ' + (stats.major / total * 100).toFixed(1) + '%' : '占比 0%';
+            document.getElementById('ovWarning').innerHTML = stats.warning + '<span class="stat-unit">栋</span>';
+            document.getElementById('ovWarningRate').textContent = total ? '占比 ' + (stats.warning / total * 100).toFixed(1) + '%' : '占比 0%';
+
+            // 风险等级列表
+            document.getElementById('riskCountDanger').textContent = stats.danger;
+            document.getElementById('riskCountMajor').textContent = stats.major;
+            document.getElementById('riskCountWarning').textContent = stats.warning;
+            document.getElementById('riskCountSafe').textContent = stats.safe;
+
+            // 动态巡查
+            document.getElementById('patrolCount').innerHTML = stats.patrolCount + '<span class="stat-unit">次</span>';
+            document.getElementById('patrolHouse').innerHTML = stats.patrolHouse + '<span class="stat-unit">栋</span>';
+            document.getElementById('patrolCoverage').textContent = stats.patrolCoverage + '%';
+            document.getElementById('patrolCoverageBar').style.width = stats.patrolCoverage + '%';
+            document.getElementById('patrolNoRisk').textContent = stats.noRiskClosed;
+            document.getElementById('patrolAB').textContent = stats.abLevel;
+            document.getElementById('patrolReview').textContent = stats.reviewNeeded;
+
+            // 排查情况
+            document.getElementById('screenTotal').innerHTML = stats.inspected + '<span class="stat-unit">栋</span>';
+            document.getElementById('screenArea').innerHTML = Math.round(stats.area).toLocaleString() + '<span class="stat-unit">㎡</span>';
+            document.getElementById('screenRisk').textContent = stats.riskCount;
+            document.getElementById('screenRiskRate').textContent = stats.inspected ? (stats.riskCount / stats.inspected * 100).toFixed(1) + '%' : '0%';
+
+            // 治理措施
+            const governRate = stats.riskCount ? (stats.done / stats.riskCount * 100).toFixed(1) : 0;
+            document.getElementById('governDoneRate').textContent = governRate + '%';
+            document.getElementById('governDoneBar').style.width = governRate + '%';
+
+            // 整改情况
+            document.getElementById('rectDone').textContent = stats.done;
+            document.getElementById('rectUndone').textContent = stats.undone;
+            document.getElementById('rectAB').textContent = stats.rectAB;
+            document.getElementById('rectEval').textContent = stats.rectEval;
+            document.getElementById('rectMeasure').textContent = stats.rectMeasure;
+        }
+
+        // 图表
+        function renderCharts() {
+            renderRiskRing();
+            renderScreenRing();
+            renderGovernBar();
+            renderRectRing();
+            renderStreetChart();
+        }
+
+        function switchChartMode(mode) {
+            chartMode = mode;
+            document.getElementById('btnStreetBar').classList.toggle('active', mode === 'street');
+            document.getElementById('btnRiskPie').classList.toggle('active', mode === 'risk');
+            const title = document.getElementById('chartCardTitle');
+            if (mode === 'street') {
+                title.innerHTML = '<i class="fas fa-chart-bar"></i>镇街房屋数量排名';
+            } else {
+                title.innerHTML = '<i class="fas fa-chart-pie"></i>隐患等级分布';
+            }
+            renderStreetChart();
+        }
+
+        function renderStreetChart() {
+            if (chartMode === 'risk') {
+                renderRiskDistributionChart();
+            } else {
+                renderStreetBarChart();
+            }
+        }
+
+        function renderStreetBarChart() {
+            const data = [...new Set(filteredData.map(d => d.street).filter(Boolean))]
+                .map(street => ({ street, count: filteredData.filter(d => d.street === street).length }))
+                .sort((a, b) => b.count - a.count);
+            if (!streetBarChart) streetBarChart = echarts.init(document.getElementById('streetBarChart'));
+            streetBarChart.clear();
+            streetBarChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: 8, right: 16, bottom: 8, top: 8, containLabel: true },
+                xAxis: { type: 'category', data: data.map(d => d.street), axisLine: { lineStyle: { color: '#dbe4ed' } }, axisLabel: { color: '#5f6b7a', fontSize: 10, rotate: 30 }, axisTick: { show: false } },
+                yAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, splitLine: { lineStyle: { color: '#f0f4f8' } } },
+                series: [{ type: 'bar', data: data.map(d => d.count), itemStyle: { color: '#1a73e8', borderRadius: [4, 4, 0, 0] }, barWidth: 14 }]
+            });
+        }
+
+        function renderRiskDistributionChart() {
+            const stats = computeStats(filteredData);
+            if (!riskDistributionChart) riskDistributionChart = echarts.init(document.getElementById('streetBarChart'));
+            riskDistributionChart.clear();
+            riskDistributionChart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                legend: { orient: 'vertical', right: 4, top: 'center', itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11, color: '#5f6b7a' } },
+                series: [{
+                    type: 'pie', radius: ['45%', '70%'], center: ['35%', '50%'],
+                    avoidLabelOverlap: false, label: { show: false },
+                    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+                    data: [
+                        { value: stats.danger, name: '疑似危房', itemStyle: { color: '#e53935' } },
+                        { value: stats.major, name: '严重损坏房', itemStyle: { color: '#f57c00' } },
+                        { value: stats.warning, name: '一般损坏房', itemStyle: { color: '#f9a825' } },
+                        { value: stats.safe, name: '完好房', itemStyle: { color: '#1a73e8' } }
+                    ]
+                }]
+            });
+        }
+
+        function renderRiskRing() {
+            const stats = generateStats();
+            if (!riskRingChart) riskRingChart = echarts.init(document.getElementById('riskRingChart'));
+            riskRingChart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                series: [{
+                    type: 'pie', radius: ['55%', '75%'], center: ['50%', '50%'],
+                    avoidLabelOverlap: false, label: { show: false },
+                    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+                    data: [
+                        { value: stats.danger, name: '疑似危房', itemStyle: { color: '#e53935' } },
+                        { value: stats.major, name: '严重损坏房', itemStyle: { color: '#f57c00' } },
+                        { value: stats.warning, name: '一般损坏房', itemStyle: { color: '#f9a825' } },
+                        { value: stats.safe, name: '完好房', itemStyle: { color: '#1a73e8' } }
+                    ]
+                }]
+            });
+        }
+
+        function renderScreenRing() {
+            const stats = generateStats();
+            if (!screenRingChart) screenRingChart = echarts.init(document.getElementById('screenRingChart'));
+            screenRingChart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                series: [{
+                    type: 'pie', radius: ['55%', '75%'], center: ['50%', '50%'],
+                    avoidLabelOverlap: false, label: { show: false },
+                    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+                    data: [
+                        { value: stats.riskCount, name: '初判隐患', itemStyle: { color: '#f57c00' } },
+                        { value: stats.inspected - stats.riskCount, name: '无隐患', itemStyle: { color: '#1a73e8' } }
+                    ]
+                }]
+            });
+        }
+
+        function renderGovernBar() {
+            const stats = generateStats();
+            // 模拟工程措施 vs 管理措施：按隐患等级加权分配
+            const engDanger = Math.floor(stats.danger * 0.9);
+            const engMajor = Math.floor(stats.major * 0.7);
+            const engWarning = Math.floor(stats.warning * 0.3);
+            const mgtDanger = stats.danger - engDanger;
+            const mgtMajor = stats.major - engMajor;
+            const mgtWarning = stats.warning - engWarning;
+            if (!governBarChart) governBarChart = echarts.init(document.getElementById('governBarChart'));
+            governBarChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { show: false },
+                grid: { left: 2, right: 2, bottom: 2, top: 2, containLabel: true },
+                xAxis: { type: 'category', data: ['危', '重', '一般'], axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: '#5f6b7a', fontSize: 9 } },
+                yAxis: { type: 'value', axisLine: { show: false }, axisLabel: { show: false }, splitLine: { show: false } },
+                series: [
+                    { name: '工程措施', type: 'bar', stack: 'total', data: [engDanger, engMajor, engWarning], itemStyle: { color: '#1a73e8', borderRadius: [2, 2, 0, 0] }, barWidth: 12 },
+                    { name: '管理措施', type: 'bar', stack: 'total', data: [mgtDanger, mgtMajor, mgtWarning], itemStyle: { color: '#00b4d8', borderRadius: [2, 2, 0, 0] }, barWidth: 12 }
+                ]
+            });
+        }
+
+        function renderRectRing() {
+            const stats = generateStats();
+            if (!rectRingChart) rectRingChart = echarts.init(document.getElementById('rectRingChart'));
+            rectRingChart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                series: [{
+                    type: 'pie', radius: ['55%', '75%'], center: ['50%', '50%'],
+                    avoidLabelOverlap: false, label: { show: false },
+                    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+                    data: [
+                        { value: stats.done, name: '完整整治', itemStyle: { color: '#1e8e3e' } },
+                        { value: stats.undone, name: '未完整整治', itemStyle: { color: '#e53935' } }
+                    ]
+                }]
+            });
+        }
+
+        function filterByRisk(risk) {
+            // 点击风险总览卡片时，同步 filter-tag 状态并触发筛选
+            document.querySelectorAll('.filter-tag[data-risk]').forEach(t => {
+                t.classList.toggle('active', t.dataset.risk === risk);
+            });
+            state.riskLevels = [risk];
+            applyFilters();
+        }
+
+        // 地图渲染（示意地图）
+        function renderMap() {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+
+            // 首次或缺失时重建层
+            mapLayer = document.getElementById('mapLayer');
+            mapBoundaryLayer = document.getElementById('mapBoundaryLayer');
+            mapContentLayer = document.getElementById('mapContentLayer');
+            if (!mapLayer) {
+                svg.innerHTML = '<g id="mapLayer"><g id="mapBoundaryLayer"></g><g id="mapContentLayer"></g></g>';
+                mapLayer = document.getElementById('mapLayer');
+                mapBoundaryLayer = document.getElementById('mapBoundaryLayer');
+                mapContentLayer = document.getElementById('mapContentLayer');
+            }
+
+            // Defs（渐变）放在 svg 根下
+            let defs = svg.querySelector('defs');
+            if (!defs) {
+                defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                defs.innerHTML =
+                    '<radialGradient id="heatGrad" cx="50%" cy="50%" r="50%">' +
+                    '<stop offset="0%" stop-color="#e53935" stop-opacity="0.55"/>' +
+                    '<stop offset="60%" stop-color="#ff7043" stop-opacity="0.25"/>' +
+                    '<stop offset="100%" stop-color="#e53935" stop-opacity="0"/>' +
+                    '</radialGradient>';
+                svg.insertBefore(defs, svg.firstChild);
+            }
+
+            // 网格线：放在 mapLayer 之前
+            let gridGroup = document.getElementById('mockGridGroup');
+            if (!gridGroup) {
+                gridGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                gridGroup.setAttribute('id', 'mockGridGroup');
+                for (let i = 0; i <= 10; i++) {
+                    const x = (MAP_VIEW.w / 10) * i;
+                    const y = (MAP_VIEW.h / 10) * i;
+                    const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    vLine.setAttribute('x1', x); vLine.setAttribute('y1', 0); vLine.setAttribute('x2', x); vLine.setAttribute('y2', MAP_VIEW.h);
+                    vLine.setAttribute('class', 'mock-grid');
+                    gridGroup.appendChild(vLine);
+                    const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    hLine.setAttribute('x1', 0); hLine.setAttribute('y1', y); hLine.setAttribute('x2', MAP_VIEW.w); hLine.setAttribute('y2', y);
+                    hLine.setAttribute('class', 'mock-grid');
+                    gridGroup.appendChild(hLine);
+                }
+                svg.insertBefore(gridGroup, mapLayer);
+            }
+
+            // 清空内容层
+            mapBoundaryLayer.innerHTML = '';
+            mapContentLayer.innerHTML = '';
+
+            // 区级视图绘制边界
+            if (!state.street) {
+                renderStreetBoundaries(mapBoundaryLayer);
+            }
+
+            if (state.mapMode === 'heatmap') {
+                renderHeatmap(mapContentLayer);
+            } else if (state.street) {
+                renderStreetPoints(mapContentLayer, filteredData);
+            } else {
+                renderDistrictAggregation(mapContentLayer);
+            }
+
+            // 应用当前变换
+            applyMapTransform();
+        }
+
+        // 绘制镇街行政边界
+        function renderStreetBoundaries(container) {
+            Object.entries(STREET_BOUNDARIES).forEach(([street, points]) => {
+                if (!points || points.length < 3) return;
+                const stats = computeStats(filteredData.filter(d => d.street === street));
+                const total = stats.total;
+                const riskCount = stats.danger + stats.major + stats.warning;
+
+                const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                const pointsStr = points.map(p => p[0] + ',' + p[1]).join(' ');
+                polygon.setAttribute('points', pointsStr);
+                polygon.setAttribute('class', 'mock-boundary');
+                polygon.setAttribute('data-street', street);
+                polygon.onclick = (e) => { e.stopPropagation(); drillToStreet(street); };
+                polygon.onmouseenter = () => polygon.classList.add('active');
+                polygon.onmouseleave = () => polygon.classList.remove('active');
+                container.appendChild(polygon);
+
+                // 计算多边形中心用于放置标签
+                let cx = 0, cy = 0;
+                points.forEach(p => { cx += p[0]; cy += p[1]; });
+                cx /= points.length;
+                cy /= points.length;
+
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', cx);
+                label.setAttribute('y', cy - 4);
+                label.setAttribute('class', 'mock-boundary-label');
+                label.textContent = street;
+                container.appendChild(label);
+
+                const subLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                subLabel.setAttribute('x', cx);
+                subLabel.setAttribute('y', cy + 10);
+                subLabel.setAttribute('class', 'mock-boundary-label');
+                subLabel.style.fontSize = '9px';
+                subLabel.textContent = total + '栋';
+                container.appendChild(subLabel);
+            });
+        }
+
+        // 区级聚合：按镇街画圆（叠加在边界之上）
+        function renderDistrictAggregation(container) {
+            const streetMap = {};
+            filteredData.forEach(d => {
+                if (!streetMap[d.street]) {
+                    streetMap[d.street] = { street: d.street, total: 0, risk: { danger: 0, major: 0, warning: 0, safe: 0 }, lats: [], lngs: [] };
+                }
+                streetMap[d.street].total++;
+                streetMap[d.street].risk[d.risk]++;
+                streetMap[d.street].lats.push(d.lat);
+                streetMap[d.street].lngs.push(d.lng);
+            });
+
+            Object.values(streetMap).forEach(s => {
+                const maxRisk = s.risk.danger > 0 ? 'danger' : (s.risk.major > 0 ? 'major' : (s.risk.warning > 0 ? 'warning' : 'safe'));
+                const riskCount = s.risk.danger + s.risk.major + s.risk.warning;
+                const radius = Math.max(22, Math.min(48, 14 + riskCount * 1.5));
+                const pos = STREET_MOCK_POSITIONS[s.street] || { x: MAP_VIEW.w / 2, y: MAP_VIEW.h / 2 };
+                const cx = pos.x;
+                const cy = pos.y;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('class', 'mock-cluster');
+                g.setAttribute('data-risk', maxRisk);
+                g.setAttribute('transform', 'translate(' + cx + ',' + cy + ')');
+                g.onclick = (e) => { e.stopPropagation(); drillToStreet(s.street); };
+
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', radius);
+                circle.setAttribute('fill', RISK_CONFIG[maxRisk].color);
+                circle.setAttribute('class', 'mock-cluster-circle');
+                g.appendChild(circle);
+
+                const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text1.setAttribute('y', -3);
+                text1.setAttribute('class', 'mock-cluster-text');
+                text1.textContent = s.street;
+                g.appendChild(text1);
+
+                const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text2.setAttribute('y', 10);
+                text2.setAttribute('class', 'mock-cluster-sub');
+                text2.textContent = riskCount + '栋';
+                g.appendChild(text2);
+
+                container.appendChild(g);
+            });
+        }
+
+        // 镇级点位
+        function renderStreetPoints(container, data) {
+            data.forEach(d => {
+                const cfg = RISK_CONFIG[d.risk];
+                const cx = lngToX(d.lng);
+                const cy = latToY(d.lat);
+                const color = cfg.color;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('class', 'mock-point');
+                g.setAttribute('data-risk', d.risk);
+                g.setAttribute('transform', 'translate(' + cx + ',' + cy + ')');
+                g.onclick = (e) => { e.stopPropagation(); showPopup(d, e); };
+                g.ondblclick = (e) => { e.stopPropagation(); openDrawer(d); };
+
+                // 定位针形状
+                const pin = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                pin.setAttribute('d', 'M0,-20 C-8,-20 -12,-12 -12,-6 C-12,4 0,18 0,18 C0,18 12,4 12,-6 C12,-12 8,-20 0,-20 Z');
+                pin.setAttribute('fill', color);
+                pin.setAttribute('stroke', '#fff');
+                pin.setAttribute('stroke-width', '1.5');
+                g.appendChild(pin);
+
+                const inner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                inner.setAttribute('r', 3);
+                inner.setAttribute('cy', -8);
+                inner.setAttribute('fill', '#fff');
+                g.appendChild(inner);
+
+                container.appendChild(g);
+            });
+        }
+
+        // 热力图
+        function renderHeatmap(container) {
+            const heatData = filteredData
+                .filter(d => d.risk !== 'safe')
+                .map(d => ({ x: lngToX(d.lng), y: latToY(d.lat), count: d.risk === 'danger' ? 10 : (d.risk === 'major' ? 7 : 4) }));
+
+            heatData.forEach(p => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', p.x);
+                circle.setAttribute('cy', p.y);
+                circle.setAttribute('r', 22 + p.count);
+                circle.setAttribute('fill', 'url(#heatGrad)');
+                circle.setAttribute('class', 'mock-heat');
+                container.appendChild(circle);
+            });
+        }
+
+        function switchMapMode(mode) {
+            state.mapMode = mode;
+            document.getElementById('btnScatter').classList.toggle('active', mode === 'scatter');
+            document.getElementById('btnHeatmap').classList.toggle('active', mode === 'heatmap');
+            renderMap();
+        }
+
+        // 下钻
+        function drillToStreet(street) {
+            state.street = street;
+            document.getElementById('streetFilter').value = street;
+            const arrow = document.getElementById('levelArrow');
+            if (arrow) arrow.style.display = 'inline';
+            const levelStreet = document.getElementById('levelStreet');
+            if (levelStreet) levelStreet.textContent = street;
+            fitStreetView(street);
+            applyFilters();
+        }
+
+        function backToDistrict() {
+            state.street = '';
+            document.getElementById('streetFilter').value = '';
+            const arrow = document.getElementById('levelArrow');
+            if (arrow) arrow.style.display = 'none';
+            const levelStreet = document.getElementById('levelStreet');
+            if (levelStreet) levelStreet.textContent = '';
+            mapViewState.scale = 1;
+            mapViewState.tx = 0;
+            mapViewState.ty = 0;
+            applyMapTransform();
+            applyFilters();
+        }
+
+        // 弹窗
+        function showPopup(d, event) {
+            const popup = document.getElementById('housePopup');
+            const cfg = RISK_CONFIG[d.risk];
+            document.getElementById('popupTitle').textContent = d.name;
+            document.getElementById('popupRisk').innerHTML = '<span class="risk-badge" style="background:' + cfg.color + '">' + cfg.label + '</span>';
+            document.getElementById('popupStreet').textContent = d.street;
+            document.getElementById('popupFloors').textContent = d.floors;
+            document.getElementById('popupArea').textContent = (d.buildingArea ? d.buildingArea + '㎡' : d.area);
+            document.getElementById('popupTime').textContent = d.inspectionTime;
+            document.getElementById('popupConclusion').textContent = d.conclusion;
+            document.getElementById('popupDetail').href = 'rural-house-detail.html?no=' + d.no;
+
+            const mapRect = document.getElementById('mapContainer').getBoundingClientRect();
+            const pixel = event ? { x: event.clientX - mapRect.left, y: event.clientY - mapRect.top } : { x: mapRect.width / 2, y: mapRect.height / 2 };
+            popup.style.left = Math.min(pixel.x + 20, mapRect.width - 300) + 'px';
+            popup.style.top = Math.min(pixel.y + 20, mapRect.height - 220) + 'px';
+            popup.style.display = 'block';
+        }
+
+        // 右侧抽屉（预留）
+        function openDrawer(d) {
+            const drawer = document.getElementById('rightDrawer');
+            document.getElementById('drawerTitle').textContent = d.name;
+            document.getElementById('drawerContent').innerHTML = `
+                <div class="info-section">
+                    <div class="info-section-title"><i class="fas fa-info-circle"></i>基本信息</div>
+                    <div class="info-item"><span class="label">房屋编号</span><span class="value">${d.no}</span></div>
+                    <div class="info-item"><span class="label">所属镇街</span><span class="value">${d.street}</span></div>
+                    <div class="info-item"><span class="label">详细地址</span><span class="value">${d.address}</span></div>
+                    <div class="info-item"><span class="label">建成年代</span><span class="value">${d.year}</span></div>
+                    <div class="info-item"><span class="label">建筑层数</span><span class="value">${d.floors}</span></div>
+                    <div class="info-item"><span class="label">建筑面积</span><span class="value">${d.area}</span></div>
+                </div>
+                <div class="info-section">
+                    <div class="info-section-title"><i class="fas fa-exclamation-triangle"></i>风险信息</div>
+                    <div class="info-item"><span class="label">隐患等级</span><span class="value">${d.riskLevel}</span></div>
+                    <div class="info-item"><span class="label">整治状态</span><span class="value">${d.governStatus}</span></div>
+                    <div class="info-item"><span class="label">排查时间</span><span class="value">${d.inspectionTime}</span></div>
+                    <div class="info-item"><span class="label">排查结论</span><span class="value">${d.conclusion}</span></div>
+                </div>
+                <a href="rural-house-detail.html?no=${d.no}" target="_blank" class="btn-primary">查看完整档案</a>
+            `;
+            drawer.classList.add('open');
+        }
+
+        function closeDrawer() {
+            document.getElementById('rightDrawer').classList.remove('open');
+        }
+
+        // 点击空白关闭弹窗
+        document.getElementById('mapContainer').addEventListener('click', (e) => {
+            if (e.target.id === 'mapContainer' || e.target.id === 'mockMap' || e.target.id === 'mockSvg') {
+                document.getElementById('housePopup').style.display = 'none';
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            riskRingChart && riskRingChart.resize();
+            screenRingChart && screenRingChart.resize();
+            governBarChart && governBarChart.resize();
+            rectRingChart && rectRingChart.resize();
+            riskDistributionChart && riskDistributionChart.resize();
+            streetBarChart && streetBarChart.resize();
+        });
+    </script>
+</body>
+</html>

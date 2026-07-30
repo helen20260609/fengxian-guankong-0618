@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房屋安全GIS治理态势图</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-light: #e8f0fe;
+            --danger: #d93025;
+            --warning: #f57c00;
+            --caution: #f9ab00;
+            --success: #1e8e3e;
+            --bg: #f5f7fa;
+            --card: #fff;
+            --border: #e0e3e7;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; height: 100%; font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: var(--bg); color: var(--text); }
+        .page-header { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; height: 56px; background: var(--card); box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+        .page-header .title { font-size: 18px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 10px; }
+        .page-header .actions { display: flex; gap: 10px; }
+        .btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: 4px; background: #fff; color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+        .btn:hover { border-color: var(--primary); color: var(--primary); }
+        .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .btn-primary:hover { background: #1557b0; color: #fff; }
+        .main { display: flex; height: 100vh; padding-top: 56px; }
+        .left-panel { width: 320px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 100; }
+        .right-panel { flex: 1; position: relative; display: flex; flex-direction: column; min-width: 0; }
+        .map-wrap { flex: 1; position: relative; min-height: 0; }
+        #map { width: 100%; height: 100%; }
+        .top-bar { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+        .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 10px; flex-wrap: wrap; }
+        .crumb { color: var(--primary); cursor: pointer; font-weight: 500; }
+        .crumb.active { color: var(--text-secondary); cursor: default; }
+        .search-wrap { position: relative; }
+        .search-wrap input { width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; outline: none; }
+        .search-wrap i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 13px; }
+        .layer-tabs { display: flex; border-bottom: 1px solid var(--border); }
+        .layer-btn { flex: 1; padding: 10px 4px; text-align: center; font-size: 12px; color: var(--text-secondary); cursor: pointer; background: #fafafa; border-right: 1px solid var(--border); transition: all 0.2s; }
+        .layer-btn:last-child { border-right: none; }
+        .layer-btn.active { color: var(--primary); background: var(--primary-light); font-weight: 600; border-bottom: 2px solid var(--primary); }
+        .chart-area { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+        .chart-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+        .chart-tab { padding: 4px 10px; border-radius: 12px; font-size: 12px; color: var(--text-secondary); background: var(--bg); cursor: pointer; border: 1px solid transparent; }
+        .chart-tab.active { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+        #leftChart { width: 100%; height: 180px; }
+        .filter-area { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+        .filter-title { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+        #filterTags { display: flex; flex-wrap: wrap; gap: 6px; }
+        .filter-tag { padding: 4px 10px; border-radius: 12px; font-size: 12px; color: var(--text-secondary); background: var(--bg); cursor: pointer; border: 1px solid var(--border); }
+        .filter-tag.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .list-area { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; }
+        .list-footer { padding: 8px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); text-align: center; background: #fafafa; }
+        .house-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: box-shadow 0.2s; }
+        .house-card:hover { box-shadow: var(--shadow); }
+        .house-card.active { border-color: var(--primary); background: var(--primary-light); }
+        .house-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .house-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .house-code { font-size: 11px; color: var(--text-secondary); background: var(--bg); padding: 2px 6px; border-radius: 4px; }
+        .house-address { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        .house-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .risk-tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+        .risk-tag.danger { background: #fce8e8; color: #d93025; }
+        .risk-tag.major { background: #fff3e0; color: #f57c00; }
+        .risk-tag.warning { background: #fff8e1; color: #f9ab00; }
+        .risk-tag.safe { background: #e6f4ea; color: #1e8e3e; }
+        .risk-tag.treat-pending { background: #f1f3f4; color: #5f6368; }
+        .risk-tag.treat-doing { background: #fff8e1; color: #f9ab00; }
+        .risk-tag.treat-done { background: #e6f4ea; color: #1e8e3e; }
+        .risk-tag.treat-overdue { background: #fce8e8; color: #d93025; }
+        .risk-tag.elim-pending { background: #f1f3f4; color: #5f6368; }
+        .risk-tag.elim-review { background: #e8f0fe; color: #1a73e8; }
+        .risk-tag.elim-done { background: #e6f4ea; color: #1e8e3e; }
+        .risk-tag.elim-rejected { background: #fce8e8; color: #d93025; }
+        .year-tag { font-size: 11px; color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 10px; cursor: pointer; }
+        .dashboard { position: absolute; top: 12px; right: 12px; z-index: 500; width: 230px; background: var(--card); border-radius: 8px; box-shadow: var(--shadow); padding: 10px; }
+        .dashboard-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .dashboard-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .db-card { background: #fafafa; border-radius: 6px; padding: 10px; text-align: center; }
+        .db-value { font-size: 22px; font-weight: 700; color: var(--primary); }
+        .db-label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+        .db-value.danger { color: var(--danger); }
+        .dash-chart { height: 130px; margin-top: 8px; }
+        .map-legend { position: absolute; bottom: 20px; left: 20px; z-index: 500; background: var(--card); border-radius: 8px; box-shadow: var(--shadow); padding: 12px; min-width: 140px; max-width: 180px; }
+        .legend-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .legend-symbol { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; }
+        .stats-card { position: absolute; bottom: 20px; right: 20px; z-index: 500; background: var(--card); border-radius: 8px; box-shadow: var(--shadow); padding: 12px; min-width: 150px; }
+        .stats-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+        .stats-value { font-weight: 700; }
+        .cluster-marker { background: transparent; border: none; }
+        .cluster-icon { border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 2px 6px rgba(0,0,0,0.25); border: 2px solid #fff; }
+        .popup-section { margin-bottom: 10px; }
+        .popup-section-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+        .popup-section ul { margin: 0; padding-left: 16px; font-size: 12px; color: var(--text-secondary); }
+        .popup-section li { margin-bottom: 4px; }
+        .popup-status-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; font-size: 12px; margin-right: 6px; margin-bottom: 4px; }
+        .kv { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+        .kv span { color: var(--text-secondary); }
+        .kv b { font-weight: 500; }
+        .progress-bar { height: 8px; background: #e0e3e7; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+        .progress-bar .fill { height: 100%; background: var(--success); border-radius: 4px; }
+        .archive-btn { width: 100%; margin-top: 8px; padding: 6px 0; border: none; border-radius: 4px; background: var(--primary); color: #fff; font-size: 12px; cursor: pointer; }
+        .archive-btn:hover { background: #1557b0; }
+        .shape { display: inline-block; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 2000; display: none; align-items: center; justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--card); width: 720px; max-width: 90vw; max-height: 85vh; border-radius: 8px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+        .modal-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 16px; font-weight: 700; }
+        .modal-close { cursor: pointer; color: var(--text-secondary); font-size: 18px; }
+        .modal-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 18px; }
+        .tab { padding: 10px 16px; font-size: 13px; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+        .modal-body { padding: 18px; overflow-y: auto; flex: 1; }
+        .arch-section { margin-bottom: 16px; }
+        .arch-section-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; color: var(--primary); }
+        .arch-row { display: flex; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+        .arch-label { width: 120px; color: var(--text-secondary); flex-shrink: 0; }
+        .arch-value { flex: 1; color: var(--text); }
+        @media (max-width: 960px) { .dashboard { display: none; } .stats-card { display: none; } }
+    </style>
+</head>
+<body>
+    <header class="page-header">
+        <div class="title"><i class="fas fa-map-marked-alt"></i> 房屋安全GIS治理态势图</div>
+        <div class="actions">
+            <button class="btn" id="resetZoom"><i class="fas fa-compress-arrows-alt"></i> 重置视图</button>
+            <button class="btn" onclick="history.back()"><i class="fas fa-arrow-left"></i> 返回</button>
+        </div>
+    </header>
+    <div class="main">
+        <aside class="left-panel">
+            <div class="top-bar">
+                <div class="breadcrumb" id="breadcrumb"></div>
+                <div class="search-wrap">
+                    <i class="fas fa-search"></i>
+                    <input id="searchInput" placeholder="搜索房屋名称/编号/地址/产权人/社区">
+                </div>
+            </div>
+            <div class="layer-tabs" id="layerTabs">
+                <div class="layer-btn" data-layer="governance"><i class="fas fa-tasks"></i><br>治理状态</div>
+                <div class="layer-btn" data-layer="management"><i class="fas fa-clipboard-check"></i><br>管理措施</div>
+                <div class="layer-btn" data-layer="engineering"><i class="fas fa-hammer"></i><br>工程措施</div>
+                <div class="layer-btn" data-layer="base"><i class="fas fa-home"></i><br>房屋底图</div>
+                <div class="layer-btn" data-layer="elimination"><i class="fas fa-check-double"></i><br>消险状态</div>
+            </div>
+            <div class="chart-area">
+                <div class="chart-tabs">
+                    <div class="chart-tab active" data-chart="status">状态统计</div>
+                    <div class="chart-tab" data-chart="street">街道分布</div>
+                    <div class="chart-tab" data-chart="measure">措施占比</div>
+                </div>
+                <div id="leftChart"></div>
+            </div>
+            <div class="filter-area">
+                <div class="filter-title">快速筛选</div>
+                <div id="filterTags"></div>
+            </div>
+            <div class="list-area" id="houseList"></div>
+            <div class="list-footer" id="listFooter">加载中...</div>
+        </aside>
+        <main class="right-panel">
+            <div class="map-wrap">
+                <div id="map"></div>
+                <div class="dashboard">
+                    <div class="dashboard-title"><i class="fas fa-chart-pie"></i> 全区整治驾驶舱</div>
+                    <div class="dashboard-cards">
+                        <div class="db-card"><div class="db-value" id="completionRate">0%</div><div class="db-label">整治完成率</div></div>
+                        <div class="db-card"><div class="db-value danger" id="overdueCount">0</div><div class="db-label">逾期未整治</div></div>
+                    </div>
+                    <div class="db-label"><i class="fas fa-trophy"></i> 各街道整治排名</div>
+                    <div id="streetRankingChart" class="dash-chart"></div>
+                    <div class="db-label" style="margin-top:8px;"><i class="fas fa-chart-pie"></i> 措施类型占比</div>
+                    <div id="measurePieChart" class="dash-chart"></div>
+                </div>
+                <div class="map-legend" id="mapLegend"></div>
+                <div class="stats-card" id="statsContent"></div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="archiveModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-folder-open"></i> 房屋档案 - <span id="archTitle"></span> <span id="archNo" style="font-size:12px;color:var(--text-secondary);margin-left:8px;"></span></div>
+                <div class="modal-close" id="archClose"><i class="fas fa-times"></i></div>
+            </div>
+            <div class="modal-tabs">
+                <div class="tab active" data-tab="basic">基本信息</div>
+                <div class="tab" data-tab="hazard">隐患信息</div>
+                <div class="tab" data-tab="measure">整治措施</div>
+                <div class="tab" data-tab="progress">整治进度</div>
+                <div class="tab" data-tab="responsible">责任单位</div>
+            </div>
+            <div class="modal-body" id="archiveBody"></div>
+            <div class="modal-header" style="border-top:1px solid var(--border);border-bottom:none;justify-content:flex-end;">
+                <button class="btn" id="archCloseBtn"><i class="fas fa-times"></i> 关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="../js/echarts.min.js"></script>
+    <script src="../js/gis-logic.js"></script>
+</body>
+</html>
