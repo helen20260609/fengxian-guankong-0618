@@ -177,6 +177,11 @@ http.createServer(function(req, res) {
     var filePath = path.join(baseDir, urlPath);
     var contentType = mimeTypes[ext] || 'application/octet-stream';
 
+    // 兼容从 /css 或 /js 访问根目录静态资源（页面内 ../css/... 不能直接匹配 /pages/*）
+    if ((urlPath.startsWith('/css/') || urlPath.startsWith('/js/')) && !fs.existsSync(filePath)) {
+        filePath = path.join(__dirname, urlPath);
+    }
+
     fs.readFile(filePath, function(err, data) {
         if (err) {
             if (err.code === 'ENOENT') {
