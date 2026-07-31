@@ -560,22 +560,32 @@ function generateAppraisalReports(no, risk, governance, i) {
 
 // 生成巡查检查记录
 function generatePatrolRecords(no, risk, governance, i) {
-    if (risk === 'safe') return [];
     const records = [];
-    const months = governance === 'done' ? 3 : (governance === 'doing' ? 2 : 1);
+    const months = risk === 'safe' ? 2 : (governance === 'done' ? 4 : (governance === 'doing' ? 3 : 2));
     for (let m = 0; m < months; m++) {
+        const month = 7 + m + (i % 3);
+        const day = 5 + (i % 20);
+        const patrolDate = '2024-' + pad2(month) + '-' + pad2(day);
+        // 判定结果：safe 多为无隐患销号；done 多为 AB 级；其它按风险等级给复核/隐患
+        let decision = '需专业人员复核';
+        if (risk === 'safe' || (governance === 'done' && m >= 2)) {
+            decision = m % 3 === 0 ? '经判定无隐患销号' : '鉴定为AB级';
+        } else if (governance === 'done' && m === 1) {
+            decision = '鉴定为AB级';
+        }
         records.push({
             id: 'PAT-' + no + '-' + pad2(m + 1),
-            patrolDate: '2024-' + pad2(7 + m + (i % 3)) + '-' + pad2(5 + (i % 20)),
+            patrolDate: patrolDate,
             patrolType: m % 2 === 0 ? '日常巡查' : '专项检查',
             patrolOrg: MODULE_STREETS[(i - 1) % MODULE_STREETS.length] + '城建中心',
             patrolPerson: RESPONSIBLE_PERSONS[(i + m) % RESPONSIBLE_PERSONS.length],
             content: '检查房屋隐患部位安全状况、管控措施落实情况',
-            result: '正常',
-            foundProblems: '',
+            result: risk === 'safe' ? '正常' : '发现隐患',
+            foundProblems: risk === 'safe' ? '' : HAZARD_PARTS[i % HAZARD_PARTS.length] + '存在' + HAZARD_TYPES[(i + 3) % HAZARD_TYPES.length],
+            decision: decision,
             photos: '',
             files: '',
-            remark: '管控措施到位，需持续关注'
+            remark: decision === '需专业人员复核' ? '建议安排专家现场复核' : '管控措施到位，持续关注'
         });
     }
     return records;
