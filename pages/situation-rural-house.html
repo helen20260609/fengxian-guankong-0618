@@ -891,12 +891,12 @@
                             <div class="stat-label">应整治总数</div>
                             <div class="stat-trend" id="rectProgressTotalTrend">隐患房屋</div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card" onclick="document.getElementById('rectProgressStatusFilter').value='done';rectProgressTableState.filterStatus='done';rectProgressTableState.page=1;toggleRectProgressTable(true);renderRectProgressTable();" title="只看完整整治">
                             <div class="stat-value" id="rectProgressDone">0<span class="stat-unit">栋</span></div>
                             <div class="stat-label">完整整治数</div>
                             <div class="stat-trend" id="rectProgressDoneTrend">含销号通过</div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card" onclick="filterRectProgressUndone()" title="只看未完整整治">
                             <div class="stat-value" id="rectProgressUndone">0<span class="stat-unit">栋</span></div>
                             <div class="stat-label">未完整整治数</div>
                             <div class="stat-trend down" id="rectProgressUndoneTrend">待推进</div>
@@ -3113,12 +3113,13 @@
         // 整治进度统计
         function computeRectProgressStats(data) {
             const total = data.length;
-            const shouldRect = data.filter(d => d.risk !== 'safe').length;
-            const done = data.filter(d => d.governance === 'done' || d.closeStatus === '已通过').length;
+            const shouldRectData = data.filter(d => d.risk !== 'safe');
+            const shouldRect = shouldRectData.length;
+            const done = shouldRectData.filter(d => d.governance === 'done' || d.closeStatus === '已通过').length;
             const undone = shouldRect - done;
             const doneRate = shouldRect ? (done / shouldRect * 100).toFixed(1) : 0;
 
-            // 细分：AB级排除、评估排除、工程措施、管理措施
+            // 细分：AB级排除、评估排除、工程措施、管理措施（按房屋去重）
             const abHouses = new Set();
             const evalExcludeHouses = new Set();
             const engHouses = new Set();
@@ -3126,6 +3127,7 @@
             data.forEach(d => {
                 (d.patrolRecords || []).forEach(p => {
                     if (p.decision === PATROL_DECISION_CONFIG.ab.text) abHouses.add(d.no);
+                    if (p.decision === PATROL_DECISION_CONFIG.close.text) evalExcludeHouses.add(d.no);
                 });
                 (d.appraisalReports || []).forEach(a => {
                     if (classifyConclusion(a.conclusion || a.level) === 'exclude') evalExcludeHouses.add(d.no);
@@ -3163,7 +3165,8 @@
                     if (m.type === 'management') measureCategories.push('management');
                 });
                 const hasAB = (d.patrolRecords || []).some(p => p.decision === PATROL_DECISION_CONFIG.ab.text);
-                const hasEvalExclude = (d.appraisalReports || []).some(a => classifyConclusion(a.conclusion || a.level) === 'exclude') ||
+                const hasEvalExclude = (d.patrolRecords || []).some(p => p.decision === PATROL_DECISION_CONFIG.close.text) ||
+                                       (d.appraisalReports || []).some(a => classifyConclusion(a.conclusion || a.level) === 'exclude') ||
                                        (d.inspectionRecords || []).some(ins => classifyConclusion(ins.structureStatus) === 'exclude');
                 if (hasAB) measureCategories.push('ab');
                 if (hasEvalExclude) measureCategories.push('eval-exclude');
@@ -3348,6 +3351,14 @@
             renderRectProgressTable();
         }
 
+        function filterRectProgressUndone() {
+            document.getElementById('rectProgressStatusFilter').value = '';
+            rectProgressTableState.filterStatus = 'undone';
+            rectProgressTableState.page = 1;
+            toggleRectProgressTable(true);
+            renderRectProgressTable();
+        }
+
         function getRectProgressTableData() {
             const name = (document.getElementById('rectProgressSearchName').value || '').trim().toLowerCase();
             const street = (document.getElementById('rectProgressSearchStreet').value || '').trim().toLowerCase();
@@ -3362,6 +3373,7 @@
                 if (street && !(r.street || '').toLowerCase().includes(street)) return false;
                 if (risk && r.risk !== risk) return false;
                 if (status && r.governance !== status) return false;
+                if (rectProgressTableState.filterStatus === 'undone' && r.governance === 'done') return false;
                 if (measure && !r.measureCategories.includes(measure)) return false;
                 if (accept && r.acceptConclusion !== accept) return false;
                 if (from && r.completeDate && r.completeDate < from) return false;
