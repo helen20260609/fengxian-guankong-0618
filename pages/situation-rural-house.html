@@ -382,6 +382,7 @@
             color: var(--text-secondary);
             font-size: 13px;
         }
+        .progress-bar {
             width: 100%; height: 6px; background: #eef2f7; border-radius: 3px; overflow: hidden; margin-top: 4px;
         }
         .progress-bar-fill {
@@ -821,6 +822,65 @@
                     </div>
                 </div>
 
+                <!-- 风险整治措施统计 -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-hammer"></i>风险整治措施统计</div>
+                    <div class="stat-grid-3">
+                        <div class="stat-card" onclick="toggleMeasureTable(true)" title="查看措施明细">
+                            <div class="stat-value" id="measureTotal">0<span class="stat-unit">条</span></div>
+                            <div class="stat-label">措施总记录</div>
+                            <div class="stat-trend" id="measureTotalTrend">覆盖 0/0 栋</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="measureEngCount">0<span class="stat-unit">条</span></div>
+                            <div class="stat-label">工程措施</div>
+                            <div class="stat-trend" id="measureEngTrend">工程整治</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="measureMgtCount">0<span class="stat-unit">条</span></div>
+                            <div class="stat-label">管理措施</div>
+                            <div class="stat-trend" id="measureMgtTrend">安全管控</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px">
+                        <div class="stat-flex">
+                            <span style="font-size:12px;color:var(--text-secondary)">措施完成率</span>
+                            <span style="font-size:13px;font-weight:600;color:var(--primary)" id="measureDoneRate">0%</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-bar-fill" id="measureDoneBar" style="width:0%"></div></div>
+                    </div>
+                    <div class="measure-summary" style="margin-top:10px;display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
+                        <div class="patrol-summary-item engineering" onclick="filterMeasureTableByType('engineering')">
+                            <div class="ps-count" id="measureEngDone">0</div>
+                            <div class="ps-label">工程措施已验收</div>
+                        </div>
+                        <div class="patrol-summary-item management" onclick="filterMeasureTableByType('management')">
+                            <div class="ps-count" id="measureMgtDone">0</div>
+                            <div class="ps-label">管理措施已完成</div>
+                        </div>
+                    </div>
+                    <style>
+                        .patrol-summary-item.engineering { background: #e8f5e9; border-color: rgba(30,142,62,.2); }
+                        .patrol-summary-item.engineering .ps-count { color: #1e8e3e; }
+                        .patrol-summary-item.management { background: #e3f2fd; border-color: rgba(26,115,232,.2); }
+                        .patrol-summary-item.management .ps-count { color: #1a73e8; }
+                    </style>
+                    <div class="chart-sub-title"><i class="fas fa-chart-pie"></i>工程措施分类占比</div>
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <div id="measureEngRingChart" class="chart-patrol-ring"></div>
+                        <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:120px" id="measureEngRingLegend"></div>
+                    </div>
+                    <div class="chart-sub-title"><i class="fas fa-chart-bar"></i>管理措施分类统计</div>
+                    <div id="measureMgtBarChart" class="chart-patrol-bar"></div>
+                    <div class="chart-sub-title"><i class="fas fa-chart-bar"></i>各镇街措施数量分布</div>
+                    <div id="measureStreetBarChart" class="chart-patrol-bar"></div>
+                    <div class="chart-sub-title"><i class="fas fa-chart-line"></i>近半年措施实施趋势</div>
+                    <div id="measureTrendLineChart" class="chart-patrol-line"></div>
+                    <div style="text-align:center;margin-top:8px">
+                        <button class="btn-text" onclick="toggleMeasureTable()" id="btnMeasureTable"><i class="fas fa-list"></i> 查看整治措施明细</button>
+                    </div>
+                </div>
+
                 <!-- 风险等级情况 -->
                 <div class="card">
                     <div class="card-title"><i class="fas fa-exclamation-triangle"></i>风险等级情况</div>
@@ -1167,6 +1227,62 @@
                 </div>
             </div>
         </div>
+        <!-- 整治措施明细表 -->
+        <div id="measureTablePanel" class="risk-table-panel">
+            <div class="risk-table-header" onclick="toggleMeasureTable()">
+                <div class="risk-table-title"><i class="fas fa-list-alt"></i>整治措施明细</div>
+                <div class="risk-table-toggle">
+                    <span id="measureTableSummary">共 0 条</span>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </div>
+            </div>
+            <div class="risk-table-body">
+                <div class="risk-table-toolbar">
+                    <input type="text" id="measureSearchName" placeholder="房屋名称" oninput="renderMeasureTable()">
+                    <input type="text" id="measureSearchStreet" placeholder="镇街" oninput="renderMeasureTable()">
+                    <select id="measureTypeFilter" onchange="renderMeasureTable()">
+                        <option value="">全部措施类型</option>
+                        <option value="engineering">工程措施</option>
+                        <option value="management">管理措施</option>
+                    </select>
+                    <select id="measureAcceptFilter" onchange="renderMeasureTable()">
+                        <option value="">全部验收状态</option>
+                        <option value="done">已验收</option>
+                        <option value="doing">验收中</option>
+                        <option value="pending">待验收</option>
+                    </select>
+                    <input type="date" id="measureDateFrom" onchange="renderMeasureTable()">
+                    <span style="font-size:12px;color:var(--text-secondary)">至</span>
+                    <input type="date" id="measureDateTo" onchange="renderMeasureTable()">
+                    <div class="toolbar-fill"></div>
+                    <button class="btn-text" onclick="exportMeasureTable()"><i class="fas fa-download"></i> 导出</button>
+                </div>
+                <div style="overflow:auto;max-height:44vh">
+                    <table class="risk-table" id="measureTable">
+                        <thead>
+                            <tr>
+                                <th>房屋名称</th>
+                                <th>隐患等级</th>
+                                <th>措施类型</th>
+                                <th>具体措施</th>
+                                <th>实施时间</th>
+                                <th>责任单位</th>
+                                <th>验收状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="measureTableBody">
+                            <tr><td colspan="8" class="risk-table-empty">点击展开查看明细</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="risk-table-pagination" id="measureTablePagination">
+                    <span id="measureTablePageInfo">第 1 页 / 共 0 页</span>
+                    <button onclick="changeMeasureTablePage(-1)" id="measureTablePrev"><i class="fas fa-chevron-left"></i></button>
+                    <button onclick="changeMeasureTablePage(1)" id="measureTableNext"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
         </div>
     </div>
 
@@ -1210,8 +1326,13 @@
         let patrolDecisionRingChart = null;
         let patrolStreetBarChart = null;
         let patrolTrendLineChart = null;
+        let measureEngRingChart = null;
+        let measureMgtBarChart = null;
+        let measureStreetBarChart = null;
+        let measureTrendLineChart = null;
         let riskTableState = { page: 1, pageSize: 10, isOpen: false };
         let patrolTableState = { page: 1, pageSize: 10, isOpen: false, filterDecision: '' };
+        let measureTableState = { page: 1, pageSize: 10, isOpen: false, filterType: '', filterAccept: '' };
 
         // 示意地图视图状态
         let mapViewState = { scale: 1, tx: 0, ty: 0, minScale: 0.6, maxScale: 6 };
@@ -1257,6 +1378,7 @@
                 const reviewNeeded = decisions.filter(d => d === '需专业人员复核').length;
 
                 return {
+                    measures: r.measures || [],
                     no: r.no,
                     name: r.name || r.overview?.houseName || '未命名',
                     street: r.street || '',
@@ -1691,8 +1813,13 @@
             renderPatrolDecisionRing();
             renderPatrolStreetBar();
             renderPatrolTrendLine();
+            renderMeasureEngRing();
+            renderMeasureMgtBar();
+            renderMeasureStreetBar();
+            renderMeasureTrendLine();
             renderRiskTable();
             renderPatrolTable();
+            renderMeasureTable();
         }
 
         function switchChartMode(mode) {
@@ -1980,6 +2107,332 @@
             review: { label: '需专业人员复核', color: '#f9a825', text: '需专业人员复核' }
         };
 
+        // 整治措施分类映射：工程措施映射为 加固维修/拆除重建/疏散安置；管理措施保持原名称
+        const MEASURE_ENG_CATEGORY_MAP = {
+            '结构加固': '加固维修',
+            '屋面修缮': '加固维修',
+            '基础加固': '加固维修',
+            '墙体修复': '加固维修',
+            '排水改造': '加固维修',
+            '电气改造': '拆除重建',
+            '消防改造': '疏散安置'
+        };
+        const MEASURE_STATUS_CONFIG = {
+            done:    { label: '已验收', color: '#1e8e3e' },
+            doing:   { label: '验收中', color: '#f9a825' },
+            pending: { label: '待验收', color: '#e53935' }
+        };
+        const MEASURE_TYPE_CONFIG = {
+            engineering: { label: '工程措施', color: '#1e8e3e' },
+            management:  { label: '管理措施', color: '#1a73e8' }
+        };
+
+        function computeMeasureStats(data) {
+            const allMeasures = data.flatMap(d => (d.measures || []).map(m => ({ ...m, houseNo: d.no, houseName: d.name, street: d.street, risk: d.risk, riskLevel: d.riskLevel })));
+            const engTotal = allMeasures.filter(m => m.type === 'engineering').length;
+            const mgtTotal = allMeasures.filter(m => m.type === 'management').length;
+            const engDone = allMeasures.filter(m => m.type === 'engineering' && m.status === 'done').length;
+            const mgtDone = allMeasures.filter(m => m.type === 'management' && m.status === 'done').length;
+            const done = allMeasures.filter(m => m.status === 'done').length;
+            const measureTotal = allMeasures.length;
+            const houseWithMeasure = data.filter(d => (d.measures || []).length > 0).length;
+            const doneRate = measureTotal ? (done / measureTotal * 100).toFixed(1) : 0;
+            return { measureTotal, engTotal, mgtTotal, engDone, mgtDone, done, houseWithMeasure, doneRate };
+        }
+
+        function getMeasureRecordsFlat(data) {
+            const list = [];
+            data.forEach(d => {
+                (d.measures || []).forEach((m, idx) => {
+                    const category = m.type === 'engineering' ? (MEASURE_ENG_CATEGORY_MAP[m.name] || m.name) : m.name;
+                    const statusCfg = MEASURE_STATUS_CONFIG[m.status] || MEASURE_STATUS_CONFIG.pending;
+                    const typeCfg = MEASURE_TYPE_CONFIG[m.type] || MEASURE_TYPE_CONFIG.management;
+                    list.push({
+                        id: d.no + '-' + (m.type === 'engineering' ? 'E' : 'M') + (idx + 1),
+                        houseNo: d.no,
+                        houseName: d.name,
+                        address: d.address,
+                        street: d.street,
+                        risk: d.risk,
+                        riskLevel: d.riskLevel,
+                        type: m.type,
+                        typeLabel: typeCfg.label,
+                        typeColor: typeCfg.color,
+                        name: m.name,
+                        category: category,
+                        status: m.status,
+                        statusLabel: statusCfg.label,
+                        statusColor: statusCfg.color,
+                        startTime: m.startTime || '',
+                        dutyPerson: m.dutyPerson || '',
+                        dutyUnit: d.responsibleDept || (d.street ? d.street + '城建中心' : '—')
+                    });
+                });
+            });
+            return list.sort((a, b) => (b.startTime || '').localeCompare(a.startTime || ''));
+        }
+
+        function renderMeasureEngRing() {
+            const records = getMeasureRecordsFlat(filteredData).filter(m => m.type === 'engineering');
+            const map = {};
+            records.forEach(m => { map[m.category] = (map[m.category] || 0) + 1; });
+            const colors = { '加固维修': '#1e8e3e', '拆除重建': '#f57c00', '疏散安置': '#1a73e8' };
+            const data = Object.keys(map).map(name => ({ value: map[name], name, itemStyle: { color: colors[name] || '#9aa0a6' } })).sort((a, b) => b.value - a.value);
+            const total = records.length || 1;
+            if (!measureEngRingChart) measureEngRingChart = echarts.init(document.getElementById('measureEngRingChart'));
+            measureEngRingChart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                legend: { show: false },
+                title: {
+                    text: total.toString(),
+                    subtext: '工程措施',
+                    left: 'center', top: 'center',
+                    textStyle: { fontSize: 16, fontWeight: 'bold', color: 'var(--text-primary)' },
+                    subtextStyle: { fontSize: 9, color: 'var(--text-secondary)' }
+                },
+                series: [{
+                    type: 'pie', radius: ['50%', '72%'], center: ['50%', '50%'],
+                    avoidLabelOverlap: false, label: { show: false },
+                    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+                    data: data
+                }]
+            });
+            measureEngRingChart.off('click');
+            measureEngRingChart.on('click', params => {
+                document.getElementById('measureTypeFilter').value = 'engineering';
+                measureTableState.filterType = 'engineering';
+                measureTableState.filterAccept = '';
+                document.getElementById('measureAcceptFilter').value = '';
+                toggleMeasureTable(true);
+                renderMeasureTable();
+            });
+
+            const legendContainer = document.getElementById('measureEngRingLegend');
+            if (legendContainer) {
+                legendContainer.innerHTML = data.map(d => {
+                    return '<div class="patrol-ring-legend-item" style="cursor:pointer">' +
+                        '<span class="patrol-ring-legend-dot" style="background:' + d.itemStyle.color + '"></span>' +
+                        '<span>' + d.name + '</span>' +
+                        '<span class="patrol-ring-legend-val">' + d.value + '</span>' +
+                        '</div>';
+                }).join('');
+            }
+        }
+
+        function renderMeasureMgtBar() {
+            const records = getMeasureRecordsFlat(filteredData).filter(m => m.type === 'management');
+            const map = {};
+            records.forEach(m => { map[m.name] = (map[m.name] || 0) + 1; });
+            const data = Object.keys(map).map(name => ({ name, count: map[name] })).sort((a, b) => b.count - a.count);
+            if (!measureMgtBarChart) measureMgtBarChart = echarts.init(document.getElementById('measureMgtBarChart'));
+            measureMgtBarChart.clear();
+            measureMgtBarChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: 8, right: 16, bottom: 8, top: 8, containLabel: true },
+                xAxis: { type: 'category', data: data.map(d => d.name), axisLine: { lineStyle: { color: '#dbe4ed' } }, axisLabel: { color: '#5f6b7a', fontSize: 10, rotate: 20 }, axisTick: { show: false } },
+                yAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, splitLine: { lineStyle: { color: '#f0f4f8' } } },
+                series: [{ type: 'bar', data: data.map(d => d.count), itemStyle: { color: '#1a73e8', borderRadius: [4, 4, 0, 0] }, barWidth: 14 }]
+            });
+            measureMgtBarChart.off('click');
+            measureMgtBarChart.on('click', params => {
+                document.getElementById('measureTypeFilter').value = 'management';
+                measureTableState.filterType = 'management';
+                measureTableState.filterAccept = '';
+                document.getElementById('measureAcceptFilter').value = '';
+                toggleMeasureTable(true);
+                renderMeasureTable();
+            });
+        }
+
+        function renderMeasureStreetBar() {
+            const streets = [...new Set(filteredData.map(d => d.street).filter(Boolean))].sort();
+            const data = streets.map(street => {
+                const records = filteredData.filter(d => d.street === street).flatMap(d => d.measures || []);
+                return { street, count: records.length };
+            }).sort((a, b) => b.count - a.count);
+            if (!measureStreetBarChart) measureStreetBarChart = echarts.init(document.getElementById('measureStreetBarChart'));
+            measureStreetBarChart.clear();
+            measureStreetBarChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: 8, right: 16, bottom: 8, top: 8, containLabel: true },
+                xAxis: { type: 'category', data: data.map(d => d.street), axisLine: { lineStyle: { color: '#dbe4ed' } }, axisLabel: { color: '#5f6b7a', fontSize: 10, rotate: 30 }, axisTick: { show: false } },
+                yAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, splitLine: { lineStyle: { color: '#f0f4f8' } } },
+                series: [{ type: 'bar', data: data.map(d => d.count), itemStyle: { color: '#1a73e8', borderRadius: [4, 4, 0, 0] }, barWidth: 14 }]
+            });
+            measureStreetBarChart.off('click');
+            measureStreetBarChart.on('click', params => {
+                document.getElementById('streetFilter').value = params.name;
+                state.street = params.name;
+                drillToStreet(params.name);
+            });
+        }
+
+        function renderMeasureTrendLine() {
+            const months = [];
+            const now = new Date();
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+            }
+            const allRecords = filteredData.flatMap(d => d.measures || []);
+            const counts = months.map(m => allRecords.filter(p => p.startTime && p.startTime.startsWith(m)).length);
+            if (!measureTrendLineChart) measureTrendLineChart = echarts.init(document.getElementById('measureTrendLineChart'));
+            measureTrendLineChart.clear();
+            measureTrendLineChart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: 8, right: 16, bottom: 8, top: 8, containLabel: true },
+                xAxis: { type: 'category', data: months, axisLine: { lineStyle: { color: '#dbe4ed' } }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, axisTick: { show: false } },
+                yAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, splitLine: { lineStyle: { color: '#f0f4f8' } } },
+                series: [{
+                    type: 'line', data: counts, smooth: true,
+                    itemStyle: { color: '#1e8e3e' }, lineStyle: { width: 2 },
+                    areaStyle: { color: 'rgba(30, 142, 62, 0.15)' },
+                    symbol: 'circle', symbolSize: 6
+                }]
+            });
+            measureTrendLineChart.off('click');
+            measureTrendLineChart.on('click', params => {
+                document.getElementById('measureDateFrom').value = params.name + '-01';
+                const y = parseInt(params.name.split('-')[0]), m = parseInt(params.name.split('-')[1]);
+                const lastDay = new Date(y, m, 0).getDate();
+                document.getElementById('measureDateTo').value = params.name + '-' + String(lastDay).padStart(2, '0');
+                toggleMeasureTable(true);
+                renderMeasureTable();
+            });
+        }
+
+        function toggleMeasureTable(forceOpen) {
+            if (typeof forceOpen === 'boolean') measureTableState.isOpen = forceOpen;
+            else measureTableState.isOpen = !measureTableState.isOpen;
+            document.getElementById('measureTablePanel').classList.toggle('open', measureTableState.isOpen);
+            if (measureTableState.isOpen) renderMeasureTable();
+        }
+
+        function changeMeasureTablePage(delta) {
+            measureTableState.page += delta;
+            renderMeasureTable();
+        }
+
+        function filterMeasureTableByType(type) {
+            document.getElementById('measureTypeFilter').value = type;
+            measureTableState.filterType = type;
+            measureTableState.page = 1;
+            toggleMeasureTable(true);
+            renderMeasureTable();
+        }
+
+        function filterMeasureTableByAccept(status) {
+            document.getElementById('measureAcceptFilter').value = status;
+            measureTableState.filterAccept = status;
+            measureTableState.page = 1;
+            toggleMeasureTable(true);
+            renderMeasureTable();
+        }
+
+        function getMeasureTableData() {
+            const name = (document.getElementById('measureSearchName').value || '').trim().toLowerCase();
+            const street = (document.getElementById('measureSearchStreet').value || '').trim().toLowerCase();
+            const type = document.getElementById('measureTypeFilter').value;
+            const accept = document.getElementById('measureAcceptFilter').value;
+            const from = document.getElementById('measureDateFrom').value;
+            const to = document.getElementById('measureDateTo').value;
+            let list = getMeasureRecordsFlat(filteredData).filter(m => {
+                if (name && !(m.houseName || '').toLowerCase().includes(name)) return false;
+                if (street && !(m.street || '').toLowerCase().includes(street)) return false;
+                if (type && m.type !== type) return false;
+                if (accept && m.status !== accept) return false;
+                if (from && m.startTime && m.startTime < from) return false;
+                if (to && m.startTime && m.startTime > to) return false;
+                return true;
+            });
+            return list;
+        }
+
+        function renderMeasureTable() {
+            const list = getMeasureTableData();
+            const total = list.length;
+            const pageSize = measureTableState.pageSize;
+            const totalPages = Math.max(1, Math.ceil(total / pageSize));
+            let page = Math.max(1, Math.min(measureTableState.page, totalPages));
+            measureTableState.page = page;
+            const start = (page - 1) * pageSize;
+            const slice = list.slice(start, start + pageSize);
+            const body = document.getElementById('measureTableBody');
+            document.getElementById('measureTableSummary').textContent = '共 ' + total + ' 条';
+            document.getElementById('measureTablePageInfo').textContent = '第 ' + page + ' 页 / 共 ' + totalPages + ' 页';
+            document.getElementById('measureTablePrev').disabled = page <= 1;
+            document.getElementById('measureTableNext').disabled = page >= totalPages;
+            if (!slice.length) {
+                body.innerHTML = '<tr><td colspan="8" class="risk-table-empty">暂无数据</td></tr>';
+                return;
+            }
+            body.innerHTML = slice.map(m => {
+                const cfg = RISK_CONFIG[m.risk] || RISK_CONFIG.safe;
+                const highlight = m.status === 'pending' ? ' style="background:#fffbe6"' : (m.status === 'done' ? ' style="background:#f0fff4"' : '');
+                return '<tr' + highlight + '>' +
+                    '<td>' + (m.houseName || '—') + '</td>' +
+                    '<td><span class="risk-badge-inline" style="background:' + cfg.color + (cfg.class === 'warning' ? ';color:#333' : '') + '">' + cfg.label + '</span></td>' +
+                    '<td>' + m.typeLabel + '</td>' +
+                    '<td>' + (m.type === 'engineering' ? m.category : m.name) + '</td>' +
+                    '<td>' + (m.startTime || '—') + '</td>' +
+                    '<td>' + (m.dutyUnit || '—') + '</td>' +
+                    '<td><span class="patrol-decision-tag ' + m.status + '" style="background:' + m.statusColor + (m.status === 'pending' ? ';color:#333' : ';color:#fff') + '">' + m.statusLabel + '</span></td>' +
+                    '<td><button class="btn-text" onclick="showMeasureDetail(\'' + m.id + '\')">查看详情</button></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function showMeasureDetail(measureId) {
+            const all = getMeasureRecordsFlat(filteredData);
+            const m = all.find(x => x.id === measureId);
+            if (!m) return;
+            const drawer = document.getElementById('rightDrawer');
+            document.getElementById('drawerTitle').textContent = '整治措施详情';
+            const riskCfg = RISK_CONFIG[m.risk] || RISK_CONFIG.safe;
+            const statusColor = m.statusColor;
+            const statusTextColor = m.status === 'doing' || m.status === 'pending' ? '#333' : '#fff';
+            document.getElementById('drawerContent').innerHTML = `
+                <div class="info-section">
+                    <div class="info-section-title"><i class="fas fa-home"></i>房屋信息</div>
+                    <div class="info-item"><span class="label">房屋编号</span><span class="value">${m.houseNo || '—'}</span></div>
+                    <div class="info-item"><span class="label">房屋名称</span><span class="value">${m.houseName || '—'}</span></div>
+                    <div class="info-item"><span class="label">所属镇街</span><span class="value">${m.street || '—'}</span></div>
+                    <div class="info-item"><span class="label">隐患等级</span><span class="value"><span class="risk-badge" style="background:${riskCfg.color}">${riskCfg.label}</span></span></div>
+                </div>
+                <div class="info-section">
+                    <div class="info-section-title"><i class="fas fa-hammer"></i>措施信息</div>
+                    <div class="info-item"><span class="label">措施编号</span><span class="value">${m.id || '—'}</span></div>
+                    <div class="info-item"><span class="label">措施类型</span><span class="value">${m.typeLabel}</span></div>
+                    <div class="info-item"><span class="label">具体措施</span><span class="value">${m.type === 'engineering' ? m.category : m.name}</span></div>
+                    <div class="info-item"><span class="label">原始措施</span><span class="value">${m.name}</span></div>
+                    <div class="info-item"><span class="label">实施时间</span><span class="value">${m.startTime || '—'}</span></div>
+                    <div class="info-item"><span class="label">责任单位</span><span class="value">${m.dutyUnit || '—'}</span></div>
+                    <div class="info-item"><span class="label">责任人</span><span class="value">${m.dutyPerson || '—'}</span></div>
+                    <div class="info-item"><span class="label">验收状态</span><span class="value"><span class="patrol-decision-tag ${m.status}" style="background:${statusColor};color:${statusTextColor}">${m.statusLabel}</span></span></div>
+                </div>
+                <a href="rural-house-detail.html?no=${m.houseNo}" target="_blank" class="btn-primary">查看房屋完整档案</a>
+            `;
+            drawer.classList.add('open');
+        }
+
+        function exportMeasureTable() {
+            const list = getMeasureTableData();
+            const rows = [['房屋名称','隐患等级','措施类型','具体措施','实施时间','责任单位','验收状态']];
+            list.forEach(m => {
+                rows.push([m.houseName || '', RISK_CONFIG[m.risk]?.label || m.riskLevel || '', m.typeLabel, m.type === 'engineering' ? m.category : m.name, m.startTime || '', m.dutyUnit || '', m.statusLabel]);
+            });
+            const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '整治措施明细.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
         function computePatrolStats(data) {
             const total = data.length;
             const allRecords = data.flatMap(d => d.patrolRecords || []);
@@ -2021,6 +2474,22 @@
             document.getElementById('patrolAB').textContent = stats.abLevel;
             document.getElementById('patrolReview').textContent = stats.reviewNeeded;
             document.getElementById('patrolCountTrend').textContent = total ? '覆盖 ' + stats.patrolHouse + '/' + total + ' 栋' : '覆盖 0/' + total + ' 栋';
+            renderMeasureStats();
+        }
+
+        function renderMeasureStats() {
+            const stats = computeMeasureStats(filteredData);
+            const total = filteredData.length;
+            document.getElementById('measureTotal').innerHTML = stats.measureTotal + '<span class="stat-unit">条</span>';
+            document.getElementById('measureEngCount').innerHTML = stats.engTotal + '<span class="stat-unit">条</span>';
+            document.getElementById('measureMgtCount').innerHTML = stats.mgtTotal + '<span class="stat-unit">条</span>';
+            document.getElementById('measureTotalTrend').textContent = total ? '覆盖 ' + stats.houseWithMeasure + '/' + total + ' 栋' : '覆盖 0/' + total + ' 栋';
+            document.getElementById('measureEngTrend').textContent = '已验收 ' + stats.engDone + ' 条';
+            document.getElementById('measureMgtTrend').textContent = '已完成 ' + stats.mgtDone + ' 条';
+            document.getElementById('measureDoneRate').textContent = stats.doneRate + '%';
+            document.getElementById('measureDoneBar').style.width = stats.doneRate + '%';
+            document.getElementById('measureEngDone').textContent = stats.engDone;
+            document.getElementById('measureMgtDone').textContent = stats.mgtDone;
         }
 
         function renderPatrolDecisionRing() {
@@ -2572,6 +3041,10 @@
             patrolDecisionRingChart && patrolDecisionRingChart.resize();
             patrolStreetBarChart && patrolStreetBarChart.resize();
             patrolTrendLineChart && patrolTrendLineChart.resize();
+            measureEngRingChart && measureEngRingChart.resize();
+            measureMgtBarChart && measureMgtBarChart.resize();
+            measureStreetBarChart && measureStreetBarChart.resize();
+            measureTrendLineChart && measureTrendLineChart.resize();
         });
     </script>
 </body>
