@@ -286,6 +286,7 @@
             overflow-y: auto;
         }
         .risk-table-panel + .risk-table-panel { margin-bottom: 54px; }
+        .risk-table-panel:has(+ .risk-table-panel.open) { margin-bottom: 0; }
         .risk-table-toolbar {
             display: flex;
             flex-wrap: wrap;
@@ -988,6 +989,75 @@
                     </div>
                 </div>
 
+                <!-- 鉴定进度跟踪 -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-microscope"></i>鉴定进度跟踪</div>
+                    <div class="stat-grid-3">
+                        <div class="stat-card" onclick="toggleAppraisalTable(true)" title="查看排查鉴定明细">
+                            <div class="stat-value" id="appraisalTotal">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">已排查栋数</div>
+                            <div class="stat-trend" id="appraisalTotalTrend">覆盖 0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="appraisalEvalCount">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">已评估栋数</div>
+                            <div class="stat-trend" id="appraisalEvalTrend">评估排除/隐患</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="appraisalAppCount">0<span class="stat-unit">栋</span></div>
+                            <div class="stat-label">已鉴定栋数</div>
+                            <div class="stat-trend" id="appraisalAppTrend">鉴定排除/隐患</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px">
+                        <div class="stat-flex">
+                            <span style="font-size:12px;color:var(--text-secondary)">评估鉴定完成率</span>
+                            <span style="font-size:13px;font-weight:600;color:var(--primary)" id="appraisalDoneRate">0%</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-bar-fill" id="appraisalDoneBar" style="width:0%"></div></div>
+                    </div>
+                    <div class="appraisal-summary" style="margin-top:10px;display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
+                        <div class="patrol-summary-item eval-exclude" onclick="filterAppraisalTableByJudge('eval-exclude')">
+                            <div class="ps-count" id="appraisalEvalExclude">0</div>
+                            <div class="ps-label">评估排除</div>
+                        </div>
+                        <div class="patrol-summary-item app-exclude" onclick="filterAppraisalTableByJudge('app-exclude')">
+                            <div class="ps-count" id="appraisalAppExclude">0</div>
+                            <div class="ps-label">鉴定排除</div>
+                        </div>
+                        <div class="patrol-summary-item eval-hazard" onclick="filterAppraisalTableByJudge('eval-hazard')">
+                            <div class="ps-count" id="appraisalEvalHazard">0</div>
+                            <div class="ps-label">评估隐患</div>
+                        </div>
+                        <div class="patrol-summary-item app-hazard" onclick="filterAppraisalTableByJudge('app-hazard')">
+                            <div class="ps-count" id="appraisalAppHazard">0</div>
+                            <div class="ps-label">鉴定隐患</div>
+                        </div>
+                    </div>
+                    <style>
+                        .patrol-summary-item.eval-exclude { background: #e8f5e9; border-color: rgba(30,142,62,.2); }
+                        .patrol-summary-item.eval-exclude .ps-count { color: #1e8e3e; }
+                        .patrol-summary-item.app-exclude { background: #e3f2fd; border-color: rgba(26,115,232,.2); }
+                        .patrol-summary-item.app-exclude .ps-count { color: #1a73e8; }
+                        .patrol-summary-item.eval-hazard { background: #fff4e5; border-color: rgba(245,124,0,.2); }
+                        .patrol-summary-item.eval-hazard .ps-count { color: #f57c00; }
+                        .patrol-summary-item.app-hazard { background: #ffefef; border-color: rgba(229,57,53,.2); }
+                        .patrol-summary-item.app-hazard .ps-count { color: #e53935; }
+                    </style>
+                    <div class="chart-sub-title"><i class="fas fa-chart-bar"></i>评估与鉴定对比</div>
+                    <div id="appraisalCompareBarChart" class="chart-patrol-bar"></div>
+                    <div class="chart-sub-title"><i class="fas fa-chart-pie"></i>初判隐患处置状态</div>
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <div id="appraisalRingChart" class="chart-patrol-ring"></div>
+                        <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:120px" id="appraisalRingLegend"></div>
+                    </div>
+                    <div class="chart-sub-title"><i class="fas fa-chart-line"></i>近半年评估鉴定趋势</div>
+                    <div id="appraisalTrendLineChart" class="chart-patrol-line"></div>
+                    <div style="text-align:center;margin-top:8px">
+                        <button class="btn-text" onclick="toggleAppraisalTable()" id="btnAppraisalTable"><i class="fas fa-list"></i> 查看排查鉴定明细</button>
+                    </div>
+                </div>
+
                 <!-- 风险治理措施 -->
                 <div class="card">
                     <div class="card-title"><i class="fas fa-tools"></i>风险治理措施</div>
@@ -1283,6 +1353,70 @@
                 </div>
             </div>
         </div>
+
+        <!-- 排查鉴定明细表 -->
+        <div id="appraisalTablePanel" class="risk-table-panel">
+            <div class="risk-table-header" onclick="toggleAppraisalTable()">
+                <div class="risk-table-title"><i class="fas fa-list-alt"></i>排查鉴定明细</div>
+                <div class="risk-table-toggle">
+                    <span id="appraisalTableSummary">共 0 条</span>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </div>
+            </div>
+            <div class="risk-table-body">
+                <div class="risk-table-toolbar">
+                    <input type="text" id="appraisalSearchName" placeholder="房屋名称" oninput="renderAppraisalTable()">
+                    <input type="text" id="appraisalSearchStreet" placeholder="镇街" oninput="renderAppraisalTable()">
+                    <select id="appraisalPreJudgeFilter" onchange="renderAppraisalTable()">
+                        <option value="">全部初判结论</option>
+                        <option value="safe">无隐患</option>
+                        <option value="hazard">存在隐患</option>
+                    </select>
+                    <select id="appraisalEvalFilter" onchange="renderAppraisalTable()">
+                        <option value="">全部评估结论</option>
+                        <option value="exclude">评估排除</option>
+                        <option value="general">一般隐患</option>
+                        <option value="danger">评估危房</option>
+                    </select>
+                    <select id="appraisalAppFilter" onchange="renderAppraisalTable()">
+                        <option value="">全部鉴定结论</option>
+                        <option value="exclude">鉴定排除</option>
+                        <option value="general">一般隐患</option>
+                        <option value="danger">鉴定危房</option>
+                    </select>
+                    <input type="date" id="appraisalDateFrom" onchange="renderAppraisalTable()">
+                    <span style="font-size:12px;color:var(--text-secondary)">至</span>
+                    <input type="date" id="appraisalDateTo" onchange="renderAppraisalTable()">
+                    <div class="toolbar-fill"></div>
+                    <button class="btn-text" onclick="exportAppraisalTable()"><i class="fas fa-download"></i> 导出</button>
+                </div>
+                <div style="overflow:auto;max-height:44vh">
+                    <table class="risk-table" id="appraisalTable">
+                        <thead>
+                            <tr>
+                                <th>房屋名称</th>
+                                <th>地址</th>
+                                <th>镇街</th>
+                                <th>初判结论</th>
+                                <th>评估结论</th>
+                                <th>鉴定结论</th>
+                                <th>评估/鉴定时间</th>
+                                <th>评估/鉴定单位</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="appraisalTableBody">
+                            <tr><td colspan="9" class="risk-table-empty">点击展开查看明细</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="risk-table-pagination" id="appraisalTablePagination">
+                    <span id="appraisalTablePageInfo">第 1 页 / 共 0 页</span>
+                    <button onclick="changeAppraisalTablePage(-1)" id="appraisalTablePrev"><i class="fas fa-chevron-left"></i></button>
+                    <button onclick="changeAppraisalTablePage(1)" id="appraisalTableNext"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
         </div>
     </div>
 
@@ -1330,9 +1464,13 @@
         let measureMgtBarChart = null;
         let measureStreetBarChart = null;
         let measureTrendLineChart = null;
+        let appraisalCompareBarChart = null;
+        let appraisalRingChart = null;
+        let appraisalTrendLineChart = null;
         let riskTableState = { page: 1, pageSize: 10, isOpen: false };
         let patrolTableState = { page: 1, pageSize: 10, isOpen: false, filterDecision: '' };
         let measureTableState = { page: 1, pageSize: 10, isOpen: false, filterType: '', filterAccept: '' };
+        let appraisalTableState = { page: 1, pageSize: 10, isOpen: false, filterPreJudge: '', filterEval: '', filterApp: '' };
 
         // 示意地图视图状态
         let mapViewState = { scale: 1, tx: 0, ty: 0, minScale: 0.6, maxScale: 6 };
@@ -1407,7 +1545,9 @@
                     evaluateTime: r.riskClassification?.assessTime || r.inspectionRecords?.[0]?.checkDate || r.inspectionTime || '—',
                     evaluateBasis: r.riskClassification?.basis || r.inspectionRecords?.[0]?.remark || r.riskInfo?.riskDesc || '—',
                     responsibleDept: r.responsibleDept || (r.street ? r.street + '城建中心' : '—'),
-                    responsiblePerson: r.responsiblePerson || r.riskClassification?.assessor || r.inspectionRecords?.[0]?.checker || '—'
+                    responsiblePerson: r.responsiblePerson || r.riskClassification?.assessor || r.inspectionRecords?.[0]?.checker || '—',
+                    // 原始记录引用，便于排查鉴定明细
+                    _raw: r
                 };
             });
             filteredData = [...allData];
@@ -1788,6 +1928,9 @@
             document.getElementById('screenRisk').textContent = stats.riskCount;
             document.getElementById('screenRiskRate').textContent = stats.inspected ? (stats.riskCount / stats.inspected * 100).toFixed(1) + '%' : '0%';
 
+            // 鉴定进度跟踪
+            renderAppraisalStats();
+
             // 治理措施
             const governRate = stats.riskCount ? (stats.done / stats.riskCount * 100).toFixed(1) : 0;
             document.getElementById('governDoneRate').textContent = governRate + '%';
@@ -1817,9 +1960,13 @@
             renderMeasureMgtBar();
             renderMeasureStreetBar();
             renderMeasureTrendLine();
+            renderAppraisalCompareBar();
+            renderAppraisalRing();
+            renderAppraisalTrendLine();
             renderRiskTable();
             renderPatrolTable();
             renderMeasureTable();
+            renderAppraisalTable();
         }
 
         function switchChartMode(mode) {
@@ -2427,6 +2574,378 @@
             const a = document.createElement('a');
             a.href = url;
             a.download = '整治措施明细.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 鉴定进度跟踪统计
+        const APPRAISAL_CONCLUSION_CONFIG = {
+            safe: { text: '无隐患', color: '#1a73e8' },
+            exclude: { text: '评估排除/鉴定排除', color: '#1e8e3e' },
+            general: { text: '一般隐患', color: '#f9a825' },
+            danger: { text: '危房', color: '#e53935' },
+            unknown: { text: '未评估/未鉴定', color: '#9aa0a6' }
+        };
+
+        function classifyInspection(inspection) {
+            if (!inspection) return 'unknown';
+            const pre = (inspection.preliminaryJudge || '').trim();
+            if (pre.includes('停止使用') || pre.includes('危险')) return 'hazard';
+            return 'safe';
+        }
+
+        function classifyConclusion(text) {
+            const t = String(text || '').trim();
+            if (!t || t === '—' || t === '无' || t === '暂无') return 'unknown';
+            if (t.includes('完好') || t.includes('基本完好') || t.includes('排除') || t.includes('AB') || t.includes('安全')) return 'exclude';
+            if (t.includes('危房') || t.includes('疑似危房')) return 'danger';
+            if (t.includes('严重') || t.includes('一般') || t.includes('损坏')) return 'general';
+            return 'unknown';
+        }
+
+        function computeAppraisalStats(data) {
+            const total = data.length;
+            const inspected = data.filter(d => d.inspectionRecords?.length > 0).length;
+            const inspectedArea = data.filter(d => d.inspectionRecords?.length > 0).reduce((s, d) => s + (d.buildingArea || 0), 0);
+            const preJudgeHazard = data.filter(d => d.inspectionRecords?.length > 0 && classifyInspection(d.inspectionRecords[0]) === 'hazard').length;
+            const preJudgeSafe = inspected - preJudgeHazard;
+
+            // 已评估栋数：以风险辨识/风险分类+排查结论综合判定
+            const evaluated = data.filter(d => {
+                if (d.riskClassification?.level) return true;
+                const ins = d.inspectionRecords?.[0];
+                return ins && classifyConclusion(ins.structureStatus) !== 'unknown';
+            }).length;
+            const evalExclude = data.filter(d => {
+                const lvl = d.riskClassification?.level || d.inspectionRecords?.[0]?.structureStatus || '';
+                return classifyConclusion(lvl) === 'exclude';
+            }).length;
+            const evalGeneral = data.filter(d => {
+                const lvl = d.riskClassification?.level || d.inspectionRecords?.[0]?.structureStatus || '';
+                return classifyConclusion(lvl) === 'general';
+            }).length;
+            const evalDanger = data.filter(d => {
+                const lvl = d.riskClassification?.level || d.inspectionRecords?.[0]?.structureStatus || '';
+                return classifyConclusion(lvl) === 'danger';
+            }).length;
+
+            // 已鉴定栋数：有鉴定报告的房屋
+            const appraised = data.filter(d => d.appraisalReports?.length > 0).length;
+            const appExclude = data.filter(d => (d.appraisalReports || []).some(a => classifyConclusion(a.conclusion || a.level) === 'exclude')).length;
+            const appGeneral = data.filter(d => (d.appraisalReports || []).some(a => classifyConclusion(a.conclusion || a.level) === 'general')).length;
+            const appDanger = data.filter(d => (d.appraisalReports || []).some(a => classifyConclusion(a.conclusion || a.level) === 'danger')).length;
+
+            // 完成率：已评估 + 已鉴定去重 / 应排查总数
+            const doneSet = new Set();
+            data.forEach(d => {
+                if (d.riskClassification?.level || d.inspectionRecords?.[0]?.structureStatus) doneSet.add(d.no);
+                if (d.appraisalReports?.length) doneSet.add(d.no);
+            });
+            const doneRate = total ? (doneSet.size / total * 100).toFixed(1) : 0;
+
+            return {
+                total, inspected, inspectedArea, preJudgeHazard, preJudgeSafe, preJudgeRate: inspected ? (preJudgeHazard / inspected * 100).toFixed(1) : 0,
+                evaluated, evalExclude, evalGeneral, evalDanger,
+                appraised, appExclude, appGeneral, appDanger,
+                doneRate, doneCount: doneSet.size
+            };
+        }
+
+        function getAppraisalRecordsFlat(data) {
+            const list = [];
+            data.forEach(d => {
+                const inspection = d.inspectionRecords?.[0];
+                const appraisal = d.appraisalReports?.[0];
+                const preJudge = classifyInspection(inspection);
+                const evalCon = classifyConclusion(d.riskClassification?.level || inspection?.structureStatus || '');
+                const appCon = appraisal ? classifyConclusion(appraisal.conclusion || appraisal.level) : 'unknown';
+                const evalTime = d.riskClassification?.assessTime || inspection?.checkDate || '';
+                const appTime = appraisal?.appraisalDate || '';
+                list.push({
+                    houseNo: d.no,
+                    houseName: d.name || '—',
+                    address: d.address || '—',
+                    street: d.street || '—',
+                    risk: d.risk || 'safe',
+                    riskLevel: d.riskLevel || '—',
+                    preJudge,
+                    preJudgeText: preJudge === 'hazard' ? '存在隐患' : '无隐患',
+                    evalCon,
+                    evalConText: APPRAISAL_CONCLUSION_CONFIG[evalCon].text,
+                    appCon,
+                    appConText: APPRAISAL_CONCLUSION_CONFIG[appCon].text,
+                    evalTime,
+                    appTime,
+                    evalUnit: d.riskClassification?.assessor ? (d.street + '评估组') : (inspection?.checker || '—'),
+                    appUnit: appraisal?.orgName || '—',
+                    inspection,
+                    appraisal,
+                    _raw: d._raw
+                });
+            });
+            return list.sort((a, b) => (b.evalTime || b.appTime || '').localeCompare(a.evalTime || a.appTime || ''));
+        }
+
+        function renderAppraisalStats() {
+            const stats = computeAppraisalStats(filteredData);
+            const total = filteredData.length;
+            document.getElementById('appraisalTotal').innerHTML = stats.inspected + '<span class="stat-unit">栋</span>';
+            document.getElementById('appraisalTotalTrend').textContent = total ? '覆盖 ' + (stats.inspected / total * 100).toFixed(1) + '%' : '覆盖 0%';
+            document.getElementById('appraisalEvalCount').innerHTML = stats.evaluated + '<span class="stat-unit">栋</span>';
+            document.getElementById('appraisalEvalTrend').textContent = stats.evaluated ? '排除 ' + stats.evalExclude + ' / 隐患 ' + (stats.evalGeneral + stats.evalDanger) : '暂无评估';
+            document.getElementById('appraisalAppCount').innerHTML = stats.appraised + '<span class="stat-unit">栋</span>';
+            document.getElementById('appraisalAppTrend').textContent = stats.appraised ? '排除 ' + stats.appExclude + ' / 隐患 ' + (stats.appGeneral + stats.appDanger) : '暂无鉴定';
+            document.getElementById('appraisalDoneRate').textContent = stats.doneRate + '%';
+            document.getElementById('appraisalDoneBar').style.width = stats.doneRate + '%';
+            document.getElementById('appraisalEvalExclude').textContent = stats.evalExclude;
+            document.getElementById('appraisalAppExclude').textContent = stats.appExclude;
+            document.getElementById('appraisalEvalHazard').textContent = stats.evalGeneral + stats.evalDanger;
+            document.getElementById('appraisalAppHazard').textContent = stats.appGeneral + stats.appDanger;
+        }
+
+        function renderAppraisalCompareBar() {
+            const stats = computeAppraisalStats(filteredData);
+            if (!appraisalCompareBarChart) appraisalCompareBarChart = echarts.init(document.getElementById('appraisalCompareBarChart'));
+            appraisalCompareBarChart.clear();
+            appraisalCompareBarChart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { data: ['已评估', '已鉴定'], top: 0, textStyle: { fontSize: 10, color: '#5f6b7a' } },
+                grid: { left: 8, right: 16, bottom: 8, top: 24, containLabel: true },
+                xAxis: { type: 'category', data: ['排除', '一般隐患', '危房'], axisLine: { lineStyle: { color: '#dbe4ed' } }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, axisTick: { show: false } },
+                yAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, splitLine: { lineStyle: { color: '#f0f4f8' } } },
+                series: [
+                    { name: '已评估', type: 'bar', data: [stats.evalExclude, stats.evalGeneral, stats.evalDanger], itemStyle: { color: '#1a73e8', borderRadius: [4, 4, 0, 0] }, barWidth: 14 },
+                    { name: '已鉴定', type: 'bar', data: [stats.appExclude, stats.appGeneral, stats.appDanger], itemStyle: { color: '#1e8e3e', borderRadius: [4, 4, 0, 0] }, barWidth: 14 }
+                ]
+            });
+            appraisalCompareBarChart.off('click');
+            appraisalCompareBarChart.on('click', params => {
+                const type = params.seriesName === '已评估' ? 'eval' : 'app';
+                const con = params.name === '排除' ? 'exclude' : (params.name === '一般隐患' ? 'general' : 'danger');
+                filterAppraisalTableByJudge(type + '-' + con);
+            });
+        }
+
+        function renderAppraisalRing() {
+            const stats = computeAppraisalStats(filteredData);
+            const total = stats.preJudgeHazard + stats.preJudgeSafe || 1;
+            const data = [
+                { value: stats.preJudgeHazard, name: '初判存在隐患', itemStyle: { color: '#f57c00' } },
+                { value: stats.preJudgeSafe, name: '初判无隐患', itemStyle: { color: '#1a73e8' } }
+            ];
+            if (!appraisalRingChart) appraisalRingChart = echarts.init(document.getElementById('appraisalRingChart'));
+            appraisalRingChart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                legend: { show: false },
+                title: {
+                    text: stats.preJudgeHazard.toString(),
+                    subtext: '隐患栋数',
+                    left: 'center', top: 'center',
+                    textStyle: { fontSize: 16, fontWeight: 'bold', color: 'var(--text-primary)' },
+                    subtextStyle: { fontSize: 10, color: 'var(--text-secondary)' }
+                },
+                series: [{
+                    type: 'pie', radius: ['50%', '72%'], center: ['50%', '50%'],
+                    avoidLabelOverlap: false, label: { show: false },
+                    itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+                    data: data
+                }]
+            });
+            appraisalRingChart.off('click');
+            appraisalRingChart.on('click', params => {
+                filterAppraisalTableByJudge(params.name === '初判存在隐患' ? 'pre-hazard' : 'pre-safe');
+            });
+
+            const legendContainer = document.getElementById('appraisalRingLegend');
+            if (legendContainer) {
+                legendContainer.innerHTML = data.map(d => {
+                    const key = d.name === '初判存在隐患' ? 'pre-hazard' : 'pre-safe';
+                    return '<div class="patrol-ring-legend-item" onclick="filterAppraisalTableByJudge(\'' + key + '\')" style="cursor:pointer">' +
+                        '<span class="patrol-ring-legend-dot" style="background:' + d.itemStyle.color + '"></span>' +
+                        '<span>' + d.name + '</span>' +
+                        '<span class="patrol-ring-legend-val">' + d.value + '</span>' +
+                        '</div>';
+                }).join('');
+            }
+        }
+
+        function renderAppraisalTrendLine() {
+            const months = [];
+            const now = new Date();
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+            }
+            const records = getAppraisalRecordsFlat(filteredData);
+            const evalCounts = months.map(m => records.filter(r => r.evalTime && r.evalTime.startsWith(m)).length);
+            const appCounts = months.map(m => records.filter(r => r.appTime && r.appTime.startsWith(m)).length);
+            if (!appraisalTrendLineChart) appraisalTrendLineChart = echarts.init(document.getElementById('appraisalTrendLineChart'));
+            appraisalTrendLineChart.clear();
+            appraisalTrendLineChart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['评估', '鉴定'], top: 0, textStyle: { fontSize: 10, color: '#5f6b7a' } },
+                grid: { left: 8, right: 16, bottom: 8, top: 24, containLabel: true },
+                xAxis: { type: 'category', data: months, axisLine: { lineStyle: { color: '#dbe4ed' } }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, axisTick: { show: false } },
+                yAxis: { type: 'value', axisLine: { show: false }, axisLabel: { color: '#5f6b7a', fontSize: 10 }, splitLine: { lineStyle: { color: '#f0f4f8' } } },
+                series: [
+                    { name: '评估', type: 'line', data: evalCounts, smooth: true, itemStyle: { color: '#1a73e8' }, lineStyle: { width: 2 }, symbol: 'circle', symbolSize: 5 },
+                    { name: '鉴定', type: 'line', data: appCounts, smooth: true, itemStyle: { color: '#1e8e3e' }, lineStyle: { width: 2 }, symbol: 'circle', symbolSize: 5 }
+                ]
+            });
+            appraisalTrendLineChart.off('click');
+            appraisalTrendLineChart.on('click', params => {
+                document.getElementById('appraisalDateFrom').value = params.name + '-01';
+                const y = parseInt(params.name.split('-')[0]), m = parseInt(params.name.split('-')[1]);
+                const lastDay = new Date(y, m, 0).getDate();
+                document.getElementById('appraisalDateTo').value = params.name + '-' + String(lastDay).padStart(2, '0');
+                toggleAppraisalTable(true);
+                renderAppraisalTable();
+            });
+        }
+
+        function toggleAppraisalTable(forceOpen) {
+            if (typeof forceOpen === 'boolean') appraisalTableState.isOpen = forceOpen;
+            else appraisalTableState.isOpen = !appraisalTableState.isOpen;
+            document.getElementById('appraisalTablePanel').classList.toggle('open', appraisalTableState.isOpen);
+            if (appraisalTableState.isOpen) renderAppraisalTable();
+        }
+
+        function changeAppraisalTablePage(delta) {
+            appraisalTableState.page += delta;
+            renderAppraisalTable();
+        }
+
+        function filterAppraisalTableByJudge(judge) {
+            // judge 形如 pre-hazard / eval-exclude / app-danger
+            const parts = judge.split('-');
+            const type = parts[0];
+            const con = parts[1];
+            if (type === 'pre') document.getElementById('appraisalPreJudgeFilter').value = con;
+            if (type === 'eval') document.getElementById('appraisalEvalFilter').value = con;
+            if (type === 'app') document.getElementById('appraisalAppFilter').value = con;
+            appraisalTableState.page = 1;
+            toggleAppraisalTable(true);
+            renderAppraisalTable();
+        }
+
+        function getAppraisalTableData() {
+            const name = (document.getElementById('appraisalSearchName').value || '').trim().toLowerCase();
+            const street = (document.getElementById('appraisalSearchStreet').value || '').trim().toLowerCase();
+            const pre = document.getElementById('appraisalPreJudgeFilter').value;
+            const ev = document.getElementById('appraisalEvalFilter').value;
+            const app = document.getElementById('appraisalAppFilter').value;
+            const from = document.getElementById('appraisalDateFrom').value;
+            const to = document.getElementById('appraisalDateTo').value;
+            let list = getAppraisalRecordsFlat(filteredData).filter(r => {
+                if (name && !(r.houseName || '').toLowerCase().includes(name)) return false;
+                if (street && !(r.street || '').toLowerCase().includes(street)) return false;
+                if (pre && r.preJudge !== pre) return false;
+                if (ev && r.evalCon !== ev) return false;
+                if (app && r.appCon !== app) return false;
+                const time = r.appTime || r.evalTime || '';
+                if (from && time && time < from) return false;
+                if (to && time && time > to) return false;
+                return true;
+            });
+            return list;
+        }
+
+        function renderAppraisalTable() {
+            const list = getAppraisalTableData();
+            const total = list.length;
+            const pageSize = appraisalTableState.pageSize;
+            const totalPages = Math.max(1, Math.ceil(total / pageSize));
+            let page = Math.max(1, Math.min(appraisalTableState.page, totalPages));
+            appraisalTableState.page = page;
+            const start = (page - 1) * pageSize;
+            const slice = list.slice(start, start + pageSize);
+            const body = document.getElementById('appraisalTableBody');
+            document.getElementById('appraisalTableSummary').textContent = '共 ' + total + ' 条';
+            document.getElementById('appraisalTablePageInfo').textContent = '第 ' + page + ' 页 / 共 ' + totalPages + ' 页';
+            document.getElementById('appraisalTablePrev').disabled = page <= 1;
+            document.getElementById('appraisalTableNext').disabled = page >= totalPages;
+            if (!slice.length) {
+                body.innerHTML = '<tr><td colspan="9" class="risk-table-empty">暂无数据</td></tr>';
+                return;
+            }
+            body.innerHTML = slice.map(r => {
+                const preColor = r.preJudge === 'hazard' ? '#f57c00' : '#1a73e8';
+                const evalCfg = APPRAISAL_CONCLUSION_CONFIG[r.evalCon] || APPRAISAL_CONCLUSION_CONFIG.unknown;
+                const appCfg = APPRAISAL_CONCLUSION_CONFIG[r.appCon] || APPRAISAL_CONCLUSION_CONFIG.unknown;
+                return '<tr>' +
+                    '<td>' + (r.houseName || '—') + '</td>' +
+                    '<td>' + (r.address || '—') + '</td>' +
+                    '<td>' + (r.street || '—') + '</td>' +
+                    '<td><span class="risk-badge-inline" style="background:' + preColor + '">' + r.preJudgeText + '</span></td>' +
+                    '<td><span class="risk-badge-inline" style="background:' + evalCfg.color + (r.evalCon === 'general' ? ';color:#333' : '') + '">' + evalCfg.text + '</span></td>' +
+                    '<td><span class="risk-badge-inline" style="background:' + appCfg.color + (r.appCon === 'general' ? ';color:#333' : '') + '">' + appCfg.text + '</span></td>' +
+                    '<td>' + (r.evalTime || r.appTime || '—') + '</td>' +
+                    '<td>' + (r.appTime ? r.appUnit : r.evalUnit) + '</td>' +
+                    '<td><button class="btn-text" onclick="showAppraisalDetail(\'' + r.houseNo + '\')">查看详情</button></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function showAppraisalDetail(houseNo) {
+            const all = getAppraisalRecordsFlat(filteredData);
+            const r = all.find(x => x.houseNo === houseNo);
+            if (!r) return;
+            const drawer = document.getElementById('rightDrawer');
+            document.getElementById('drawerTitle').textContent = '排查鉴定详情';
+            const evalCfg = APPRAISAL_CONCLUSION_CONFIG[r.evalCon] || APPRAISAL_CONCLUSION_CONFIG.unknown;
+            const appCfg = APPRAISAL_CONCLUSION_CONFIG[r.appCon] || APPRAISAL_CONCLUSION_CONFIG.unknown;
+            const preColor = r.preJudge === 'hazard' ? '#f57c00' : '#1a73e8';
+            document.getElementById('drawerContent').innerHTML = `
+                <div class="info-section">
+                    <div class="info-section-title"><i class="fas fa-home"></i>房屋信息</div>
+                    <div class="info-item"><span class="label">房屋编号</span><span class="value">${r.houseNo || '—'}</span></div>
+                    <div class="info-item"><span class="label">房屋名称</span><span class="value">${r.houseName || '—'}</span></div>
+                    <div class="info-item"><span class="label">所属镇街</span><span class="value">${r.street || '—'}</span></div>
+                    <div class="info-item"><span class="label">详细地址</span><span class="value">${r.address || '—'}</span></div>
+                </div>
+                <div class="info-section">
+                    <div class="info-section-title"><i class="fas fa-clipboard-check"></i>排查/初判信息</div>
+                    <div class="info-item"><span class="label">初判结论</span><span class="value"><span class="risk-badge-inline" style="background:${preColor};color:#fff">${r.preJudgeText}</span></span></div>
+                    <div class="info-item"><span class="label">排查时间</span><span class="value">${r.inspection?.checkDate || '—'}</span></div>
+                    <div class="info-item"><span class="label">排查人员</span><span class="value">${r.inspection?.checker || '—'}</span></div>
+                    <div class="info-item"><span class="label">损坏部位</span><span class="value">${r.inspection?.damagePart || '—'}</span></div>
+                    <div class="info-item"><span class="label">初判意见</span><span class="value">${r.inspection?.preliminaryJudge || '—'}</span></div>
+                    <div class="info-item"><span class="label">备注</span><span class="value">${r.inspection?.remark || '—'}</span></div>
+                </div>
+                <div class="info-section">
+                    <div class="info-section-title"><i class="fas fa-chart-bar"></i>评估信息</div>
+                    <div class="info-item"><span class="label">评估结论</span><span class="value"><span class="risk-badge-inline" style="background:${evalCfg.color};color:${r.evalCon === 'general' ? '#333' : '#fff'}">${evalCfg.text}</span></span></div>
+                    <div class="info-item"><span class="label">评估时间</span><span class="value">${r.evalTime || '—'}</span></div>
+                    <div class="info-item"><span class="label">评估单位/人员</span><span class="value">${r.evalUnit || '—'}</span></div>
+                </div>
+                <div class="info-section">
+                    <div class="info-section-title"><i class="fas fa-microscope"></i>鉴定信息</div>
+                    <div class="info-item"><span class="label">鉴定结论</span><span class="value"><span class="risk-badge-inline" style="background:${appCfg.color};color:${r.appCon === 'general' ? '#333' : '#fff'}">${appCfg.text}</span></span></div>
+                    <div class="info-item"><span class="label">鉴定时间</span><span class="value">${r.appTime || '—'}</span></div>
+                    <div class="info-item"><span class="label">鉴定机构</span><span class="value">${r.appUnit || '—'}</span></div>
+                    <div class="info-item"><span class="label">鉴定人员</span><span class="value">${r.appraisal?.appraiser || '—'}</span></div>
+                    <div class="info-item"><span class="label">鉴定报告编号</span><span class="value">${r.appraisal?.id || '—'}</span></div>
+                    <div class="info-item"><span class="label">鉴定备注</span><span class="value">${r.appraisal?.remark || '—'}</span></div>
+                </div>
+                <a href="rural-house-detail.html?no=${r.houseNo}" target="_blank" class="btn-primary">查看房屋完整档案</a>
+            `;
+            drawer.classList.add('open');
+        }
+
+        function exportAppraisalTable() {
+            const list = getAppraisalTableData();
+            const rows = [['房屋名称','地址','镇街','初判结论','评估结论','鉴定结论','评估/鉴定时间','评估/鉴定单位']];
+            list.forEach(r => {
+                rows.push([r.houseName || '', r.address || '', r.street || '', r.preJudgeText, r.evalConText, r.appConText, r.evalTime || r.appTime || '', r.appTime ? r.appUnit : r.evalUnit]);
+            });
+            const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '排查鉴定明细.csv';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -3045,6 +3564,9 @@
             measureMgtBarChart && measureMgtBarChart.resize();
             measureStreetBarChart && measureStreetBarChart.resize();
             measureTrendLineChart && measureTrendLineChart.resize();
+            appraisalCompareBarChart && appraisalCompareBarChart.resize();
+            appraisalRingChart && appraisalRingChart.resize();
+            appraisalTrendLineChart && appraisalTrendLineChart.resize();
         });
     </script>
 </body>
