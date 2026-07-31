@@ -558,19 +558,14 @@ function generateAppraisalReports(no, risk, governance, i) {
     }];
 }
 
-// 生成巡查检查记录（近 6 个月滚动，确保当前时间有数据）
+// 生成巡查检查记录
 function generatePatrolRecords(no, risk, governance, i) {
     const records = [];
-    const now = new Date();
     const months = risk === 'safe' ? 2 : (governance === 'done' ? 4 : (governance === 'doing' ? 3 : 2));
-    // 以当前月份为基准往前推 m 个月，保证趋势图在当前半年内有数据
     for (let m = 0; m < months; m++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - m, 1);
-        const year = d.getFullYear();
-        const month = d.getMonth() + 1;
-        // 在同一个月内分散日期，避免全挤在 1 号
-        const day = Math.min(28, 5 + ((i + m * 7) % 24));
-        const patrolDate = year + '-' + pad2(month) + '-' + pad2(day);
+        const month = 7 + m + (i % 3);
+        const day = 5 + (i % 20);
+        const patrolDate = '2024-' + pad2(month) + '-' + pad2(day);
         // 判定结果：safe 多为无隐患销号；done 多为 AB 级；其它按风险等级给复核/隐患
         let decision = '需专业人员复核';
         if (risk === 'safe' || (governance === 'done' && m >= 2)) {
