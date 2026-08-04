@@ -17,6 +17,12 @@ const RISK_LABEL_MAP = {
     'warning': '一般损坏房',
     'safe': '完好房(基本完好房)'
 };
+const APPRAISAL_LEVEL_MAP = {
+    'danger': 'D级',
+    'major': 'C级',
+    'warning': 'B级',
+    'safe': 'A级'
+};
 const RISK_LABEL_MAP_INV = {
     '疑似危房': 'danger',
     '严重损坏房': 'major',
@@ -548,8 +554,8 @@ function generateAppraisalReports(no, risk, governance, i) {
         orgCode: '91310120MA1K' + pad5(i),
         appraisalDate: appraisalDate,
         appraiser: RESPONSIBLE_PERSONS[(i + 2) % RESPONSIBLE_PERSONS.length],
-        conclusion: RISK_LABEL_MAP[risk],
-        level: RISK_LABEL_MAP[risk],
+        conclusion: APPRAISAL_LEVEL_MAP[risk] || RISK_LABEL_MAP[risk],
+        level: APPRAISAL_LEVEL_MAP[risk] || RISK_LABEL_MAP[risk],
         phaseTag: '阶段性鉴定',
         reportFiles: '',
         remark: '东侧承重墙需加固',
