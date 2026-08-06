@@ -35,7 +35,7 @@ body {
     min-height: 100vh;
 }
 
-/* ===== KPI Dashboard: 2 Cards Row ===== */
+/* ===== KPI Dashboard: 6 Cards Row ===== */
 .kpi-wrapper {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -669,44 +669,34 @@ body {
 /* ===== Tab Content ===== */
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+
+/* 档案详情嵌入层 */
+.detail-embed-overlay { display: none; position: fixed; inset: 0; background: var(--bg-dark); z-index: 2000; flex-direction: column; }
+.detail-embed-overlay.active { display: flex; }
+.detail-embed-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: var(--bg-card); border-bottom: 1px solid var(--border); box-shadow: 0 1px 3px var(--shadow); }
+.detail-embed-header .title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.detail-embed-back { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); font-size: 13px; cursor: pointer; }
+.detail-embed-back:hover { border-color: var(--primary); color: var(--primary); }
+.detail-embed-frame { flex: 1; border: none; width: 100%; background: var(--bg-card); }
 </style>
 </head>
 <body>
 
-<div class="kpi-wrapper" id="kpiBar">
-    <!-- 固有风险: 底数台账 -->
-    <div class="kpi-card blue-top">
-        <div class="kpi-card-header">
-            <span class="kpi-card-label blue">固有风险 · 底数台账</span>
-            <div class="kpi-card-icon blue"><i class="fa-solid fa-database"></i></div>
-        </div>
-        <div class="kpi-card-main">
-            <span class="kpi-card-total blue" id="kpiBaseStock">42</span>
-            <span class="kpi-card-trend blue"><i class="fa-solid fa-minus" style="font-size:9px"></i> 0.0%</span>
-        </div>
-        <div class="hazard-breakdown">
-            <div class="hazard-level red">
-                <div class="hazard-level-value" id="kpiBaseMajor">7</div>
-                <div class="hazard-level-label">疑似危房</div>
-            </div>
-            <div class="hazard-level orange">
-                <div class="hazard-level-value" id="kpiBaseSignificant">11</div>
-                <div class="hazard-level-label">严重损坏房</div>
-            </div>
-            <div class="hazard-level yellow">
-                <div class="hazard-level-value" id="kpiBaseGeneral">17</div>
-                <div class="hazard-level-label">一般损坏房</div>
-            </div>
-            <div class="hazard-level blue">
-                <div class="hazard-level-value" id="kpiBaseLow">7</div>
-                <div class="hazard-level-label">完好房(基本完好房)</div>
-            </div>
-        </div>
+<!-- 档案详情嵌入层 -->
+<div class="detail-embed-overlay" id="detailEmbedOverlay">
+    <div class="detail-embed-header">
+        <div class="title"><i class="fa-solid fa-file-lines"></i> 房屋档案详情</div>
+        <button class="detail-embed-back" onclick="closeDetailEmbed()"><i class="fa-solid fa-arrow-left"></i> 返回风险档案列表</button>
     </div>
-    <!-- 动态隐患: 现存总量 -->
+    <iframe class="detail-embed-frame" id="detailEmbedFrame" src=""></iframe>
+</div>
+
+<!-- KPI Dashboard: 2 Cards -->
+<div class="kpi-wrapper" id="kpiBar">
+    <!-- 动态隐患: 隐患存量 -->
     <div class="kpi-card orange-top">
         <div class="kpi-card-header">
-            <span class="kpi-card-label orange">动态隐患 · 现存总量</span>
+            <span class="kpi-card-label orange">动态隐患 · 隐患存量</span>
             <div class="kpi-card-icon orange"><i class="fa-solid fa-clipboard-list"></i></div>
         </div>
         <div class="kpi-card-main">
@@ -732,6 +722,35 @@ body {
             </div>
         </div>
     </div>
+    <!-- 动态隐患: 超期未整改 -->
+    <div class="kpi-card red-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label red">动态隐患 · 超期未整改</span>
+            <div class="kpi-card-icon red"><i class="fa-solid fa-clock"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total red" id="kpiHazardOverdue">4</span>
+            <span class="kpi-card-trend red"><i class="fa-solid fa-arrow-up" style="font-size:9px"></i> 8.7%</span>
+        </div>
+        <div class="hazard-breakdown">
+            <div class="hazard-level red">
+                <div class="hazard-level-value" id="kpiOverdueMajor">4</div>
+                <div class="hazard-level-label">疑似危房</div>
+            </div>
+            <div class="hazard-level orange">
+                <div class="hazard-level-value" id="kpiOverdueSignificant">0</div>
+                <div class="hazard-level-label">严重损坏房</div>
+            </div>
+            <div class="hazard-level yellow">
+                <div class="hazard-level-value" id="kpiOverdueGeneral">0</div>
+                <div class="hazard-level-label">一般损坏房</div>
+            </div>
+            <div class="hazard-level blue">
+                <div class="hazard-level-value" id="kpiOverdueLow">0</div>
+                <div class="hazard-level-label">完好房(基本完好房)</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Main Content -->
@@ -744,7 +763,7 @@ body {
                 <span class="tab-count" id="countAll">42</span>
             </div>
             <div class="tab-item" data-tab="major" onclick="switchTab('major')">
-                <i class="fa-solid fa-house-crack"></i>
+                <i class="fa-solid fa-triangle-exclamation"></i>
                 疑似危房
                 <span class="tab-count" id="countMajor">7</span>
             </div>
@@ -811,7 +830,7 @@ body {
                     </div>
                     <div class="filter-field" style="flex:1;min-width:140px">
                         <select class="filter-select" id="quickTownSelect">
-                            <option value="">全部镇/街道/乡</option>
+                            <option value="">全部镇/街道</option>
                             <option>南桥镇</option>
                             <option>奉城镇</option>
                             <option>庄行镇</option>
@@ -897,9 +916,13 @@ body {
                         <div class="filter-section-title">基本情况</div>
                         <div class="filter-row">
                             <div class="filter-field">
-                                <label>镇/街道/乡</label>
+                                <label>区域</label>
+                                <select class="filter-select"><option>奉贤区</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>镇/街道</label>
                                 <select class="filter-select" id="townSelect">
-                                    <option value="">全部镇/街道/乡</option>
+                                    <option value="">全部镇/街道</option>
                                     <option>南桥镇</option>
                                     <option>奉城镇</option>
                                     <option>庄行镇</option>
@@ -1056,7 +1079,7 @@ body {
                         </div>
                     </div>
                     <div class="filter-section">
-                        <div class="filter-section-title">安全鉴定</div>
+                        <div class="filter-section-title">排查情况</div>
                         <div class="filter-row">
                             <div class="filter-field">
                                 <label>结构状况</label>
@@ -1155,8 +1178,9 @@ body {
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th class="sticky-col sticky-left">房屋编号</th>
                             <th>户主姓名</th>
-                            <th>乡镇/街道</th>
+                            <th>镇/街道</th>
                             <th>行政村</th>
                             <th>详细地址</th>
                             <th>结构形式</th>
@@ -1187,6 +1211,13 @@ body {
             <div class="filter-bar">
                 <input type="text" class="filter-input" placeholder="搜索房屋编号/户主姓名/地址..." style="min-width:260px">
                 <select class="filter-select">
+                    <option>全部房屋类型</option>
+                    <option>住宅</option>
+                    <option>商住混合</option>
+                    <option>生产仓储</option>
+                    <option>其他</option>
+                </select>
+                <select class="filter-select">
                     <option>全部结构形式</option>
                     <option>砖混结构</option>
                     <option>框架结构</option>
@@ -1211,14 +1242,15 @@ body {
             </div>
             <div class="table-card">
                 <div class="table-header">
-                    <div class="table-title"><i class="fa-solid fa-house-crack" style="color:var(--danger)"></i> 疑似危房房屋档案列表</div>
+                    <div class="table-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i> 疑似危房房屋档案列表</div>
                     <button class="btn btn-outline" style="padding:6px 12px;font-size:12px"><i class="fa-solid fa-download"></i> 导出</button>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th class="sticky-col sticky-left">房屋编号</th>
                             <th>户主姓名</th>
-                            <th>乡镇/街道</th>
+                            <th>镇/街道</th>
                             <th>行政村</th>
                             <th>详细地址</th>
                             <th>结构形式</th>
@@ -1247,6 +1279,13 @@ body {
         <div class="tab-content" id="tab-significant">
             <div class="filter-bar">
                 <input type="text" class="filter-input" placeholder="搜索房屋编号/户主姓名/地址..." style="min-width:260px">
+                <select class="filter-select">
+                    <option>全部房屋类型</option>
+                    <option>住宅</option>
+                    <option>商住混合</option>
+                    <option>生产仓储</option>
+                    <option>其他</option>
+                </select>
                 <select class="filter-select">
                     <option>全部结构形式</option>
                     <option>砖混结构</option>
@@ -1278,8 +1317,9 @@ body {
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th class="sticky-col sticky-left">房屋编号</th>
                             <th>户主姓名</th>
-                            <th>乡镇/街道</th>
+                            <th>镇/街道</th>
                             <th>行政村</th>
                             <th>详细地址</th>
                             <th>结构形式</th>
@@ -1308,6 +1348,13 @@ body {
         <div class="tab-content" id="tab-general">
             <div class="filter-bar">
                 <input type="text" class="filter-input" placeholder="搜索房屋编号/户主姓名/地址..." style="min-width:260px">
+                <select class="filter-select">
+                    <option>全部房屋类型</option>
+                    <option>住宅</option>
+                    <option>商住混合</option>
+                    <option>生产仓储</option>
+                    <option>其他</option>
+                </select>
                 <select class="filter-select">
                     <option>全部结构形式</option>
                     <option>砖混结构</option>
@@ -1339,8 +1386,9 @@ body {
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th class="sticky-col sticky-left">房屋编号</th>
                             <th>户主姓名</th>
-                            <th>乡镇/街道</th>
+                            <th>镇/街道</th>
                             <th>行政村</th>
                             <th>详细地址</th>
                             <th>结构形式</th>
@@ -1369,6 +1417,13 @@ body {
         <div class="tab-content" id="tab-low">
             <div class="filter-bar">
                 <input type="text" class="filter-input" placeholder="搜索房屋编号/户主姓名/地址..." style="min-width:260px">
+                <select class="filter-select">
+                    <option>全部房屋类型</option>
+                    <option>住宅</option>
+                    <option>商住混合</option>
+                    <option>生产仓储</option>
+                    <option>其他</option>
+                </select>
                 <select class="filter-select">
                     <option>全部结构形式</option>
                     <option>砖混结构</option>
@@ -1400,8 +1455,9 @@ body {
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th class="sticky-col sticky-left">房屋编号</th>
                             <th>户主姓名</th>
-                            <th>乡镇/街道</th>
+                            <th>镇/街道</th>
                             <th>行政村</th>
                             <th>详细地址</th>
                             <th>结构形式</th>
@@ -1523,6 +1579,7 @@ function renderRuralRowsInto(pageRecords, tbody, hasRiskCol) {
             : '';
         const tr = document.createElement('tr');
         tr.innerHTML = `
+            <td class="sticky-col sticky-left">${record.no}</td>
             <td>${record.owner}</td>
             <td>${record.street || '—'}</td>
             <td>${record.community}</td>
@@ -1534,7 +1591,7 @@ function renderRuralRowsInto(pageRecords, tbody, hasRiskCol) {
             <td>${formatHazardStock(record)}</td>
             <td>${lastInspect}</td>
             <td><span class="risk-tag ${status.cls}">${status.text}</span></td>
-            <td class="sticky-col sticky-right"><button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="window.open('rural-house-detail.html?no=${record.no}', '_blank')">查看档案</button></td>
+            <td class="sticky-col sticky-right"><button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="openDetailEmbed('${record.no}')">查看档案</button></td>
         `;
         tbody.appendChild(tr);
     });
@@ -1750,6 +1807,24 @@ function initTownVillageLinkage() {
             });
         }
     });
+}
+
+function openDetailEmbed(houseNo) {
+    const overlay = document.getElementById('detailEmbedOverlay');
+    const frame = document.getElementById('detailEmbedFrame');
+    if (!overlay || !frame) return;
+    frame.src = 'rural-house-detail.html?no=' + encodeURIComponent(houseNo || '');
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDetailEmbed() {
+    const overlay = document.getElementById('detailEmbedOverlay');
+    const frame = document.getElementById('detailEmbedFrame');
+    if (!overlay || !frame) return;
+    overlay.classList.remove('active');
+    frame.src = '';
+    document.body.style.overflow = '';
 }
 
 // ===== Init =====

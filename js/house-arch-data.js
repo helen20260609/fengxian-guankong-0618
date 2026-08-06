@@ -539,7 +539,12 @@ function generateInspectionRecords(no, risk, i) {
         proofFiles: '',
         remark: part + '存在' + type + '，需进行安全整治',
         reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
-        reportTime: checkDate + ' 09:00'
+        reportTime: checkDate + ' 09:00',
+        // 关联巡查任务字段
+        sourceType: '排查发现',
+        taskId: '',
+        taskNo: '',
+        taskName: ''
     }];
 }
 
@@ -596,7 +601,12 @@ function generatePatrolRecords(no, risk, governance, i) {
             decision: decision,
             photos: '',
             files: '',
-            remark: decision === '需专业人员复核' ? '建议安排专家现场复核' : '管控措施到位，持续关注'
+            remark: decision === '需专业人员复核' ? '建议安排专家现场复核' : '管控措施到位，持续关注',
+            // 关联巡查任务字段
+            sourceType: '巡查人员上报',
+            taskId: '',
+            taskNo: '',
+            taskName: ''
         });
     }
     return records;
@@ -705,6 +715,90 @@ function generateMeasures(risk, governance, projectMeasure, i) {
         });
     }
     return measures;
+}
+
+// 任务类型值域统一映射（与 patrol-task-management.html 一致）
+const TASK_TYPE_LABEL_MAP = {
+    'routine': '日常巡查',
+    'special': '专项巡查',
+    'temporary': '临时巡查',
+    'review': '复查任务'
+};
+
+// 将巡查任务同步到房屋档案记录（双向关联入口）
+function syncTaskToHouseRecords(task) {
+    if (!task || !Array.isArray(task.houseNos) || task.houseNos.length === 0) return;
+    const all = getHouseArchStorage();
+    task.houseNos.forEach(no => {
+        const rec = all[no];
+        if (!rec) return;
+        normalizeHouseRecord(rec);
+        const now = new Date();
+        const dateStr = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+        const timeStr = dateStr + ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+
+        // 排查记录：任务为专项/复查时生成排查记录
+        if (task.type === 'special' || task.type === 'review') {
+            const existingIns = (rec.inspectionRecords || []).find(r => r.taskId === String(task.id));
+            if (!existingIns) {
+                const insId = 'INS-' + no + '-' + String(rec.inspectionRecords.length + 1).padStart(3, '0');
+                rec.inspectionRecords.push({
+                    id: insId,
+                    checkDate: dateStr,
+                    checker: task.person || '',
+                    checkerPhone: '',
+                    structureStatus: rec.riskLevel || '一般损坏房',
+                    damagePart: '',
+                    overload: '否',
+                    otherRisk: '暂无',
+                    preliminaryJudge: '',
+                    location: '',
+                    dutyPerson: '',
+                    dutyPhone: '',
+                    photos: '',
+                    preAppraisal: '否',
+                    noAppraisalReason: '',
+                    proofFiles: '',
+                    remark: '由巡查任务同步生成：' + (task.name || ''),
+                    reporter: task.person || '',
+                    reportTime: timeStr,
+                    sourceType: task.type === 'review' ? '复查任务' : '专项巡查',
+                    taskId: String(task.id),
+                    taskNo: task.no || '',
+                    taskName: task.name || ''
+                });
+                if (!Array.isArray(task.recordIds)) task.recordIds = [];
+                task.recordIds.push({ type: 'inspection', id: insId, houseNo: no });
+            }
+        }
+
+        // 巡查检查记录：所有任务类型都生成巡查记录
+        const existingPat = (rec.patrolRecords || []).find(r => r.taskId === String(task.id));
+        if (!existingPat) {
+            const patId = 'PAT-' + no + '-' + String(rec.patrolRecords.length + 1).padStart(3, '0');
+            rec.patrolRecords.push({
+                id: patId,
+                patrolDate: dateStr,
+                patrolType: TASK_TYPE_LABEL_MAP[task.type] || '日常巡查',
+                patrolOrg: (task.town || '') + '城建中心',
+                patrolPerson: task.person || '',
+                content: task.desc || '检查房屋隐患部位安全状况、管控措施落实情况',
+                result: '正常',
+                foundProblems: '',
+                decision: '经判定无隐患销号',
+                photos: '',
+                files: '',
+                remark: '由巡查任务同步生成：' + (task.name || ''),
+                sourceType: '巡查人员上报',
+                taskId: String(task.id),
+                taskNo: task.no || '',
+                taskName: task.name || ''
+            });
+            if (!Array.isArray(task.recordIds)) task.recordIds = [];
+            task.recordIds.push({ type: 'patrol', id: patId, houseNo: no });
+        }
+    });
+    setHouseArchStorage(all);
 }
 
 // 根据房屋状态生成销号申请记录
