@@ -58,6 +58,7 @@ const STATUS_LABEL_MAP_INV = {
 // 完整的隐患部位/类型/措施词库，用于生成丰富的种子数据
 const HAZARD_PARTS = ['承重墙', '屋面', '地基基础', '木构架', '楼梯间', '阳台', '外墙', '梁柱', '楼板', '排水系统'];
 const HAZARD_TYPES = ['裂缝', '渗漏', '沉降', '腐朽', '破损', '变形', '倾斜', '钢筋锈蚀', '抹灰脱落', '积水'];
+const DISCOVERY_METHODS = ['日常巡查', '专项巡查', '临时巡查', '复查任务'];
 const MANAGEMENT_MEASURES = ['停止使用', '封控警示', '人员撤离', '持续监控', '停止经营'];
 const ENGINEERING_MEASURES = ['结构加固', '屋面修缮', '基础加固', '墙体修复', '排水改造', '电气改造', '消防改造'];
 const MANAGER_PHONES = ['138-1234-5678', '139-5678-1234', '136-0000-1234', '137-9999-8888', '150-1111-2222'];
@@ -263,6 +264,11 @@ function normalizeHouseRecord(record) {
     rec.riskInfo.riskStatus = rec.riskInfo.riskStatus || rec.governStatus || '待整治';
     rec.riskInfo.relatedHouse = rec.riskInfo.relatedHouse || rec.no || '';
     rec.riskInfo.relatedOwner = rec.riskInfo.relatedOwner || rec.owner || '';
+    // 旧缓存记录补充发现方式（按编号数字轮换 4 类）
+    if (!rec.riskInfo.discoveryMethod) {
+        const idx = parseInt(String(rec.no || '').replace(/\D/g, '') || '0', 10);
+        rec.riskInfo.discoveryMethod = DISCOVERY_METHODS[idx % DISCOVERY_METHODS.length];
+    }
 
     return rec;
 }
@@ -1080,7 +1086,7 @@ function generateHouseSeed() {
             riskType: riskType,
             riskLevel: originalRiskLevel,
             discoveryTime: inspectionRecords.length ? inspectionRecords[0].checkDate : '',
-            discoveryMethod: '排查发现',
+            discoveryMethod: DISCOVERY_METHODS[i % DISCOVERY_METHODS.length],
             discoverer: inspectionRecords.length ? inspectionRecords[0].checker : '',
             riskStatus: governStatus,
             riskPart: riskPart,

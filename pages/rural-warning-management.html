@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <!-- saved from url=(0053)http://192.168.70.210/pages/gas-warning-overview.html -->
 <html lang="zh-CN" data-theme="light"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
@@ -245,7 +245,10 @@ body {
     white-space: nowrap;
 }
 .data-table tbody tr:hover {
-    background: rgba(26,115,232,0.04);
+    background: #f1f7fe;
+}
+.data-table tbody tr:hover td {
+    background: #f1f7fe;
 }
 .data-table tbody tr:last-child td {
     border-bottom: none;
@@ -265,17 +268,17 @@ body {
         box-shadow: -2px 0 4px -2px rgba(0,0,0,0.08);
     }
     .data-table th:first-child,
-    .data-table td:first-child { left: 0; }
+    .data-table td:first-child { left: 0; border-right: 1px solid var(--border); }
     .data-table th:nth-last-child(2),
-    .data-table td:nth-last-child(2) { right: 100px; }
+    .data-table td:nth-last-child(2) { right: var(--last-col-w, 100px); border-left: none; }
     .data-table th:last-child,
-    .data-table td:last-child { right: 0; }
+    .data-table td:last-child { right: 0; border-left: 1px solid var(--border); }
     .data-table th:first-child,
     .data-table th:nth-last-child(2),
     .data-table th:last-child { background: var(--bg-hover); }
     .data-table tbody tr:hover td:first-child,
     .data-table tbody tr:hover td:nth-last-child(2),
-    .data-table tbody tr:hover td:last-child { background: var(--bg-hover); }
+    .data-table tbody tr:hover td:last-child { background: #f1f7fe; }
 }
 
 @media (max-width: 1439px) {
@@ -607,7 +610,7 @@ body {
         <span class="filter-label">处理状态</span>
         <select id="filter-status" class="filter-select">
             <option value="">全部</option>
-            <option value="待审核">待审核</option>
+            <option value="待核实">待核实</option>
             <option value="待分发">待分发</option>
             <option value="处置中">处置中</option>
             <option value="待验收">待验收</option>
@@ -628,7 +631,7 @@ body {
         <span class="tab-count" id="tab-count-all">0</span>
     </button>
     <button class="tab-item" data-tab="pending-audit">
-        <span>待审核</span>
+        <span>待核实</span>
         <span class="tab-count" id="tab-count-pending-audit">0</span>
     </button>
     <button class="tab-item" data-tab="pending-dispatch">
@@ -642,6 +645,10 @@ body {
     <button class="tab-item" data-tab="pending-accept">
         <span>待验收</span>
         <span class="tab-count" id="tab-count-pending-accept">0</span>
+    </button>
+    <button class="tab-item" data-tab="closed">
+        <span>已销号</span>
+        <span class="tab-count" id="tab-count-closed">0</span>
     </button>
 </div>
 
@@ -743,10 +750,10 @@ body {
         if (governance === 'doing') return { key: 'handling', label: '处置中', cls: 'handling' };
         if (governance === 'overdue') return { key: 'handling', label: '处置中', cls: 'handling' };
         if (governance === 'pending') {
-            // 待整治进一步区分为待审核/待分发（按序号奇偶分布）
-            return { key: 'pending-audit', label: '待审核', cls: 'pending' };
+            // 待整治进一步区分为待核实/待分发（按序号奇偶分布）
+            return { key: 'pending-audit', label: '待核实', cls: 'pending' };
         }
-        return { key: 'pending-audit', label: '待审核', cls: 'pending' };
+        return { key: 'pending-audit', label: '待核实', cls: 'pending' };
     }
 
     function generateHazardRowsFromRecords() {
@@ -800,17 +807,18 @@ body {
         const s = status.key;
         const detail = `<button class="action-link" onclick="window.location.href='rural-warning-detail.html?no=${houseNo}'">查看</button>`;
         if (s === 'pending-audit') {
-            return `<button class="action-link" onclick="window.location.href='rural-warning-audit.html?no=${houseNo}'">审核</button>` + detail;
+            return `<button class="action-link" onclick="window.location.href='rural-warning-audit.html?no=${houseNo}'">核实</button>`;
         }
         if (s === 'pending-dispatch') {
-            return `<button class="action-link" onclick="window.location.href='rural-warning-dispatch.html?no=${houseNo}'">分发</button>` + detail;
+            return `<button class="action-link" onclick="window.location.href='rural-warning-dispatch.html?no=${houseNo}'">分发</button>`;
         }
         if (s === 'handling') {
-            return `<button class="action-link" onclick="window.location.href='rural-warning-handle.html?no=${houseNo}'">处置</button>` + detail;
+            return `<button class="action-link" onclick="window.location.href='rural-warning-handle.html?no=${houseNo}'">处置</button>`;
         }
         if (s === 'pending-accept') {
-            return `<button class="action-link" onclick="window.location.href='rural-warning-acceptance.html?no=${houseNo}'">验收</button>` + detail;
+            return `<button class="action-link" onclick="window.location.href='rural-warning-acceptance.html?no=${houseNo}'">验收</button>`;
         }
+        // 已销号等终态：仅提供"查看"（进入 detail 纯查看页）
         return detail;
     }
 
@@ -890,7 +898,8 @@ body {
             'pending-audit': 0,
             'pending-dispatch': 0,
             handling: 0,
-            'pending-accept': 0
+            'pending-accept': 0,
+            closed: 0
         };
         allHazards.forEach(row => { if (counts[row.status.key] !== undefined) counts[row.status.key]++; });
         Object.keys(counts).forEach(k => {
@@ -938,8 +947,45 @@ body {
 
     // init
     allHazards = generateHazardRowsFromRecords().filter(row => row.source !== '物联自动上报' && row.source !== '专家研判');
-    // 默认按状态分流：待审核(pending) -> 待审核；处置中(doing/overdue) -> 处置中；完成(done) -> 待验收；销号 -> 已销号；驳回 -> 已驳回
-    // 将部分“待审核”状态再分流为“待分发”，使5个tab都有数据：按序号奇偶
+    // 补充 2 条“待验收”模拟数据（源数据中的待验收记录因来源被过滤，这里手动补入）
+    allHazards.push(
+        {
+            id: 'NF-2025-00022-0',
+            hazardNo: 'NF-2025-00022-H1',
+            hazardName: '明星村66号 房屋结构安全隐患',
+            hazardType: '结构隐患',
+            hazardLevel: '一般损坏房',
+            address: '上海市奉贤区西渡街道明星村66号',
+            community: '明星村',
+            source: '巡查人员上报',
+            reporter: '王五',
+            dutyUnit: '西渡街道城建中心',
+            dutyPerson: '张工',
+            reportTime: '2025-06-10 09:00',
+            ownerName: '王五',
+            status: { key: 'pending-accept', label: '待验收', cls: 'accept' },
+            houseNo: 'NF-2025-00022'
+        },
+        {
+            id: 'NF-2025-00080-0',
+            hazardNo: 'NF-2025-00080-H1',
+            hazardName: '环城社区240号 外墙瓷砖脱落',
+            hazardType: '外围隐患',
+            hazardLevel: '一般损坏房',
+            address: '上海市奉贤区奉城镇环城社区240号',
+            community: '环城社区',
+            source: '排查发现',
+            reporter: '李四',
+            dutyUnit: '奉城镇城建中心',
+            dutyPerson: '陈工',
+            reportTime: '2025-06-15 14:30',
+            ownerName: '李四',
+            status: { key: 'pending-accept', label: '待验收', cls: 'accept' },
+            houseNo: 'NF-2025-00080'
+        }
+    );
+    // 默认按状态分流：待核实(pending) -> 待核实；处置中(doing/overdue) -> 处置中；完成(done) -> 待验收；销号 -> 已销号；驳回 -> 已驳回
+    // 将部分“待核实”状态再分流为“待分发”，使5个tab都有数据：按序号奇偶
     let dispatchIdx = 0;
     allHazards.forEach((row, idx) => {
         if (row.status.key === 'pending-audit' && idx % 7 === 0) {
@@ -947,10 +993,46 @@ body {
             dispatchIdx++;
         }
     });
+    // 模拟部分已销号数据：将部分“待验收”状态改为“已销号”（每 3 条取 1 条，但保留前 2 条作为待验收演示数据）
+    let acceptIdx = 0;
+    allHazards.forEach((row, idx) => {
+        if (row.status.key === 'pending-accept') {
+            acceptIdx++;
+            if (acceptIdx > 2 && acceptIdx % 3 === 1) {
+                row.status = { key: 'closed', label: '已销号', cls: 'closed' };
+                // 同步把 closeStatus='已通过' 写回数据层，供 detail 页流转图识别
+                if (typeof getHouseRecord === 'function' && typeof setHouseRecord === 'function') {
+                    const rec = getHouseRecord(row.houseNo);
+                    if (rec && rec.closeStatus !== '已通过') {
+                        rec.closeStatus = '已通过';
+                        setHouseRecord(row.houseNo, rec);
+                    }
+                }
+            }
+        }
+    });
     filteredHazards = allHazards.slice();
     updateTabCounts();
     renderTable();
 })();
+
+// 动态测量"操作"列实际宽度，写入 CSS 变量，让"状态"列与之无缝拼接
+function syncStickyColWidth() {
+    var table = document.querySelector('.data-table');
+    if (!table) return;
+    var lastTh = table.querySelector('thead th:last-child');
+    if (!lastTh) return;
+    var w = lastTh.getBoundingClientRect().width;
+    table.style.setProperty('--last-col-w', w + 'px');
+}
+window.addEventListener('load', syncStickyColWidth);
+window.addEventListener('resize', syncStickyColWidth);
+// 表格渲染后再校一次（数据异步/字体加载可能引起宽度变化）
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(syncStickyColWidth, 0);
+} else {
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(syncStickyColWidth, 0); });
+}
 </script>
 
 
