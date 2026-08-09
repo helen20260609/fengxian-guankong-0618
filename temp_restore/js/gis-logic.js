@@ -39,8 +39,8 @@ let footprintPolygons = [];
 let leftChart, streetRankingChart, measurePieChart;
 
 const RISK_CONFIG = {
-    danger: { label: '疑似危房', color: '#d93025', class: 'danger', shape: 'triangle' },
-    major: { label: '严重损坏房', color: '#f57c00', class: 'major', shape: 'square' },
+    danger: { label: '疑似危房', color: '#d93025', class: 'danger', shape: 'circle' },
+    major: { label: '严重损坏房', color: '#f57c00', class: 'major', shape: 'circle' },
     warning: { label: '一般损坏房', color: '#f9ab00', class: 'warning', shape: 'circle' },
     safe: { label: '完好房(基本完好房)', color: '#1a73e8', class: 'safe', shape: 'circle' }
 };

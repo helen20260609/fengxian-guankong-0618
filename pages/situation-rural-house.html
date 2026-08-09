@@ -98,10 +98,10 @@
         }
         .filter-tag:hover { border-color: var(--primary); color: var(--primary); box-shadow: var(--glow); }
         .filter-tag.active { background: var(--primary); color: #050b14; border-color: var(--primary); font-weight: 600; }
-        .filter-tag.active.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
-        .filter-tag.active.major { background: var(--major); border-color: var(--major); color: #fff; }
-        .filter-tag.active.warning { background: var(--warning); border-color: var(--warning); color: #050b14; }
-        .filter-tag.active.safe { background: var(--safe); border-color: var(--safe); color: #050b14; }
+        .filter-tag.active[data-risk="danger"] { background: var(--danger); border-color: var(--danger); color: #fff; }
+        .filter-tag.active[data-risk="major"] { background: var(--major); border-color: var(--major); color: #fff; }
+        .filter-tag.active[data-risk="warning"] { background: var(--warning); border-color: var(--warning); color: #050b14; }
+        .filter-tag.active[data-risk="safe"] { background: var(--safe); border-color: var(--safe); color: #050b14; }
 
         /* 主体 */
         .main-body { flex: 1; display: flex; overflow: hidden; gap: 12px; padding: 12px; position: relative; }
@@ -181,6 +181,10 @@
             margin-top: 2px;
         }
         .stat-trend.down { color: var(--danger); }
+        .stat-card.danger .stat-trend { color: #fda0b1; }
+        .stat-card.major .stat-trend { color: #fb923c; }
+        .stat-card.warning .stat-trend { color: #facc15; }
+        .stat-card.safe .stat-trend { color: #7dd3fc; }
         .chart-box { width: 100%; height: 200px; }
         .chart-box-sm { width: 100%; height: 90px; }
         .chart-box-md { width: 100%; height: 110px; }
@@ -215,6 +219,13 @@
             transition: all .2s;
         }
         .risk-level-item:hover { transform: translateY(-2px); box-shadow: 0 0 14px rgba(14, 165, 233, 0.18); border-color: var(--border-strong); }
+        .risk-level-item.active { transform: translateY(-2px); box-shadow: 0 0 20px rgba(56, 189, 248, 0.24); border-color: rgba(56, 189, 248, 0.6); }
+        .risk-level-item.active.danger { background: linear-gradient(135deg, rgba(244, 63, 94, 0.24) 0%, rgba(5, 15, 30, 0.48) 100%); border-color: rgba(244, 63, 94, 0.55); }
+        .risk-level-item.active.major { background: linear-gradient(135deg, rgba(249, 115, 22, 0.24) 0%, rgba(5, 15, 30, 0.48) 100%); border-color: rgba(249, 115, 22, 0.55); }
+        .risk-level-item.active.warning { background: linear-gradient(135deg, rgba(250, 204, 21, 0.24) 0%, rgba(5, 15, 30, 0.48) 100%); border-color: rgba(250, 204, 21, 0.55); }
+        .risk-level-item.active.safe { background: linear-gradient(135deg, rgba(56, 189, 248, 0.24) 0%, rgba(5, 15, 30, 0.48) 100%); border-color: rgba(56, 189, 248, 0.55); }
+        .risk-level-item.active .rl-label { color: #ffffff; }
+        .risk-level-item.active .rl-count { text-shadow: 0 0 14px rgba(255, 255, 255, 0.15); }
         .risk-level-item.danger { background: linear-gradient(135deg, rgba(244, 63, 94, 0.14) 0%, rgba(5, 15, 30, 0.4) 100%); border-color: rgba(244, 63, 94, 0.35); }
         .risk-level-item.major { background: linear-gradient(135deg, rgba(249, 115, 22, 0.14) 0%, rgba(5, 15, 30, 0.4) 100%); border-color: rgba(249, 115, 22, 0.35); }
         .risk-level-item.warning { background: linear-gradient(135deg, rgba(250, 204, 21, 0.14) 0%, rgba(5, 15, 30, 0.4) 100%); border-color: rgba(250, 204, 21, 0.35); }
@@ -1051,12 +1062,12 @@
                             <div class="stat-label">疑似危房数</div>
                             <div class="stat-trend down" id="ovDangerRate">占比 0%</div>
                         </div>
-                        <div class="stat-card" id="cardMajor" onclick="filterByRisk('major')">
+                        <div class="stat-card major" id="cardMajor" onclick="filterByRisk('major')">
                             <div class="stat-value" id="ovMajor">0<span class="stat-unit">栋</span></div>
                             <div class="stat-label">严重损坏房数</div>
                             <div class="stat-trend" id="ovMajorRate">占比 0%</div>
                         </div>
-                        <div class="stat-card" id="cardWarning" onclick="filterByRisk('warning')">
+                        <div class="stat-card warning" id="cardWarning" onclick="filterByRisk('warning')">
                             <div class="stat-value" id="ovWarning">0<span class="stat-unit">栋</span></div>
                             <div class="stat-label">一般损坏房数</div>
                             <div class="stat-trend" id="ovWarningRate">占比 0%</div>
@@ -2558,6 +2569,9 @@
             // 点击风险总览卡片时，同步 filter-tag 状态并触发筛选
             document.querySelectorAll('.filter-tag[data-risk]').forEach(t => {
                 t.classList.toggle('active', t.dataset.risk === risk);
+            });
+            document.querySelectorAll('.risk-level-item').forEach(item => {
+                item.classList.toggle('active', item.classList.contains(risk));
             });
             state.riskLevels = [risk];
             applyFilters();
@@ -4317,46 +4331,14 @@
                 g.onmouseenter = (e) => { showPopup(d, e); };
                 g.onmouseleave = () => { hidePopup(); };
 
-                // 不同风险等级采用不同图标形状
+                // 统一使用圆形图标
                 const shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 shape.setAttribute('class', 'point-icon');
-                let pathD;
-                if (d.risk === 'danger') {
-                    // 疑似危房：星形突出
-                    pathD = 'M0,-22 L5,-8 L20,-8 L8,2 L13,16 L0,8 L-13,16 L-8,2 L-20,-8 L-5,-8 Z';
-                } else if (d.risk === 'major') {
-                    // 严重损坏房：六边形
-                    pathD = 'M0,-20 L10,-10 L10,6 L0,18 L-10,6 L-10,-10 Z';
-                } else if (d.risk === 'warning') {
-                    // 一般损坏房：菱形
-                    pathD = 'M0,-18 L12,0 L0,18 L-12,0 Z';
-                } else {
-                    // 完好房：圆形定位点
-                    pathD = 'M0,-16 A16,16 0 1,1 0,16 A16,16 0 1,1 0,-16 Z';
-                }
-                shape.setAttribute('d', pathD);
+                shape.setAttribute('d', 'M0,-16 A16,16 0 1,1 0,16 A16,16 0 1,1 0,-16 Z');
                 shape.setAttribute('fill', color);
                 shape.setAttribute('stroke', '#fff');
                 shape.setAttribute('stroke-width', '1.5');
                 g.appendChild(shape);
-
-                // 内部风险等级标识
-                const innerColor = '#fff';
-                let innerShape;
-                if (d.risk === 'safe') {
-                    innerShape = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    innerShape.setAttribute('r', 4);
-                    innerShape.setAttribute('fill', innerColor);
-                } else {
-                    innerShape = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    innerShape.setAttribute('text-anchor', 'middle');
-                    innerShape.setAttribute('dy', '4');
-                    innerShape.setAttribute('font-size', '10');
-                    innerShape.setAttribute('font-weight', '700');
-                    innerShape.setAttribute('fill', innerColor);
-                    innerShape.textContent = d.risk === 'danger' ? '危' : (d.risk === 'major' ? '严' : '一');
-                }
-                g.appendChild(innerShape);
 
                 container.appendChild(g);
             });
