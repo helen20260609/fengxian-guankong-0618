@@ -16,7 +16,9 @@
         curtain: { id: 'curtain', name: '玻璃幕墙', icon: 'fa-building' },
         gas: { id: 'gas', name: '燃气安全', icon: 'fa-fire' },
         falling: { id: 'falling', name: '高空坠物', icon: 'fa-person-falling' },
-        selfbuild: { id: 'selfbuild', name: '自建房安全', icon: 'fa-house-chimney' }
+        selfbuild: { id: 'selfbuild', name: '自建房安全', icon: 'fa-house-chimney' },
+        rural: { id: 'rural', name: '农村自建房', icon: 'fa-house-chimney' },
+        urban: { id: 'urban', name: '城市自建房', icon: 'fa-building-user' }
     };
 
     // 建筑工地：39 条（与 PC 端 risk-list-build.html 一致）
@@ -153,7 +155,9 @@
             curtain: { title: '某大厦玻璃幕墙坠落', desc: '2024 年 8 月，某大厦因密封胶老化导致玻璃面板脱落。整改：更换密封胶、全面排查连接件。' },
             gas: { title: '某路段燃气泄漏爆炸', desc: '2024 年 4 月，某路段因第三方施工破坏燃气管道引发泄漏。整改：加强施工监护、完善管线标识。' },
             falling: { title: '某小区外墙砖脱落伤人', desc: '2024 年 9 月，某小区外墙饰面空鼓脱落砸伤行人。整改：排查空鼓、重新粘贴加固。' },
-            selfbuild: { title: '某自建房坍塌事故', desc: '2024 年 3 月，某自建房因擅自加层导致结构超载坍塌。整改：拆除违规加层、委托结构鉴定。' }
+            selfbuild: { title: '某自建房坍塌事故', desc: '2024 年 3 月，某自建房因擅自加层导致结构超载坍塌。整改：拆除违规加层、委托结构鉴定。' },
+            rural: { title: '某农村自建房墙体开裂事件', desc: '2024 年 4 月，某农村自建房因基础不均匀沉降导致墙体开裂。整改：委托鉴定、加固地基、限制使用。' },
+            urban: { title: '某城镇自建房违规加层事件', desc: '2024 年 6 月，某城镇经营性自建房违规加层用于出租。整改：拆除加层、结构安全鉴定。' }
         };
         return data.map(function (item, idx) {
             var cases = [];
@@ -180,7 +184,9 @@
             curtain: withDomain(curtainData, 'curtain'),
             gas: withDomain(gasData, 'gas'),
             falling: withDomain(fallingData, 'falling'),
-            selfbuild: withDomain(selfbuildData, 'selfbuild')
+            selfbuild: withDomain(selfbuildData, 'selfbuild'),
+            rural: withDomain(selfbuildData, 'rural'),
+            urban: withDomain(selfbuildData, 'urban')
         },
         getList: function (domain, filters) {
             filters = filters || {};

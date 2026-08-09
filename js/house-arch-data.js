@@ -7,6 +7,24 @@ const CLOSE_APPLY_KEY = 'closeApplyData';
 
 const MODULE_STREETS = ['南桥镇', '奉城镇', '庄行镇', '金汇镇', '青村镇', '柘林镇', '四团镇', '海湾镇', '西渡街道', '奉浦街道', '海湾旅游区', '头桥街道', '金海街道'];
 const MODULE_COMMUNITIES = ['张翁庙村', '洪庙村', '五四村', '新寺村', '潘垫村', '明星村', '李窑村', '星火村', '杨王村', '久茂村', '三坎村', '营房村', '解放社区', '人民社区', '新建社区', '环城社区'];
+
+// 奉贤区镇/街道 → 下辖村/居委（演示数据，保证房屋记录中镇街与村/居委的正确从属关系）
+const FENGXIAN_TOWN_VILLAGES = {
+    '南桥镇': ['张翁庙村', '环城社区'],
+    '奉城镇': ['洪庙村', '解放社区'],
+    '庄行镇': ['潘垫村', '人民社区'],
+    '金汇镇': ['明星村', '新建社区'],
+    '青村镇': ['李窑村', '星火村'],
+    '柘林镇': ['新寺村', '营房村'],
+    '四团镇': ['五四村', '三坎村'],
+    '海湾镇': ['久茂村', '杨王村'],
+    '西渡街道': ['西渡社区'],
+    '奉浦街道': ['奉浦社区'],
+    '海湾旅游区': ['海湾社区'],
+    '头桥街道': ['头桥社区'],
+    '金海街道': ['金海社区']
+};
+
 const MODULE_RISKS = ['danger', 'major', 'warning', 'safe'];
 const MODULE_GOVERNANCE = ['pending', 'doing', 'done', 'overdue'];
 
@@ -887,7 +905,8 @@ function generateHouseSeed() {
         const nameIdx = (i - 1) % names.length;
         const name = names[nameIdx] + (i > 30 ? '·' + i + '号' : i + '号');
         const street = streets[(i - 1) % streets.length];
-        const community = communities[(i - 1) % communities.length];
+        const townVillages = FENGXIAN_TOWN_VILLAGES[street] || ['未知'];
+        const community = townVillages[(i - 1) % townVillages.length];
         const address = '上海市奉贤区' + street + community + (i * 3) + '号';
         const category = categories[i % 2];
         const struct = structTypes[i % 3];
@@ -979,7 +998,7 @@ function generateHouseSeed() {
         const archiveRecords = generateArchiveRecords(no, originalRisk, governance, closeStatus, i);
 
         // 全要素档案字段
-        const village = VILLAGES[(i - 1) % VILLAGES.length];
+        const village = community;
         const floors = FLOOR_OPTIONS[i % FLOOR_OPTIONS.length];
         const buildingArea = (80 + (i * 3.5)).toFixed(1);
         const roofType = ROOF_TYPES[i % ROOF_TYPES.length];

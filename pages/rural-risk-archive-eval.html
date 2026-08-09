@@ -284,10 +284,10 @@
     <div class="filter-row">
         <div class="filter-left">
             <select class="filter-select" id="filterTown">
-                <option value="">全部乡镇/街道</option>
+                <option value="">全部镇/街道</option>
             </select>
             <select class="filter-select" id="filterVillage">
-                <option value="">全部行政村</option>
+                <option value="">全部村/居委</option>
             </select>
             <select class="filter-select" id="filterStructure">
                 <option value="">全部结构形式</option>
@@ -590,8 +590,26 @@ function structureLabel(r) {
     return (r.structure && r.structure.structureType) || (r.category ? r.category + '结构' : '未知');
 }
 
-function townLabel(r) { return r.street || '未知'; }
-function villageLabel(r) { return r.village || r.community || '未知'; }
+function townLabel(r) {
+    if (typeof FENGXIAN_TOWN_VILLAGES !== 'undefined' && r.street && FENGXIAN_TOWN_VILLAGES[r.street]) {
+        return r.street;
+    }
+    if (typeof FENGXIAN_TOWN_VILLAGES !== 'undefined') {
+        const towns = Object.keys(FENGXIAN_TOWN_VILLAGES);
+        const seq = parseInt(String(r.no || '').replace(/\D/g, ''), 10) || 1;
+        return towns[(seq - 1) % towns.length];
+    }
+    return r.street || '未知';
+}
+function villageLabel(r) {
+    const t = townLabel(r);
+    if (typeof FENGXIAN_TOWN_VILLAGES === 'undefined') return r.village || r.community || '未知';
+    const validVillages = FENGXIAN_TOWN_VILLAGES[t] || ['未知'];
+    if (r.village && validVillages.includes(r.village)) return r.village;
+    if (r.community && validVillages.includes(r.community)) return r.community;
+    const seq = parseInt(String(r.no || '').replace(/\D/g, ''), 10) || 1;
+    return validVillages[(seq - 1) % validVillages.length];
+}
 
 function passFilter(r) {
     const ft = document.getElementById('filterTown').value;
@@ -696,17 +714,19 @@ function groupByDimension(records, mode) {
 }
 
 function populateFilters(selectedTown) {
-    const towns = [...new Set(allRecords.map(townLabel))].sort();
+    const towns = Object.keys(FENGXIAN_TOWN_VILLAGES || {}).sort();
     const townSel = document.getElementById('filterTown');
     const villageSel = document.getElementById('filterVillage');
 
-    townSel.innerHTML = '<option value="">全部乡镇/街道</option>' + towns.map(t => `<option value="${t}">${t}</option>`).join('');
+    townSel.innerHTML = '<option value="">全部镇/街道</option>' + towns.map(t => `<option value="${t}">${t}</option>`).join('');
     if (selectedTown) {
         townSel.value = selectedTown;
     }
 
-    const villages = [...new Set(allRecords.filter(r => !selectedTown || townLabel(r) === selectedTown).map(villageLabel))].sort();
-    villageSel.innerHTML = '<option value="">全部行政村</option>' + villages.map(v => `<option value="${v}">${v}</option>`).join('');
+    const villages = selectedTown
+        ? ((FENGXIAN_TOWN_VILLAGES || {})[selectedTown] || [])
+        : Object.values(FENGXIAN_TOWN_VILLAGES || {}).flat();
+    villageSel.innerHTML = '<option value="">全部村/居委</option>' + [...new Set(villages)].sort().map(v => `<option value="${v}">${v}</option>`).join('');
 }
 
 function updateVillageOptions() {
@@ -715,11 +735,14 @@ function updateVillageOptions() {
     const currentVillage = villageSel.value;
     const selectedTown = townSel.value;
 
-    const villages = [...new Set(allRecords.filter(r => !selectedTown || townLabel(r) === selectedTown).map(villageLabel))].sort();
-    villageSel.innerHTML = '<option value="">全部行政村</option>' + villages.map(v => `<option value="${v}">${v}</option>`).join('');
+    const villages = selectedTown
+        ? ((FENGXIAN_TOWN_VILLAGES || {})[selectedTown] || [])
+        : Object.values(FENGXIAN_TOWN_VILLAGES || {}).flat();
+    const sortedVillages = [...new Set(villages)].sort();
+    villageSel.innerHTML = '<option value="">全部村/居委</option>' + sortedVillages.map(v => `<option value="${v}">${v}</option>`).join('');
 
-    // 如果当前选中的行政村仍在可用范围内，则保留选中状态
-    if (currentVillage && villages.includes(currentVillage)) {
+    // 如果当前选中的村/居委仍在可用范围内，则保留选中状态
+    if (currentVillage && sortedVillages.includes(currentVillage)) {
         villageSel.value = currentVillage;
     } else {
         villageSel.value = '';

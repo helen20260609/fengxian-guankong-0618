@@ -423,8 +423,8 @@
 
         // 预警统计
         warningStats: {
-            byLevel: { red: 2, orange: 2, yellow: 1, blue: 0 },
-            byDomain: { build: 3, gas: 1, traffic: 1, curtain: 0, falling: 0, selfbuild: 0 },
+            byLevel: { red: 3, orange: 3, yellow: 1, blue: 0 },
+            byDomain: { build: 3, gas: 1, traffic: 1, curtain: 0, falling: 0, selfbuild: 0, rural: 1, urban: 1 },
             byDate: [
                 { date: '06-15', red: 0, orange: 1, yellow: 0, blue: 0 },
                 { date: '06-16', red: 1, orange: 0, yellow: 1, blue: 0 },
@@ -536,6 +536,36 @@
                     { step: '任务分派', actor: '平台', time: dateAdd(-116), action: '分派至施工单位 B', result: '张工接单', status: 'completed' },
                     { step: '处置反馈', actor: '张工', time: dateAdd(-100), action: '已开启喷淋降尘', result: '浓度已回落至 0.65mg/m³', status: 'completed' },
                     { step: '验收归档', actor: '平台', time: dateAdd(-90), action: '验收通过', result: '已归档', status: 'completed' }
+                ]
+            },
+            {
+                id: 'W-0006', eventNo: 'W-2026-0006', level: 'red', title: '农村自建房倾斜超限预警', domain: 'rural',
+                location: '青村镇某村', time: dateAdd(-25), status: 'handling', handler: '刘工',
+                responsibleUnit: '青村镇城建中心', deadline: dateAdd(300),
+                description: '青村镇某农村自建房监测点倾斜率达到 4.8‰，超过红色预警阈值 4.0‰，存在结构失稳风险。',
+                indicator: '倾斜率', threshold: '4.0‰', currentValue: '4.8‰',
+                photos: [],
+                timeline: [
+                    { step: '预警产生', actor: '监测系统', time: dateAdd(-25), action: '自建房倾斜率超限自动预警', result: '红色预警', status: 'completed' },
+                    { step: '在线确认', actor: '王主任', time: dateAdd(-22), action: '确认预警属实', result: '属实，需立即处置', status: 'completed' },
+                    { step: '任务分派', actor: '平台', time: dateAdd(-20), action: '分派至青村镇城建中心', result: '刘工接单', status: 'completed' },
+                    { step: '处置反馈', actor: '刘工', time: dateAdd(-5), action: '已设置警戒并撤离人员', result: '正在委托鉴定并制定加固方案', status: 'active' },
+                    { step: '验收归档', actor: '', time: '', action: '待验收', result: '', status: 'pending' }
+                ]
+            },
+            {
+                id: 'W-0007', eventNo: 'W-2026-0007', level: 'orange', title: '城镇经营性自建房违规加层预警', domain: 'urban',
+                location: '南桥镇某路段', time: dateAdd(-48), status: 'dispatched', handler: '陈工',
+                responsibleUnit: '南桥镇城管执法中队', deadline: dateAdd(180),
+                description: '南桥镇某城镇经营性自建房擅自加建两层，荷载超过原结构设计承载力，经巡查发现上报。',
+                indicator: '加层层数', threshold: '原设计层数', currentValue: '超建 2 层',
+                photos: [],
+                timeline: [
+                    { step: '预警产生', actor: '巡查系统', time: dateAdd(-48), action: '巡查发现违规加层并自动预警', result: '橙色预警', status: 'completed' },
+                    { step: '在线确认', actor: '平台', time: dateAdd(-46), action: '确认预警属实', result: '属实，需限期整改', status: 'completed' },
+                    { step: '任务分派', actor: '平台', time: dateAdd(-44), action: '分派至南桥镇城管执法中队', result: '陈工接单', status: 'active' },
+                    { step: '处置反馈', actor: '陈工', time: '', action: '待处置', result: '', status: 'pending' },
+                    { step: '验收归档', actor: '', time: '', action: '待验收', result: '', status: 'pending' }
                 ]
             }
         ],

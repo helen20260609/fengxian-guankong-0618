@@ -454,6 +454,96 @@ body {
 }
 .btn-default:hover { background: var(--border); }
 
+/* ===== 隐患状态流转（横向步骤条） ===== */
+.hazard-flow-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px var(--shadow);
+    margin-bottom: 16px;
+}
+.hazard-flow-section .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 18px;
+    background: var(--bg-hover);
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+    font-weight: 700;
+}
+.hazard-flow-section .section-header i { color: var(--primary); font-size: 14px; }
+.hazard-flow-section .section-body { padding: 24px 18px 20px; }
+.hazard-flow-container {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: relative;
+}
+.hazard-flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    z-index: 2;
+    flex: 1;
+}
+.hazard-flow-step .step-dot {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    border: 2px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    transition: all 0.3s;
+}
+.hazard-flow-step.active .step-dot {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 0 0 5px rgba(26,115,232,0.15);
+}
+.hazard-flow-step.completed .step-dot {
+    border-color: var(--success);
+    background: var(--success);
+    color: #fff;
+}
+.hazard-flow-step .step-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.hazard-flow-step.active .step-label { color: var(--primary); }
+.hazard-flow-step.completed .step-label { color: var(--success); }
+.hazard-flow-step .step-time {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    margin-top: -6px;
+}
+.hazard-flow-line {
+    position: absolute;
+    top: 22px;
+    left: 56px;
+    right: 56px;
+    height: 2px;
+    background: var(--border);
+    z-index: 1;
+}
+.hazard-flow-line-progress {
+    height: 100%;
+    background: var(--success);
+    transition: width 0.3s;
+}
+
 /* ===== Flow Timeline ===== */
 .flow-timeline {
     position: relative;
@@ -1001,6 +1091,21 @@ body {
 
 <!-- ===== LEFT COLUMN ===== -->
 <div class="left-column">
+<!-- ===== 隐患状态流转 ===== -->
+<div class="hazard-flow-section">
+    <div class="section-header">
+        <i class="fa-solid fa-diagram-project"></i>
+        隐患状态流转
+    </div>
+    <div class="section-body">
+        <div class="hazard-flow-container" id="hazardFlowContainer">
+            <div class="hazard-flow-line">
+                <div class="hazard-flow-line-progress" id="hazardFlowLineProgress" style="width: 0%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Left Tab Navigation -->
 <div class="left-tabs">
     <button class="left-tab-btn active" onclick="switchLeftTab(this,'left-tab-base')">
@@ -1918,6 +2023,9 @@ function loadData() {
         }
     }
 
+    // 隐患状态流转
+    renderHazardStatusFlow(rec, reportTime);
+
     // 流转记录
     const timeline = document.getElementById('flow-timeline');
     if (timeline) {
@@ -1945,6 +2053,68 @@ function loadData() {
             </div>
         `).join('');
     }
+}
+
+const HAZARD_FLOW_STEPS = [
+    { key: 'reported',         label: '隐患上报', icon: 'fa-pen' },
+    { key: 'pending-audit',    label: '待核实',   icon: 'fa-user-clock' },
+    { key: 'pending-dispatch', label: '待分发',   icon: 'fa-paper-plane' },
+    { key: 'handling',         label: '处置中',   icon: 'fa-screwdriver-wrench' },
+    { key: 'pending-accept',   label: '待验收',   icon: 'fa-clipboard-check' },
+    { key: 'closed',           label: '已销号',   icon: 'fa-check' }
+];
+
+function normalizeFlowStatusKey(status) {
+    if (!status || status === 'pending' || status === 'pending-audit') return 'pending-audit';
+    if (status === 'reject-check' || status === 'reject-audit') return 'pending-audit';
+    if (status === 'processing' || status === 'handling' || status === 'doing' || status === 'overdue') return 'handling';
+    if (status === 'done') return 'pending-accept';
+    if (status === 'closed') return 'closed';
+    return status;
+}
+
+function renderHazardStatusFlow(rec, reportTime) {
+    const container = document.getElementById('hazardFlowContainer');
+    if (!container) return;
+    const progress = document.getElementById('hazardFlowLineProgress');
+
+    let statusKey = normalizeFlowStatusKey(rec.governance || rec.governStatus);
+    // 该页面是"分发"操作页，若仍是 pending 阶段则可视化为待分发
+    if (statusKey === 'pending-audit') statusKey = 'pending-dispatch';
+    if (rec.closeStatus === '已通过') statusKey = 'closed';
+    else if (rec.closeStatus === '待核实') statusKey = 'pending-accept';
+
+    const currentIdx = Math.max(0, HAZARD_FLOW_STEPS.findIndex(s => s.key === statusKey));
+
+    const manage = rec.manageRecords || [];
+    const dispatchTime = manage.length ? (manage[0].assignTime || '') : '';
+    const stepTimes = [
+        formatDateTime(reportTime),
+        currentIdx >= 1 ? formatDateTime(reportTime) : '',
+        currentIdx >= 2 && dispatchTime ? formatDateTime(dispatchTime) : (currentIdx >= 2 ? formatDateTime(reportTime) : ''),
+        currentIdx >= 3 ? formatDateTime(dispatchTime || reportTime) : '',
+        currentIdx >= 4 ? formatDateTime(dispatchTime || reportTime) : '',
+        currentIdx >= 5 ? formatDateTime(dispatchTime || reportTime) : ''
+    ];
+
+    Array.from(container.querySelectorAll('.hazard-flow-step')).forEach(el => el.remove());
+
+    HAZARD_FLOW_STEPS.forEach(function(step, idx) {
+        const div = document.createElement('div');
+        let cls = 'hazard-flow-step';
+        if (idx < currentIdx) cls += ' completed';
+        else if (idx === currentIdx) cls += (statusKey === 'closed' ? ' completed' : ' active');
+        div.className = cls;
+        const timeHtml = stepTimes[idx] ? `<div class="step-time">${stepTimes[idx]}</div>` : '';
+        div.innerHTML = `<div class="step-dot"><i class="fa-solid ${step.icon}"></i></div>` +
+                        `<div class="step-label">${step.label}</div>` + timeHtml;
+        container.appendChild(div);
+    });
+
+    const pct = HAZARD_FLOW_STEPS.length > 1
+        ? (currentIdx / (HAZARD_FLOW_STEPS.length - 1)) * 100
+        : 0;
+    if (progress) progress.style.width = pct + '%';
 }
 
 // Initialize
