@@ -18,7 +18,7 @@
         falling: { id: 'falling', name: '高空坠物', icon: 'fa-person-falling' },
         selfbuild: { id: 'selfbuild', name: '自建房安全', icon: 'fa-house-chimney' },
         rural: { id: 'rural', name: '农村自建房', icon: 'fa-house-chimney' },
-        urban: { id: 'urban', name: '城市自建房', icon: 'fa-building-user' }
+        urban: { id: 'urban', name: '城镇自建房', icon: 'fa-building-user' }
     };
 
     // 建筑工地：39 条（与 PC 端 risk-list-build.html 一致）
@@ -137,6 +137,34 @@
         { main: '树木', sub: '行道树', content: '枯枝断裂', riskIdentify: '行道树枯枝、病虫害枝干断裂坠落', accident: '砸伤行人、车辆', level: 'yellow', measures: '定期修剪，清除枯枝', basis: '城市绿化条例' }
     ];
 
+    // 农村/城镇自建房：参照 PC 端 rural-risk-measure-lib 的完整风险措施库
+    var ruralHouseData = [
+        { main: '建筑结构信息', sub: '地基基础', content: '地基基础情况', riskIdentify: '地基基础保持稳定，无明显不均匀沉降；上部结构无不均匀沉降裂缝和倾斜，外露基础完好。', accident: '无', level: 'blue', measures: '无', basis: '' },
+        { main: '建筑结构信息', sub: '地基基础', content: '地基基础情况', riskIdentify: '地基基础保持稳定，无明显不均匀沉降；上部结构有轻微不均匀沉降裂缝，外露基础基本完好。', accident: '房屋倾斜或倒塌', level: 'yellow', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '地基基础', content: '地基基础情况', riskIdentify: '地基基础出现少量损坏，有较明显的不均匀沉降，上部结构出现明显不均匀沉降裂缝，或外露基础明显腐蚀、酥碱、松散和剥落。', accident: '房屋倾斜或倒塌', level: 'orange', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '地基基础', content: '地基基础情况', riskIdentify: '地基基础局部或整体塌陷；上部结构不均匀沉降裂缝严重，且继续发展尚未稳定，或已出现明显倾斜。', accident: '房屋倾斜或倒塌', level: 'red', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '墙体', content: '墙体情况', riskIdentify: '承重墙体基本完好，无明显受力裂缝和变形；墙体转角处和纵、横墙交接处无松动、脱闪现象。', accident: '无', level: 'blue', measures: '无', basis: '' },
+        { main: '建筑结构信息', sub: '墙体', content: '墙体情况', riskIdentify: '承重墙体有少量受力裂缝和变形；墙体转角处和纵、横墙交接处无松动、脱闪现象。', accident: '墙体酥碎或倒塌', level: 'yellow', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '墙体', content: '墙体情况', riskIdentify: '承重墙体多数受力裂缝，部分承重墙体明显位移和歪闪；部分山墙转角处和纵、横墙交接处有明显松动、脱闪现象。', accident: '墙体酥碎或倒塌', level: 'orange', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '墙体', content: '墙体情况', riskIdentify: '承重墙体有明显歪闪、局部酥碎或倒塌；墙角处和纵、横墙交接处普遍松动和开裂。', accident: '墙体酥碎或倒塌', level: 'red', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '梁、柱', content: '梁、柱情况', riskIdentify: '梁、柱完好，无明显受力裂缝和变形，梁、柱节点无破损，无裂缝。', accident: '无', level: 'blue', measures: '无', basis: '' },
+        { main: '建筑结构信息', sub: '梁、柱', content: '梁、柱情况', riskIdentify: '梁、柱有轻微受力裂缝，梁、柱节点无破损，无裂缝。', accident: '梁、柱倒塌，房屋坍塌或局部坍塌', level: 'yellow', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '梁、柱', content: '梁、柱情况', riskIdentify: '梁、柱出现受力裂缝，但未完全丧失承载能力；个别梁柱节点破损和开裂明显。', accident: '梁、柱倒塌，房屋坍塌或局部坍塌', level: 'orange', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '梁、柱', content: '梁、柱情况', riskIdentify: '梁、柱节点损坏严重；梁、柱普遍开裂；梁、柱有明显变形和位移；部分柱基座滑移严重，有歪闪或局部倒塌。', accident: '梁、柱倒塌，房屋坍塌或局部坍塌', level: 'red', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '楼、屋盖', content: '楼、屋盖情况', riskIdentify: '楼板、屋盖板无明显受力裂缝和变形，板与梁搭接处无松动和裂缝。', accident: '无', level: 'blue', measures: '无', basis: '' },
+        { main: '建筑结构信息', sub: '楼、屋盖', content: '楼、屋盖情况', riskIdentify: '楼、屋盖板有轻微受力裂缝，但无明显变形；板与墙、梁搭接处有松动和轻微受力裂缝；屋架无倾斜，屋架与柱无明显位移。', accident: '房屋坍塌或局部坍塌', level: 'yellow', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '楼、屋盖', content: '楼、屋盖情况', riskIdentify: '楼、屋盖板有明显开裂；楼、屋盖板与墙、梁搭接处松动和明显受力裂缝，个别屋面板塌落。', accident: '房屋坍塌或局部坍塌', level: 'orange', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '楼、屋盖', content: '楼、屋盖情况', riskIdentify: '楼、屋盖板普遍开裂，且部分严重开裂；楼、屋盖板与墙、梁搭接处有松动和严重开裂，部分屋面板塌落；屋架歪闪，部分屋盖塌落。', accident: '房屋坍塌或局部坍塌', level: 'red', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '次要构件', content: '次要构件情况', riskIdentify: '非承重墙体、出屋面楼梯间墙体完好或有轻微裂缝。', accident: '无', level: 'blue', measures: '无', basis: '' },
+        { main: '建筑结构信息', sub: '次要构件', content: '次要构件情况', riskIdentify: '非承重墙体、出屋面楼梯间墙体等有轻微受力裂缝；抹灰等饰面层可有裂缝或局部散落。', accident: '房屋局部坍塌或次要构件脱落', level: 'yellow', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '次要构件', content: '次要构件情况', riskIdentify: '非承重墙体普遍明显受力裂缝；部分山墙转角处和纵、横墙交接处有明显松动、脱闪现象。', accident: '房屋局部坍塌或次要构件脱落', level: 'orange', measures: '维修加固', basis: '' },
+        { main: '建筑结构信息', sub: '次要构件', content: '次要构件情况', riskIdentify: '非承重墙、女儿墙局部倒塌或严重开裂。', accident: '房屋局部坍塌或次要构件脱落', level: 'red', measures: '维修加固', basis: '' },
+        { main: '建筑基本信息', sub: '建成时间', content: '楼龄', riskIdentify: '≥25年', accident: '年代久远，构件老化损坏', level: 'yellow', measures: '定期维修加固', basis: '' },
+        { main: '建筑基本信息', sub: '建成时间', content: '楼龄', riskIdentify: '≥40年', accident: '年代久远，构件老化损坏', level: 'orange', measures: '定期维修加固', basis: '' },
+        { main: '建筑基本信息', sub: '设计方式', content: '有无专业设计', riskIdentify: '无专业设计（未采用标准图集）', accident: '承载设计不合格', level: 'yellow', measures: '进行安全鉴定，按照鉴定结论进行整改', basis: '' },
+        { main: '建筑基本信息', sub: '改扩建情况', content: '是否改扩建', riskIdentify: '存在改扩建情况至少1次', accident: '私自改扩建导致房屋局部荷载变化，引起倒塌或局部倒塌情况的发生。', level: 'orange', measures: '进行安全鉴定，按照鉴定结论进行整改', basis: '' }
+    ];
+
     // 自建房安全：模拟数据
     var selfbuildData = [
         { main: '结构安全', sub: '地基基础', content: '不均匀沉降', riskIdentify: '房屋出现明显倾斜、墙体裂缝', accident: '坍塌', level: 'red', measures: '停止使用，委托鉴定，加固或拆除', basis: 'GB50300-2013' },
@@ -185,8 +213,8 @@
             gas: withDomain(gasData, 'gas'),
             falling: withDomain(fallingData, 'falling'),
             selfbuild: withDomain(selfbuildData, 'selfbuild'),
-            rural: withDomain(selfbuildData, 'rural'),
-            urban: withDomain(selfbuildData, 'urban')
+            rural: withDomain(ruralHouseData, 'rural'),
+            urban: withDomain(ruralHouseData, 'urban')
         },
         getList: function (domain, filters) {
             filters = filters || {};

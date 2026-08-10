@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>点位巡查记录</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/tokens.css">
+    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../assets/css/h5-frame.css">
+    <script src="../../pages/gas-risk-data.js"></script>
+    <style>
+        .law-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 0 var(--space);
+            background: var(--bg-dark);
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .law-body::-webkit-scrollbar { display: none; }
+
+        .hero-card {
+            background: var(--card);
+            width: 100%;
+            padding: var(--space);
+            box-sizing: border-box;
+            border-bottom: 1px solid var(--border);
+            border-radius: 0;
+        }
+        .hero-project {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.4;
+            margin-bottom: 6px;
+        }
+        .hero-task {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .hero-task i { color: var(--primary); font-size: 15px; }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 16px;
+        }
+        .hero-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+        .hero-item.full-width { grid-column: 1 / -1; }
+        .hero-item i {
+            font-size: 13px;
+            color: var(--text2);
+            width: 14px;
+            text-align: center;
+        }
+        .hero-item .label {
+            color: var(--text2);
+            white-space: nowrap;
+            font-size: 13px;
+        }
+        .hero-item .value {
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 13px;
+        }
+        .hero-item .value.sign-loc {
+            color: var(--primary);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .progress-bar-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: var(--card);
+            padding: 12px var(--space);
+            border-bottom: 1px solid var(--border);
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 0;
+        }
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 8px;
+        }
+        .progress-stats .stat-done { color: var(--success); font-weight: 600; }
+        .progress-stats .stat-risk { color: var(--dot-red); font-weight: 600; }
+        .progress-track {
+            height: 8px;
+            background: rgba(var(--primary-rgb), 0.12);
+            border-radius: 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 0;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 var(--space);
+            margin-top: var(--space);
+        }
+        .card-title i { color: var(--primary); font-size: 15px; }
+
+        .risk-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 10px var(--shadow);
+            border: 1px solid var(--border);
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .risk-card:hover { box-shadow: 0 4px 14px var(--shadow); }
+        .risk-card.completed { opacity: 0.7; }
+
+        .risk-card .risk-info { display: none; }
+
+        /* 底部抽屉 */
+        .drawer-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 1500;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.25s, visibility 0.25s;
+            border-radius: 28px;
+        }
+        .drawer-overlay.show { opacity: 1; visibility: visible; }
+        .drawer-panel {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--card);
+            border-radius: 16px 16px 28px 28px;
+            z-index: 1501;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
+            max-height: 70%;
+            display: flex;
+            flex-direction: column;
+        }
+        .drawer-panel.show { transform: translateY(0); }
+        .drawer-handle {
+            width: 36px;
+            height: 4px;
+            border-radius: 2px;
+            background: var(--border);
+            margin: 10px auto 6px;
+        }
+        .drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 16px 14px;
+            border-bottom: 1px solid var(--border);
+            position: relative;
+        }
+        .drawer-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+        .drawer-title i { color: var(--primary); }
+        .drawer-state-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(26,115,232,0.12);
+            color: var(--primary);
+            white-space: nowrap;
+        }
+        .drawer-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-dark);
+            color: var(--text2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .drawer-body {
+            overflow-y: auto;
+            padding: 16px 16px 10px;
+            flex: 1;
+        }
+        .drawer-footer {
+            padding: 10px 16px 16px;
+            border-top: 1px solid var(--border);
+            background: var(--card);
+            border-radius: 0 0 28px 28px;
+        }
+        .drawer-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            background: var(--primary);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .drawer-btn i { font-size: 14px; }
+
+        .risk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0;
+        }
+        .risk-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+            line-height: 1.4;
+        }
+        .risk-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+        .risk-status.normal { background: rgba(30,142,62,0.12); color: var(--success); }
+        .risk-status.risk { background: rgba(217,48,37,0.12); color: var(--dot-red); }
+        .risk-status.na { background: rgba(128,128,128,0.12); color: var(--text2); }
+
+        .drawer-row {
+            display: flex;
+            margin-bottom: 14px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .drawer-row:last-child { margin-bottom: 0; }
+        .drawer-row .label {
+            color: var(--text2);
+            white-space: nowrap;
+            width: 80px;
+            flex-shrink: 0;
+        }
+        .drawer-row .value {
+            color: var(--text-primary);
+            flex: 1;
+            word-break: break-word;
+        }
+        .drawer-row .value .level-tag { vertical-align: middle; }
+
+        .risk-info {
+            font-size: 13px;
+            color: var(--text2);
+            line-height: 1.8;
+            margin-top: 12px;
+            padding: 10px 0;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .risk-info-row { display: flex; margin-bottom: 6px; }
+        .risk-info-row:last-child { margin-bottom: 0; }
+        .risk-info-row .label {
+            color: var(--text2);
+            white-space: nowrap;
+            width: 70px;
+            font-size: 13px;
+        }
+        .risk-info-row .value {
+            color: var(--text-primary);
+            flex: 1;
+            font-size: 13px;
+        }
+
+        .level-tag {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+        .level-tag.red { background: var(--dot-red); }
+        .level-tag.orange { background: var(--dot-orange); }
+        .level-tag.yellow { background: var(--dot-yellow); }
+        .level-tag.blue { background: var(--primary); }
+
+        .flow-track {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .flow-step {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 10px;
+            background: var(--bg-dark);
+            color: var(--text2);
+        }
+        .flow-step.active {
+            background: rgba(26,115,232,0.12);
+            color: var(--primary);
+            font-weight: 600;
+        }
+        .flow-step.done {
+            background: rgba(30,142,62,0.12);
+            color: var(--success);
+        }
+        .flow-arrow { color: var(--text2); font-size: 10px; opacity: 0.5; }
+
+        .photo-grid {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        .photo-thumb {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+        }
+        .photo-thumb:active { opacity: 0.85; }
+
+        .offlist-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 10px var(--shadow);
+            border: 1px solid var(--border);
+            position: relative;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .offlist-card:hover { box-shadow: 0 4px 14px var(--shadow); }
+        .offlist-card .offlist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 0;
+        }
+        .offlist-card .offlist-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.5;
+            flex: 1;
+        }
+        .offlist-card .offlist-level {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .offlist-card .offlist-desc { display: none; }
+        .offlist-card .offlist-footer { display: none; }
+        .offlist-card .photo-grid { display: none; }
+
+        .bottom-spacer { height: 20px; }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text2); }
+        .empty-state i { font-size: 40px; color: var(--border); margin-bottom: 8px; }
+
+        .photo-preview-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 20px;
+        }
+        .photo-preview-box {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+        }
+        .photo-preview-box img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .photo-preview-close {
+            position: absolute;
+            top: -12px;
+            right: -12px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .phone-shell { overflow: hidden; }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="side-button side-button-left mute"></div>
+        <div class="side-button side-button-left volume-up"></div>
+        <div class="side-button side-button-left volume-down"></div>
+        <div class="side-button side-button-right power"></div>
+        <div class="phone-shell">
+            <div class="status-bar light">
+                <span class="sb-time" id="statusTime">9:41</span>
+                <span class="sb-icons">
+                    <i class="fa-solid fa-signal"></i>
+                    <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                    <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+                </span>
+            </div>
+
+            <div class="page-hero">
+                <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+                <div class="ph-title">点位巡查记录</div>
+            </div>
+
+            <div class="law-body">
+                <!-- 点位头 -->
+                <div class="hero-card anim d1">
+                    <div class="hero-project">解放小区3号楼燃气管道</div>
+                    <div class="hero-task">
+                        <i class="fa-solid fa-clipboard-list"></i>青村镇老旧小区管网应急排查
+                    </div>
+                    <div class="hero-grid">
+                        <div class="hero-item">
+                            <i class="fa-solid fa-tag"></i>
+                            <span class="label">类型</span>
+                            <span class="value">燃气管线</span>
+                        </div>
+                        <div class="hero-item">
+                            <i class="fa-solid fa-industry"></i>
+                            <span class="label">企业</span>
+                            <span class="value">奉贤燃气有限公司</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span class="label">地址</span>
+                            <span class="value">青村镇解放路88号3号楼</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-solid fa-map-pin"></i>
+                            <span class="label">签到定位</span>
+                            <span class="value sign-loc">青村镇解放路88号3号楼</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-regular fa-clock"></i>
+                            <span class="label">签到时间</span>
+                            <span class="value">2025-06-10 10:15</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-regular fa-clock"></i>
+                            <span class="label">完成时间</span>
+                            <span class="value">2025-06-10 10:38</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-solid fa-stopwatch"></i>
+                            <span class="label">巡查时长</span>
+                            <span class="value" id="patrolDuration">23 分钟</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 全局进度条 -->
+                <div class="progress-bar-sticky anim d2">
+                    <div class="progress-stats">
+                        <span>已完成 <span class="stat-done">5</span>/5 项</span>
+                        <span>异常 <span class="stat-risk">1</span> 项 · 清单外 <span class="stat-risk">1</span> 项</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <div class="card-title anim d2">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    风险清单排查
+                    <span style="font-size: 12px; color: var(--text2); font-weight: normal; margin-left: auto;">共 5 项</span>
+                </div>
+
+                <!-- 风险清单容器 -->
+                <div id="riskListContainer" class="anim d3" style="padding: 0 var(--space);">
+                    <div class="risk-card collapsed" data-status="normal">
+                        <div class="risk-header">
+                            <div class="risk-title">碳钢管 - 设备、设施、工具附件缺陷</div>
+                            <span class="risk-status normal"><i class="fa-solid fa-check"></i>正常</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card" data-status="risk" data-risk-name="碳钢管 - 违章作业" data-risk-level="重大隐患" data-risk-desc="第三方施工单位在燃气管道保护范围内进行机械开挖，未办理监护手续，已现场制止。" data-risk-scope="燃气管道保护范围周边 5 米区域，涉及解放路 88 号 3 号楼北侧管线" data-risk-deadline="2025-06-12 18:00" data-risk-photos="https://via.placeholder.com/120/1a73e8/fff?text=Photo1,https://via.placeholder.com/120/e65100/fff?text=Photo2" data-risk-state="待处置">
+                        <div class="risk-header">
+                            <div class="risk-title">碳钢管 - 违章作业</div>
+                            <span class="risk-status risk"><i class="fa-solid fa-xmark"></i>异常</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card collapsed" data-status="normal">
+                        <div class="risk-header">
+                            <div class="risk-title">碳钢管 - 强度不够</div>
+                            <span class="risk-status normal"><i class="fa-solid fa-check"></i>正常</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card collapsed" data-status="na">
+                        <div class="risk-header">
+                            <div class="risk-title">聚乙烯管 - 耐腐蚀性差</div>
+                            <span class="risk-status na"><i class="fa-solid fa-ban"></i>不适用</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card collapsed" data-status="normal">
+                        <div class="risk-header">
+                            <div class="risk-title">聚乙烯管 - 违章作业</div>
+                            <span class="risk-status normal"><i class="fa-solid fa-check"></i>正常</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 清单外问题区块 -->
+                <div class="anim d3" style="padding: 0 var(--space); margin-top: 8px;">
+                    <div class="card-title" style="padding-left: 0; padding-right: 0; margin-top: 0;">
+                        <i class="fa-solid fa-thumbtack" style="color: var(--primary);"></i>
+                        清单外问题
+                        <span style="font-size: 12px; color: var(--text2); font-weight: normal; margin-left: auto;">共 1 项</span>
+                    </div>
+                    <div class="offlist-card" data-offlist-name="楼道内燃气表前阀门锈蚀" data-offlist-level="一般隐患" data-offlist-desc="巡检时发现3号楼2单元楼道内燃气表前阀门存在明显锈蚀，开关不灵活，存在泄漏风险。" data-offlist-scope="3号楼2单元楼道内所有燃气表前阀门" data-offlist-deadline="2025-06-13 18:00" data-offlist-photos="https://via.placeholder.com/120/666/fff?text=Photo3" data-offlist-state="待处置">
+                        <div class="offlist-header">
+                            <div class="offlist-title">楼道内燃气表前阀门锈蚀</div>
+                            <span class="offlist-level" style="background: rgba(199,128,0,0.12); color: #c78000;"><span class="level-tag yellow"></span>一般隐患</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bottom-spacer"></div>
+            </div>
+
+            <!-- 风险隐患抽屉 -->
+            <div class="drawer-overlay" id="riskDrawerOverlay" onclick="closeRiskDrawer()"></div>
+            <div class="drawer-panel" id="riskDrawerPanel">
+                <div class="drawer-handle"></div>
+                <div class="drawer-header">
+                    <div class="drawer-title"><i class="fa-solid fa-triangle-exclamation"></i>隐患信息</div>
+                    <div class="drawer-state-tag" id="riskDrawerState"></div>
+                    <button class="drawer-close" onclick="closeRiskDrawer()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="drawer-body" id="riskDrawerBody">
+                    <!-- 动态填充 -->
+                </div>
+                <div class="drawer-footer">
+                    <a class="drawer-btn" id="riskDrawerDetailBtn" href="danger-handle.html">
+                        <i class="fa-solid fa-file-lines"></i>查看隐患详情
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/js/theme.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/risk-data.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        (function() {
+            // 自动计算巡查时长
+            function calcPatrolDuration() {
+                const signIn = new Date('2025-06-10 10:15');
+                const finish = new Date('2025-06-10 10:38');
+                const diffMs = finish - signIn;
+                if (diffMs > 0) {
+                    const minutes = Math.round(diffMs / 60000);
+                    const hours = Math.floor(minutes / 60);
+                    const rest = minutes % 60;
+                    let text = '';
+                    if (hours > 0) text += hours + ' 小时 ';
+                    text += rest + ' 分钟';
+                    const el = document.getElementById('patrolDuration');
+                    if (el) el.textContent = text;
+                }
+            }
+            calcPatrolDuration();
+
+            // 照片大图预览
+            window.showPhotoPreview = function(src) {
+                const overlay = document.createElement('div');
+                overlay.className = 'photo-preview-overlay';
+                overlay.innerHTML = '<div class="photo-preview-box">' +
+                    '<img src="' + src + '" alt="照片">' +
+                    '<button class="photo-preview-close" onclick="this.parentElement.parentElement.remove()">' +
+                    '<i class="fa-solid fa-times"></i></button></div>';
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) overlay.remove();
+                });
+                document.body.appendChild(overlay);
+            };
+
+            // 风险抽屉
+            const overlay = document.getElementById('riskDrawerOverlay');
+            const panel = document.getElementById('riskDrawerPanel');
+            const body = document.getElementById('riskDrawerBody');
+            const stateTag = document.getElementById('riskDrawerState');
+
+            function getRiskLevelColor(level) {
+                if (level.indexOf('重大') >= 0) return 'red';
+                if (level.indexOf('较大') >= 0) return 'orange';
+                if (level.indexOf('一般') >= 0) return 'yellow';
+                return 'blue';
+            }
+
+            function buildPhotosHtml(photos) {
+                if (!photos) return '无';
+                const urls = photos.split(',').filter(function(u) { return u.trim(); });
+                if (!urls.length) return '无';
+                let html = '<div class="photo-grid">';
+                urls.forEach(function(url) {
+                    html += '<img src="' + url + '" class="photo-thumb" onclick="showPhotoPreview(this.src)">';
+                });
+                html += '</div>';
+                return html;
+            }
+
+            window.openRiskDrawer = function(card) {
+                const name = card.dataset.riskName || card.dataset.offlistName || '-';
+                const level = card.dataset.riskLevel || card.dataset.offlistLevel || '-';
+                const desc = card.dataset.riskDesc || card.dataset.offlistDesc || '-';
+                const scope = card.dataset.riskScope || card.dataset.offlistScope || '-';
+                const deadline = card.dataset.riskDeadline || card.dataset.offlistDeadline || '-';
+                const photos = card.dataset.riskPhotos || card.dataset.offlistPhotos;
+                const state = card.dataset.riskState || card.dataset.offlistState || '-';
+
+                body.innerHTML =
+                    '<div class="drawer-row"><span class="label">隐患名称：</span><span class="value">' + name + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">隐患等级：</span><span class="value" style="color:var(--dot-red); font-weight:600;">' + level + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">隐患描述：</span><span class="value">' + desc + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">影响范围：</span><span class="value">' + scope + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">整改期限：</span><span class="value">' + deadline + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">现场照片：</span><span class="value">' + buildPhotosHtml(photos) + '</span></div>';
+
+                if (stateTag) stateTag.textContent = state;
+
+                overlay.classList.add('show');
+                panel.classList.add('show');
+            };
+
+            window.closeRiskDrawer = function() {
+                overlay.classList.remove('show');
+                panel.classList.remove('show');
+            };
+
+            // 点击风险卡片打开抽屉（仅异常项）
+            document.querySelectorAll('.risk-card').forEach(function(card) {
+                card.addEventListener('click', function(e) {
+                    if (e.target.closest('.photo-thumb')) return;
+                    if (this.dataset.status !== 'risk') return;
+                    openRiskDrawer(this);
+                });
+            });
+
+            // 点击清单外问题卡片打开抽屉
+            document.querySelectorAll('.offlist-card').forEach(function(card) {
+                card.addEventListener('click', function(e) {
+                    if (e.target.closest('.photo-thumb')) return;
+                    openRiskDrawer(this);
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

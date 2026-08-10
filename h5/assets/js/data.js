@@ -211,7 +211,8 @@
         // 我的反馈（与 myReports 同步，展示处理状态）
         myFeedback: [
             { id: 'MR-2026-0001', title: '路口信号灯不亮', status: 'handling', statusLabel: '处理中', updateTime: dateAdd(-60), reply: '已派单至交警支队，预计今日修复。' },
-            { id: 'MR-2026-0002', title: '施工围挡破损', status: 'closed', statusLabel: '已办结', updateTime: dateAdd(-120), reply: '施工单位已修复并加固，感谢您反馈。' }
+            { id: 'MR-2026-0002', title: '施工围挡破损', status: 'closed', statusLabel: '已办结', updateTime: dateAdd(-120), reply: '施工单位已修复并加固，感谢您反馈。' },
+            { id: 'MR-2026-0003', title: '农村自建房墙体开裂', status: 'handling', statusLabel: '处理中', updateTime: dateAdd(-180), reply: '已联系第三方检测机构，将于近日上门鉴定。' }
         ],
 
         // 巡查任务（以奉贤区各街镇为例）

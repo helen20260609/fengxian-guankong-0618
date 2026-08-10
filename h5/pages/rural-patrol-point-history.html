@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>点位巡查记录</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/tokens.css">
+    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../assets/css/h5-frame.css">
+    <style>
+        .law-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 0 var(--space);
+            background: var(--bg-dark);
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .law-body::-webkit-scrollbar { display: none; }
+
+        .hero-card {
+            background: var(--card);
+            width: 100%;
+            padding: var(--space);
+            box-sizing: border-box;
+            border-bottom: 1px solid var(--border);
+            border-radius: 0;
+        }
+        .hero-project {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.4;
+            margin-bottom: 6px;
+        }
+        .hero-task {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .hero-task i { color: var(--primary); font-size: 15px; }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 16px;
+        }
+        .hero-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+        .hero-item.full-width { grid-column: 1 / -1; }
+        .hero-item i {
+            font-size: 13px;
+            color: var(--text2);
+            width: 14px;
+            text-align: center;
+        }
+        .hero-item .label { color: var(--text2); white-space: nowrap; font-size: 13px; }
+        .hero-item .value { color: var(--text-primary); font-weight: 500; font-size: 13px; }
+        .hero-item .value.sign-loc {
+            color: var(--primary);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .progress-bar-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: var(--card);
+            padding: 12px var(--space);
+            border-bottom: 1px solid var(--border);
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 0;
+        }
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 8px;
+        }
+        .progress-stats .stat-done { color: var(--success); font-weight: 600; }
+        .progress-stats .stat-risk { color: var(--dot-red); font-weight: 600; }
+        .progress-track {
+            height: 8px;
+            background: rgba(var(--primary-rgb), 0.12);
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 var(--space);
+            margin-top: var(--space);
+        }
+        .card-title i { color: var(--primary); font-size: 15px; }
+
+        .risk-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 10px var(--shadow);
+            border: 1px solid var(--border);
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .risk-card:hover { box-shadow: 0 4px 14px var(--shadow); }
+
+        .risk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .risk-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+            line-height: 1.4;
+        }
+        .risk-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+        .risk-status.normal { background: rgba(30,142,62,0.12); color: var(--success); }
+        .risk-status.risk { background: rgba(217,48,37,0.12); color: var(--dot-red); }
+        .risk-status.na { background: rgba(128,128,128,0.12); color: var(--text2); }
+
+        .drawer-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 1500;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.25s, visibility 0.25s;
+            border-radius: 28px;
+        }
+        .drawer-overlay.show { opacity: 1; visibility: visible; }
+        .drawer-panel {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--card);
+            border-radius: 16px 16px 28px 28px;
+            z-index: 1501;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
+            max-height: 70%;
+            display: flex;
+            flex-direction: column;
+        }
+        .drawer-panel.show { transform: translateY(0); }
+        .drawer-handle {
+            width: 36px;
+            height: 4px;
+            border-radius: 2px;
+            background: var(--border);
+            margin: 10px auto 6px;
+        }
+        .drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 16px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .drawer-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+        .drawer-title i { color: var(--primary); }
+        .drawer-state-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(26,115,232,0.12);
+            color: var(--primary);
+            white-space: nowrap;
+        }
+        .drawer-state-tag.done { background: rgba(30,142,62,0.12); color: var(--success); }
+        .drawer-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-dark);
+            color: var(--text2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .drawer-body { overflow-y: auto; padding: 16px 16px 10px; flex: 1; }
+        .drawer-footer {
+            padding: 10px 16px 16px;
+            border-top: 1px solid var(--border);
+            background: var(--card);
+            border-radius: 0 0 28px 28px;
+        }
+        .drawer-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            background: var(--primary);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .drawer-btn i { font-size: 14px; }
+
+        .drawer-row {
+            display: flex;
+            margin-bottom: 14px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .drawer-row:last-child { margin-bottom: 0; }
+        .drawer-row .label { color: var(--text2); white-space: nowrap; width: 80px; flex-shrink: 0; }
+        .drawer-row .value { color: var(--text-primary); flex: 1; word-break: break-word; }
+
+        .level-tag {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+        .level-tag.red { background: var(--dot-red); }
+        .level-tag.orange { background: var(--dot-orange); }
+        .level-tag.yellow { background: var(--dot-yellow); }
+
+        .photo-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .photo-thumb {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+        }
+        .photo-thumb:active { opacity: 0.85; }
+
+        .offlist-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 10px var(--shadow);
+            border: 1px solid var(--border);
+            position: relative;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .offlist-card:hover { box-shadow: 0 4px 14px var(--shadow); }
+        .offlist-card .offlist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        .offlist-card .offlist-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.5;
+            flex: 1;
+        }
+        .offlist-card .offlist-level {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .bottom-spacer { height: 20px; }
+
+        .photo-preview-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 20px;
+        }
+        .photo-preview-box { position: relative; max-width: 90vw; max-height: 90vh; }
+        .photo-preview-box img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .photo-preview-close {
+            position: absolute;
+            top: -12px;
+            right: -12px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .phone-shell { overflow: hidden; }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="side-button side-button-left mute"></div>
+        <div class="side-button side-button-left volume-up"></div>
+        <div class="side-button side-button-left volume-down"></div>
+        <div class="side-button side-button-right power"></div>
+        <div class="phone-home-indicator"></div>
+        <div class="phone-shell">
+            <div class="status-bar light">
+                <span class="sb-time" id="statusTime">9:41</span>
+                <span class="sb-icons">
+                    <i class="fa-solid fa-signal"></i>
+                    <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                    <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+                </span>
+            </div>
+
+            <div class="page-hero">
+                <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+                <div class="ph-title">点位巡查记录</div>
+            </div>
+
+            <div class="law-body">
+                <!-- 点位头 -->
+                <div class="hero-card anim d1">
+                    <div class="hero-project">渔人码头村海味民宿</div>
+                    <div class="hero-task">
+                        <i class="fa-solid fa-clipboard-list"></i>海湾旅游区民宿自建房消防专项巡查
+                    </div>
+                    <div class="hero-grid">
+                        <div class="hero-item">
+                            <i class="fa-solid fa-tag"></i>
+                            <span class="label">类型</span>
+                            <span class="value">经营性用房</span>
+                        </div>
+                        <div class="hero-item">
+                            <i class="fa-solid fa-user"></i>
+                            <span class="label">户主</span>
+                            <span class="value">王大强</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-solid fa-location-dot"></i>
+                            <span class="label">地址</span>
+                            <span class="value">海湾旅游区渔人码头村海滨路18号</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-solid fa-map-pin"></i>
+                            <span class="label">签到定位</span>
+                            <span class="value sign-loc">海湾旅游区渔人码头村海滨路18号</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-regular fa-clock"></i>
+                            <span class="label">签到时间</span>
+                            <span class="value">2025-05-20 09:30</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-regular fa-clock"></i>
+                            <span class="label">完成时间</span>
+                            <span class="value">2025-05-20 09:58</span>
+                        </div>
+                        <div class="hero-item full-width">
+                            <i class="fa-solid fa-stopwatch"></i>
+                            <span class="label">巡查时长</span>
+                            <span class="value" id="patrolDuration">28 分钟</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 全局进度条 -->
+                <div class="progress-bar-sticky anim d2">
+                    <div class="progress-stats">
+                        <span>已完成 <span class="stat-done">6</span>/6 项</span>
+                        <span>异常 <span class="stat-risk">2</span> 项 · 清单外 <span class="stat-risk">1</span> 项</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <div class="card-title anim d2">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    风险清单排查
+                    <span style="font-size: 12px; color: var(--text2); font-weight: normal; margin-left: auto;">共 6 项</span>
+                </div>
+
+                <!-- 风险清单容器 -->
+                <div id="riskListContainer" class="anim d3" style="padding: 0 var(--space);">
+                    <div class="risk-card" data-status="risk" data-risk-name="结构安全 - 违规加层搭建" data-risk-level="重大隐患" data-risk-desc="该民宿在三层原有结构基础上违规加建一层钢结构阁楼，用于客房经营，未取得任何审批手续，存在结构安全隐患。" data-risk-scope="三层加建阁楼整层，约 60 平方米" data-risk-deadline="2025-05-25 18:00" data-risk-photos="https://via.placeholder.com/120/d93025/fff?text=Photo1,https://via.placeholder.com/120/e65100/fff?text=Photo2" data-risk-state="已整改">
+                        <div class="risk-header">
+                            <div class="risk-title">结构安全 - 违规加层搭建</div>
+                            <span class="risk-status risk"><i class="fa-solid fa-xmark"></i>异常</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card collapsed" data-status="normal">
+                        <div class="risk-header">
+                            <div class="risk-title">结构安全 - 墙体开裂、地基沉降</div>
+                            <span class="risk-status normal"><i class="fa-solid fa-check"></i>正常</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card" data-status="risk" data-risk-name="消防安全 - 疏散通道堵塞" data-risk-level="较大隐患" data-risk-desc="二层疏散楼梯间堆放大量杂物及瓶装液化气罐，疏散通道净宽度不足 0.9 米，影响紧急疏散。" data-risk-scope="二层疏散楼梯间及走廊区域" data-risk-deadline="2025-05-22 18:00" data-risk-photos="https://via.placeholder.com/120/1a73e8/fff?text=Photo3" data-risk-state="已整改">
+                        <div class="risk-header">
+                            <div class="risk-title">消防安全 - 疏散通道堵塞</div>
+                            <span class="risk-status risk"><i class="fa-solid fa-xmark"></i>异常</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card collapsed" data-status="normal">
+                        <div class="risk-header">
+                            <div class="risk-title">消防安全 - 灭火器材配备不足</div>
+                            <span class="risk-status normal"><i class="fa-solid fa-check"></i>正常</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card collapsed" data-status="normal">
+                        <div class="risk-header">
+                            <div class="risk-title">用电安全 - 电气线路老化私拉乱接</div>
+                            <span class="risk-status normal"><i class="fa-solid fa-check"></i>正常</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-card collapsed" data-status="na">
+                        <div class="risk-header">
+                            <div class="risk-title">燃气安全 - 瓶装液化气违规存放</div>
+                            <span class="risk-status na"><i class="fa-solid fa-ban"></i>不适用</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 清单外问题区块 -->
+                <div class="anim d3" style="padding: 0 var(--space); margin-top: 8px;">
+                    <div class="card-title" style="padding-left: 0; padding-right: 0; margin-top: 0;">
+                        <i class="fa-solid fa-thumbtack" style="color: var(--primary);"></i>
+                        清单外问题
+                        <span style="font-size: 12px; color: var(--text2); font-weight: normal; margin-left: auto;">共 1 项</span>
+                    </div>
+                    <div class="offlist-card" data-offlist-name="厨房油烟管道积油严重" data-offlist-level="一般隐患" data-offlist-desc="民宿厨房排烟管道长期未清洗，内壁积油较厚，遇明火易引发火灾。" data-offlist-scope="一层厨房排烟管道全段" data-offlist-deadline="2025-05-23 18:00" data-offlist-photos="https://via.placeholder.com/120/666/fff?text=Photo4" data-offlist-state="已整改">
+                        <div class="offlist-header">
+                            <div class="offlist-title">厨房油烟管道积油严重</div>
+                            <span class="offlist-level" style="background: rgba(199,128,0,0.12); color: #c78000;">一般隐患</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bottom-spacer"></div>
+            </div>
+
+            <!-- 风险隐患抽屉 -->
+            <div class="drawer-overlay" id="riskDrawerOverlay" onclick="closeRiskDrawer()"></div>
+            <div class="drawer-panel" id="riskDrawerPanel">
+                <div class="drawer-handle"></div>
+                <div class="drawer-header">
+                    <div class="drawer-title"><i class="fa-solid fa-triangle-exclamation"></i>隐患信息</div>
+                    <div class="drawer-state-tag done" id="riskDrawerState"></div>
+                    <button class="drawer-close" onclick="closeRiskDrawer()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="drawer-body" id="riskDrawerBody">
+                    <!-- 动态填充 -->
+                </div>
+                <div class="drawer-footer">
+                    <a class="drawer-btn" id="riskDrawerDetailBtn" href="rural-danger-handle.html">
+                        <i class="fa-solid fa-file-lines"></i>查看隐患详情
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/js/theme.js"></script>
+    <script src="../assets/js/data.js"></script>
+    <script src="../assets/js/risk-data.js"></script>
+    <script src="../assets/js/app.js"></script>
+    <script>
+        (function() {
+            // 自动计算巡查时长
+            function calcPatrolDuration() {
+                const signIn = new Date('2025-05-20 09:30');
+                const finish = new Date('2025-05-20 09:58');
+                const diffMs = finish - signIn;
+                if (diffMs > 0) {
+                    const minutes = Math.round(diffMs / 60000);
+                    const hours = Math.floor(minutes / 60);
+                    const rest = minutes % 60;
+                    let text = '';
+                    if (hours > 0) text += hours + ' 小时 ';
+                    text += rest + ' 分钟';
+                    const el = document.getElementById('patrolDuration');
+                    if (el) el.textContent = text;
+                }
+            }
+            calcPatrolDuration();
+
+            // 照片大图预览
+            window.showPhotoPreview = function(src) {
+                const overlay = document.createElement('div');
+                overlay.className = 'photo-preview-overlay';
+                overlay.innerHTML = '<div class="photo-preview-box">' +
+                    '<img src="' + src + '" alt="照片">' +
+                    '<button class="photo-preview-close" onclick="this.parentElement.parentElement.remove()">' +
+                    '<i class="fa-solid fa-times"></i></button></div>';
+                overlay.addEventListener('click', function(e) {
+                    if (e.target === overlay) overlay.remove();
+                });
+                document.body.appendChild(overlay);
+            };
+
+            // 风险抽屉
+            const overlay = document.getElementById('riskDrawerOverlay');
+            const panel = document.getElementById('riskDrawerPanel');
+            const body = document.getElementById('riskDrawerBody');
+            const stateTag = document.getElementById('riskDrawerState');
+
+            function buildPhotosHtml(photos) {
+                if (!photos) return '无';
+                const urls = photos.split(',').filter(function(u) { return u.trim(); });
+                if (!urls.length) return '无';
+                let html = '<div class="photo-grid">';
+                urls.forEach(function(url) {
+                    html += '<img src="' + url + '" class="photo-thumb" onclick="showPhotoPreview(this.src)">';
+                });
+                html += '</div>';
+                return html;
+            }
+
+            window.openRiskDrawer = function(card) {
+                const name = card.dataset.riskName || card.dataset.offlistName || '-';
+                const level = card.dataset.riskLevel || card.dataset.offlistLevel || '-';
+                const desc = card.dataset.riskDesc || card.dataset.offlistDesc || '-';
+                const scope = card.dataset.riskScope || card.dataset.offlistScope || '-';
+                const deadline = card.dataset.riskDeadline || card.dataset.offlistDeadline || '-';
+                const photos = card.dataset.riskPhotos || card.dataset.offlistPhotos;
+                const state = card.dataset.riskState || card.dataset.offlistState || '-';
+                const levelColors = {
+                    '重大隐患': 'var(--dot-red)',
+                    '较大隐患': 'var(--dot-orange)',
+                    '一般隐患': '#c78000',
+                    '轻微隐患': 'var(--success)'
+                };
+                const levelColor = levelColors[level] || 'var(--text-primary)';
+
+                body.innerHTML =
+                    '<div class="drawer-row"><span class="label">隐患名称：</span><span class="value">' + name + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">隐患等级：</span><span class="value" style="color:' + levelColor + '; font-weight:600;">' + level + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">隐患描述：</span><span class="value">' + desc + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">影响范围：</span><span class="value">' + scope + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">整改期限：</span><span class="value">' + deadline + '</span></div>' +
+                    '<div class="drawer-row"><span class="label">现场照片：</span><span class="value">' + buildPhotosHtml(photos) + '</span></div>';
+
+                if (stateTag) stateTag.textContent = state;
+
+                overlay.classList.add('show');
+                panel.classList.add('show');
+            };
+
+            window.closeRiskDrawer = function() {
+                overlay.classList.remove('show');
+                panel.classList.remove('show');
+            };
+
+            // 点击风险卡片打开抽屉（仅异常项）
+            document.querySelectorAll('.risk-card').forEach(function(card) {
+                card.addEventListener('click', function(e) {
+                    if (e.target.closest('.photo-thumb')) return;
+                    if (this.dataset.status !== 'risk') return;
+                    openRiskDrawer(this);
+                });
+            });
+
+            // 点击清单外问题卡片打开抽屉
+            document.querySelectorAll('.offlist-card').forEach(function(card) {
+                card.addEventListener('click', function(e) {
+                    if (e.target.closest('.photo-thumb')) return;
+                    openRiskDrawer(this);
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

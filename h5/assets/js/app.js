@@ -45,8 +45,7 @@
         { id: 'personnel-transfer', icon: 'fa-people-roof', label: '人员转移安置', href: 'pages/personnel-transfer-list.html' },
         { id: 'disaster-management', icon: 'fa-house-crack', label: '灾情管理', href: 'pages/disaster-management-list.html' },
         { id: 'knowledge-flood-typhoon', icon: 'fa-cloud-showers-heavy', label: '防汛防台', href: 'pages/knowledge-flood-typhoon.html' },
-        { id: 'gas-monitor-list', icon: 'fa-tower-broadcast', label: '风险隐患监测', href: 'pages/gas-monitor-list.html' },
-        { id: 'rural-house', icon: 'fa-house-chimney', label: '农村自建房', href: 'pages/rural-patrol-mission.html' }
+        { id: 'gas-monitor-list', icon: 'fa-tower-broadcast', label: '风险隐患监测', href: 'pages/gas-monitor-list.html' }
     ];
 
     // 巡查人员首页常用功能预定义池
@@ -74,10 +73,9 @@
         { id: 'snap-report', icon: 'fa-camera', label: '随手拍', href: 'pages/snap-report.html' },
         { id: 'hidden-danger-list', icon: 'fa-triangle-exclamation', label: '隐患管理', href: 'pages/hidden-danger-list.html' },
         { id: 'assessment', icon: 'fa-chart-pie', label: '评估分析', href: 'pages/assessment.html' },
-        { id: 'gas-monitor-list', icon: 'fa-tower-broadcast', label: '风险隐患监测', href: 'pages/gas-monitor-list.html' },
-        { id: 'rural-patrol', icon: 'fa-house-chimney', label: '农村自建房巡查', href: 'pages/rural-patrol-mission.html' }
+        { id: 'gas-monitor-list', icon: 'fa-tower-broadcast', label: '风险隐患监测', href: 'pages/gas-monitor-list.html' }
     ];
-    var INSPECTOR_HOME_DEFAULT = ['todo', 'danger-report', 'warning', 'region', 'risk', 'rural-patrol'];
+    var INSPECTOR_HOME_DEFAULT = ['todo', 'danger-report', 'warning', 'region', 'risk'];
 
     // 企业人员首页常用功能预定义池
     var ENTERPRISE_APP_POOL = [
@@ -93,11 +91,10 @@
         { id: 'contacts', icon: 'fa-address-book', label: '通讯录', href: 'pages/contacts.html' },
         { id: 'messages', icon: 'fa-comment-dots', label: '消息中心', href: 'pages/messages.html' },
         { id: 'report-generation', icon: 'fa-file-lines', label: '报告生成', href: 'pages/report-generation.html' },
-        { id: 'my-feedback', icon: 'fa-comments', label: '我的反馈', href: 'pages/my-feedback.html' },
-        { id: 'rural-house', icon: 'fa-house-chimney', label: '农村自建房', href: 'pages/rural-patrol-mission.html' }
+        { id: 'my-feedback', icon: 'fa-comments', label: '我的反馈', href: 'pages/my-feedback.html' }
     ];
-    // 默认常用应用：隐患上报、整改反馈、自查填报、风险清单、知识栏目、农村自建房
-    var ENTERPRISE_HOME_DEFAULT = ['danger-report', 'rectify-feedback', 'self-inspect', 'risk-list', 'knowledge', 'rural-house'];
+    // 默认常用应用：隐患上报、整改反馈、自查填报、风险清单、知识栏目
+    var ENTERPRISE_HOME_DEFAULT = ['danger-report', 'rectify-feedback', 'self-inspect', 'risk-list', 'knowledge'];
 
     var App = {
         role: localStorage.getItem('risk-role') || DataStore.user.role || 'public',
@@ -328,10 +325,13 @@
     App.getManagerApps = function () {
         var saved = localStorage.getItem('risk-manager-apps');
         if (saved) {
-            try { return JSON.parse(saved); } catch (e) {}
+            try {
+                // 过滤已移除的 rural-house 入口
+                return JSON.parse(saved).filter(function(id) { return id !== 'rural-house'; });
+            } catch (e) {}
         }
-        // 默认常用应用：待办事项、预警中心、实时监测、实时发布、辅助决策、通讯录、一张图、农村自建房
-        return ['todo', 'warning-center', 'monitoring', 'real-time-release', 'decision-info', 'contacts', 'one-map', 'rural-house'];
+        // 默认常用应用：待办事项、预警中心、实时监测、实时发布、辅助决策、通讯录、一张图
+        return ['todo', 'warning-center', 'monitoring', 'real-time-release', 'decision-info', 'contacts', 'one-map'];
     };
     App.setManagerApps = function (appIds) {
         localStorage.setItem('risk-manager-apps', JSON.stringify(appIds));
@@ -344,7 +344,10 @@
     App.getInspectorHomeApps = function () {
         var saved = localStorage.getItem('risk-inspector-home-apps');
         if (saved) {
-            try { return JSON.parse(saved); } catch (e) {}
+            try {
+                // 过滤已移除的 rural-patrol 入口
+                return JSON.parse(saved).filter(function(id) { return id !== 'rural-patrol'; });
+            } catch (e) {}
         }
         return INSPECTOR_HOME_DEFAULT.slice();
     };
@@ -362,7 +365,10 @@
     App.getEnterpriseHomeApps = function () {
         var saved = localStorage.getItem('risk-enterprise-home-apps');
         if (saved) {
-            try { return JSON.parse(saved); } catch (e) {}
+            try {
+                // 过滤已移除的 rural-house 入口
+                return JSON.parse(saved).filter(function(id) { return id !== 'rural-house'; });
+            } catch (e) {}
         }
         return ENTERPRISE_HOME_DEFAULT.slice();
     };

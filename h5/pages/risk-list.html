@@ -14,6 +14,16 @@
 .filter-chips .chip { flex-shrink: 0; padding: 5px 12px; border-radius: 10px; font-size: 11px; border: 1px solid var(--border); background: var(--card); color: var(--text-primary); display: flex; align-items: center; gap: 4px; }
 .filter-chips .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .filter-chips .chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+/* 等级标签与列表记录 badge 样式一致（仅农村/城镇自建房） */
+.filter-chips .chip.risk-badge { border: none; font-size: var(--font-xs); font-weight: 700; padding: 5px 10px; border-radius: 999px; }
+.filter-chips .chip.risk-badge.active { box-shadow: 0 0 0 2px currentColor inset; }
+.filter-chips .chip.risk-badge.active.red { background: rgba(217, 48, 37, .12); color: var(--dot-red); }
+.filter-chips .chip.risk-badge.active.orange { background: rgba(227, 116, 0, .12); color: var(--dot-orange); }
+.filter-chips .chip.risk-badge.active.yellow { background: rgba(249, 171, 0, .15); color: #c68400; }
+:root[data-theme="dark"] .filter-chips .chip.risk-badge.active.yellow { color: var(--dot-yellow); }
+.filter-chips .chip.risk-badge.active.blue { background: rgba(26, 115, 232, .12); color: var(--dot-blue); }
+/* 列表记录中完好房徽标两行居中 */
+.risk-badge.two-line { flex-direction: column; gap: 0; line-height: 1.3; padding: 4px 8px; text-align: center; }
 
 .load-more { text-align: center; padding: 16px; color: var(--text2); font-size: 11px; }
 .load-more i { margin-right: 4px; }
@@ -72,10 +82,10 @@
 
         <div class="filter-chips" id="levelFilter">
             <div class="chip active" data-level="">全部</div>
-            <div class="chip" data-level="red"><span class="dot" style="background:var(--dot-red)"></span>红色</div>
-            <div class="chip" data-level="orange"><span class="dot" style="background:var(--dot-orange)"></span>橙色</div>
-            <div class="chip" data-level="yellow"><span class="dot" style="background:var(--dot-yellow)"></span>黄色</div>
-            <div class="chip" data-level="blue"><span class="dot" style="background:var(--dot-blue)"></span>蓝色</div>
+            <div class="chip" data-level="red">红色</div>
+            <div class="chip" data-level="orange">橙色</div>
+            <div class="chip" data-level="yellow">黄色</div>
+            <div class="chip" data-level="blue">蓝色</div>
         </div>
 
         <div class="split-layout">
@@ -111,28 +121,34 @@
         return;
     }
 
-    var isSelfbuild = currentDomain === 'selfbuild';
+    var isHouseDomain = currentDomain === 'rural' || currentDomain === 'urban';
     var selfbuildLevelNames = {
         red: '疑似危房',
         orange: '严重损坏房',
         yellow: '一般损坏房',
-        blue: '完好房(基本完好房)'
+        blue: '完好房（基本完好房）'
     };
 
     function updateLevelLabels() {
-        if (!isSelfbuild) return;
+        if (!isHouseDomain) return;
         document.querySelectorAll('#levelFilter .chip[data-level]').forEach(function(c) {
             var lv = c.dataset.level;
             if (!lv) return;
-            var name = selfbuildLevelNames[lv] || '';
-            var dot = c.querySelector('.dot');
-            c.textContent = '';
-            if (dot) c.appendChild(dot);
-            c.appendChild(document.createTextNode(name));
+            c.textContent = selfbuildLevelNames[lv] || '';
         });
         document.querySelectorAll('.hero-stats-v2 .hs-label[data-level]').forEach(function(l) {
             var lv = l.dataset.level;
             if (lv && selfbuildLevelNames[lv]) l.textContent = selfbuildLevelNames[lv];
+        });
+    }
+
+    // 筛选标签使用与列表记录相同的 risk-badge 配色（仅农村/城镇自建房）
+    function styleLevelChips() {
+        if (!isHouseDomain) return;
+        document.querySelectorAll('#levelFilter .chip[data-level]').forEach(function(c) {
+            var lv = c.dataset.level;
+            if (!lv) return;
+            c.classList.add('risk-badge', lv);
         });
     }
 
@@ -146,7 +162,7 @@
     }
 
     function renderStats() {
-        var all = RiskData.getAll ? RiskData.getAll() : [];
+        var all = RiskData.getList(currentDomain, {});
         var counts = { red: 0, orange: 0, yellow: 0, blue: 0 };
         all.forEach(function(item) {
             if (counts[item.level] !== undefined) counts[item.level]++;
@@ -188,6 +204,11 @@
         if (clear) container.innerHTML = '';
 
         var list = RiskData.getList(currentDomain, { level: currentLevel, keyword: keyword });
+        // 按风险等级排序：红(red) > 橙(orange) > 黄(yellow) > 蓝(blue)
+        var levelOrder = { red: 0, orange: 1, yellow: 2, blue: 3 };
+        list = list.slice().sort(function(a, b) {
+            return (levelOrder[a.level] !== undefined ? levelOrder[a.level] : 99) - (levelOrder[b.level] !== undefined ? levelOrder[b.level] : 99);
+        });
         var total = list.length;
         var start = (currentPage - 1) * pageSize;
         var pageItems = list.slice(start, start + pageSize);
@@ -205,7 +226,7 @@
             var html = '<div class="risk-card-item tap anim" ' + clickAction + '>' +
                 '<div class="rc-header">' +
                 '<div class="rc-title">' + App.escapeHtml(item.riskIdentify.length > 40 ? item.riskIdentify.slice(0, 40) + '…' : item.riskIdentify) + '</div>' +
-                '<span class="risk-badge ' + item.level + '" style="flex-shrink:0"><span class="risk-dot ' + item.level + '"></span> ' + levelName(item.level) + '</span>' +
+                '<span class="risk-badge ' + item.level + (isHouseDomain && item.level === 'blue' ? ' two-line' : '') + '" style="flex-shrink:0">' + levelName(item.level) + '</span>' +
                 '</div>' +
                 '<div class="rc-meta">' +
                 '<span><i class="fa-solid fa-layer-group"></i> ' + App.escapeHtml(item.main) + '</span>' +
@@ -224,7 +245,10 @@
     }
 
     function levelName(level) {
-        if (isSelfbuild && selfbuildLevelNames[level]) {
+        if (isHouseDomain && selfbuildLevelNames[level]) {
+            if (level === 'blue') {
+                return '<span>完好房</span><span>（基本完好房）</span>';
+            }
             return selfbuildLevelNames[level];
         }
         var map = { red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色' };
@@ -253,6 +277,7 @@
     document.getElementById('searchInput').addEventListener('input', App.debounce(handleSearch, 400));
 
     updateLevelLabels();
+    styleLevelChips();
     renderStats();
     renderList(true);
 })();
