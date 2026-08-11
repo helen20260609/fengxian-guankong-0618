@@ -227,6 +227,12 @@ body {
     padding: 8px 10px;
     font-size: 12px;
     color: var(--text-secondary);
+    line-height: 1.5;
+}
+.evidence-info .photo-time {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.8;
 }
 
 /* ===== Evidence Groups ===== */
@@ -1335,10 +1341,6 @@ body {
                 <span class="info-value" id="base-riskLevel"><span class="risk-badge red">-</span></span>
             </div>
             <div class="info-item">
-                <span class="info-label">所属房屋</span>
-                <span class="info-value" id="base-houseName">-</span>
-            </div>
-            <div class="info-item">
                 <span class="info-label">隐患地址</span>
                 <span class="info-value" id="base-address">-</span>
             </div>
@@ -1386,15 +1388,15 @@ body {
             <div class="evidence-gallery" id="evidence-gallery">
                 <div class="evidence-item">
                     <div class="evidence-thumb"><i class="fa-regular fa-image"></i></div>
-                    <div class="evidence-info">巡查照片 1</div>
+                    <div class="evidence-info">巡查照片 1<br><span class="photo-time">拍摄时间：2026-08-09 09:30</span></div>
                 </div>
                 <div class="evidence-item">
                     <div class="evidence-thumb"><i class="fa-regular fa-image"></i></div>
-                    <div class="evidence-info">巡查照片 2</div>
+                    <div class="evidence-info">巡查照片 2<br><span class="photo-time">拍摄时间：2026-08-09 10:15</span></div>
                 </div>
                 <div class="evidence-item">
                     <div class="evidence-thumb"><i class="fa-regular fa-image"></i></div>
-                    <div class="evidence-info">巡查照片 3</div>
+                    <div class="evidence-info">巡查照片 3<br><span class="photo-time">拍摄时间：2026-08-09 11:00</span></div>
                 </div>
             </div>
         </div>
@@ -1649,8 +1651,8 @@ body {
 
         <!-- Submit Buttons -->
         <div class="audit-actions" style="display: flex; gap: 12px; margin-top: 16px;">
-            <button class="btn btn-secondary" onclick="window.location.href=&#39;rural-warning-management.html&#39;" style="flex: 1; height: 44px; justify-content: center;">
-                <i class="fa-solid fa-arrow-left"></i> 返回列表
+            <button class="btn btn-secondary" onclick="saveDraft()" style="flex: 1; height: 44px; justify-content: center;">
+                <i class="fa-solid fa-floppy-disk"></i> 暂存
             </button>
             <button class="btn btn-primary" id="submit-btn" style="flex: 1; height: 44px; justify-content: center;">
                 <i class="fa-solid fa-check"></i> 确认提交
@@ -1787,6 +1789,10 @@ function selectDecision(el, type) {
 
 function applyExpert() {
     alert('已申请专家/机构评估');
+}
+
+function saveDraft() {
+    alert('已暂存');
 }
 
 function toggleExpertPanel() {
@@ -2123,13 +2129,32 @@ function submitExpertApply() {
         // 各节点时间（有真实时间则显示，后续节点为空）
         const manage = rec.manageRecords || [];
         const dispatchTime = manage.length ? (manage[0].assignTime || '') : '';
+
+        // 基于上报时间推算各流转节点的合理时间
+        function parseFlowTime(s) {
+            const dt = new Date((s || '').replace(' ', 'T'));
+            return isNaN(dt) ? new Date() : dt;
+        }
+        function fmtFlow(dt) {
+            return dt.getFullYear() + '-' + pad2(dt.getMonth() + 1) + '-' + pad2(dt.getDate()) + ' ' + pad2(dt.getHours()) + ':' + pad2(dt.getMinutes());
+        }
+        function addHours(base, h) {
+            const dt = parseFlowTime(base);
+            dt.setTime(dt.getTime() + h * 3600 * 1000);
+            return fmtFlow(dt);
+        }
+        const tReport = formatDateTime(reportTime);
+        const tAudit = addHours(tReport, 24);
+        const tDispatch = dispatchTime ? formatDateTime(dispatchTime) : addHours(tAudit, 2);
+        const tHandleStart = addHours(tDispatch, 4);
+        const tHandleDone = addHours(tDispatch, 24 * 10);
         const stepTimes = [
-            formatDateTime(reportTime),
-            currentIdx >= 1 ? formatDateTime(reportTime) : '',
-            currentIdx >= 2 && dispatchTime ? formatDateTime(dispatchTime) : (currentIdx >= 2 ? formatDateTime(reportTime) : ''),
-            currentIdx >= 3 ? formatDateTime(dispatchTime || reportTime) : '',
-            currentIdx >= 4 ? formatDateTime(dispatchTime || reportTime) : '',
-            currentIdx >= 5 ? formatDateTime(dispatchTime || reportTime) : ''
+            tReport,
+            currentIdx >= 1 ? tAudit : '',
+            currentIdx >= 2 ? tDispatch : '',
+            currentIdx >= 3 ? tHandleStart : '',
+            currentIdx >= 4 ? tHandleDone : '',
+            currentIdx >= 5 ? addHours(tHandleDone, 24) : ''
         ];
 
         // 清除旧步骤（保留 line 节点）
@@ -2258,7 +2283,7 @@ function submitExpertApply() {
                 gallery.innerHTML = photos.slice(0, 8).map(p => `
                     <div class="evidence-item">
                         <div class="evidence-thumb"><i class="fa-regular fa-image"></i></div>
-                        <div class="evidence-info">${p.description || '现场照片'}<br>${p.shootTime || '-'}</div>
+                        <div class="evidence-info">${p.description || '现场照片'}<br><span class="photo-time">拍摄时间：${p.shootTime || '-'}</span></div>
                     </div>
                 `).join('');
             }

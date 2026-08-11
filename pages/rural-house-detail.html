@@ -28,15 +28,16 @@
             box-shadow: 0 2px 8px var(--shadow); margin-bottom: 12px;
             display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
         }
-        .topbar-left { display: flex; align-items: center; gap: 12px; }
+        .topbar-left { display: flex; align-items: center; gap: 12px; flex: 1; }
         .topbar-back {
             display: flex; align-items: center; gap: 4px; padding: 6px 12px;
             border: 1px solid var(--border); border-radius: 4px; background: #fff;
             color: var(--text-primary); font-size: 13px; cursor: pointer; text-decoration: none;
         }
         .topbar-back:hover { background: var(--bg-hover); }
+        .topbar-title-wrap { display: flex; align-items: baseline; justify-content: space-between; flex: 1; gap: 16px; }
         .topbar-title { font-size: 16px; font-weight: 600; }
-        .topbar-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .topbar-sub { font-size: 12px; color: var(--text-secondary); }
         .topbar-actions { display: flex; gap: 8px; align-items: center; }
         .topbar-btn {
             display: flex; align-items: center; gap: 4px; padding: 6px 12px;
@@ -206,6 +207,7 @@
         .record-list .actions .task-link:hover { text-decoration: underline; }
 
         .record-list .tag { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 10px; font-size: 11px; line-height: 22px; height: 22px; vertical-align: middle; white-space: nowrap; }
+        .record-list .tag.primary { background: var(--primary); color: #fff; font-weight: 600; box-shadow: 0 0 0 3px rgba(26,115,232,.15); }
         .record-list .tag.success { background: #e6f4ea; color: var(--safe); }
         .record-list .tag.warning { background: #fff8e1; color: #f9a825; }
         .record-list .tag.danger { background: #fce8e6; color: var(--danger); }
@@ -243,9 +245,9 @@
     <div class="page-wrapper">
         <div class="topbar">
             <div class="topbar-left">
-                <div>
+                <div class="topbar-title-wrap">
                     <div class="topbar-title" id="topbarTitle">农村自建房全要素档案</div>
-                    <div class="topbar-sub" id="topbarSub">编号：— | 所属区域：—</div>
+                    <div class="topbar-sub" id="topbarSub">房屋编号：—</div>
                 </div>
             </div>
         </div>
@@ -336,6 +338,7 @@
             risk: 0,
             patrol: 0,
             measure: 0,
+            measureProject: 0,
             close: 0,
             designConstruction: 0
         };
@@ -354,7 +357,7 @@
         function renderTopbar() {
             const s = currentHouse;
             const title = (s.overview && s.overview.houseName) || s.name || '农村自建房档案';
-            const sub = '编号：' + (s.no || '—') + ' | 所属区域：' + (s.street || '—') + ' · ' + (s.village || s.community || '—');
+            const sub = '房屋编号：' + (s.no || '—');
             document.getElementById('topbarTitle').textContent = title;
             document.getElementById('topbarSub').textContent = sub;
         }
@@ -724,14 +727,10 @@
                 { key: 'completion', title: '整治完成照片' }
             ];
             let body = '';
-            sections.forEach(sec => {
-                const list = p[sec.key] || [];
+            sections.forEach((sec, idx) => {
+                const list = (p[sec.key] && p[sec.key].length) ? p[sec.key] : mockPhotoPair(sec.title + ' 1', sec.title + ' 2');
                 body += '<div class="info-section-title"><i class="fas fa-image"></i> ' + sec.title + '</div>';
-                if (list.length) {
-                    body += '<div class="photo-grid">' + list.map(u => '<img src="' + u + '" alt="' + sec.title + '" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>';
-                } else {
-                    body += '<div class="photo-empty">暂无照片</div>';
-                }
+                body += '<div class="photo-grid">' + list.map(u => '<img src="' + u + '" alt="' + sec.title + '" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>';
             });
             return card('房屋照片', 'fa-images', body);
         }
@@ -786,8 +785,39 @@
             return card('使用信息', 'fa-home', '<div class="info-grid">' + grid + '</div>' + history);
         }
 
+        function mockInspectionPhotoSvg(title, color) {
+            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240">' +
+                '<rect width="320" height="240" fill="' + color + '"/>' +
+                '<rect x="16" y="16" width="288" height="208" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2" stroke-dasharray="8 6"/>' +
+                '<text x="160" y="118" font-size="20" fill="#fff" text-anchor="middle" font-family="Microsoft YaHei">' + title + '</text>' +
+                '<text x="160" y="146" font-size="12" fill="rgba(255,255,255,.8)" text-anchor="middle" font-family="Microsoft YaHei">2024-05-15 现场拍摄</text>' +
+                '</svg>';
+            return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        }
+
+        // 生成两张占位照片
+        function mockPhotoPair(t1, t2, c1, c2) {
+            return [mockInspectionPhotoSvg(t1, c1 || '#5b7fa6'), mockInspectionPhotoSvg(t2, c2 || '#8a6d4b')];
+        }
+
+        // 把值渲染成照片缩略图网格或附件按钮（占位）
+        function renderPhotoValue(value, label, btnText) {
+            const list = Array.isArray(value) ? value : (value && value !== '—' && value !== '-' ? [value] : []);
+            if (!list.length) return '<div class="info-value empty">—</div>';
+            if (list.length > 1 || (list[0] + '').indexOf('data:image') === 0) {
+                return '<div class="info-value photo-value"><div class="photo-grid">' +
+                    list.map(u => '<img src="' + u + '" alt="' + (label || '照片') + '" onclick="viewPhotoOnline(\'' + u + '\')">').join('') +
+                    '</div></div>';
+            }
+            return '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + list[0] + '\')">' + (btnText || '查看文件') + '</button></div>';
+        }
+
         function inspectionRecordToData(record) {
             // 把单条 inspectionRecord 对象转换成 3 个 tab 的展示数据
+            const mockPhotos = [
+                mockInspectionPhotoSvg('排查照片 1 · 房屋外观', '#5b7fa6'),
+                mockInspectionPhotoSvg('排查照片 2 · 承重墙损伤部位', '#8a6d4b')
+            ];
             return {
                 survey1: {
                     columns: ['结构状况', '损伤具体部位', '增加堆载（二层及以上堆放大量重物）', '其他使用安全隐患', '初步判定', '位置标注', '房屋安全责任人', '联系方式', '安全监管责任人', '联系方式', '安全鉴定：是否整治前鉴定', '未进行鉴定房屋原因', '更新时间'],
@@ -799,8 +829,8 @@
                     ]],
                     extraRows: [
                         [{ label: '排查备注', value: record.remark || '—', colspan: 'all' }],
-                        [{ label: '排查照片', value: record.photos || '—', colspan: 'all', isPhoto: true }],
-                        [{ label: '上传证明文件', value: record.proofFiles || '—', colspan: 'all', isPhoto: true }]
+                        [{ label: '排查照片', value: (record.photos && record.photos.length ? record.photos : mockPhotos), colspan: 'all', isPhoto: true }],
+                        [{ label: '上传证明文件', value: (record.proofFiles && record.proofFiles.length ? record.proofFiles : mockPhotoPair('证明文件 1 · 排查告知书', '证明文件 2 · 复核确认单', '#6b7fa6', '#7a8a6d')), colspan: 'all', isPhoto: true }]
                     ]
                 },
                 survey2: {
@@ -811,7 +841,7 @@
                         record.reporter || '-', record.checkDate || '-'
                     ]],
                     extraRows: [[
-                        { label: '建房现场照片', value: record.sitePhotos || '-', colspan: 'all', isPhoto: true }
+                        { label: '建房现场照片', value: (record.sitePhotos && record.sitePhotos.length ? record.sitePhotos : mockPhotoPair('建房现场照片 1', '建房现场照片 2', '#7a6d8a', '#4b7a6d')), colspan: 'all', isPhoto: true }
                     ]]
                 },
                 survey3: {
@@ -831,7 +861,7 @@
             }
             const activeIndex = recordViewState.inspection;
             const listHtml = recordListTable(
-                ['排查日期', '排查人员', '结构状况', '初步判定', '填报时间', { title: '状态', tag: true, tagClass: v => v }],
+                ['排查日期', '排查人员', '结构状况', '初步判定', '填报时间', { title: '状态', tag: true, tagClass: v => v === '最新' ? 'primary' : 'info' }],
                 list.map((r, i) => {
                     const status = i === 0 ? '最新' : '历史';
                     return [r.checkDate || '—', r.checker || '—', r.structureStatus || '—', r.preliminaryJudge || '—', r.reportTime || '—', status];
@@ -866,7 +896,11 @@
                 gridHtml += extraRows.map(row => {
                     return row.map(item => {
                         let valueHtml = '<div class="info-value ' + (item.value ? '' : 'empty') + '">' + (item.value || '—') + '</div>';
-                        if (item.isPhoto && item.value && item.value !== '—' && item.value !== '-') {
+                        if (item.isPhoto && Array.isArray(item.value) && item.value.length) {
+                            valueHtml = '<div class="info-value photo-value"><div class="photo-grid">' +
+                                item.value.map(u => '<img src="' + u + '" alt="' + (item.label || '照片') + '" onclick="viewPhotoOnline(\'' + u + '\')">').join('') +
+                                '</div></div>';
+                        } else if (item.isPhoto && item.value && item.value !== '—' && item.value !== '-') {
                             valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + item.value + '\')">查看文件</button></div>';
                         }
                         return '<div class="info-item full-width">' +
@@ -909,7 +943,7 @@
             if (!list.length) return card('安全鉴定', 'fa-clipboard-check', '<div class="record-empty">暂无安全鉴定记录</div>');
             const activeIndex = recordViewState.appraisal;
             const listHtml = recordListTable(
-                ['报告编号', '鉴定机构', '鉴定日期', '鉴定结论', '填报时间', { title: '状态', tag: true }],
+                ['报告编号', '鉴定机构', '鉴定日期', '鉴定结论', '填报时间', { title: '状态', tag: true, tagClass: v => v === '最新' ? 'primary' : 'info' }],
                 list.map((r, i) => [r.id || '—', r.orgName || '—', r.appraisalDate || '—', formatAppraisalConclusion(r.level || r.conclusion), r.reportTime || '—', i === 0 ? '最新' : '历史']),
                 'appraisal',
                 activeIndex,
@@ -923,10 +957,10 @@
                 kv('阶段性标识', r.phaseTag), kv('填报人', r.reporter),
                 kv('填报时间', r.reportTime)
             ].join('');
-            const reportHtml = (r.reportFiles && r.reportFiles !== '—' && r.reportFiles !== '-') ? ('<div class="info-grid info-grid-2col" style="margin-top:12px;">' +
+            const reportHtml = '<div class="info-grid info-grid-2col" style="margin-top:12px;">' +
                 '<div class="info-item full-width"><div class="info-label">鉴定报告</div>' +
-                '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + r.reportFiles + '\')">查看报告</button></div>' +
-                '</div></div>') : '';
+                renderPhotoValue((r.reportFiles && r.reportFiles.length ? r.reportFiles : mockPhotoPair('鉴定报告 1 · 封面', '鉴定报告 2 · 结论页', '#8a5b5b', '#5b6d8a')), '鉴定报告', '查看报告') +
+                '</div></div>';
             return card('安全鉴定', 'fa-clipboard-check',
                 recordListWrapper('安全鉴定记录列表', listHtml, { icon: 'fa-clipboard-list' }) +
                 '<div class="record-detail-header"><div class="title">安全鉴定详情（' + (activeIndex + 1) + ' / ' + list.length + '）</div>' +
@@ -982,7 +1016,7 @@
                     kv('隐患部位', r.hazardPart), kv('隐患类型', r.hazardType), kv('隐患描述', r.hazardDesc),
                     kv('可能后果', r.possibleConsequence), kv('管控建议', r.controlSuggestion)
                 ].join('');
-                const riskExtra = '<div class="info-item full-width"><div class="info-label">现场照片</div><div class="info-value">' + (r.photos ? '有' : '无') + '</div></div>';
+                const riskExtra = '<div class="info-item full-width"><div class="info-label">现场照片</div>' + renderPhotoValue((r.photos && r.photos.length ? r.photos : mockPhotoPair('风险现场照片 1', '风险现场照片 2', '#8a4b4b', '#a67a4b')), '现场照片') + '</div>';
                 body += '<div class="info-section-title" style="margin-top:20px;"><i class="fas fa-search-location"></i> 风险辨识记录</div>' +
                     recordListWrapper('风险辨识记录列表', listHtml, { icon: 'fa-search-location' }) +
                     '<div class="record-detail-header"><div class="title">风险辨识详情（' + (activeIndex + 1) + ' / ' + ident.length + '）</div>' +
@@ -998,7 +1032,7 @@
             if (!list.length) return card('巡查检查', 'fa-walking', '<div class="record-empty">暂无巡查检查记录</div>');
             const activeIndex = recordViewState.patrol;
             const listHtml = recordListTable(
-                ['巡查日期', '巡查类型', '巡查机构', '巡查人员', '巡查结果', { title: '状态', tag: true }],
+                ['巡查日期', '巡查类型', '巡查机构', '巡查人员', '巡查结果', { title: '状态', tag: true, tagClass: v => v === '最新' ? 'primary' : 'info' }],
                 list.map((r, i) => [r.patrolDate || '—', r.patrolType || '—', r.patrolOrg || '—', r.patrolPerson || '—', r.result || '—', i === 0 ? '最新' : '历史']),
                 'patrol',
                 activeIndex,
@@ -1010,8 +1044,8 @@
                 kv('巡查机构', r.patrolOrg), kv('巡查人员', r.patrolPerson), kv('巡查内容', r.content),
                 kv('巡查结果', r.result), kv('发现问题', r.foundProblems || '无'), kv('备注', r.remark)
             ].join('');
-            const patrolExtra = '<div class="info-item full-width"><div class="info-label">现场照片</div><div class="info-value">' + (r.photos ? '有' : '无') + '</div></div>' +
-                '<div class="info-item full-width"><div class="info-label">附件</div><div class="info-value">' + (r.files ? '有' : '无') + '</div></div>';
+            const patrolExtra = '<div class="info-item full-width"><div class="info-label">现场照片</div>' + renderPhotoValue((r.photos && r.photos.length ? r.photos : mockPhotoPair('巡查现场照片 1', '巡查现场照片 2', '#4b6d8a', '#8a7a4b')), '现场照片') + '</div>' +
+                '<div class="info-item full-width"><div class="info-label">附件</div>' + renderPhotoValue((r.files && r.files.length ? r.files : mockPhotoPair('巡查附件 1 · 巡查记录表', '巡查附件 2 · 签字确认单', '#6d7a8a', '#8a6d7a')), '附件') + '</div>';
             return card('巡查检查', 'fa-walking',
                 recordListWrapper('巡查检查记录列表', listHtml, { icon: 'fa-walking' }) +
                 '<div class="record-detail-header"><div class="title">巡查详情（' + (activeIndex + 1) + ' / ' + list.length + '）</div>' +
@@ -1044,18 +1078,39 @@
                     kv('措施效果评估', r.effectEvaluation), kv('风险是否已有效控制', r.riskControlled ? '是' : '否'),
                     kv('变更或延长申请审批', r.changeApply), kv('备注', r.remark), kv('填报人', r.reporter), kv('填报时间', r.reportTime)
                 ].join('');
-                const measureExtra = '<div class="info-item full-width"><div class="info-label">管理措施实施照片</div><div class="info-value">' + (r.implementPhotos ? '有' : '无') + '</div></div>' +
-                    '<div class="info-item full-width"><div class="info-label">管理措施完成照片</div><div class="info-value">' + (r.completePhotos ? '有' : '无') + '</div></div>';
+                const measureExtra = '<div class="info-item full-width"><div class="info-label">管理措施实施照片</div>' + renderPhotoValue((r.implementPhotos && r.implementPhotos.length ? r.implementPhotos : mockPhotoPair('实施照片 1 · 施工前', '实施照片 2 · 施工中', '#4b8a6d', '#8a4b5b')), '管理措施实施照片') + '</div>' +
+                    '<div class="info-item full-width"><div class="info-label">管理措施完成照片</div>' + renderPhotoValue((r.completePhotos && r.completePhotos.length ? r.completePhotos : mockPhotoPair('完成照片 1 · 整治后全景', '完成照片 2 · 细节特写', '#5b8a7a', '#7a5b8a')), '管理措施完成照片') + '</div>';
                 body += recordListWrapper('管理措施记录列表', listHtml, { icon: 'fa-shield-alt' }) +
                     '<div class="record-detail-header"><div class="title">管理措施详情（' + (activeIndex + 1) + ' / ' + mgmt.length + '）</div>' +
                     '<div class="meta">记录编号：' + (r.id || '—') + '</div></div>' +
                     '<div class="info-grid info-grid-2col">' + grid + measureExtra + '</div>';
             }
             if (prj.length) {
-                body += '<div class="table-section-title"><i class="fas fa-hammer"></i> 工程措施记录</div>' +
-                    '<table class="arch-table"><thead><tr><th>工程名称</th><th>施工单位</th><th>开工时间</th><th>竣工时间</th><th>负责人</th><th>联系电话</th><th>状态</th><th>进度</th></tr></thead><tbody>' +
-                    prj.map(r => '<tr><td>' + (r.projectName || '—') + '</td><td>' + (r.company || '—') + '</td><td>' + (r.startDate || '—') + '</td><td>' + (r.endDate || '—') + '</td><td>' + (r.manager || '—') + '</td><td>' + (r.phone || '—') + '</td><td>' + (r.status || '—') + '</td><td>' + (r.progress || 0) + '%</td></tr>').join('') +
-                    '</tbody></table>';
+                const pActiveIndex = Math.min(recordViewState.measureProject, prj.length - 1);
+                const pListHtml = recordListTable(
+                    ['唯一标识', '工程措施', '开始时间', '结束时间', '负责人', '状态'],
+                    prj.map((r, i) => [r.id || ('P-' + (s.no || 'NF') + '-' + String(i + 1).padStart(3, '0')), r.projectName || '—', r.startDate || '—', r.endDate || '—', r.manager || '—', r.status || '—']),
+                    'measureProject',
+                    pActiveIndex,
+                    { showAction: true }
+                );
+                const p = prj[pActiveIndex] || prj[0];
+                const pGrid = [
+                    kv('唯一标识', p.id || ('P-' + (s.no || 'NF') + '-' + String(pActiveIndex + 1).padStart(3, '0'))), kv('工程措施', p.projectName),
+                    kv('实施拟采用的政策路径', p.policyPath || '维修加固'), kv('其他实施拟采用政策路径', p.otherPolicyPath || '—'),
+                    kv('细化工程措施方案', p.planDetail || (p.projectName + '：由' + (p.company || '专业施工单位') + '按规范施工，完成后组织验收')), kv('施工单位', p.company),
+                    kv('开始时间', p.startDate), kv('结束时间', p.endDate),
+                    kv('负责人信息', p.manager), kv('联系电话', p.phone),
+                    kv('措施是否完成', (p.status === '已完成' || p.progress >= 100) ? '已完成' : '进行中'), kv('进度', (p.progress || 0) + '%'),
+                    kv('备注', p.remark || '按方案推进，质量符合要求'), kv('填报人', p.reporter || p.manager || '—'),
+                    kv('填报时间', p.reportTime || (p.endDate ? p.endDate + ' 17:00' : '—'))
+                ].join('');
+                const pExtra = '<div class="info-item full-width"><div class="info-label">工程措施实施照片</div>' + renderPhotoValue((p.implementPhotos && p.implementPhotos.length ? p.implementPhotos : mockPhotoPair('工程实施照片 1 · 开工', '工程实施照片 2 · 施工中', '#4b6d8a', '#8a5b4b')), '工程措施实施照片') + '</div>' +
+                    '<div class="info-item full-width"><div class="info-label">工程措施完成照片</div>' + renderPhotoValue((p.completePhotos && p.completePhotos.length ? p.completePhotos : mockPhotoPair('工程完成照片 1 · 竣工验收', '工程完成照片 2 · 完成后全景', '#5b8a6d', '#6d5b8a')), '工程措施完成照片') + '</div>';
+                body += recordListWrapper('工程措施记录列表', pListHtml, { icon: 'fa-hammer' }) +
+                    '<div class="record-detail-header"><div class="title">工程措施详情（' + (pActiveIndex + 1) + ' / ' + prj.length + '）</div>' +
+                    '<div class="meta">唯一标识：' + (p.id || ('P-' + (s.no || 'NF') + '-' + String(pActiveIndex + 1).padStart(3, '0'))) + '</div></div>' +
+                    '<div class="info-grid info-grid-2col">' + pGrid + pExtra + '</div>';
             }
             return card('隐患整治', 'fa-tools', body);
         }

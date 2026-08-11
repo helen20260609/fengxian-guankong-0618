@@ -224,6 +224,12 @@ body {
     padding: 8px 10px;
     font-size: 12px;
     color: var(--text-secondary);
+    line-height: 1.5;
+}
+.evidence-info .photo-time {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.8;
 }
 
 /* ===== Evidence Groups ===== */
@@ -1145,10 +1151,6 @@ body {
                 <span class="info-value" id="base-riskLevel"><span class="risk-badge red">-</span></span>
             </div>
             <div class="info-item">
-                <span class="info-label">所属房屋</span>
-                <span class="info-value" id="base-houseName">-</span>
-            </div>
-            <div class="info-item">
                 <span class="info-label">隐患地址</span>
                 <span class="info-value" id="base-address">-</span>
             </div>
@@ -1196,15 +1198,15 @@ body {
             <div class="evidence-gallery" id="evidence-gallery">
                 <div class="evidence-item">
                     <div class="evidence-thumb"><i class="fa-regular fa-image"></i></div>
-                    <div class="evidence-info">巡查照片 1</div>
+                    <div class="evidence-info">巡查照片 1<br><span class="photo-time">拍摄时间：2026-08-09 09:30</span></div>
                 </div>
                 <div class="evidence-item">
                     <div class="evidence-thumb"><i class="fa-regular fa-image"></i></div>
-                    <div class="evidence-info">巡查照片 2</div>
+                    <div class="evidence-info">巡查照片 2<br><span class="photo-time">拍摄时间：2026-08-09 10:15</span></div>
                 </div>
                 <div class="evidence-item">
                     <div class="evidence-thumb"><i class="fa-regular fa-image"></i></div>
-                    <div class="evidence-info">巡查照片 3</div>
+                    <div class="evidence-info">巡查照片 3<br><span class="photo-time">拍摄时间：2026-08-09 11:00</span></div>
                 </div>
             </div>
         </div>
@@ -1415,7 +1417,7 @@ body {
                     </div>
                     <div class="deadline-option-content">
                         <div class="deadline-option-title">默认时限</div>
-                        <div class="deadline-option-desc">按风险等级自动计算：疑似危房24小时、严重损坏房3天、一般损坏房7天</div>
+                        <div class="deadline-option-desc">按风险等级自动计算：疑似危房24小时、严重损坏房3-6个月、一般损坏房6-12个月</div>
                     </div>
                 </div>
                 <div class="deadline-option" onclick="selectDeadline(this, 'custom')">
@@ -1432,7 +1434,8 @@ body {
                 <div class="deadline-row">
                     <input type="number" class="deadline-input" value="7" min="1">
                     <select class="deadline-unit">
-                        <option value="day">天</option>
+                        <option value="month">月</option>
+                        <option value="day" selected>天</option>
                         <option value="hour">小时</option>
                     </select>
                 </div>
@@ -2017,7 +2020,7 @@ function loadData() {
             gallery.innerHTML = photos.slice(0, 8).map(p => `
                 <div class="evidence-item">
                     <div class="evidence-thumb"><i class="fa-regular fa-image"></i></div>
-                    <div class="evidence-info">${p.description || '现场照片'}<br>${p.shootTime || '-'}</div>
+                    <div class="evidence-info">${p.description || '现场照片'}<br><span class="photo-time">拍摄时间：${p.shootTime || '-'}</span></div>
                 </div>
             `).join('');
         }
@@ -2088,13 +2091,32 @@ function renderHazardStatusFlow(rec, reportTime) {
 
     const manage = rec.manageRecords || [];
     const dispatchTime = manage.length ? (manage[0].assignTime || '') : '';
+
+    // 基于上报时间推算各流转节点的合理时间
+    function parseFlowTime(s) {
+        const dt = new Date((s || '').replace(' ', 'T'));
+        return isNaN(dt) ? new Date() : dt;
+    }
+    function fmtFlow(dt) {
+        return dt.getFullYear() + '-' + pad2(dt.getMonth() + 1) + '-' + pad2(dt.getDate()) + ' ' + pad2(dt.getHours()) + ':' + pad2(dt.getMinutes());
+    }
+    function addHours(base, h) {
+        const dt = parseFlowTime(base);
+        dt.setTime(dt.getTime() + h * 3600 * 1000);
+        return fmtFlow(dt);
+    }
+    const tReport = formatDateTime(reportTime);
+    const tAudit = addHours(tReport, 24);
+    const tDispatch = dispatchTime ? formatDateTime(dispatchTime) : addHours(tAudit, 2);
+    const tHandleStart = addHours(tDispatch, 4);
+    const tHandleDone = addHours(tDispatch, 24 * 10);
     const stepTimes = [
-        formatDateTime(reportTime),
-        currentIdx >= 1 ? formatDateTime(reportTime) : '',
-        currentIdx >= 2 && dispatchTime ? formatDateTime(dispatchTime) : (currentIdx >= 2 ? formatDateTime(reportTime) : ''),
-        currentIdx >= 3 ? formatDateTime(dispatchTime || reportTime) : '',
-        currentIdx >= 4 ? formatDateTime(dispatchTime || reportTime) : '',
-        currentIdx >= 5 ? formatDateTime(dispatchTime || reportTime) : ''
+        tReport,
+        currentIdx >= 1 ? tAudit : '',
+        currentIdx >= 2 ? tDispatch : '',
+        currentIdx >= 3 ? tHandleStart : '',
+        currentIdx >= 4 ? tHandleDone : '',
+        currentIdx >= 5 ? addHours(tHandleDone, 24) : ''
     ];
 
     Array.from(container.querySelectorAll('.hazard-flow-step')).forEach(el => el.remove());
