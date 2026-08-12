@@ -581,6 +581,64 @@
             color: var(--text-primary);
             margin-bottom: 12px;
         }
+        .cond-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .cond-tab {
+            padding: 6px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .cond-tab:hover { border-color: var(--primary); color: var(--primary); }
+        .cond-tab.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+        .cond-values-panel {
+            background: var(--bg-page);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        .cond-values-title {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+        .cond-values {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .cond-value-pill {
+            padding: 6px 14px;
+            font-size: 13px;
+            color: var(--text-primary);
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .cond-value-pill:hover { border-color: var(--primary); color: var(--primary); }
+        .cond-value-pill.active {
+            background: var(--primary-light);
+            border-color: var(--primary);
+            color: var(--primary);
+            font-weight: 600;
+        }
         .detail-grid {
             display: grid;
             grid-template-columns: 120px 1fr;
@@ -895,15 +953,12 @@
                     </div>
                     <div id="editCondArea" style="display: none; margin-top: 8px;">
                         <div class="wizard-section-label">启用条件</div>
-                        <div class="form-field full-width">
-                            <select id="editCondType">
-                                <option value="按季节启用">按季节启用（汛期/台风季重点监管）</option>
-                                <option value="按房龄启用">按房龄启用（超过年限的老旧房屋）</option>
-                                <option value="按区域启用">按区域启用（重点区域/隐患点周边）</option>
-                                <option value="按房屋类型启用">按房屋类型启用（纯自住类/经营类/闲置类等）</option>
-                                <option value="按结构形式启用">按结构形式启用（砖混/砖木/土木等）</option>
-                            </select>
+                        <div class="cond-tabs" id="editCondTabs"></div>
+                        <div class="cond-values-panel">
+                            <div class="cond-values-title" id="editCondValuesTitle"></div>
+                            <div class="cond-values" id="editCondValues"></div>
                         </div>
+                        <input type="hidden" id="editCondType">
                     </div>
                 </div>
             </div>
@@ -962,7 +1017,7 @@
                             <label>风险识别</label>
                             <textarea id="addRisk" rows="3" placeholder="描述风险识别内容..."></textarea>
                         </div>
-                        <div class="form-field">
+                        <div class="form-field full-width">
                             <label>可能导致事故</label>
                             <input type="text" id="addAccident" placeholder="如：房屋倾斜或倒塌、墙体酥碎">
                         </div>
@@ -1009,15 +1064,12 @@
                     </div>
                     <div id="addCondArea" style="display: none; margin-top: 8px;">
                         <div class="wizard-section-label">启用条件</div>
-                        <div class="form-field full-width">
-                            <select id="addCondType">
-                                <option value="按季节启用">按季节启用（汛期/台风季重点监管）</option>
-                                <option value="按房龄启用">按房龄启用（超过年限的老旧房屋）</option>
-                                <option value="按区域启用">按区域启用（重点区域/隐患点周边）</option>
-                                <option value="按房屋类型启用">按房屋类型启用（纯自住类/经营类/闲置类等）</option>
-                                <option value="按结构形式启用">按结构形式启用（砖混/砖木/土木等）</option>
-                            </select>
+                        <div class="cond-tabs" id="addCondTabs"></div>
+                        <div class="cond-values-panel">
+                            <div class="cond-values-title" id="addCondValuesTitle"></div>
+                            <div class="cond-values" id="addCondValues"></div>
                         </div>
+                        <input type="hidden" id="addCondType">
                     </div>
                 </div>
             </div>
@@ -1290,6 +1342,71 @@
         let editStep = 1;
         let editStatus = 'on';
 
+        // ============ 启用条件配置 ============
+        const condConfig = {
+            '按季节启用': { title: '选择适用的季节范围：', values: ['汛期（6-9月）', '台风季', '全年'] },
+            '按建成时间启用': { title: '选择适用的建成时间范围：', values: ['建成10年以上', '建成20年以上', '建成30年以上', '建成40年以上'] },
+            '按区域启用': { title: '选择适用的区域范围：', values: ['重点区域', '隐患点周边', '地质灾害易发区'] },
+            '按房屋类型启用': { title: '选择适用的房屋类型：', values: ['纯自住类', '经营类', '闲置类', '出租类'] },
+            '按结构形式启用': { title: '选择适用的结构形式：', values: ['砖混结构', '砖木结构', '土木结构', '石结构', '混杂结构'] }
+        };
+        const condTypes = Object.keys(condConfig);
+
+        // 每个弹窗独立维护一份条件状态
+        function createCondState() {
+            const sel = {};
+            condTypes.forEach(t => sel[t] = []);
+            return { type: condTypes[0], selected: sel };
+        }
+        let editCondState = createCondState();
+        let addCondState = createCondState();
+
+        function renderCondUI(prefix, state) {
+            const tabsEl = document.getElementById(prefix + 'CondTabs');
+            const titleEl = document.getElementById(prefix + 'CondValuesTitle');
+            const valuesEl = document.getElementById(prefix + 'CondValues');
+            tabsEl.innerHTML = condTypes.map(t =>
+                `<span class="cond-tab${state.type === t ? ' active' : ''}" onclick="switchCondType('${prefix}','${t}')">${t}</span>`
+            ).join('');
+            const cfg = condConfig[state.type];
+            titleEl.textContent = cfg.title;
+            const sel = state.selected[state.type];
+            valuesEl.innerHTML = cfg.values.map(v =>
+                `<span class="cond-value-pill${sel.includes(v) ? ' active' : ''}" onclick="toggleCondValue('${prefix}','${v}')">${v}</span>`
+            ).join('');
+        }
+
+        function switchCondType(prefix, t) {
+            const state = prefix === 'edit' ? editCondState : addCondState;
+            state.type = t;
+            renderCondUI(prefix, state);
+        }
+
+        function toggleCondValue(prefix, v) {
+            const state = prefix === 'edit' ? editCondState : addCondState;
+            const arr = state.selected[state.type];
+            const idx = arr.indexOf(v);
+            if (idx >= 0) arr.splice(idx, 1); else arr.push(v);
+            renderCondUI(prefix, state);
+        }
+
+        // 汇总为兼容的 condType 字符串，如 "按季节启用：汛期（6-9月）、台风季"
+        function getCondTypeValue(state) {
+            const sel = state.selected[state.type];
+            return sel.length ? `${state.type}：${sel.join('、')}` : state.type;
+        }
+
+        // 从已保存的 condType 字符串解析回状态
+        function parseCondTypeValue(condType, state) {
+            const match = condTypes.find(t => condType.startsWith(t));
+            if (match) {
+                state.type = match;
+                const valPart = condType.slice(match.length).replace(/^[：:]/, '');
+                state.selected[match] = valPart ? valPart.split('、').filter(v => condConfig[match].values.includes(v)) : [];
+            }
+            return state;
+        }
+
         function gotoEditStep(step) {
             editStep = Math.min(3, Math.max(1, step));
             [1, 2, 3].forEach(i => {
@@ -1325,9 +1442,11 @@
             document.getElementById('editRemark').value = item.remark || '';
             // 监管状态：优先取条目自身的 status，否则按等级映射
             const st = item.status || getItemStatus(item).key;
+            editCondState = createCondState();
             if (item.status === 'cond' && item.condType) {
-                document.getElementById('editCondType').value = item.condType;
+                parseCondTypeValue(item.condType, editCondState);
             }
+            renderCondUI('edit', editCondState);
             selectEditStatus(st);
             gotoEditStep(1);
             openModal('editModal');
@@ -1346,7 +1465,7 @@
             item.basis = document.getElementById('editBasis').value;
             item.remark = document.getElementById('editRemark').value;
             item.status = editStatus;
-            item.condType = editStatus === 'cond' ? document.getElementById('editCondType').value : '';
+            item.condType = editStatus === 'cond' ? getCondTypeValue(editCondState) : '';
             applyFilter();
             closeModal('editModal');
             showToast('保存成功');
@@ -1401,7 +1520,8 @@
             document.getElementById('addMeasure').value = '';
             document.getElementById('addBasis').value = '';
             document.getElementById('addRemark').value = '';
-            document.getElementById('addCondType').value = '按季节启用';
+            addCondState = createCondState();
+            renderCondUI('add', addCondState);
             selectAddStatus('on');
             gotoAddStep(1);
             openModal('addModal');
@@ -1421,7 +1541,7 @@
                 basis: document.getElementById('addBasis').value,
                 remark: document.getElementById('addRemark').value,
                 status: addStatus,
-                condType: addStatus === 'cond' ? document.getElementById('addCondType').value : ''
+                condType: addStatus === 'cond' ? getCondTypeValue(addCondState) : ''
             };
             riskData.push(newItem);
             applyFilter();

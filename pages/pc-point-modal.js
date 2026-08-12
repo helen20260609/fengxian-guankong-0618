@@ -52,10 +52,6 @@ function buildPointModalContent(point) {
                     <span class="point-info-value">${point.name}</span>
                 </div>
                 <div class="point-info-item">
-                    <span class="point-info-label">巡查点类型</span>
-                    <span class="point-info-value">${point.type}</span>
-                </div>
-                <div class="point-info-item">
                     <span class="point-info-label">所属任务</span>
                     <span class="point-info-value">${taskName}</span>
                 </div>
@@ -76,10 +72,6 @@ function buildPointModalContent(point) {
                     <span class="point-info-value">${point.time || '-'}</span>
                 </div>
             </div>
-        </div>
-        <div class="point-detail-section">
-            <div class="point-detail-section-title">风险等级</div>
-            <div style="padding:0 14px;">${riskHtml}</div>
         </div>
         <div class="point-detail-section">
             <div class="point-detail-section-title">检查项清单</div>
@@ -160,8 +152,6 @@ function buildCheckItemCard(item, index) {
 
 function buildAbnormalDetail(item) {
     const disposal = item.disposal || 'handle-now';
-    const disposalLabel = disposal === 'handle-now' ? '立即处置' : '上报转办';
-    const disposalIcon = disposal === 'handle-now' ? 'fa-bolt' : 'fa-share-from-square';
     return `
         <div class="detail-section">
             <div class="detail-section-title">异常上报</div>
@@ -170,14 +160,14 @@ function buildAbnormalDetail(item) {
                     <label class="form-label">处置方式</label>
                     <div class="option-group">
                         <div class="option-item ${disposal === 'handle-now' ? 'active' : ''}">
-                            <i class="fa-solid ${disposalIcon}"></i>
-                            <span>${disposalLabel}</span>
+                            <i class="fa-solid fa-bolt"></i>
+                            <span>立即处置</span>
+                        </div>
+                        <div class="option-item ${disposal === 'report-transfer' ? 'active' : ''}">
+                            <i class="fa-solid fa-share-from-square"></i>
+                            <span>上报转办</span>
                         </div>
                     </div>
-                </div>
-                <div class="form-row">
-                    <label class="form-label">风险等级</label>
-                    <div class="fake-input">${item.riskLevel || '—'}</div>
                 </div>
                 <div class="form-row">
                     <label class="form-label">隐患描述</label>
