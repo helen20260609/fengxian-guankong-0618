@@ -51,7 +51,7 @@
             font-size: 14px;
             line-height: 1.5;
         }
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .container { max-width: none; margin: 0 auto; padding: 20px; }
         .page-header { margin-bottom: 20px; }
         .breadcrumb {
             font-size: 13px;
@@ -432,6 +432,73 @@
         }
         .empty-state i { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
         .empty-state p { font-size: 14px; }
+
+        /* 导入弹窗 */
+        .import-modal { max-width: 560px; }
+        .import-dropzone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 40px 24px;
+            text-align: center;
+            transition: all 0.2s;
+            cursor: pointer;
+            background: var(--bg);
+        }
+        .import-dropzone:hover, .import-dropzone.dragover {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+        .import-dropzone i {
+            font-size: 48px;
+            color: var(--primary);
+            margin-bottom: 16px;
+        }
+        .import-dropzone h4 {
+            font-size: 15px;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .import-dropzone p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+        .import-template-box {
+            background: var(--bg-hover);
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-top: 16px;
+        }
+        .import-template-box h5 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        .import-template-box p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+        .file-list {
+            margin-top: 12px;
+        }
+        .file-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: var(--bg-hover);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .file-list-item .file-name { color: var(--text-primary); }
+        .file-list-item .file-remove {
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 12px;
+        }
         @media (max-width: 768px) {
             .stats-row { grid-template-columns: repeat(2, 1fr); }
             .form-row { grid-template-columns: 1fr; }
@@ -496,6 +563,7 @@
                     </div>
                     <div style="margin-left: auto; display: flex; gap: 8px;">
                         <button class="btn btn-primary" onclick="openAddModal()">新增措施</button>
+                        <button class="btn btn-secondary" onclick="openImportModal()">导入</button>
                         <button class="btn btn-secondary" onclick="exportData()">导出</button>
                     </div>
                 </div>
@@ -732,6 +800,34 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('addModal')">取消</button>
                 <button class="btn btn-primary" onclick="saveAdd()"><i class="fa-solid fa-check" style="margin-right:4px;"></i>保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入模态框 -->
+    <div class="modal-overlay" id="importModal">
+        <div class="modal import-modal">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-upload" style="margin-right:6px;color:var(--text-secondary);"></i>导入</h3>
+                <button class="modal-close" onclick="closeModal('importModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="import-dropzone" id="importDropzone" onclick="document.getElementById('importFile').click()">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <h4>拖拽文件到此处或点击上传</h4>
+                    <p>支持 Excel (.xlsx, .xls) 或 CSV 格式</p>
+                    <button type="button" class="btn btn-primary"><i class="fa-solid fa-folder-open" style="margin-right:4px;"></i>选择文件</button>
+                    <input type="file" id="importFile" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleImportFile(event)">
+                </div>
+                <div class="file-list" id="importFileList"></div>
+                <div class="import-template-box">
+                    <h5>模板说明：</h5>
+                    <p>请按照下列顺序准备数据：序号、风险主项、分项、分项内容、风险识别、可能导致事故、主要防护措施、风险等级、工作依据、措施类型、责任主体建议、实施周期建议、实施要求、验收标准。</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('importModal')">取消</button>
+                <button class="btn btn-primary" onclick="downloadImportTemplate()"><i class="fa-solid fa-download" style="margin-right:4px;"></i>下载模板</button>
             </div>
         </div>
     </div>
@@ -1052,6 +1148,197 @@
             showToast('新增成功');
         }
 
+        let importPendingFile = null;
+
+        function openImportModal() {
+            importPendingFile = null;
+            document.getElementById('importFile').value = '';
+            document.getElementById('importFileList').innerHTML = '';
+            openModal('importModal');
+        }
+
+        function closeImportModal() {
+            importPendingFile = null;
+            document.getElementById('importFile').value = '';
+            document.getElementById('importFileList').innerHTML = '';
+            closeModal('importModal');
+        }
+
+        function setupImportDropzone() {
+            const dropzone = document.getElementById('importDropzone');
+            if (!dropzone) return;
+            dropzone.addEventListener('dragover', e => {
+                e.preventDefault();
+                dropzone.classList.add('dragover');
+            });
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('dragover');
+            });
+            dropzone.addEventListener('drop', e => {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files && files.length > 0) {
+                    handleImportFile({ target: { files: files } });
+                }
+            });
+        }
+
+        function handleImportFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const validExt = /\.(csv|xlsx|xls)$/i;
+            if (!validExt.test(file.name)) {
+                showToast('仅支持 .xlsx, .xls, .csv 格式文件');
+                return;
+            }
+            importPendingFile = file;
+            const list = document.getElementById('importFileList');
+            list.innerHTML = `
+                <div class="file-list-item">
+                    <span class="file-name"><i class="fa-solid fa-file-lines" style="margin-right:6px;color:var(--primary);"></i>${file.name}</span>
+                    <span class="file-remove" onclick="clearImportFile()">移除</span>
+                </div>
+            `;
+            processImportFile(file);
+        }
+
+        function clearImportFile() {
+            importPendingFile = null;
+            document.getElementById('importFile').value = '';
+            document.getElementById('importFileList').innerHTML = '';
+        }
+
+        function processImportFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                let lines = [];
+                if (file.name.toLowerCase().endsWith('.csv')) {
+                    lines = text.split(/\r?\n/).filter(line => line.trim());
+                } else {
+                    // 简单处理：将 Excel 二进制文本中的行按换行拆分（仅支持纯文本内容）
+                    lines = text.split(/\r?\n/).filter(line => line.trim());
+                }
+                if (lines.length < 2) {
+                    showToast('文件内容为空或格式不正确');
+                    return;
+                }
+                const headers = parseCsvLine(lines[0]);
+                const required = ['措施名称', '措施类型', '主要防护措施'];
+                const missing = required.filter(h => !headers.includes(h));
+                if (missing.length > 0) {
+                    showToast('缺少必需列：' + missing.join('、'));
+                    return;
+                }
+                const idxName = headers.indexOf('措施名称');
+                const idxType = headers.indexOf('措施类型');
+                const idxMain = headers.indexOf('风险主项');
+                const idxSub = headers.indexOf('分项');
+                const idxContent = headers.indexOf('分项内容');
+                const idxRisk = headers.indexOf('风险识别');
+                const idxAccident = headers.indexOf('可能导致事故');
+                const idxMeasure = headers.indexOf('主要防护措施');
+                const idxLevel = headers.indexOf('风险等级');
+                const idxBasis = headers.indexOf('工作依据');
+                const idxOwner = headers.indexOf('责任主体建议');
+                const idxCycle = headers.indexOf('实施周期建议');
+                const idxRequirement = headers.indexOf('实施要求');
+                const idxStandard = headers.indexOf('验收标准');
+
+                let successCount = 0;
+                let failCount = 0;
+                for (let i = 1; i < lines.length; i++) {
+                    const row = parseCsvLine(lines[i]);
+                    if (row.length < Math.max(idxName, idxType, idxMeasure) + 1) continue;
+                    const name = row[idxName].trim();
+                    const type = row[idxType].trim();
+                    const measure = row[idxMeasure].trim();
+                    if (!name || !type || !measure) {
+                        failCount++;
+                        continue;
+                    }
+                    const levelText = idxLevel > -1 ? row[idxLevel].trim() : '';
+                    const levelMapReverse = {
+                        '疑似危房': 'red',
+                        '严重损坏房': 'orange',
+                        '一般损坏房': 'yellow',
+                        '完好房(基本完好房)': 'blue'
+                    };
+                    const newId = Math.max(...riskData.map(r => r.id), 0) + 1;
+                    riskData.push({
+                        id: newId,
+                        main: idxMain > -1 ? row[idxMain].trim() : '建筑结构信息',
+                        sub: idxSub > -1 ? row[idxSub].trim() : name,
+                        content: idxContent > -1 ? row[idxContent].trim() : name,
+                        risk: idxRisk > -1 ? row[idxRisk].trim() : '',
+                        accident: idxAccident > -1 ? row[idxAccident].trim() : '',
+                        level: levelMapReverse[levelText] || 'yellow',
+                        measure: measure,
+                        basis: idxBasis > -1 ? row[idxBasis].trim() : '',
+                        type: type,
+                        owner: idxOwner > -1 ? row[idxOwner].trim() : '',
+                        cycle: idxCycle > -1 ? row[idxCycle].trim() : '',
+                        requirement: idxRequirement > -1 ? row[idxRequirement].trim() : '',
+                        standard: idxStandard > -1 ? row[idxStandard].trim() : ''
+                    });
+                    successCount++;
+                }
+                applyFilter();
+                showToast(`导入完成：成功 ${successCount} 条，失败 ${failCount} 条`);
+            };
+            reader.readAsText(file, 'utf-8');
+        }
+
+        function parseCsvLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (inQuotes) {
+                    if (ch === '"') {
+                        if (line[i + 1] === '"') {
+                            current += '"';
+                            i++;
+                        } else {
+                            inQuotes = false;
+                        }
+                    } else {
+                        current += ch;
+                    }
+                } else {
+                    if (ch === '"') {
+                        inQuotes = true;
+                    } else if (ch === ',') {
+                        result.push(current);
+                        current = '';
+                    } else {
+                        current += ch;
+                    }
+                }
+            }
+            result.push(current);
+            return result;
+        }
+
+        function downloadImportTemplate() {
+            const headers = ['序号', '风险主项', '分项', '分项内容', '风险识别', '可能导致事故', '主要防护措施', '风险等级', '工作依据', '措施类型', '责任主体建议', '实施周期建议', '实施要求', '验收标准'];
+            const sample = [
+                ['1', '建筑结构信息', '示例分项', '示例措施名称', '示例风险识别', '示例事故', '示例主要防护措施', '一般损坏房', '示例依据', '工程措施', '房屋产权人（使用人）', '1个月内', '示例实施要求', '示例验收标准']
+            ];
+            let csv = headers.join(',') + '\n';
+            sample.forEach(row => {
+                csv += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + '\n';
+            });
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `风险措施导入模板_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+            showToast('模板下载成功');
+        }
+
         function exportData() {
             const headers = ['序号', '措施名称', '措施类型', '风险主项', '分项', '分项内容', '风险识别', '可能导致事故', '主要防护措施', '风险等级', '工作依据'];
             const levelMap = {
@@ -1129,6 +1416,7 @@
         });
 
         renderTable();
+        setupImportDropzone();
     </script>
     <style>
         @keyframes slideIn {
