@@ -234,6 +234,13 @@ function normalizeHouseRecord(record) {
     if (!rec.inspectionRecords) rec.inspectionRecords = [];
     if (!rec.appraisalReports) rec.appraisalReports = [];
     if (!rec.patrolRecords) rec.patrolRecords = [];
+    // 历史缓存记录缺失鉴定报告时按编号补生成（非安全房才需要鉴定）
+    if (rec.risk && rec.risk !== 'safe') {
+        const idx = parseInt(String(rec.no || '').replace(/\D/g, '') || '0', 10);
+        rec.appraisalReports = generateAppraisalReports(rec.no, rec.risk, rec.governance || 'pending', idx);
+    } else if (!rec.appraisalReports.length) {
+        rec.appraisalReports = [];
+    }
     if (!rec.riskIdentification) rec.riskIdentification = [];
     if (!rec.riskClassification) rec.riskClassification = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskClassification));
     if (!rec.emergencyResponse) rec.emergencyResponse = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.emergencyResponse));
@@ -286,6 +293,37 @@ function normalizeHouseRecord(record) {
     if (!rec.riskInfo.discoveryMethod) {
         const idx = parseInt(String(rec.no || '').replace(/\D/g, '') || '0', 10);
         rec.riskInfo.discoveryMethod = DISCOVERY_METHODS[idx % DISCOVERY_METHODS.length];
+    }
+
+    // 旧缓存记录缺失整治措施记录时按编号补生成（非安全房）
+    if (rec.risk && rec.risk !== 'safe') {
+        const idx = parseInt(String(rec.no || '').replace(/\D/g, '') || '0', 10);
+        const totalTask = rec.totalTask || (1 + (idx % 4));
+        const doneTask = rec.doneTask !== undefined ? rec.doneTask : (rec.governance === 'done' ? totalTask : 0);
+        if (!rec.manageRecords || !rec.manageRecords.length) {
+            rec.manageRecords = generateManageRecords(rec.no, rec.risk, rec.governance || 'pending', doneTask, totalTask, idx);
+        }
+        if (!rec.projectRecords || !rec.projectRecords.length) {
+            rec.projectRecords = generateProjectRecordsLocal(rec.no, rec.risk, rec.governance || 'pending', rec.projectMeasure || 1, idx, rec.fundTotal || 30000);
+        }
+        // 补齐计划相关字段
+        if (!rec.rectDeadline && rec.manageRecords && rec.manageRecords[0]) rec.rectDeadline = rec.manageRecords[0].planEndTime || '';
+        if (!rec.responsiblePerson) rec.responsiblePerson = RESPONSIBLE_PERSONS[idx % RESPONSIBLE_PERSONS.length];
+        if (!rec.managerPhone) rec.managerPhone = MANAGER_PHONES[idx % MANAGER_PHONES.length];
+        // 工程措施记录缺失的整治字段按既有数据补生成
+        if (rec.projectRecords && rec.projectRecords.length) {
+            rec.projectRecords.forEach((p, i2) => {
+                if (!p.renovateApplyNo && !p.subsidyApplyNo) {
+                    p.renovateApplyNo = p.subsidyApplyNo = 'BT-' + (p.taskNo || rec.no) + '-' + String(i2 + 1).padStart(3, '0');
+                }
+                if (p.subsidyAmount === undefined && p.fund !== undefined) p.subsidyAmount = p.fund;
+                if (!p.taskNo) p.taskNo = rec.no;
+                if (p.isDone && !p.acceptConclusion) p.acceptConclusion = '合格';
+                if (!p.acceptUnit) p.acceptUnit = (rec.street || '海湾镇') + '建设管理部门';
+                if (!p.acceptChecker) p.acceptChecker = p.manager || rec.responsiblePerson || RESPONSIBLE_PERSONS[(idx + i2) % RESPONSIBLE_PERSONS.length];
+                if (!p.acceptDate) p.acceptDate = p.endDate || '';
+            });
+        }
     }
 
     return rec;
@@ -403,13 +441,25 @@ function generateProjectRecordsLocal(no, risk, governance, projectMeasure, i, fu
         const progress = isDone ? 100 : (governance === 'doing' ? 50 : 0);
         const reportTime = isDone ? (endDate + ' 16:00') : (startDate + ' 08:00');
         const remark = isDone ? '工程已竣工，验收合格' : (governance === 'doing' ? '施工进行中，进度约' + progress + '%' : '尚未开工，待资金到位后启动');
+        const acceptDate = isDone ? endDate : '';
+        const subsidyApplyNo = 'BT-' + no + '-' + String(idx + 1).padStart(3, '0');
+        const acceptUnit = MODULE_STREETS[i % MODULE_STREETS.length] + '建设管理部门';
+        const acceptChecker = RESPONSIBLE_PERSONS[(i + idx + 2) % RESPONSIBLE_PERSONS.length];
         records.push({
             id: no + '-P' + (idx + 1),
+            taskNo: no,
+            renovateApplyNo: subsidyApplyNo,
             projectName: pName,
             company: company,
             startDate: startDate,
             endDate: endDate,
             fund: projectFund,
+            subsidyApplyNo: subsidyApplyNo,
+            subsidyAmount: projectFund,
+            acceptConclusion: isDone ? '合格' : '',
+            acceptUnit: acceptUnit,
+            acceptChecker: acceptChecker,
+            acceptDate: acceptDate,
             status: isDone ? '已完成' : (governance === 'doing' ? '进行中' : '未开工'),
             isDone: isDone,
             manager: manager,
@@ -544,19 +594,38 @@ function generateInspectionRecords(no, risk, i) {
     const part = HAZARD_PARTS[i % HAZARD_PARTS.length];
     const type = HAZARD_TYPES[(i + 3) % HAZARD_TYPES.length];
     const checkDate = '2024-' + pad2(5 + (i % 4)) + '-' + pad2(10 + (i % 15));
+    const checkTime = pad2(8 + (i % 3)) + ':' + pad2(10 + (i % 40));
+    const preliminary = risk === 'danger' ? '立即停止使用' : (risk === 'major' ? '停止使用危险区域' : '加强观察');
+    const conclusion = risk === 'danger' ? '存在重大安全隐患' : (risk === 'major' ? '存在较大安全隐患' : '存在一般安全隐患');
+    const checkerRole = i % 2 === 0 ? '村干部' : '网格员';
+    const checkOrg = i % 3 === 0 ? '奉城镇人民政府' : ('奉城镇' + VILLAGES[i % VILLAGES.length] + '村民委员会');
+    const foundProblem = part + type;
+    const hazardDesc = part + '出现' + type + '，存在' + RISK_LABEL_MAP[risk] + '风险，需尽快采取安全整治措施。';
     return [{
         id: 'INS-' + no + '-001',
         checkDate: checkDate,
+        checkTime: checkTime,
+        checkOrg: checkOrg,
         checker: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
         checkerPhone: MANAGER_PHONES[i % MANAGER_PHONES.length],
+        checkerRole: checkerRole,
         structureStatus: RISK_LABEL_MAP[risk],
         damagePart: part,
         overload: '否',
         otherRisk: '暂无',
-        preliminaryJudge: risk === 'danger' ? '立即停止使用' : (risk === 'major' ? '停止使用危险区域' : '加强观察'),
-        location: '',
+        otherRisks: '暂无',
+        preliminaryJudge: preliminary,
+        preliminary: preliminary,
+        checkConclusion: conclusion,
+        foundProblem: foundProblem,
+        hazardDesc: hazardDesc,
+        location: '119.8563,28.8964',
         dutyPerson: RESPONSIBLE_PERSONS[(i + 1) % RESPONSIBLE_PERSONS.length],
         dutyPhone: MANAGER_PHONES[(i + 1) % MANAGER_PHONES.length],
+        ownerName: RESPONSIBLE_PERSONS[(i + 1) % RESPONSIBLE_PERSONS.length],
+        ownerPhone: MANAGER_PHONES[(i + 1) % MANAGER_PHONES.length],
+        safetyName: RESPONSIBLE_PERSONS[(i + 3) % RESPONSIBLE_PERSONS.length],
+        safetyPhone: MANAGER_PHONES[(i + 3) % MANAGER_PHONES.length],
         photos: '',
         preAppraisal: '否',
         noAppraisalReason: '资金尚未到位',
@@ -564,6 +633,7 @@ function generateInspectionRecords(no, risk, i) {
         remark: part + '存在' + type + '，需进行安全整治',
         reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
         reportTime: checkDate + ' 09:00',
+        updateTime: checkDate + ' 14:30',
         // 关联巡查任务字段
         sourceType: '排查发现',
         taskId: '',
@@ -576,19 +646,21 @@ function generateInspectionRecords(no, risk, i) {
 function generateAppraisalReports(no, risk, governance, i) {
     if (risk === 'safe') return [];
     const isDone = governance === 'done';
-    const appraisalDate = '2024-' + pad2(6 + (i % 4)) + '-' + pad2(10 + (i % 15));
+    // 编号索引归一化，避免统一社会信用代码等派生字段过长
+    const idx = i > 999 ? (i % 1000) : i;
+    const appraisalDate = '2024-' + pad2(6 + (idx % 4)) + '-' + pad2(10 + (idx % 15));
     return [{
         id: 'APP-' + no + '-001',
-        orgName: APPRAISAL_UNITS[i % APPRAISAL_UNITS.length],
-        orgCode: '91310120MA1K' + pad5(i),
+        orgName: APPRAISAL_UNITS[idx % APPRAISAL_UNITS.length],
+        orgCode: '91310120MA1K' + pad5(idx),
         appraisalDate: appraisalDate,
-        appraiser: RESPONSIBLE_PERSONS[(i + 2) % RESPONSIBLE_PERSONS.length],
+        appraiser: RESPONSIBLE_PERSONS[(idx + 2) % RESPONSIBLE_PERSONS.length],
         conclusion: APPRAISAL_LEVEL_MAP[risk] || RISK_LABEL_MAP[risk],
         level: APPRAISAL_LEVEL_MAP[risk] || RISK_LABEL_MAP[risk],
         phaseTag: '阶段性鉴定',
         reportFiles: '',
         remark: '东侧承重墙需加固',
-        reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
+        reporter: RESPONSIBLE_PERSONS[idx % RESPONSIBLE_PERSONS.length],
         reportTime: appraisalDate + ' 10:00'
     }];
 }

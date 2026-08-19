@@ -20,7 +20,7 @@
             font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
             background: var(--bg-dark); color: var(--text-primary); min-height: 100vh;
         }
-        .page-wrapper { max-width: 1400px; margin: 0 auto; padding: 16px; }
+        .page-wrapper { max-width: none; margin: 0 auto; padding: 16px; }
 
         /* 顶部 */
         .topbar {
@@ -298,13 +298,15 @@
         // 侧边栏模块配置：key / icon / title / tag
         const sidebarModules = [
             { key: 'overview', icon: 'fa-id-card', title: '房屋概况', tag: '基础' },
-            { key: 'inspection', icon: 'fa-search', title: '排查记录', tag: '排查' },
             { key: 'risk', icon: 'fa-exclamation-triangle', title: '风险信息记录', tag: '风险' },
-            { key: 'patrol', icon: 'fa-walking', title: '巡查检查', tag: '巡查' },
+            { key: 'inspection', icon: 'fa-search', title: '排查信息', tag: '排查' },
+            { key: 'patrol', icon: 'fa-walking', title: '动态巡查', tag: '巡查' },
             { key: 'measure', icon: 'fa-tools', title: '隐患整治', tag: '整治' },
-            { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '应急' },
+            { key: 'control', icon: 'fa-shield-alt', title: '隐患动态', tag: '动态' },
+            { key: 'stageAccept', icon: 'fa-clipboard-check', title: '阶段性验收', tag: '阶段' },
             { key: 'close', icon: 'fa-check-circle', title: '验收销号', tag: '闭环' },
             { key: 'appraisal', icon: 'fa-clipboard-check', title: '安全鉴定', tag: '鉴定' },
+            { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '应急' },
             { key: 'archive', icon: 'fa-folder-open', title: '整治档案', tag: '归档' }
         ];
 
@@ -330,6 +332,8 @@
             { key: 'survey3', title: '房屋用途现场情况', icon: 'fa-home' }
         ];
         let currentInspectionSubTab = 'survey1';
+        let currentMeasureSubTab = 'plan';
+        let currentControlSubTab = 'situation';
 
         // 各多次记录模块当前选中的记录索引
         const recordViewState = {
@@ -475,6 +479,8 @@
                 case 'patrol': html = renderPatrol(s); break;
                 case 'measure': html = renderMeasure(s); break;
                 case 'emergency': html = renderEmergency(s); break;
+                case 'control': html = renderControl(s); break;
+                case 'stageAccept': html = renderStageAccept(s); break;
                 case 'close': html = renderClose(s); break;
                 case 'archive': html = renderArchive(s); break;
                 default: html = renderOverview(s);
@@ -503,6 +509,22 @@
                 if (inspectionTab) {
                     e.stopPropagation();
                     currentInspectionSubTab = inspectionTab.dataset.key;
+                    renderContent();
+                    return;
+                }
+                // 隐患整治子 tab
+                const measureTab = e.target.closest('.content-tab[data-scope="measure"]');
+                if (measureTab) {
+                    e.stopPropagation();
+                    currentMeasureSubTab = measureTab.dataset.key;
+                    renderContent();
+                    return;
+                }
+                // 隐患动态子 tab
+                const controlTab = e.target.closest('.content-tab[data-scope="control"]');
+                if (controlTab) {
+                    e.stopPropagation();
+                    currentControlSubTab = controlTab.dataset.key;
                     renderContent();
                     return;
                 }
@@ -540,25 +562,30 @@
             }).join('');
 
             const jbxx = [
+                ['房屋编号', s.no || s.houseNo || s.overview && s.overview.houseNo || '—'],
                 ['房屋名称', s.overview && s.overview.houseName || s.name || '—'],
-                ['房屋性质', s.houseType || '自住民居'],
-                ['所在区域', '奉贤区' + (s.street || '') + (s.community || s.village || '')],
-                ['路号信息', formatRoadNoInfo(s)],
-                ['不需要排查原因', '—'],
-                ['产权人 / 使用人信息', s.owner || '—'],
-                ['身份证号码', s.overview && s.overview.idCard || '—'],
-                ['房屋用途', s.overview && s.overview.usage || '自住'],
-                ['是否同时自住', s.overview && s.overview.isSelfLive || '是'],
-                ['具体用途', s.overview && s.overview.specificUsage || '日常居住'],
-                ['人员聚集场所周边', s.overview && s.overview.crowdAround || '否'],
-                ['其他人员密集场所周边', s.overview && s.overview.otherCrowdAround || '否'],
-                ['土地性质', s.overview && s.overview.landNature || '集体土地'],
-                ['集体土地', '宅基地'],
-                ['所在区域', '奉贤区' + (s.street || '') + (s.community || s.village || '')],
+                ['所属乡镇/行政村', (s.street || '—') + ' / ' + (s.community || s.village || '—')],
+                ['自然村', s.naturalVillage || s.village || '—'],
+                ['详细地址', s.address || s.overview && s.overview.address || '—'],
+                ['建成年代', (s.overview && s.overview.builtYear || s.year || '—') + '年'],
                 ['建筑层数', s.overview && s.overview.floors || '3层'],
                 ['建筑面积 (m²)', s.overview && s.overview.buildingArea || '—'],
-                ['建成时间', (s.year || '—') + '年'],
-                ['具体年份', (s.year || '—') + '年']
+                ['结构类型', s.overview && s.overview.structureType || s.structure && s.structure.structureType || (s.category === '框架' ? '框架结构' : '砌体结构')],
+                ['房屋用途', s.overview && s.overview.usage || '自住'],
+                ['户主姓名', s.owner || '—'],
+                ['户主联系方式', s.overview && s.overview.phone || '—'],
+                ['家庭成员信息', s.familyMembers || '—'],
+                ['常住或使用人数超过 10 人', s.overview && s.overview.over10People || '否'],
+                ['设计方式', s.designConstruction && s.designConstruction.designMode || '有专业设计'],
+                ['是否正规设计', s.designConstruction && s.designConstruction.hasProfessionalDesign ? '是' : '否'],
+                ['建造方式', s.designConstruction && s.designConstruction.buildMode || '有资质施工队伍'],
+                ['是否正规施工', s.designConstruction && s.designConstruction.hasQualificationTeam ? '是' : '否'],
+                ['建造工匠', s.designConstruction && s.designConstruction.builder || '—'],
+                ['建造年份', (s.designConstruction && s.designConstruction.buildYear || s.year || '—') + '年'],
+                ['改建扩建记录', s.designConstruction && s.designConstruction.expansionRecord || s.structure && s.structure.expansionStatus || '—'],
+                ['楼屋盖', s.structure && s.structure.roofType || '现浇板'],
+                ['是否改扩建', s.structure && s.structure.expansionStatus || '否'],
+                ['是否装修', s.structure && s.structure.decorationStatus || '否']
             ];
             const zjd = [
                 ['宅基地面积', s.homestead && s.homestead.area || '132㎡'],
@@ -820,16 +847,32 @@
             ];
             return {
                 survey1: {
-                    columns: ['结构状况', '损伤具体部位', '增加堆载（二层及以上堆放大量重物）', '其他使用安全隐患', '初步判定', '位置标注', '房屋安全责任人', '联系方式', '安全监管责任人', '联系方式', '安全鉴定：是否整治前鉴定', '未进行鉴定房屋原因', '更新时间'],
+                    columns: ['排查时间', '排查单位', '排查人员', '人员身份', '排查结论', '结构状况', '发现问题', '隐患描述', '损伤具体部位', '增加堆载（二层及以上堆放大量重物）', '其他使用安全隐患', '初步判定', '位置标注', '房屋安全责任人', '联系方式', '安全监管责任人', '联系方式', '安全鉴定：是否整治前鉴定', '未进行鉴定房屋原因', '更新时间'],
                     rows: [[
-                        record.structureStatus || '—', record.damagePart || '—', record.overload || '否', record.otherRisks || '暂无',
-                        record.preliminary || '—', record.location || '—', record.ownerName || '—', record.ownerPhone || '—',
-                        record.safetyName || '—', record.safetyPhone || '—', record.preAppraisal || '否',
-                        record.noAppraisalReason || '—', record.updateTime || record.checkDate || '—'
+                        (record.checkDate || '—') + (record.checkTime ? ' ' + record.checkTime : ''),
+                        record.checkOrg || '奉城镇人民政府',
+                        record.checker || '—',
+                        record.checkerRole || '村干部',
+                        record.checkConclusion || record.structureStatus || '—',
+                        record.structureStatus || '—',
+                        record.foundProblem || record.damagePart || '—',
+                        record.hazardDesc || record.remark || '—',
+                        record.damagePart || '—',
+                        record.overload || '否',
+                        record.otherRisks || record.otherRisk || '暂无',
+                        record.preliminary || record.preliminaryJudge || '—',
+                        record.location || '—',
+                        record.ownerName || record.dutyPerson || '—',
+                        record.ownerPhone || record.dutyPhone || '—',
+                        record.safetyName || '—',
+                        record.safetyPhone || '—',
+                        record.preAppraisal || '否',
+                        record.noAppraisalReason || '—',
+                        record.updateTime || record.reportTime || record.checkDate || '—'
                     ]],
                     extraRows: [
                         [{ label: '排查备注', value: record.remark || '—', colspan: 'all' }],
-                        [{ label: '排查照片', value: (record.photos && record.photos.length ? record.photos : mockPhotos), colspan: 'all', isPhoto: true }],
+                        [{ label: '现场照片', value: (record.photos && record.photos.length ? record.photos : mockPhotos), colspan: 'all', isPhoto: true }],
                         [{ label: '上传证明文件', value: (record.proofFiles && record.proofFiles.length ? record.proofFiles : mockPhotoPair('证明文件 1 · 排查告知书', '证明文件 2 · 复核确认单', '#6b7fa6', '#7a8a6d')), colspan: 'all', isPhoto: true }]
                     ]
                 },
@@ -857,7 +900,7 @@
         function renderInspection(s) {
             const list = s.inspectionRecords || [];
             if (!list.length) {
-                return card('排查记录', 'fa-search', recordListWrapper('排查记录列表', '', { icon: 'fa-search' }));
+                return card('排查信息', 'fa-search', recordListWrapper('排查记录列表', '', { icon: 'fa-search' }));
             }
             const activeIndex = recordViewState.inspection;
             const listHtml = recordListTable(
@@ -913,7 +956,7 @@
 
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
-                    '<div class="content-card-title"><i class="fas fa-search"></i> 排查记录</div>' +
+                    '<div class="content-card-title"><i class="fas fa-search"></i> 排查信息</div>' +
                 '</div>' +
                 '<div class="content-body">' +
                     recordListWrapper('排查记录列表', listHtml, { icon: 'fa-search' }) +
@@ -951,10 +994,11 @@
             );
             const r = list[activeIndex] || list[0];
             const grid = [
-                kv('隐患动态整治状态', s.governStatus || '—'), kv('鉴定机构名称', r.orgName),
-                kv('鉴定时间', r.appraisalDate),
-                kv('鉴定负责人', r.appraiser), kv('鉴定结论', formatAppraisalConclusion(r.level || r.conclusion)),
-                kv('阶段性标识', r.phaseTag), kv('填报人', r.reporter),
+                kv('唯一标识', r.id), kv('隐患动态整治状态', s.governStatus || '—'),
+                kv('鉴定机构名称', r.orgName), kv('统一社会信用代码', r.orgCode),
+                kv('鉴定时间', r.appraisalDate), kv('鉴定负责人', r.appraiser),
+                kv('鉴定结论', formatAppraisalConclusion(r.level || r.conclusion)), kv('阶段性标识', r.phaseTag),
+                kv('备注', r.remark), kv('填报人', r.reporter),
                 kv('填报时间', r.reportTime)
             ].join('');
             const reportHtml = '<div class="info-grid info-grid-2col" style="margin-top:12px;">' +
@@ -1029,25 +1073,27 @@
         function renderPatrol(s) {
             let list = s.patrolRecords || [];
             list = list.slice().sort((a, b) => (b.patrolDate || '').localeCompare(a.patrolDate || ''));
-            if (!list.length) return card('巡查检查', 'fa-walking', '<div class="record-empty">暂无巡查检查记录</div>');
+            if (!list.length) return card('动态巡查', 'fa-walking', '<div class="record-empty">暂无动态巡查记录</div>');
             const activeIndex = recordViewState.patrol;
             const listHtml = recordListTable(
-                ['巡查日期', '巡查类型', '巡查机构', '巡查人员', '巡查结果', { title: '状态', tag: true, tagClass: v => v === '最新' ? 'primary' : 'info' }],
-                list.map((r, i) => [r.patrolDate || '—', r.patrolType || '—', r.patrolOrg || '—', r.patrolPerson || '—', r.result || '—', i === 0 ? '最新' : '历史']),
+                ['巡查时间', '巡查单位', '巡查人员', '巡查结论', { title: '状态', tag: true, tagClass: v => v === '最新' ? 'primary' : 'info' }],
+                list.map((r, i) => [r.patrolDate || '—', r.patrolOrg || '—', r.patrolPerson || '—', r.result || '—', i === 0 ? '最新' : '历史']),
                 'patrol',
                 activeIndex,
                 { showAction: true, records: list }
             );
             const r = list[activeIndex] || list[0];
             const grid = [
-                kv('记录编号', r.id), kv('巡查日期', r.patrolDate), kv('巡查类型', r.patrolType),
-                kv('巡查机构', r.patrolOrg), kv('巡查人员', r.patrolPerson), kv('巡查内容', r.content),
-                kv('巡查结果', r.result), kv('发现问题', r.foundProblems || '无'), kv('备注', r.remark)
+                kv('巡查时间', r.patrolDate),
+                kv('巡查单位', r.patrolOrg),
+                kv('巡查人员', r.patrolPerson),
+                kv('问题描述', r.foundProblems || '无'),
+                kv('巡查结论', r.result || '—'),
+                kv('判定结果', r.decision || '—')
             ].join('');
-            const patrolExtra = '<div class="info-item full-width"><div class="info-label">现场照片</div>' + renderPhotoValue((r.photos && r.photos.length ? r.photos : mockPhotoPair('巡查现场照片 1', '巡查现场照片 2', '#4b6d8a', '#8a7a4b')), '现场照片') + '</div>' +
-                '<div class="info-item full-width"><div class="info-label">附件</div>' + renderPhotoValue((r.files && r.files.length ? r.files : mockPhotoPair('巡查附件 1 · 巡查记录表', '巡查附件 2 · 签字确认单', '#6d7a8a', '#8a6d7a')), '附件') + '</div>';
-            return card('巡查检查', 'fa-walking',
-                recordListWrapper('巡查检查记录列表', listHtml, { icon: 'fa-walking' }) +
+            const patrolExtra = '<div class="info-item full-width"><div class="info-label">现场照片</div>' + renderPhotoValue((r.photos && r.photos.length ? r.photos : mockPhotoPair('巡查现场照片 1', '巡查现场照片 2', '#4b6d8a', '#8a7a4b')), '现场照片') + '</div>';
+            return card('动态巡查', 'fa-walking',
+                recordListWrapper('动态巡查记录列表', listHtml, { icon: 'fa-walking' }) +
                 '<div class="record-detail-header"><div class="title">巡查详情（' + (activeIndex + 1) + ' / ' + list.length + '）</div>' +
                 '<div class="meta">记录编号：' + (r.id || '—') + '</div></div>' +
                 '<div class="info-grid info-grid-2col">' + grid + patrolExtra + '</div>'
@@ -1057,7 +1103,68 @@
         function renderMeasure(s) {
             const mgmt = s.manageRecords || [];
             const prj = s.projectRecords || [];
-            if (!mgmt.length && !prj.length) return card('隐患整治', 'fa-tools', '<div class="record-empty">暂无整治记录</div>');
+            const tabsHtml = [
+                { key: 'plan', title: '整治计划', icon: 'fa-clipboard-list' },
+                { key: 'action', title: '整治措施', icon: 'fa-tools' }
+            ].map(t => '<div class="content-tab ' + (currentMeasureSubTab === t.key ? 'active' : '') + '" data-scope="measure" data-key="' + t.key + '"><i class="fas ' + t.icon + '"></i> ' + t.title + '</div>').join('');
+
+            let body = '';
+            if (currentMeasureSubTab === 'plan') {
+                body = renderMeasurePlan(s, mgmt, prj);
+            } else {
+                body = renderMeasureActions(s, mgmt, prj);
+            }
+            return card('隐患整治', 'fa-tools', '<div class="content-tabs" style="padding-left:0;padding-right:0;margin-bottom:14px;">' + tabsHtml + '</div>' + body);
+        }
+
+        // tab1 整治计划
+        function renderMeasurePlan(s, mgmt, prj) {
+            const firstMgmt = mgmt[0] || {};
+            const firstPrj = prj[0] || {};
+            const planId = 'PLAN-' + (s.no || 'NF') + '-001';
+            const planStart = firstMgmt.startTime || firstPrj.startDate || '';
+            const planEnd = s.rectDeadline || firstMgmt.planEndTime || firstPrj.endDate || '';
+            const manager = s.responsiblePerson || firstPrj.manager || firstMgmt.dutyPerson || '';
+            const phone = s.managerPhone || firstPrj.phone || firstMgmt.phone || '';
+            const scheme = firstPrj.planDetail || (firstPrj.projectName ? (firstPrj.projectName + '：由' + (firstPrj.company || '专业施工单位') + '按规范施工，完成后组织验收') : (firstMgmt.measureDesc || firstMgmt.requirement || ''));
+            const hasIsolation = (firstMgmt.isolation !== undefined) ? firstMgmt.isolation : (firstMgmt.measureType === '封控警示' || firstMgmt.measureType === '停止使用' || firstMgmt.measureType === '人员撤离');
+            const monitorTime = firstPrj.monitorTime || firstMgmt.monitorTime || (planStart ? planStart : '');
+            const reporter = firstMgmt.reporter || firstPrj.reporter || manager;
+            const reportTime = firstMgmt.reportTime || firstPrj.reportTime || (planStart ? planStart + ' 09:00' : '');
+
+            const grid = [
+                kv('唯一标识', planId),
+                kv('计划开始时间', planStart),
+                kv('计划完成时间', planEnd),
+                kv('负责人信息', manager),
+                kv('联系电话', phone),
+                kv('整治方案', scheme),
+                kv('是否采取硬隔离', hasIsolation ? '是' : '否'),
+                hasIsolation ? '' : kv('未硬隔离原因说明', firstMgmt.noIsolationReason || '经评估风险可控，采取警示标识与定期巡查管控'),
+                kv('备注', firstMgmt.remark || firstPrj.remark || '按计划推进整治'),
+                kv('填报人', reporter),
+                kv('填报时间', reportTime),
+                kv('动态监测情况时间', monitorTime)
+            ].join('');
+
+            const photoHtml = '<div class="info-grid info-grid-2col" style="margin-top:12px;">' +
+                '<div class="info-item full-width"><div class="info-label">长期管控照片</div>' +
+                renderPhotoValue(mockPhotoPair('长期管控照片 1 · 管控区域', '长期管控照片 2 · 警示标识', '#5b7fa6', '#8a6d4b'), '长期管控照片') + '</div>' +
+                '<div class="info-item full-width"><div class="info-label">告知承诺书</div>' +
+                renderPhotoValue([mockInspectionPhotoSvg('告知承诺书 · 签字页', '#6d8a5b')], '告知承诺书', '查看承诺书') + '</div>' +
+                '<div class="info-item full-width"><div class="info-label">书面计划</div>' +
+                renderPhotoValue([mockInspectionPhotoSvg('整治书面计划 · 盖章页', '#5b6d8a')], '书面计划', '查看书面计划') + '</div>' +
+                '</div>';
+
+            return '<div class="record-detail-header"><div class="title">整治计划</div>' +
+                '<div class="meta">唯一标识：' + planId + '</div></div>' +
+                '<div class="info-grid info-grid-2col">' + grid + '</div>' +
+                photoHtml;
+        }
+
+        // tab2 整治措施（管理措施 + 工程措施）
+        function renderMeasureActions(s, mgmt, prj) {
+            if (!mgmt.length && !prj.length) return '<div class="record-empty">暂无整治措施记录</div>';
 
             let body = '';
             if (mgmt.length) {
@@ -1096,12 +1203,16 @@
                 );
                 const p = prj[pActiveIndex] || prj[0];
                 const pGrid = [
-                    kv('唯一标识', p.id || ('P-' + (s.no || 'NF') + '-' + String(pActiveIndex + 1).padStart(3, '0'))), kv('工程措施', p.projectName),
+                    kv('唯一标识', p.id || ('P-' + (s.no || 'NF') + '-' + String(pActiveIndex + 1).padStart(3, '0'))), kv('整治任务编号', p.taskNo || s.no || '—'),
+                    kv('工程措施', p.projectName), kv('危房改造申请', p.renovateApplyNo || p.subsidyApplyNo || '—'),
+                    kv('补助资金', (p.subsidyAmount !== undefined ? p.subsidyAmount : p.fund) ? ((p.subsidyAmount !== undefined ? p.subsidyAmount : p.fund).toLocaleString() + ' 元') : '—'),
+                    kv('改造进度', (p.progress || 0) + '%'), kv('验收结论', p.acceptConclusion || '—'),
                     kv('实施拟采用的政策路径', p.policyPath || '维修加固'), kv('其他实施拟采用政策路径', p.otherPolicyPath || '—'),
                     kv('细化工程措施方案', p.planDetail || (p.projectName + '：由' + (p.company || '专业施工单位') + '按规范施工，完成后组织验收')), kv('施工单位', p.company),
-                    kv('开始时间', p.startDate), kv('结束时间', p.endDate),
+                    kv('开工时间', p.startDate), kv('竣工时间', p.endDate),
+                    kv('验收单位', p.acceptUnit || '—'), kv('验收人员', p.acceptChecker || '—'),
                     kv('负责人信息', p.manager), kv('联系电话', p.phone),
-                    kv('措施是否完成', (p.status === '已完成' || p.progress >= 100) ? '已完成' : '进行中'), kv('进度', (p.progress || 0) + '%'),
+                    kv('措施是否完成', (p.status === '已完成' || p.progress >= 100) ? '已完成' : '进行中'),
                     kv('备注', p.remark || '按方案推进，质量符合要求'), kv('填报人', p.reporter || p.manager || '—'),
                     kv('填报时间', p.reportTime || (p.endDate ? p.endDate + ' 17:00' : '—'))
                 ].join('');
@@ -1112,7 +1223,7 @@
                     '<div class="meta">唯一标识：' + (p.id || ('P-' + (s.no || 'NF') + '-' + String(pActiveIndex + 1).padStart(3, '0'))) + '</div></div>' +
                     '<div class="info-grid info-grid-2col">' + pGrid + pExtra + '</div>';
             }
-            return card('隐患整治', 'fa-tools', body);
+            return body;
         }
 
         function renderEmergency(s) {
@@ -1136,6 +1247,253 @@
                     '</tbody></table>';
             }
             return card('应急处置', 'fa-first-aid', body);
+        }
+
+        // 隐患动态
+        function renderControl(s) {
+            const tabsHtml = [
+                { key: 'situation', title: '隐患控制情况', icon: 'fa-shield-alt' },
+                { key: 'dynamic', title: '隐患动态记录', icon: 'fa-exchange-alt' },
+                { key: 'quality', title: '最新质检信息', icon: 'fa-check-circle' },
+                { key: 'history', title: '历史整改信息', icon: 'fa-history' }
+            ].map(t => '<div class="content-tab ' + (currentControlSubTab === t.key ? 'active' : '') + '" data-scope="control" data-key="' + t.key + '"><i class="fas ' + t.icon + '"></i> ' + t.title + '</div>').join('');
+
+            let body = '';
+            if (currentControlSubTab === 'dynamic') {
+                body = renderControlDynamic(s);
+            } else if (currentControlSubTab === 'quality') {
+                body = renderControlQuality(s);
+            } else if (currentControlSubTab === 'history') {
+                body = renderControlHistory(s);
+            } else {
+                body = renderControlSituation(s);
+            }
+            return card('隐患动态', 'fa-shield-alt', '<div class="content-tabs" style="padding-left:0;padding-right:0;margin-bottom:14px;">' + tabsHtml + '</div>' + body);
+        }
+
+        // tab1 隐患控制情况
+        function renderControlSituation(s) {
+            const mgmt = s.manageRecords || [];
+            const prj = s.projectRecords || [];
+            const firstMgmt = mgmt[0] || {};
+            const firstPrj = prj[0] || {};
+            const controlId = 'CTRL-' + (s.no || 'NF') + '-001';
+            const governanceLabel = { 'pending': '待整治', 'doing': '整治中', 'done': '已整治', 'overdue': '已逾期' }[s.governance] || (s.governStatus || '待整治');
+            const isControlled = firstMgmt.riskControlled !== undefined ? firstMgmt.riskControlled :
+                (s.governance === 'done' || s.closeStatus === '已通过');
+            const reporter = firstMgmt.reporter || firstPrj.reporter || s.responsiblePerson || '—';
+            const reportTime = firstMgmt.reportTime || firstPrj.reportTime || '';
+            const grid = [
+                kv('唯一标识', controlId),
+                kv('隐患动态整治状态', governanceLabel),
+                kv('安全隐患是否得到控制', isControlled ? '<span class="status-badge safe">是</span>' : '<span class="status-badge warning">否</span>'),
+                kv('备注', firstMgmt.remark || '持续管控中'),
+                kv('填报人', reporter),
+                kv('填报时间', reportTime || '—')
+            ].join('');
+            return '<div class="record-detail-header"><div class="title">隐患控制情况</div>' +
+                '<div class="meta">唯一标识：' + controlId + '</div></div>' +
+                '<div class="info-grid info-grid-2col">' + grid + '</div>';
+        }
+
+        // tab2 隐患动态记录
+        function renderControlDynamic(s) {
+            const idx = parseInt(String(s.no || '0').replace(/\D/g, '') || '0', 10);
+            const ins = (s.inspectionRecords || [])[0] || {};
+            const patrol = (s.patrolRecords || [])[0] || {};
+            const mgmt = (s.manageRecords || [])[0] || {};
+            const riskText = getRiskDisplayText(s.riskLevel) || '—';
+            const records = [];
+
+            records.push({
+                id: 'DYN-' + (s.no || 'NF') + '-001',
+                judge: '确认安全隐患',
+                reason: ins.hazardDesc || ('排查发现房屋存在安全隐患，风险等级：' + riskText),
+                reporter: ins.reporter || ins.checker || s.responsiblePerson || '—',
+                reportTime: ins.reportTime || ins.checkDate || '—'
+            });
+
+            records.push({
+                id: 'DYN-' + (s.no || 'NF') + '-002',
+                judge: '新增隐患',
+                reason: patrol.foundProblems || '巡查发现隐患部位有发展趋势',
+                reporter: patrol.patrolPerson || RESPONSIBLE_PERSONS[(idx + 1) % RESPONSIBLE_PERSONS.length],
+                reportTime: patrol.patrolDate || '—'
+            });
+
+            const doneLike = s.governance === 'done' || (s.manageRecords || []).some(m => m.riskControlled);
+            records.push({
+                id: 'DYN-' + (s.no || 'NF') + '-003',
+                judge: doneLike ? '隐患已控制' : '隐患未控制',
+                reason: mgmt.remark || ('落实' + (mgmt.measureType || '管控') + '措施'),
+                reporter: mgmt.reporter || mgmt.dutyPerson || RESPONSIBLE_PERSONS[(idx + 2) % RESPONSIBLE_PERSONS.length],
+                reportTime: mgmt.reportTime || mgmt.startTime || '—'
+            });
+
+            const rows = records.map(r => '<tr>' +
+                '<td>' + r.id + '</td><td>' + r.judge + '</td><td style="text-align:left;">' + r.reason + '</td>' +
+                '<td>' + r.reporter + '</td><td>' + r.reportTime + '</td></tr>').join('');
+            return '<div class="record-detail-header"><div class="title">隐患动态记录（' + records.length + '）</div>' +
+                '<div class="meta">房屋编号：' + (s.no || '—') + '</div></div>' +
+                '<table class="arch-table"><thead><tr><th>唯一标识</th><th>隐患判定情况</th><th>新增隐患原因</th><th>填报人</th><th>填报时间</th></tr></thead>' +
+                '<tbody>' + rows + '</tbody></table>';
+        }
+
+        // tab3 最新质检信息
+        function renderControlQuality(s) {
+            const patrol = (s.patrolRecords || []).slice().sort((a, b) => (b.patrolDate || '').localeCompare(a.patrolDate || ''));
+            const latest = patrol[0] || {};
+            const appraisal = (s.appraisalReports || [])[0] || {};
+            const mgmt = s.manageRecords || [];
+            const prj = s.projectRecords || [];
+            const hasProject = prj.length > 0;
+            const isControlled = mgmt.some(m => m.riskControlled) || s.governance === 'done';
+            const notEliminated = !isControlled || latest.result === '发现隐患' || hasProject;
+            const qualityConclusion = latest.result || formatAppraisalConclusion(appraisal.level || appraisal.conclusion) || '—';
+            const checkConclusion = notEliminated
+                ? '核查确认：安全隐患未彻底消除，需继续落实整治措施'
+                : '核查确认：安全隐患已消除，整治措施到位';
+            const subCategory = !hasProject
+                ? '未实施工程措施'
+                : (notEliminated ? '工程措施未完工/未验收' : '已实施工程措施但存在遗留问题');
+            const qualityRemark = latest.remark || appraisal.remark || '管控措施有效，需持续关注隐患部位变化';
+            const grid = [
+                kv('历史质检员', latest.patrolPerson || appraisal.appraiser || '—'),
+                kv('质检结论', qualityConclusion),
+                kv('质检来源', latest.patrolType ? '巡查检查' : (appraisal.id ? '安全鉴定' : '—')),
+                kv('核查结论', checkConclusion),
+                kv('是否真的实施了工程措施进行整治', hasProject ? '是' : '否'),
+                kv('安全隐患没有彻底消除', notEliminated ? '<span class="status-badge warning">是</span>' : '<span class="status-badge safe">否</span>'),
+                kv('安全隐患没有彻底消除细类', notEliminated ? subCategory : '—'),
+                kv('质检批注', qualityRemark),
+                kv('质检时间', latest.patrolDate || appraisal.appraisalDate || '—')
+            ].join('');
+            const photoHtml = '<div class="info-item full-width"><div class="info-label">质检现场照片</div>' +
+                renderPhotoValue(mockPhotoPair('质检现场照片 1', '质检现场照片 2', '#4b6d8a', '#8a7a4b'), '质检现场照片') + '</div>';
+            return '<div class="record-detail-header"><div class="title">最新质检信息</div>' +
+                '<div class="meta">房屋编号：' + (s.no || '—') + '</div></div>' +
+                '<div class="info-grid info-grid-2col">' + grid + photoHtml + '</div>';
+        }
+
+        // tab4 历史整改信息
+        function renderControlHistory(s) {
+            const mgmt = s.manageRecords || [];
+            const prj = s.projectRecords || [];
+            const rows = [];
+            mgmt.forEach((m, i) => rows.push({
+                person: m.dutyPerson || m.manager || m.reporter || '—',
+                selfConfirm: m.isDone ? '已自查确认' : '自查中',
+                remark: m.remark || m.measureDesc || '—',
+                time: m.actualEndTime || m.startTime || m.reportTime || '—',
+                done: m.isDone
+            }));
+            prj.forEach((p, i) => rows.push({
+                person: p.manager || p.checker || p.reporter || '—',
+                selfConfirm: p.isDone ? '已自查确认' : '自查中',
+                remark: p.remark || (p.projectName ? p.projectName + (p.isDone ? '已完成' : '进行中') : '—'),
+                time: p.endDate || p.startDate || p.reportTime || '—',
+                done: p.isDone
+            }));
+            if (!rows.length) return '<div class="record-empty">暂无历史整改信息</div>';
+            const body = rows.map((r, i) => '<tr>' +
+                '<td>' + (i + 1) + '</td><td>' + r.person + '</td>' +
+                '<td><span class="status-badge ' + (r.done ? 'safe' : 'warning') + '">' + r.selfConfirm + '</span></td>' +
+                '<td style="text-align:left;">' + r.remark + '</td><td>' + r.time + '</td></tr>').join('');
+            return '<div class="record-detail-header"><div class="title">历史整改信息（' + rows.length + '）</div>' +
+                '<div class="meta">房屋编号：' + (s.no || '—') + '</div></div>' +
+                '<table class="arch-table"><thead><tr><th>序号</th><th>历史整改员</th><th>自查确认</th><th>备注</th><th>整改时间</th></tr></thead>' +
+                '<tbody>' + body + '</tbody></table>';
+        }
+
+        // 阶段性验收
+        function renderStageAccept(s) {
+            const mgmt = s.manageRecords || [];
+            const prj = s.projectRecords || [];
+            const firstMgmt = mgmt[0] || {};
+            const firstPrj = prj[0] || {};
+            const acceptId = 'SA-' + (s.no || 'NF') + '-001';
+            const isDone = s.governance === 'done';
+            const acceptMethod = firstPrj.acceptMethod || '现场验收';
+            const hasAppraisalAfter = (s.appraisalReports || []).some(r => r.stage === '阶段性鉴定');
+            const thirdParty = firstPrj.thirdPartyResult || (isDone ? '复核合格' : '待复核');
+            const contact = firstPrj.manager || s.responsiblePerson || '—';
+            const phone = firstPrj.phone || s.managerPhone || '—';
+            const reporter = firstPrj.reporter || firstMgmt.reporter || s.responsiblePerson || '—';
+            const reportTime = firstPrj.reportTime || firstMgmt.reportTime || '';
+
+            const grid = [
+                kv('唯一标识', acceptId),
+                kv('验收方式', acceptMethod),
+                kv('整治完成后是否进行了安全鉴定', hasAppraisalAfter ? '是' : '否'),
+                kv('经专业第三方复核判定', thirdParty),
+                kv('姓名', contact),
+                kv('联系电话', phone),
+                kv('备注', firstPrj.remark || '按计划推进整治'),
+                kv('填报人', reporter),
+                kv('填报时间', reportTime || '—')
+            ].join('');
+
+            const photoHtml = '<div class="info-grid info-grid-2col" style="margin-top:12px;">' +
+                '<div class="info-item full-width"><div class="info-label">整治后照片</div>' +
+                renderPhotoValue(mockPhotoPair('整治后照片 1 · 全景', '整治后照片 2 · 细节', '#4b8a6d', '#8a5b4b'), '整治后照片') + '</div>' +
+                '<div class="info-item full-width"><div class="info-label">相关资料</div>' +
+                renderPhotoValue([mockInspectionPhotoSvg('相关资料 · 验收报告', '#5b6d8a')], '相关资料', '查看相关资料') + '</div>' +
+                '</div>';
+
+            const auditRecords = generateStageAcceptAuditRecords(s, acceptId);
+            const auditTable = '<table class="arch-table"><thead><tr>' +
+                '<th>序号</th><th>提交人</th><th>提交时间</th><th>审核时间</th><th>审核人</th><th>审核结论</th><th>审核报告</th><th>备注</th>' +
+                '</tr></thead><tbody>' +
+                auditRecords.map((r, i) => '<tr>' +
+                    '<td>' + (i + 1) + '</td>' +
+                    '<td>' + (r.submitter || '—') + '</td>' +
+                    '<td>' + (r.submitTime || '—') + '</td>' +
+                    '<td>' + (r.auditTime || '—') + '</td>' +
+                    '<td>' + (r.auditor || '—') + '</td>' +
+                    '<td>' + (r.conclusion || '—') + '</td>' +
+                    '<td><a href="javascript:void(0)" onclick="viewPhotoOnline(\'' + mockInspectionPhotoSvg('阶段性验收审核报告 ' + (i + 1), '#6d5b8a') + '\')">' + (r.reportName || '查看报告') + '</a></td>' +
+                    '<td>' + (r.remark || '—') + '</td>' +
+                    '</tr>').join('') +
+                '</tbody></table>';
+
+            return card('阶段性验收', 'fa-clipboard-check',
+                '<div class="record-detail-header"><div class="title">阶段性验收</div>' +
+                '<div class="meta">唯一标识：' + acceptId + '</div></div>' +
+                '<div class="info-grid info-grid-2col">' + grid + '</div>' +
+                photoHtml +
+                '<div class="table-section-title"><i class="fas fa-history"></i> 阶段性验收审核记录</div>' +
+                auditTable);
+        }
+
+        function generateStageAcceptAuditRecords(s, acceptId) {
+            const records = [];
+            const idx = parseInt(String(s.no || '').replace(/\D/g, '') || '0', 10);
+            const baseSubmit = (s.manageRecords && s.manageRecords[0] && s.manageRecords[0].reportTime) || '2024-06-15 10:00';
+            const baseDate = baseSubmit.split(' ')[0] || '2024-06-15';
+            const isDone = s.governance === 'done';
+            const submitter = s.responsiblePerson || RESPONSIBLE_PERSONS[idx % RESPONSIBLE_PERSONS.length];
+            const auditor = AUDITORS[(idx + 1) % AUDITORS.length];
+            records.push({
+                submitter: submitter,
+                submitTime: baseDate + ' 10:00',
+                auditTime: isDone ? baseDate + ' 14:30' : '—',
+                auditor: isDone ? auditor : '—',
+                conclusion: isDone ? '审核通过' : '待审核',
+                reportName: '阶段性验收审核报告 1',
+                remark: isDone ? '整治完成，符合验收条件' : '材料待补充'
+            });
+            if (isDone) {
+                records.push({
+                    submitter: auditor,
+                    submitTime: baseDate + ' 16:00',
+                    auditTime: baseDate + ' 17:30',
+                    auditor: AUDITORS[(idx + 2) % AUDITORS.length],
+                    conclusion: '复核通过',
+                    reportName: '阶段性验收审核报告 2',
+                    remark: '复核完成，同意进入销号流程'
+                });
+            }
+            return records;
         }
 
         function renderClose(s) {
