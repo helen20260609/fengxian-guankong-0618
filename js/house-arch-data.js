@@ -1254,4 +1254,58 @@ function syncCloseApplyData(houses) {
     setCloseApplyStorage(applies);
 }
 
+// ============================================================
+// 2026回头看 · 片区打卡（Zone Checkin）
+// 房屋种子坐标以 (30.92, 121.47) 为中心 ±0.09 随机分布，
+// 这里按象限划分 4 个片区，覆盖全部分布范围。
+// ============================================================
+const REVIEW_ZONES = [
+    { id: 'Z-NE', name: '东北片区', centerLat: 30.965, centerLng: 121.515, radius: 8000 },
+    { id: 'Z-NW', name: '西北片区', centerLat: 30.965, centerLng: 121.425, radius: 8000 },
+    { id: 'Z-SE', name: '东南片区', centerLat: 30.875, centerLng: 121.515, radius: 8000 },
+    { id: 'Z-SW', name: '西南片区', centerLat: 30.875, centerLng: 121.425, radius: 8000 }
+];
+const REVIEW_ZONE_SPLIT = { lat: 30.92, lng: 121.47 };
+const REVIEW_ZONE_CHECKIN_KEY = 'review-2026-zone-checkins'; // { zoneId: {zoneId,zoneName,lat,lng,time,source,operator} }
+
+// 按坐标判断所属片区
+function getZoneByCoord(lat, lng) {
+    if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+    const ns = lat >= REVIEW_ZONE_SPLIT.lat ? 'N' : 'S';
+    const ew = lng >= REVIEW_ZONE_SPLIT.lng ? 'E' : 'W';
+    const id = 'Z-' + ns + ew;
+    return REVIEW_ZONES.find(z => z.id === id) || null;
+}
+
+function getZoneById(zoneId) {
+    return REVIEW_ZONES.find(z => z.id === zoneId) || null;
+}
+
+// 读取全部片区打卡记录 { zoneId: record }
+function getZoneCheckins() {
+    try { return JSON.parse(localStorage.getItem(REVIEW_ZONE_CHECKIN_KEY) || '{}'); } catch (e) { return {}; }
+}
+
+// 写入/覆盖某片区打卡记录
+function saveZoneCheckin(record) {
+    const all = getZoneCheckins();
+    all[record.zoneId] = record;
+    localStorage.setItem(REVIEW_ZONE_CHECKIN_KEY, JSON.stringify(all));
+    // 同步写入历史
+    const hist = getZoneCheckinHistory();
+    hist.unshift(Object.assign({ seq: Date.now() }, record));
+    localStorage.setItem(REVIEW_ZONE_HISTORY_KEY, JSON.stringify(hist.slice(0, 100)));
+}
+
+function removeZoneCheckin(zoneId) {
+    const all = getZoneCheckins();
+    delete all[zoneId];
+    localStorage.setItem(REVIEW_ZONE_CHECKIN_KEY, JSON.stringify(all));
+}
+
+const REVIEW_ZONE_HISTORY_KEY = 'review-2026-zone-checkin-history';
+function getZoneCheckinHistory() {
+    try { return JSON.parse(localStorage.getItem(REVIEW_ZONE_HISTORY_KEY) || '[]'); } catch (e) { return []; }
+}
+
 // 在需要的地方调用，例如：initHouseArchSeed();

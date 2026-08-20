@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>我的工单</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.page-hero { padding-bottom: 58px; }
+.page-hero .ph-sub { position: absolute; left: 50%; top: calc(34px + 16px + 36px); transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; z-index: 2; }
+
+.ticket-body { flex: 1; overflow-y: auto; padding: 14px 14px calc(14px + var(--safe-bottom)); background: var(--bg); }
+
+.tab-bar { display: flex; gap: 8px; margin-bottom: 12px; background: var(--card); padding: 6px; border-radius: 10px; box-shadow: var(--shadow); }
+.tab-bar .tab-item { flex: 1; text-align: center; padding: 8px 0; border-radius: 8px; font-size: 13px; color: var(--text2); cursor: pointer; position: relative; transition: all .2s; }
+.tab-bar .tab-item.active { background: var(--primary); color: #fff !important; font-weight: 600; }
+.tab-item .badge { position: absolute; top: 2px; right: 8px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #d93025; color: #fff; font-size: 10px; line-height: 16px; text-align: center; font-weight: 600; }
+.tab-item.active .badge { background: rgba(255,255,255,.3); }
+
+.ticket-card { background: var(--card); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow); cursor: pointer; }
+.ticket-card:active { opacity: .85; }
+.tc-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+.tc-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.tc-no { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.tc-status { font-size: 11px; padding: 3px 10px; border-radius: 8px; font-weight: 600; flex-shrink: 0; }
+.st-draft { background: rgba(249,171,0,.15); color: #c68400; }
+.st-submitted { background: rgba(24,128,56,.12); color: #188038; }
+.tc-row { display: flex; font-size: 12px; margin-top: 4px; }
+.tc-label { width: 60px; flex-shrink: 0; color: var(--text2); }
+.tc-value { flex: 1; color: var(--text-primary); }
+.tc-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.tc-time { font-size: 11px; color: var(--text2); }
+.tc-actions { display: flex; gap: 8px; }
+.tc-btn { font-size: 12px; padding: 4px 12px; border-radius: 6px; border: none; cursor: pointer; }
+.tc-btn.primary { background: var(--primary); color: #fff; }
+.tc-btn.danger { background: rgba(217,48,37,.1); color: #d93025; }
+.tc-btn.ghost { background: var(--bg); color: var(--text2); }
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+.empty-state i { font-size: 48px; opacity: .3; display: block; margin-bottom: 12px; }
+.empty-state p { font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">我的工单</div>
+        <div class="ph-sub">2026回头看 · 排查任务管理</div>
+    </div>
+
+    <div class="ticket-body">
+        <div class="tab-bar">
+            <div class="tab-item active" data-tab="draft">
+                草稿箱
+                <span class="badge" id="draftBadge" style="display:none">0</span>
+            </div>
+            <div class="tab-item" data-tab="submitted">
+                已提交
+                <span class="badge" id="submittedBadge" style="display:none">0</span>
+            </div>
+        </div>
+        <div id="ticketList"></div>
+    </div>
+
+    </div>
+</div>
+
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var currentTab = 'draft';
+
+    // ---------- 收集所有工单 ----------
+    function loadTickets() {
+        var drafts = [];
+        var submitted = [];
+
+        // 扫描 localStorage 找草稿
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && key.indexOf('review-2026-draft-') === 0) {
+                try {
+                    var data = JSON.parse(localStorage.getItem(key));
+                    if (data && data.houseNo) {
+                        drafts.push(data);
+                    }
+                } catch(e) {}
+            }
+        }
+
+        // 已提交记录
+        try {
+            submitted = JSON.parse(localStorage.getItem('review-2026-records') || '[]');
+        } catch(e) {}
+
+        // 按时间倒序
+        drafts.sort(function(a, b) { return (b.saveTime || '').localeCompare(a.saveTime || ''); });
+        submitted.sort(function(a, b) { return (b.submitTime || '').localeCompare(a.submitTime || ''); });
+
+        return { drafts: drafts, submitted: submitted };
+    }
+
+    function fmtTime(isoStr) {
+        if (!isoStr) return '—';
+        var d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' +
+               String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+
+    function renderList() {
+        var tickets = loadTickets();
+        var list = currentTab === 'draft' ? tickets.drafts : tickets.submitted;
+        var container = document.getElementById('ticketList');
+
+        // 更新角标
+        var draftBadge = document.getElementById('draftBadge');
+        var submittedBadge = document.getElementById('submittedBadge');
+        if (tickets.drafts.length > 0) {
+            draftBadge.textContent = tickets.drafts.length;
+            draftBadge.style.display = 'block';
+        } else {
+            draftBadge.style.display = 'none';
+        }
+        if (tickets.submitted.length > 0) {
+            submittedBadge.textContent = tickets.submitted.length;
+            submittedBadge.style.display = 'block';
+        } else {
+            submittedBadge.style.display = 'none';
+        }
+
+        if (list.length === 0) {
+            container.innerHTML = '<div class="empty-state">' +
+                '<i class="fa-solid fa-inbox"></i>' +
+                '<p>' + (currentTab === 'draft' ? '暂无草稿工单' : '暂无已提交工单') + '</p>' +
+                '</div>';
+            return;
+        }
+
+        container.innerHTML = list.map(function(t, idx) {
+            var isDraft = currentTab === 'draft';
+            var statusClass = isDraft ? 'st-draft' : 'st-submitted';
+            var statusText = isDraft ? '草稿' : '已提交';
+            var timeLabel = isDraft ? '保存时间' : '提交时间';
+            var time = isDraft ? fmtTime(t.saveTime) : fmtTime(t.submitTime);
+
+            var conclusionText = '';
+            if (t.answers && t.answers.conclusion) {
+                var conclusionMap = { '安全': '安全', '观察使用': '观察使用', '处理使用': '处理使用', '停止使用': '停止使用' };
+                conclusionText = conclusionMap[t.answers.conclusion] || t.answers.conclusion;
+            }
+
+            var html = '<div class="ticket-card" data-idx="' + idx + '" data-no="' + (t.houseNo || '') + '">';
+            html += '<div class="tc-head">';
+            html += '<div>';
+            html += '<div class="tc-title">' + (t.houseName || t.houseNo || '未命名') + '</div>';
+            html += '<div class="tc-no">' + (t.houseNo || '—') + '</div>';
+            html += '</div>';
+            html += '<div class="tc-status ' + statusClass + '">' + statusText + '</div>';
+            html += '</div>';
+
+            if (t.houseAddress) {
+                html += '<div class="tc-row"><div class="tc-label">地址</div><div class="tc-value">' + t.houseAddress + '</div></div>';
+            }
+            if (t.owner) {
+                html += '<div class="tc-row"><div class="tc-label">户主</div><div class="tc-value">' + t.owner + '</div></div>';
+            }
+            if (conclusionText) {
+                html += '<div class="tc-row"><div class="tc-label">排查结论</div><div class="tc-value">' + conclusionText + '</div></div>';
+            }
+            if (t.checkin && t.checkin.time) {
+                html += '<div class="tc-row"><div class="tc-label">打卡时间</div><div class="tc-value">' + t.checkin.time + '</div></div>';
+            }
+
+            html += '<div class="tc-foot">';
+            html += '<div class="tc-time">' + timeLabel + '：' + time + '</div>';
+            html += '<div class="tc-actions">';
+            if (isDraft) {
+                html += '<button class="tc-btn primary" data-action="continue" data-no="' + (t.houseNo || '') + '">继续排查</button>';
+                html += '<button class="tc-btn danger" data-action="delete" data-no="' + (t.houseNo || '') + '">删除</button>';
+            } else {
+                html += '<button class="tc-btn ghost" data-action="view" data-no="' + (t.houseNo || '') + '">查看</button>';
+            }
+            html += '</div>';
+            html += '</div>';
+            html += '</div>';
+            return html;
+        }).join('');
+
+        // 绑定事件
+        container.querySelectorAll('.ticket-card').forEach(function(card) {
+            card.addEventListener('click', function(e) {
+                var action = e.target.getAttribute('data-action');
+                var houseNo = e.target.getAttribute('data-no') || card.getAttribute('data-no');
+                if (action === 'continue') {
+                    e.stopPropagation();
+                    App.go('pages/review-2026-inspect.html?no=' + encodeURIComponent(houseNo));
+                } else if (action === 'delete') {
+                    e.stopPropagation();
+                    if (confirm('确定删除该草稿吗？')) {
+                        localStorage.removeItem('review-2026-draft-' + houseNo);
+                        App.showToast('草稿已删除');
+                        renderList();
+                    }
+                } else if (action === 'view') {
+                    e.stopPropagation();
+                    App.showToast('已提交工单仅支持查看（原型）');
+                } else if (!action) {
+                    // 点击卡片本身
+                    if (currentTab === 'draft') {
+                        App.go('pages/review-2026-inspect.html?no=' + encodeURIComponent(houseNo));
+                    }
+                }
+            });
+        });
+    }
+
+    // ---------- Tab 切换 ----------
+    document.querySelectorAll('.tab-item').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.tab-item').forEach(function(t) { t.classList.remove('active'); });
+            this.classList.add('active');
+            currentTab = this.getAttribute('data-tab');
+            renderList();
+        });
+    });
+
+    renderList();
+})();
+</script>
+</body>
+</html>

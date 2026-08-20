@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>2026回头看</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.review-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.page-hero { padding-bottom: 58px; }
+.page-hero .ph-sub { position: absolute; left: 50%; top: calc(34px + 16px + 36px); transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; z-index: 2; }
+.page-hero .ph-ticket { position: absolute; right: 14px; top: calc(34px + 16px); width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; cursor: pointer; z-index: 2; }
+.page-hero .ph-ticket:active { background: rgba(255,255,255,.3); }
+.page-hero .ph-ticket-badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #d93025; color: #fff; font-size: 10px; line-height: 16px; text-align: center; font-weight: 600; border: 1.5px solid #fff; }
+
+.search-section { padding: 12px 14px 10px; background: var(--card); border-bottom: 1px solid var(--border); }
+.search-section .search-input-wrapper { position: relative; }
+.search-section input { width: 100%; height: 40px; border: 1px solid var(--border); border-radius: 20px; padding: 0 96px 0 36px; font-size: 14px; background: var(--bg); color: var(--text-primary); outline: none; box-sizing: border-box; }
+.search-section input:focus { border-color: var(--primary); }
+.search-section .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text2); font-size: 14px; }
+.search-btn { position: absolute; right: 4px; top: 4px; height: 32px; padding: 0 14px; border: none; border-radius: 16px; background: var(--primary); color: #fff; font-size: 13px; cursor: pointer; }
+.search-btn:active { opacity: .85; }
+
+.map-wrap { position: relative; flex: 1; min-height: 0; }
+#reviewMap { position: absolute; inset: 0; }
+
+.house-spot { position: relative; }
+.house-spot .spot-pin { width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--primary); border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; }
+.house-spot .spot-pin i { transform: rotate(45deg); color: #fff; font-size: 14px; }
+.house-spot.spot-red .spot-pin { background: #d93025; }
+.house-spot.spot-orange .spot-pin { background: #e37400; }
+.house-spot.spot-yellow .spot-pin { background: #f9ab00; }
+.house-spot.spot-blue .spot-pin { background: #1a73e8; }
+.house-spot.spot-pulse::after { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 2px solid rgba(26,115,232,.5); animation: spotPulse 1.6s ease-out infinite; }
+@keyframes spotPulse { 0% { transform: scale(.5); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+
+.info-card { position: absolute; left: 12px; right: 12px; bottom: calc(12px + var(--safe-bottom)); background: var(--card); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 14px; z-index: 1000; display: none; }
+.info-card.show { display: block; animation: cardUp .25s ease; }
+@keyframes cardUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.info-card .ic-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.info-card .ic-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.info-card .ic-close { color: var(--text2); font-size: 16px; padding: 2px 6px; cursor: pointer; }
+.info-card .ic-row { display: flex; font-size: 12px; margin-top: 6px; }
+.info-card .ic-label { width: 72px; flex-shrink: 0; color: var(--text2); }
+.info-card .ic-value { flex: 1; color: var(--text-primary); }
+.info-card .ic-badges { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.info-card .ic-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; font-weight: 600; }
+.badge-red { background: rgba(217,48,37,.12); color: #d93025; }
+.badge-orange { background: rgba(227,116,0,.12); color: #e37400; }
+.badge-yellow { background: rgba(249,171,0,.15); color: #c68400; }
+.badge-blue { background: rgba(26,115,232,.12); color: #1a73e8; }
+.badge-gray { background: rgba(95,99,104,.12); color: #5f6368; }
+.info-card .ic-btn { margin-top: 12px; width: 100%; height: 38px; border: none; border-radius: 10px; background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.info-card .ic-btn:active { opacity: .85; }
+
+.map-empty { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%); text-align: center; color: var(--text2); z-index: 500; pointer-events: none; }
+.map-empty i { font-size: 40px; opacity: .4; display: block; margin-bottom: 10px; }
+.map-empty p { font-size: 13px; }
+
+/* ===== 片区打卡 ===== */
+.zone-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--card); border-bottom: 1px solid var(--border); font-size: 12px; }
+.zone-bar .zb-label { color: var(--text2); flex-shrink: 0; }
+.zone-bar .zb-name { flex: 1; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zone-bar .zb-status { flex-shrink: 0; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 8px; }
+.zone-bar .zb-status.ok { background: rgba(24,128,56,.12); color: #188038; }
+.zone-bar .zb-status.no { background: rgba(217,48,37,.12); color: #d93025; }
+.zone-bar .zb-btn { flex-shrink: 0; border: none; border-radius: 14px; height: 28px; padding: 0 12px; font-size: 12px; cursor: pointer; background: var(--primary); color: #fff; }
+.zone-bar .zb-btn:active { opacity: .85; }
+.zone-bar .zb-btn.ghost { background: var(--bg); color: var(--text-primary); border: 1px solid var(--border); }
+
+.zone-fab { position: absolute; right: 12px; bottom: calc(12px + var(--safe-bottom)); z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+.zone-fab .zf-btn { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--card); box-shadow: 0 4px 14px rgba(0,0,0,.2); color: var(--primary); font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.zone-fab .zf-btn:active { transform: scale(.94); }
+.zone-fab .zf-btn.primary { background: var(--primary); color: #fff; }
+
+.zone-marker { position: relative; }
+.zone-marker .zm-pin { width: 30px; height: 30px; border-radius: 50%; background: #9aa0a6; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; }
+.zone-marker.zm-done .zm-pin { background: #188038; }
+.zone-marker .zm-label { position: absolute; left: 50%; top: 34px; transform: translateX(-50%); white-space: nowrap; font-size: 10px; font-weight: 600; color: var(--text-primary); background: rgba(255,255,255,.92); padding: 1px 6px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+
+/* 片区打卡弹层 */
+.zone-sheet-mask { position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 1500; display: none; }
+.zone-sheet-mask.show { display: block; }
+.zone-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--card); border-radius: 14px 14px 0 0; padding: 16px 16px calc(16px + var(--safe-bottom)); z-index: 1501; transform: translateY(100%); transition: transform .25s ease; max-height: 70%; overflow-y: auto; }
+.zone-sheet.show { transform: translateY(0); }
+.zone-sheet .zs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.zone-sheet .zs-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.zone-sheet .zs-close { color: var(--text2); font-size: 18px; padding: 2px 8px; cursor: pointer; }
+.zone-sheet .zs-item { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; }
+.zone-sheet .zs-item .zsi-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--bg); display: flex; align-items: center; justify-content: center; color: #9aa0a6; font-size: 15px; flex-shrink: 0; }
+.zone-sheet .zs-item.done .zsi-icon { background: rgba(24,128,56,.12); color: #188038; }
+.zone-sheet .zs-item .zsi-body { flex: 1; min-width: 0; }
+.zone-sheet .zs-item .zsi-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.zone-sheet .zs-item .zsi-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.zone-sheet .zs-item .zsi-btn { flex-shrink: 0; height: 30px; padding: 0 12px; border: none; border-radius: 15px; font-size: 12px; cursor: pointer; background: var(--primary); color: #fff; }
+.zone-sheet .zs-item .zsi-btn.done { background: rgba(24,128,56,.12); color: #188038; }
+.zone-sheet .zs-empty { text-align: center; color: var(--text2); font-size: 12px; padding: 20px 0; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">2026回头看</div>
+        <div class="ph-sub">奉贤区农村自建房排查</div>
+        <div class="ph-ticket tap" onclick="App.go('pages/review-2026-list.html')">
+            <i class="fa-solid fa-clipboard-list"></i>
+            <span class="ph-ticket-badge" id="ticketBadge" style="display:none">0</span>
+        </div>
+    </div>
+
+    <div class="review-body">
+        <div class="search-section">
+            <div class="search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="houseNoInput" placeholder="输入唯一标识" autocomplete="off">
+                <button class="search-btn" id="searchBtn">定位</button>
+            </div>
+        </div>
+
+        <div class="zone-bar">
+            <span class="zb-label">当前片区</span>
+            <span class="zb-name" id="zbName">定位中…</span>
+            <span class="zb-status no" id="zbStatus">未打卡</span>
+            <button class="zb-btn" id="zbCheckinBtn">片区打卡</button>
+            <button class="zb-btn ghost" id="zbHistoryBtn">记录</button>
+        </div>
+
+        <div class="map-wrap">
+            <div id="reviewMap"></div>
+            <div class="map-empty" id="mapEmpty" style="display:none">
+                <i class="fa-solid fa-house-circle-xmark"></i>
+                <p>未找到该唯一标识<br>请检查后重新输入</p>
+            </div>
+            <div class="zone-fab">
+                <button class="zf-btn" id="zfZones" title="片区列表"><i class="fa-solid fa-layer-group"></i></button>
+                <button class="zf-btn primary" id="zfLocate" title="定位到我"><i class="fa-solid fa-location-crosshairs"></i></button>
+            </div>
+            <div class="info-card" id="infoCard">
+                <div class="ic-head">
+                    <div class="ic-title" id="icName">—</div>
+                    <div class="ic-close tap" id="icClose"><i class="fa-solid fa-xmark"></i></div>
+                </div>
+                <div class="ic-badges" id="icBadges"></div>
+                <div class="ic-row"><div class="ic-label">唯一标识</div><div class="ic-value" id="icNo">—</div></div>
+                <div class="ic-row"><div class="ic-label">详细地址</div><div class="ic-value" id="icAddr">—</div></div>
+                <div class="ic-row"><div class="ic-label">户主</div><div class="ic-value" id="icOwner">—</div></div>
+                <button class="ic-btn" id="icEnter"><i class="fa-solid fa-clipboard-check"></i> 进入现场排查</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="zone-sheet-mask" id="zsMask"></div>
+    <div class="zone-sheet" id="zsSheet">
+        <div class="zs-head">
+            <div class="zs-title" id="zsTitle">片区打卡</div>
+            <div class="zs-close tap" id="zsClose"><i class="fa-solid fa-xmark"></i></div>
+        </div>
+        <div id="zsBody"></div>
+    </div>
+
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="../../js/house-arch-data.js"></script>
+<script>
+(function() {
+    // ---------- 数据 ----------
+    initHouseArchSeed();
+    var allHouses = getHouseArchStorage();
+    var houseList = Object.keys(allHouses).map(function(no) { return allHouses[no]; })
+        .filter(function(h) { return h.lat && h.lng; });
+
+    // ---------- 地图 ----------
+    var FENGXIAN_CENTER = [30.92, 121.47];
+    var map = L.map('reviewMap', { zoomControl: false, attributionControl: false }).setView(FENGXIAN_CENTER, 12);
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+        maxZoom: 19, subdomains: '1234'
+    }).addTo(map);
+
+    function riskColor(h) {
+        var lv = h.riskLevel || h.risk || '';
+        if (/疑似危房|重大/.test(lv)) return 'red';
+        if (/严重损坏|较大/.test(lv)) return 'orange';
+        if (/一般损坏|一般/.test(lv)) return 'yellow';
+        return 'blue';
+    }
+
+    function createIcon(h, highlight) {
+        return L.divIcon({
+            className: '',
+            html: '<div class="house-spot spot-' + riskColor(h) + (highlight ? ' spot-pulse' : '') + '"><div class="spot-pin"><i class="fa-solid fa-house"></i></div></div>',
+            iconSize: [34, 34],
+            iconAnchor: [17, 34]
+        });
+    }
+
+    var markers = [];
+    var markerByNo = {};
+
+    houseList.forEach(function(h) {
+        var marker = L.marker([h.lat, h.lng], { icon: createIcon(h, false) }).addTo(map);
+        marker.on('click', function() { showHouse(h, false); });
+        marker.houseNo = h.no;
+        markers.push(marker);
+        markerByNo[h.no] = marker;
+    });
+
+    // ---------- 信息卡 ----------
+    var infoCard = document.getElementById('infoCard');
+    var currentHouse = null;
+
+    function showHouse(h, flyTo) {
+        currentHouse = h;
+        document.getElementById('icName').textContent = h.name || h.no;
+        document.getElementById('icNo').textContent = h.no || '—';
+        document.getElementById('icAddr').textContent = h.address || '—';
+        document.getElementById('icOwner').textContent = (h.owner || '—') + (h.managerPhone ? '　' + h.managerPhone : '');
+
+        var badges = [];
+        if (h.riskLevel || h.risk) badges.push('<span class="ic-badge badge-' + riskColor(h) + '">' + (h.riskLevel || h.risk) + '</span>');
+        if (h.governStatus || h.governance) badges.push('<span class="ic-badge badge-gray">' + (h.governStatus || h.governance) + '</span>');
+        if (h.houseType || h.category) badges.push('<span class="ic-badge badge-blue">' + (h.houseType || h.category) + '</span>');
+        document.getElementById('icBadges').innerHTML = badges.join('');
+
+        infoCard.classList.add('show');
+        if (flyTo) {
+            map.flyTo([h.lat, h.lng], 16, { duration: .8 });
+        }
+        highlightMarker(h.no);
+    }
+
+    function highlightMarker(no) {
+        markers.forEach(function(m) { m.setIcon(createIcon(allHouses[m.houseNo], m.houseNo === no)); });
+    }
+
+    document.getElementById('icClose').onclick = function() {
+        infoCard.classList.remove('show');
+        highlightMarker(null);
+    };
+
+    document.getElementById('icEnter').onclick = function() {
+        if (!currentHouse) return;
+        App.go('pages/review-2026-inspect.html?no=' + encodeURIComponent(currentHouse.no));
+    };
+
+    // ---------- 搜索定位 ----------
+    function locateHouse(no) {
+        no = (no || '').trim().toUpperCase();
+        var emptyEl = document.getElementById('mapEmpty');
+        if (!no) { App.showToast('请输入唯一标识'); return; }
+        var h = allHouses[no];
+        if (!h) {
+            // 模糊匹配：支持输入后 5 位数字
+            var m = no.match(/(\d{4,5})$/);
+            if (m) {
+                var seq = m[1].padStart(5, '0');
+                h = allHouses['NF-2025-' + seq];
+            }
+        }
+        if (!h) {
+            emptyEl.style.display = 'block';
+            infoCard.classList.remove('show');
+            setTimeout(function() { emptyEl.style.display = 'none'; }, 2500);
+            return;
+        }
+        emptyEl.style.display = 'none';
+        showHouse(h, true);
+    }
+
+    document.getElementById('searchBtn').onclick = function() {
+        locateHouse(document.getElementById('houseNoInput').value);
+    };
+    document.getElementById('houseNoInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') locateHouse(this.value);
+    });
+
+    // URL 带 no 参数直接定位
+    var urlNo = App.getQuery('no');
+    if (urlNo) {
+        document.getElementById('houseNoInput').value = urlNo;
+        locateHouse(urlNo);
+    }
+
+    // 更新工单角标（草稿数）
+    (function updateTicketBadge() {
+        var count = 0;
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && key.indexOf('review-2026-draft-') === 0) count++;
+        }
+        var badge = document.getElementById('ticketBadge');
+        if (count > 0) {
+            badge.textContent = count;
+            badge.style.display = 'block';
+        }
+    })();
+
+    // ==================== 片区打卡 ====================
+    var myLatLng = null; // 我的当前定位
+    var myZone = null;   // 我所属片区
+    var zoneLayers = []; // 片区圆+中心标记
+    var myMarker = null;
+
+    function fmtNow() {
+        var n = new Date();
+        function p(x) { return String(x).padStart(2, '0'); }
+        return n.getFullYear() + '-' + p(n.getMonth() + 1) + '-' + p(n.getDate()) + ' ' + p(n.getHours()) + ':' + p(n.getMinutes()) + ':' + p(n.getSeconds());
+    }
+
+    function createZoneIcon(done) {
+        return L.divIcon({
+            className: '',
+            html: '<div class="zone-marker ' + (done ? 'zm-done' : '') + '"><div class="zm-pin"><i class="fa-solid fa-' + (done ? 'check' : 'location-dot') + '"></i></div></div>',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+    }
+
+    // 渲染 4 个片区边界圆 + 中心标记
+    function renderZones() {
+        zoneLayers.forEach(function(l) { map.removeLayer(l); });
+        zoneLayers = [];
+        var checkins = getZoneCheckins();
+        REVIEW_ZONES.forEach(function(z) {
+            var done = !!checkins[z.id];
+            var circle = L.circle([z.centerLat, z.centerLng], {
+                radius: z.radius,
+                color: done ? '#188038' : '#5f6368',
+                weight: 1.5,
+                dashArray: '5 5',
+                fillColor: done ? '#188038' : '#9aa0a6',
+                fillOpacity: done ? 0.08 : 0.04
+            }).addTo(map);
+            var marker = L.marker([z.centerLat, z.centerLng], { icon: createZoneIcon(done) }).addTo(map);
+            marker.bindTooltip(z.name + (done ? '（已打卡）' : ''), { permanent: true, direction: 'top', offset: [0, -18], className: 'zone-tip' });
+            marker.on('click', function() { openZoneSheet('zones'); });
+            zoneLayers.push(circle, marker);
+        });
+    }
+
+    // 刷新顶部片区状态栏
+    function refreshZoneBar() {
+        var nameEl = document.getElementById('zbName');
+        var statusEl = document.getElementById('zbStatus');
+        var btn = document.getElementById('zbCheckinBtn');
+        if (!myZone) {
+            nameEl.textContent = '未定位';
+            statusEl.textContent = '—';
+            statusEl.className = 'zb-status no';
+            btn.textContent = '定位';
+            return;
+        }
+        var checkins = getZoneCheckins();
+        var rec = checkins[myZone.id];
+        nameEl.textContent = myZone.name;
+        if (rec) {
+            statusEl.textContent = '已打卡 ' + rec.time.slice(5, 16);
+            statusEl.className = 'zb-status ok';
+            btn.textContent = '重新打卡';
+        } else {
+            statusEl.textContent = '未打卡';
+            statusEl.className = 'zb-status no';
+            btn.textContent = '片区打卡';
+        }
+    }
+
+    // 定位到我（真实或模拟）
+    function locateMe(cb) {
+        function done(lat, lng) {
+            myLatLng = [lat, lng];
+            myZone = getZoneByCoord(lat, lng);
+            if (myMarker) { map.removeLayer(myMarker); }
+            myMarker = L.marker(myLatLng, {
+                icon: L.divIcon({ className: '', html: '<div style="width:16px;height:16px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 4px rgba(26,115,232,.25)"></div>', iconSize: [16, 16], iconAnchor: [8, 8] })
+            }).addTo(map);
+            refreshZoneBar();
+            if (cb) cb();
+        }
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(pos) {
+                done(pos.coords.latitude, pos.coords.longitude);
+            }, function() {
+                // 模拟：落在东北片区中心附近
+                done(REVIEW_ZONES[0].centerLat + (Math.random() - .5) * 0.01, REVIEW_ZONES[0].centerLng + (Math.random() - .5) * 0.01);
+            }, { timeout: 2500 });
+        } else {
+            done(REVIEW_ZONES[0].centerLat + (Math.random() - .5) * 0.01, REVIEW_ZONES[0].centerLng + (Math.random() - .5) * 0.01);
+        }
+    }
+
+    // 片区打卡
+    function doZoneCheckin(zone) {
+        if (!zone) { App.showToast('请先定位'); return; }
+        var lat = myLatLng ? myLatLng[0] : zone.centerLat;
+        var lng = myLatLng ? myLatLng[1] : zone.centerLng;
+        var rec = {
+            zoneId: zone.id,
+            zoneName: zone.name,
+            lat: lat,
+            lng: lng,
+            time: fmtNow(),
+            source: myLatLng ? 'GPS/模拟定位' : '片区中心（未定位）',
+            operator: '排查员'
+        };
+        saveZoneCheckin(rec);
+        renderZones();
+        refreshZoneBar();
+        App.showToast(zone.name + ' 打卡成功');
+    }
+
+    document.getElementById('zbCheckinBtn').onclick = function() {
+        if (!myZone) {
+            locateMe(function() {
+                if (myZone) doZoneCheckin(myZone);
+            });
+        } else {
+            doZoneCheckin(myZone);
+        }
+    };
+
+    document.getElementById('zfLocate').onclick = function() {
+        locateMe(function() {
+            if (myLatLng) map.flyTo(myLatLng, 14, { duration: .6 });
+        });
+    };
+
+    // ---------- 片区弹层 ----------
+    var zsMask = document.getElementById('zsMask');
+    var zsSheet = document.getElementById('zsSheet');
+    function openZoneSheet(mode) {
+        var body = document.getElementById('zsBody');
+        var title = document.getElementById('zsTitle');
+        if (mode === 'history') {
+            title.textContent = '打卡记录';
+            var hist = getZoneCheckinHistory();
+            if (!hist.length) {
+                body.innerHTML = '<div class="zs-empty">暂无打卡记录</div>';
+            } else {
+                body.innerHTML = hist.map(function(h) {
+                    return '<div class="zs-item done">' +
+                        '<div class="zsi-icon"><i class="fa-solid fa-check"></i></div>' +
+                        '<div class="zsi-body"><div class="zsi-name">' + h.zoneName + '</div>' +
+                        '<div class="zsi-meta">' + h.time + ' · ' + (h.operator || '') + ' · ' + h.lat.toFixed(5) + ',' + h.lng.toFixed(5) + '</div></div>' +
+                        '</div>';
+                }).join('');
+            }
+        } else {
+            title.textContent = '片区打卡';
+            var checkins = getZoneCheckins();
+            body.innerHTML = REVIEW_ZONES.map(function(z) {
+                var rec = checkins[z.id];
+                var cur = myZone && myZone.id === z.id;
+                return '<div class="zs-item ' + (rec ? 'done' : '') + '">' +
+                    '<div class="zsi-icon"><i class="fa-solid fa-' + (rec ? 'check' : 'location-dot') + '"></i></div>' +
+                    '<div class="zsi-body"><div class="zsi-name">' + z.name + (cur ? ' <span style="color:#1a73e8;font-size:10px">（当前）</span>' : '') + '</div>' +
+                    '<div class="zsi-meta">' + (rec ? '已打卡 ' + rec.time.slice(5, 16) : '未打卡') + '</div></div>' +
+                    '<button class="zsi-btn ' + (rec ? 'done' : '') + '" data-zone="' + z.id + '">' + (rec ? '重打' : '打卡') + '</button>' +
+                    '</div>';
+            }).join('');
+            body.querySelectorAll('.zsi-btn').forEach(function(b) {
+                b.onclick = function() {
+                    var z = getZoneById(b.getAttribute('data-zone'));
+                    // 非当前片区：提示仍按当前定位打卡到该片区（原型宽松处理）
+                    doZoneCheckin(z);
+                    openZoneSheet('zones');
+                };
+            });
+        }
+        zsMask.classList.add('show');
+        zsSheet.classList.add('show');
+    }
+    function closeZoneSheet() {
+        zsMask.classList.remove('show');
+        zsSheet.classList.remove('show');
+    }
+    document.getElementById('zfZones').onclick = function() { openZoneSheet('zones'); };
+    document.getElementById('zbHistoryBtn').onclick = function() { openZoneSheet('history'); };
+    document.getElementById('zsClose').onclick = closeZoneSheet;
+    zsMask.onclick = closeZoneSheet;
+
+    // 初始化：渲染片区 + 自动定位
+    renderZones();
+    locateMe();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>现场排查</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.inspect-body { flex: 1; overflow-y: auto; padding: 14px 14px calc(14px + var(--safe-bottom)); background: var(--bg); }
+.page-hero { padding-bottom: 58px; }
+.page-hero .ph-sub { position: absolute; left: 50%; top: calc(34px + 16px + 36px); transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; z-index: 2; }
+
+.house-card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.house-card .hc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.house-card .hc-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.house-card .hc-no { font-size: 11px; color: var(--text2); background: var(--bg); padding: 2px 8px; border-radius: 8px; }
+.house-card .hc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.house-card .hc-item { font-size: 12px; }
+.house-card .hc-item .lbl { color: var(--text2); margin-bottom: 2px; }
+.house-card .hc-item .val { color: var(--text-primary); font-weight: 500; }
+.house-card .hc-item.full { grid-column: 1 / -1; }
+
+.section { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.section .sec-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.section .sec-title::before { content: ''; width: 3px; height: 14px; background: var(--primary); border-radius: 2px; }
+
+.check-item { margin-bottom: 14px; }
+.check-item:last-child { margin-bottom: 0; }
+.check-item .ci-label { font-size: 13px; color: var(--text-primary); margin-bottom: 8px; font-weight: 500; }
+.check-item .ci-label .req { color: #d93025; margin-left: 2px; }
+.radio-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.radio-pill { padding: 6px 14px; border-radius: 16px; border: 1px solid var(--border); font-size: 12px; color: var(--text2); background: var(--bg); cursor: pointer; user-select: none; }
+.radio-pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.radio-pill.active.danger { background: #d93025; border-color: #d93025; }
+.radio-pill.active.safe { background: #188038; border-color: #188038; }
+
+.form-input, .form-textarea { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; background: var(--bg); color: var(--text-primary); outline: none; box-sizing: border-box; font-family: inherit; }
+.form-input:focus, .form-textarea:focus { border-color: var(--primary); }
+.form-textarea { min-height: 80px; resize: none; }
+
+.photo-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-slot { width: 72px; height: 72px; border-radius: 8px; border: 1px dashed var(--border); background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text2); font-size: 11px; cursor: pointer; position: relative; overflow: hidden; }
+.photo-slot i { font-size: 20px; }
+.photo-slot:active { opacity: .7; }
+.photo-slot.filled { border: 1px solid var(--border); }
+.photo-slot.filled img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.photo-slot .ps-del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; z-index: 2; }
+.photo-slot .ps-tag { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); color: #fff; font-size: 10px; text-align: center; padding: 2px 0; z-index: 1; }
+
+/* 照片分类面板 */
+.photo-cat { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.photo-cat:last-child { margin-bottom: 0; }
+.pc-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--bg); cursor: pointer; user-select: none; }
+.pc-head .pc-title { flex: 1; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.pc-head .pc-title .req { color: #d93025; }
+.pc-head .pc-count { font-size: 11px; color: var(--text2); }
+.pc-head .pc-count.full { color: #188038; font-weight: 600; }
+.pc-head .pc-arrow { color: var(--text2); font-size: 12px; transition: transform .2s; }
+.photo-cat.collapsed .pc-arrow { transform: rotate(-90deg); }
+.photo-cat.collapsed .pc-body { display: none; }
+.pc-body { padding: 10px 12px; }
+.pc-tip { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
+
+.risk-result { padding: 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 12px; color: var(--text2); margin-top: 8px; }
+.risk-result strong { color: var(--text-primary); }
+
+.footer-bar { position: sticky; bottom: 0; padding: 10px 14px calc(10px + var(--safe-bottom)); background: var(--card); border-top: 1px solid var(--border); display: flex; gap: 10px; }
+.btn { flex: 1; height: 42px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-outline { background: var(--bg); color: var(--text-primary); border: 1px solid var(--border); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn:active { opacity: .85; }
+
+/* ===== 现场打卡定位 ===== */
+.checkin-card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.checkin-card .sec-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.checkin-card .sec-title::before { content: ''; width: 3px; height: 14px; background: var(--primary); border-radius: 2px; }
+.checkin-card .sec-title .ck-status { margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 8px; }
+.ck-status.ck-pending { background: rgba(95,99,104,.12); color: #5f6368; }
+.ck-status.ck-done { background: rgba(24,128,56,.12); color: #188038; }
+.ck-status.ck-far { background: rgba(217,48,37,.12); color: #d93025; }
+.checkin-info { display: none; margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
+.checkin-info.show { display: block; }
+.checkin-info .ck-row { display: flex; font-size: 12px; margin-top: 6px; }
+.checkin-info .ck-row:first-child { margin-top: 0; }
+.checkin-info .ck-label { width: 72px; flex-shrink: 0; color: var(--text2); }
+.checkin-info .ck-value { flex: 1; color: var(--text-primary); word-break: break-all; }
+.checkin-info .ck-value.far { color: #d93025; font-weight: 600; }
+.checkin-info .ck-value.ok { color: #188038; font-weight: 600; }
+.btn-checkin { width: 100%; height: 40px; border: none; border-radius: 10px; background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-checkin:active { opacity: .85; }
+.btn-checkin:disabled { background: #9aa0a6; cursor: not-allowed; }
+.btn-checkin.checked { background: #188038; }
+
+/* 打卡小地图 */
+.ck-map-wrap { margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+#ckMap { width: 100%; height: 180px; }
+.ck-map-legend { display: flex; gap: 14px; padding: 6px 10px; background: var(--bg); font-size: 11px; color: var(--text2); }
+.ck-map-legend .lg-item { display: flex; align-items: center; gap: 4px; }
+.ck-map-legend .lg-dot { width: 8px; height: 8px; border-radius: 50%; }
+.lg-dot.lg-house { background: #1a73e8; }
+.lg-dot.lg-checkin { background: #188038; }
+.lg-dot.lg-line { width: 14px; height: 2px; border-radius: 0; background: #d93025; }
+
+.ck-marker { position: relative; }
+.ck-marker .ckm-pin { width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; }
+.ck-marker .ckm-pin i { transform: rotate(45deg); color: #fff; font-size: 12px; }
+.ck-marker.ckm-house .ckm-pin { background: #1a73e8; }
+.ck-marker.ckm-checkin .ckm-pin { background: #188038; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">现场排查</div>
+        <div class="ph-sub">2026回头看 · 奉贤区农村自建房</div>
+    </div>
+
+    <div class="inspect-body" id="inspectBody">
+        <!-- 房屋信息 -->
+        <div class="house-card" id="houseCard" style="display:none">
+            <div class="hc-head">
+                <div class="hc-title" id="hName">—</div>
+                <div class="hc-no" id="hNo">—</div>
+            </div>
+            <div class="hc-grid">
+                <div class="hc-item full"><div class="lbl">详细地址</div><div class="val" id="hAddr">—</div></div>
+                <div class="hc-item"><div class="lbl">户主</div><div class="val" id="hOwner">—</div></div>
+                <div class="hc-item"><div class="lbl">联系电话</div><div class="val" id="hPhone">—</div></div>
+                <div class="hc-item"><div class="lbl">结构类型</div><div class="val" id="hStruct">—</div></div>
+                <div class="hc-item"><div class="lbl">建造年代</div><div class="val" id="hYear">—</div></div>
+                <div class="hc-item"><div class="lbl">初判风险</div><div class="val" id="hRisk">—</div></div>
+                <div class="hc-item"><div class="lbl">治理状态</div><div class="val" id="hStatus">—</div></div>
+            </div>
+        </div>
+
+        <div class="section" id="notFoundSection" style="display:none">
+            <div class="sec-title">未找到房屋档案</div>
+            <div style="font-size:13px;color:var(--text2);padding:8px 0">未查询到该唯一标识对应的档案信息，但仍可进行现场排查登记。</div>
+        </div>
+
+        <!-- 片区打卡 -->
+        <div class="checkin-card">
+            <div class="sec-title">片区打卡 <span class="ck-status ck-pending" id="ckStatus">未打卡</span></div>
+            <div class="checkin-info show" id="checkinInfo">
+                <div class="ck-row"><div class="ck-label">所属片区</div><div class="ck-value" id="ckZoneName">—</div></div>
+                <div class="ck-row"><div class="ck-label">打卡时间</div><div class="ck-value" id="ckTime">—</div></div>
+                <div class="ck-row"><div class="ck-label">打卡坐标</div><div class="ck-value" id="ckCoord">—</div></div>
+                <div class="ck-row"><div class="ck-label">打卡人</div><div class="ck-value" id="ckOperator">—</div></div>
+                <div class="ck-row"><div class="ck-label">定位方式</div><div class="ck-value" id="ckSource">—</div></div>
+                <div class="ck-row" id="ckHouseCoordRow" style="display:none"><div class="ck-label">房屋图斑</div><div class="ck-value" id="ckHouseCoord">—</div></div>
+            </div>
+            <div class="ck-map-wrap" id="ckMapWrap">
+                <div id="ckMap"></div>
+                <div class="ck-map-legend">
+                    <div class="lg-item"><div class="lg-dot lg-house"></div>房屋图斑</div>
+                    <div class="lg-item"><div class="lg-dot lg-checkin"></div>片区打卡点</div>
+                </div>
+            </div>
+            <button class="btn-checkin" id="btnCheckin"><i class="fa-solid fa-location-crosshairs"></i> 前往打卡</button>
+        </div>
+
+        <!-- 排查项 -->
+        <div class="section">
+            <div class="sec-title">排查项目</div>
+
+            <div class="check-item">
+                <div class="ci-label">房屋整体状况 <span class="req">*</span></div>
+                <div class="radio-row" data-field="overall">
+                    <div class="radio-pill" data-value="完好">完好</div>
+                    <div class="radio-pill" data-value="一般损坏">一般损坏</div>
+                    <div class="radio-pill" data-value="严重损坏">严重损坏</div>
+                    <div class="radio-pill" data-value="疑似危房">疑似危房</div>
+                </div>
+            </div>
+
+            <div class="check-item">
+                <div class="ci-label">地基基础 <span class="req">*</span></div>
+                <div class="radio-row" data-field="foundation">
+                    <div class="radio-pill" data-value="正常">正常</div>
+                    <div class="radio-pill" data-value="轻微沉降">轻微沉降</div>
+                    <div class="radio-pill" data-value="明显沉降">明显沉降</div>
+                    <div class="radio-pill" data-value="严重沉降">严重沉降</div>
+                </div>
+            </div>
+
+            <div class="check-item">
+                <div class="ci-label">承重墙体 <span class="req">*</span></div>
+                <div class="radio-row" data-field="wall">
+                    <div class="radio-pill" data-value="完好">完好</div>
+                    <div class="radio-pill" data-value="轻微裂缝">轻微裂缝</div>
+                    <div class="radio-pill" data-value="明显裂缝">明显裂缝</div>
+                    <div class="radio-pill" data-value="严重开裂">严重开裂</div>
+                </div>
+            </div>
+
+            <div class="check-item">
+                <div class="ci-label">屋面 <span class="req">*</span></div>
+                <div class="radio-row" data-field="roof">
+                    <div class="radio-pill" data-value="完好">完好</div>
+                    <div class="radio-pill" data-value="轻微渗漏">轻微渗漏</div>
+                    <div class="radio-pill" data-value="明显渗漏">明显渗漏</div>
+                    <div class="radio-pill" data-value="严重破损">严重破损</div>
+                </div>
+            </div>
+
+            <div class="check-item">
+                <div class="ci-label">是否改扩建/加层</div>
+                <div class="radio-row" data-field="expansion">
+                    <div class="radio-pill" data-value="无">无</div>
+                    <div class="radio-pill" data-value="有改扩建">有改扩建</div>
+                    <div class="radio-pill" data-value="有加层">有加层</div>
+                    <div class="radio-pill" data-value="有搭建">有搭建</div>
+                </div>
+            </div>
+
+            <div class="check-item">
+                <div class="ci-label">是否住人</div>
+                <div class="radio-row" data-field="occupied">
+                    <div class="radio-pill" data-value="自住">自住</div>
+                    <div class="radio-pill" data-value="出租">出租</div>
+                    <div class="radio-pill" data-value="空置">空置</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 综合结论 -->
+        <div class="section">
+            <div class="sec-title">综合结论</div>
+            <div class="check-item">
+                <div class="ci-label">本次排查结论 <span class="req">*</span></div>
+                <div class="radio-row" data-field="conclusion">
+                    <div class="radio-pill" data-value="安全">安全，可正常使用</div>
+                    <div class="radio-pill" data-value="观察使用">观察使用</div>
+                    <div class="radio-pill" data-value="处理使用">处理使用</div>
+                    <div class="radio-pill" data-value="停止使用">停止使用</div>
+                </div>
+            </div>
+            <div class="risk-result" id="riskHint">请选择排查结论，系统将自动匹配处置建议。</div>
+        </div>
+
+        <!-- 现场照片（分类采集） -->
+        <div class="section">
+            <div class="sec-title">现场照片</div>
+
+            <!-- 门牌号 -->
+            <div class="photo-cat" data-cat="doorPlate">
+                <div class="pc-head">
+                    <div class="pc-title">门牌号 <span class="req">*</span></div>
+                    <div class="pc-count" data-count>0/1</div>
+                    <i class="fa-solid fa-chevron-down pc-arrow"></i>
+                </div>
+                <div class="pc-body">
+                    <div class="pc-tip">拍摄门牌号或唯一标识牌，1 张</div>
+                    <div class="photo-row" data-row></div>
+                </div>
+            </div>
+
+            <!-- 房屋外立面 -->
+            <div class="photo-cat" data-cat="facade">
+                <div class="pc-head">
+                    <div class="pc-title">房屋外立面 <span class="req">*</span></div>
+                    <div class="pc-count" data-count>0/4</div>
+                    <i class="fa-solid fa-chevron-down pc-arrow"></i>
+                </div>
+                <div class="pc-body">
+                    <div class="pc-tip">依次拍摄东、南、西、北四个立面</div>
+                    <div class="photo-row" data-row>
+                        <div class="photo-slot" data-facade="东"><i class="fa-solid fa-camera"></i><span>东面</span></div>
+                        <div class="photo-slot" data-facade="南"><i class="fa-solid fa-camera"></i><span>南面</span></div>
+                        <div class="photo-slot" data-facade="西"><i class="fa-solid fa-camera"></i><span>西面</span></div>
+                        <div class="photo-slot" data-facade="北"><i class="fa-solid fa-camera"></i><span>北面</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 内部梁柱结构 -->
+            <div class="photo-cat collapsed" data-cat="structure">
+                <div class="pc-head">
+                    <div class="pc-title">内部梁柱结构</div>
+                    <div class="pc-count" data-count>0</div>
+                    <i class="fa-solid fa-chevron-down pc-arrow"></i>
+                </div>
+                <div class="pc-body">
+                    <div class="pc-tip">拍摄梁柱、承重构件内部情况（选传）</div>
+                    <div class="photo-row" data-row></div>
+                </div>
+            </div>
+
+            <!-- 损坏点位特写 -->
+            <div class="photo-cat collapsed" data-cat="damage">
+                <div class="pc-head">
+                    <div class="pc-title">损坏点位特写</div>
+                    <div class="pc-count" data-count>0</div>
+                    <i class="fa-solid fa-chevron-down pc-arrow"></i>
+                </div>
+                <div class="pc-body">
+                    <div class="pc-tip">拍摄裂缝、变形、渗漏等损坏细节（选传）</div>
+                    <div class="photo-row" data-row></div>
+                </div>
+            </div>
+        </div>
+
+        <input type="file" id="photoFileInput" accept="image/*" capture="environment" style="display:none">
+
+        <!-- 备注 -->
+        <div class="section">
+            <div class="sec-title">备注说明</div>
+            <textarea class="form-textarea" id="remarkInput" placeholder="补充说明现场情况、隐患描述、处置建议等（选填）"></textarea>
+        </div>
+    </div>
+
+    <div class="footer-bar">
+        <button class="btn btn-outline" id="btnSaveDraft"><i class="fa-solid fa-floppy-disk"></i> 存草稿</button>
+        <button class="btn btn-primary" id="btnSubmit"><i class="fa-solid fa-paper-plane"></i> 提交排查结果</button>
+    </div>
+
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="../../js/house-arch-data.js"></script>
+<script>
+(function() {
+    var houseNo = (App.getQuery('no') || '').trim().toUpperCase();
+    var house = null;
+
+    initHouseArchSeed();
+    if (houseNo) {
+        house = getHouseRecord(houseNo);
+    }
+
+    // ---------- 渲染房屋信息 ----------
+    var houseCard = document.getElementById('houseCard');
+    var notFound = document.getElementById('notFoundSection');
+    if (house) {
+        houseCard.style.display = 'block';
+        document.getElementById('hName').textContent = house.name || house.no;
+        document.getElementById('hNo').textContent = house.no;
+        document.getElementById('hAddr').textContent = house.address || '—';
+        document.getElementById('hOwner').textContent = house.owner || '—';
+        document.getElementById('hPhone').textContent = house.managerPhone || '—';
+        document.getElementById('hStruct').textContent = house.category || house.houseType || '—';
+        document.getElementById('hYear').textContent = house.year ? house.year + ' 年' : '—';
+        document.getElementById('hRisk').textContent = house.riskLevel || house.risk || '—';
+        document.getElementById('hStatus').textContent = house.governStatus || house.governance || '—';
+    } else {
+        notFound.style.display = 'block';
+    }
+
+    // ---------- 单选交互 ----------
+    var answers = {};
+    document.querySelectorAll('.radio-row').forEach(function(row) {
+        var field = row.getAttribute('data-field');
+        row.querySelectorAll('.radio-pill').forEach(function(pill) {
+            pill.addEventListener('click', function() {
+                row.querySelectorAll('.radio-pill').forEach(function(p) {
+                    p.classList.remove('active', 'danger', 'safe');
+                });
+                this.classList.add('active');
+                var val = this.getAttribute('data-value');
+                if (/疑似危房|严重|停止使用/.test(val)) this.classList.add('danger');
+                if (/安全|完好|正常|无/.test(val)) this.classList.add('safe');
+                answers[field] = val;
+                updateRiskHint();
+            });
+        });
+    });
+
+    var CONCLUSION_HINTS = {
+        '安全': '房屋现状安全，可继续正常使用。建议纳入常规巡查范围。',
+        '观察使用': '房屋存在轻微隐患，建议观察使用，3-6 个月后复查。',
+        '处理使用': '房屋存在明显隐患，建议限期维修加固，并跟踪整治进度。',
+        '停止使用': '房屋存在严重安全隐患，建议立即停止使用，撤离人员并封控警示。'
+    };
+    function updateRiskHint() {
+        var c = answers.conclusion;
+        var el = document.getElementById('riskHint');
+        if (c && CONCLUSION_HINTS[c]) {
+            el.innerHTML = '<strong>处置建议：</strong>' + CONCLUSION_HINTS[c];
+        } else {
+            el.textContent = '请选择排查结论，系统将自动匹配处置建议。';
+        }
+    }
+
+    // ---------- 片区打卡 ----------
+    var checkinData = null; // 当前房屋关联的片区打卡记录
+    var houseZone = (house && house.lat && house.lng) ? getZoneByCoord(house.lat, house.lng) : null;
+
+    function fmtCoord(lat, lng) {
+        return lat.toFixed(6) + ', ' + lng.toFixed(6);
+    }
+
+    // ---------- 打卡小地图 ----------
+    var ckMap = null;
+    var ckMapLayers = [];
+
+    function createCkIcon(cls, icon) {
+        return L.divIcon({
+            className: '',
+            html: '<div class="ck-marker ' + cls + '"><div class="ckm-pin"><i class="fa-solid ' + icon + '"></i></div></div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 28]
+        });
+    }
+
+    function ensureCkMap() {
+        if (!ckMap) {
+            ckMap = L.map('ckMap', { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+            L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+                maxZoom: 19, subdomains: '1234'
+            }).addTo(ckMap);
+        }
+        return ckMap;
+    }
+
+    function renderCkMap(zoneLat, zoneLng) {
+        var map = ensureCkMap();
+        ckMapLayers.forEach(function(l) { map.removeLayer(l); });
+        ckMapLayers = [];
+        var points = [];
+
+        if (typeof zoneLat === 'number' && typeof zoneLng === 'number') {
+            points.push([zoneLat, zoneLng]);
+            ckMapLayers.push(L.marker([zoneLat, zoneLng], { icon: createCkIcon('ckm-checkin', 'fa-location-crosshairs') }).addTo(map));
+        }
+        if (house && house.lat && house.lng) {
+            points.push([house.lat, house.lng]);
+            ckMapLayers.push(L.marker([house.lat, house.lng], { icon: createCkIcon('ckm-house', 'fa-house') }).addTo(map));
+        }
+
+        if (points.length === 0) {
+            map.setView([30.92, 121.47], 12);
+        } else if (points.length === 1) {
+            map.setView(points[0], 14);
+        } else {
+            map.fitBounds(L.latLngBounds(points).pad(0.6));
+        }
+    }
+
+    // 加载片区打卡状态
+    function loadZoneCheckin() {
+        var statusEl = document.getElementById('ckStatus');
+        var btn = document.getElementById('btnCheckin');
+        document.getElementById('ckZoneName').textContent = houseZone ? houseZone.name : '（无房屋坐标，无法匹配片区）';
+
+        if (!houseZone) {
+            statusEl.textContent = '无片区';
+            statusEl.className = 'ck-status ck-pending';
+            btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> 返回列表打卡';
+            renderCkMap();
+            return;
+        }
+        var rec = getZoneCheckins()[houseZone.id];
+        if (rec) {
+            checkinData = rec;
+            document.getElementById('ckTime').textContent = rec.time;
+            document.getElementById('ckCoord').textContent = fmtCoord(rec.lat, rec.lng);
+            document.getElementById('ckOperator').textContent = rec.operator || '—';
+            document.getElementById('ckSource').textContent = rec.source || '—';
+            statusEl.textContent = '片区已打卡';
+            statusEl.className = 'ck-status ck-done';
+            btn.classList.add('checked');
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> 已覆盖 · 重新打卡';
+            renderCkMap(rec.lat, rec.lng);
+        } else {
+            statusEl.textContent = '片区未打卡';
+            statusEl.className = 'ck-status ck-pending';
+            btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> 前往打卡';
+            renderCkMap();
+        }
+    }
+
+    document.getElementById('btnCheckin').addEventListener('click', function() {
+        // 跳回列表页进行片区打卡（带上当前房屋，便于返回）
+        App.go('pages/review-2026.html?no=' + encodeURIComponent(houseNo));
+    });
+
+    loadZoneCheckin();
+
+    // ---------- 照片分类采集 ----------
+    var PHOTO_CATS = {
+        doorPlate: { name: '门牌号', max: 1, required: true },
+        facade: { name: '房屋外立面', max: 4, required: true, slots: ['东','南','西','北'] },
+        structure: { name: '内部梁柱结构', max: 9, required: false },
+        damage: { name: '损坏点位特写', max: 9, required: false }
+    };
+    // photos[cat] = [{ id, cat, facade?, dataUrl, w, h, size, time }]
+    var photos = { doorPlate: [], facade: [], structure: [], damage: [] };
+    var photoSeq = 0;
+    var pendingCapture = null; // { cat, facade? }
+    var fileInput = document.getElementById('photoFileInput');
+
+    // 压缩至 maxWidth 1280，JPEG 质量 0.72（保证裂缝/构件可识别）
+    function compressImage(file, maxWidth, quality) {
+        maxWidth = maxWidth || 1280;
+        quality = quality || 0.72;
+        return new Promise(function(resolve, reject) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var img = new Image();
+                img.onload = function() {
+                    var w = img.width, h = img.height;
+                    if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+                    var canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    var dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    resolve({ dataUrl: dataUrl, width: w, height: h, size: Math.round(dataUrl.length * 0.75) });
+                };
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function fmtNow() {
+        var n = new Date();
+        function p(x) { return String(x).padStart(2, '0'); }
+        return n.getFullYear() + '-' + p(n.getMonth() + 1) + '-' + p(n.getDate()) + ' ' + p(n.getHours()) + ':' + p(n.getMinutes()) + ':' + p(n.getSeconds());
+    }
+
+    function getCatEl(cat) { return document.querySelector('.photo-cat[data-cat="' + cat + '"]'); }
+    function getCatRow(cat) { return getCatEl(cat).querySelector('[data-row]'); }
+
+    function updateCatCount(cat) {
+        var cfg = PHOTO_CATS[cat];
+        var countEl = getCatEl(cat).querySelector('[data-count]');
+        var n = photos[cat].length;
+        countEl.textContent = cfg.max === 1 || cfg.slots ? (n + '/' + cfg.max) : String(n);
+        var full = cfg.slots ? n >= cfg.max : (cfg.max === 1 && n >= 1);
+        countEl.className = 'pc-count' + (full ? ' full' : '');
+    }
+
+    // 触发文件选择（原型用 file input 模拟拍照）
+    function triggerCapture(cat, facade) {
+        pendingCapture = { cat: cat, facade: facade || null };
+        fileInput.value = '';
+        fileInput.click();
+    }
+
+    fileInput.addEventListener('change', function() {
+        var file = this.files && this.files[0];
+        if (!file || !pendingCapture) return;
+        var cap = pendingCapture;
+        pendingCapture = null;
+        compressImage(file).then(function(r) {
+            addPhoto(cap.cat, r.dataUrl, r.width, r.height, r.size, cap.facade);
+            App.showToast('照片已添加');
+        }).catch(function() { App.showToast('图片读取失败'); });
+    });
+
+    function addPhoto(cat, dataUrl, w, h, size, facade) {
+        var cfg = PHOTO_CATS[cat];
+        if (photos[cat].length >= cfg.max && !facade) {
+            App.showToast(cfg.name + ' 最多 ' + cfg.max + ' 张');
+            return;
+        }
+        var photo = {
+            id: 'PH-' + (++photoSeq) + '-' + Date.now(),
+            cat: cat,
+            facade: facade || null,
+            dataUrl: dataUrl,
+            w: w, h: h, size: size,
+            time: fmtNow()
+        };
+        // facade 槽位替换逻辑：同方位已存在则替换
+        if (facade) {
+            photos[cat] = photos[cat].filter(function(p) { return p.facade !== facade; });
+        }
+        photos[cat].push(photo);
+        renderCatPhotos(cat);
+    }
+
+    function removePhoto(cat, id) {
+        photos[cat] = photos[cat].filter(function(p) { return p.id !== id; });
+        renderCatPhotos(cat);
+    }
+
+    function renderCatPhotos(cat) {
+        var cfg = PHOTO_CATS[cat];
+        var row = getCatRow(cat);
+        if (cfg.slots) {
+            // 固定 4 槽位
+            row.querySelectorAll('.photo-slot').forEach(function(slot) {
+                var f = slot.getAttribute('data-facade');
+                var p = photos[cat].find(function(x) { return x.facade === f; });
+                if (p) {
+                    slot.classList.add('filled');
+                    slot.innerHTML = '<img src="' + p.dataUrl + '">' +
+                        '<div class="ps-del" data-del="' + p.id + '"><i class="fa-solid fa-xmark"></i></div>' +
+                        '<div class="ps-tag">' + f + '面</div>';
+                } else {
+                    slot.classList.remove('filled');
+                    slot.innerHTML = '<i class="fa-solid fa-camera"></i><span>' + f + '面</span>';
+                }
+            });
+            row.querySelectorAll('[data-del]').forEach(function(el) {
+                el.onclick = function(ev) {
+                    ev.stopPropagation();
+                    removePhoto(cat, el.getAttribute('data-del'));
+                };
+            });
+        } else {
+            // 动态槽位
+            var html = photos[cat].map(function(p, i) {
+                return '<div class="photo-slot filled">' +
+                    '<img src="' + p.dataUrl + '">' +
+                    '<div class="ps-del" data-del="' + p.id + '"><i class="fa-solid fa-xmark"></i></div>' +
+                    '<div class="ps-tag">' + (i + 1) + '</div>' +
+                    '</div>';
+            }).join('');
+            if (photos[cat].length < cfg.max) {
+                html += '<div class="photo-slot" data-add><i class="fa-solid fa-camera"></i><span>添加</span></div>';
+            }
+            row.innerHTML = html;
+            var addBtn = row.querySelector('[data-add]');
+            if (addBtn) addBtn.onclick = function() { triggerCapture(cat); };
+            row.querySelectorAll('[data-del]').forEach(function(el) {
+                el.onclick = function(ev) {
+                    ev.stopPropagation();
+                    removePhoto(cat, el.getAttribute('data-del'));
+                };
+            });
+        }
+        updateCatCount(cat);
+    }
+
+    // 绑定事件
+    document.querySelectorAll('.photo-cat').forEach(function(catEl) {
+        var cat = catEl.getAttribute('data-cat');
+        var cfg = PHOTO_CATS[cat];
+        // 折叠/展开
+        catEl.querySelector('.pc-head').addEventListener('click', function() {
+            catEl.classList.toggle('collapsed');
+        });
+        // 槽位点击
+        if (cfg.slots) {
+            catEl.querySelectorAll('.photo-slot').forEach(function(slot) {
+                slot.addEventListener('click', function() {
+                    triggerCapture(cat, slot.getAttribute('data-facade'));
+                });
+            });
+        }
+        updateCatCount(cat);
+    });
+    // 初始化动态类别
+    renderCatPhotos('doorPlate');
+    renderCatPhotos('structure');
+    renderCatPhotos('damage');
+
+    // ---------- 提交 ----------
+    function collectData() {
+        return {
+            houseNo: houseNo,
+            houseName: house ? (house.name || house.no) : houseNo,
+            houseAddress: house ? (house.address || '') : '',
+            owner: house ? (house.owner || '') : '',
+            answers: answers,
+            zoneId: houseZone ? houseZone.id : null,
+            zoneName: houseZone ? houseZone.name : '',
+            checkin: checkinData,
+            remark: document.getElementById('remarkInput').value.trim(),
+            photos: photos,
+            photoCount: Object.keys(photos).reduce(function(s, k) { return s + photos[k].length; }, 0),
+            submitTime: new Date().toISOString()
+        };
+    }
+
+    function validate() {
+        var required = ['overall', 'foundation', 'wall', 'roof', 'conclusion'];
+        var labels = { overall: '房屋整体状况', foundation: '地基基础', wall: '承重墙体', roof: '屋面', conclusion: '排查结论' };
+        for (var i = 0; i < required.length; i++) {
+            if (!answers[required[i]]) {
+                App.showToast('请选择：' + labels[required[i]]);
+                return false;
+            }
+        }
+        // 照片必传校验
+        if (photos.doorPlate.length < 1) {
+            App.showToast('请拍摄门牌号照片');
+            getCatEl('doorPlate').classList.remove('collapsed');
+            return false;
+        }
+        if (photos.facade.length < 4) {
+            App.showToast('请拍全房屋四个外立面');
+            getCatEl('facade').classList.remove('collapsed');
+            return false;
+        }
+        return true;
+    }
+
+    document.getElementById('btnSaveDraft').addEventListener('click', function() {
+        var data = collectData();
+        data.status = 'draft';
+        data.saveTime = data.submitTime;
+        delete data.submitTime;
+        var key = 'review-2026-draft-' + houseNo;
+        localStorage.setItem(key, JSON.stringify(data));
+        App.showToast('草稿已保存');
+    });
+
+    document.getElementById('btnSubmit').addEventListener('click', function() {
+        if (!validate()) return;
+        var data = collectData();
+        data.status = 'submitted';
+        var list = [];
+        try { list = JSON.parse(localStorage.getItem('review-2026-records') || '[]'); } catch(e) {}
+        list.unshift(data);
+        localStorage.setItem('review-2026-records', JSON.stringify(list));
+        localStorage.removeItem('review-2026-draft-' + houseNo);
+        App.showToast('排查结果已提交', 1500);
+        setTimeout(function() { App.back(); }, 1600);
+    });
+
+    // ---------- 恢复草稿 ----------
+    try {
+        var draft = JSON.parse(localStorage.getItem('review-2026-draft-' + houseNo) || 'null');
+        if (draft && draft.answers) {
+            Object.keys(draft.answers).forEach(function(field) {
+                var row = document.querySelector('.radio-row[data-field="' + field + '"]');
+                if (!row) return;
+                row.querySelectorAll('.radio-pill').forEach(function(p) {
+                    if (p.getAttribute('data-value') === draft.answers[field]) p.click();
+                });
+            });
+            if (draft.remark) document.getElementById('remarkInput').value = draft.remark;
+            // 旧草稿中的 checkin 为逐户打卡数据，片区模式下以片区打卡为准，忽略旧 checkin
+            if (draft.photos) {
+                Object.keys(draft.photos).forEach(function(cat) {
+                    if (photos[cat]) photos[cat] = draft.photos[cat];
+                });
+                ['doorPlate', 'facade', 'structure', 'damage'].forEach(renderCatPhotos);
+            }
+        }
+    } catch(e) {}
+})();
+</script>
+</body>
+</html>

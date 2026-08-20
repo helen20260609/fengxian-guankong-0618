@@ -170,16 +170,20 @@
         .photo-grid img { width: 96px; height: 72px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; }
         .photo-empty { color: var(--text-secondary); font-size: 13px; padding: 8px 0; }
 
-        /* 时间轴 */
-        .timeline { position: relative; margin-top: 8px; padding-left: 24px; }
-        .timeline::before { content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: var(--border); }
-        .tl-node { position: relative; padding-bottom: 18px; }
-        .tl-node:last-child { padding-bottom: 0; }
-        .tl-dot { position: absolute; left: -20px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--primary); border: 2px solid #fff; box-shadow: 0 0 0 2px var(--primary-light); }
-        .tl-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-        .tl-date { font-size: 12px; color: #fff; background: var(--primary); padding: 2px 8px; border-radius: 10px; }
-        .tl-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-        .tl-body { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-left: 2px; }
+        /* 时间轴 - 横向滚动 */
+        .timeline-wrap { position: relative; margin-top: 8px; }
+        .timeline { position: relative; display: flex; gap: 0; overflow-x: auto; padding: 8px 4px 10px; scrollbar-width: thin; }
+        .timeline::-webkit-scrollbar { height: 6px; }
+        .timeline::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .timeline::before { content: ''; position: absolute; left: 4px; top: 47px; height: 2px; width: calc(100% - 8px); background: var(--border); }
+        .tl-node { position: relative; flex: 0 0 220px; padding: 64px 16px 0 0; }
+        .tl-node::before { content: ''; position: absolute; left: 0; top: 42px; width: 12px; height: 12px; border-radius: 50%; background: var(--primary); border: 2px solid #fff; box-shadow: 0 0 0 2px var(--primary-light); z-index: 1; }
+        .tl-node:first-child::before { background: #fff; border-color: var(--primary); }
+        .tl-date { position: absolute; top: 6px; left: 0; font-size: 12px; color: #fff; background: var(--primary); padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+        .tl-type-tag { display: inline-block; font-size: 11px; color: var(--primary); background: var(--primary-light); padding: 1px 8px; border-radius: 8px; margin-bottom: 4px; }
+        .tl-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tl-body { font-size: 12px; color: var(--text-secondary); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .tl-scroll-hint { text-align: right; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
         /* 照片查看器 */
         .photo-viewer-overlay {
@@ -276,23 +280,16 @@
         function getCurrentHouseArch() {
             initHouseArchSeed();
             const no = getCurrentHouseNo();
-            let rec = getHouseRecord(no);
-            if (!rec) {
-                rec = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS));
-                rec.no = no;
-                ensureHouseRecord(no);
-            }
-            return rec;
+            // 未找到记录时直接入库并返回规范化后的记录，避免返回未补全字段的拷贝
+            return getHouseRecord(no) || ensureHouseRecord(no);
         }
 
-        // 地址转路号信息：去掉"上海市奉贤区"、镇/街道、村/居委，仅保留"X组Y号"
-        function formatRoadNoInfo(record) {
-            const raw = (record && record.address) || '';
-            const numMatch = raw.match(/(\d+)号/);
-            const houseNo = numMatch ? numMatch[0] : raw.replace(/^上海市奉贤区/, '').replace(/^\S*(镇|街道|旅游区)/, '').replace(/^\S*(村|社区|居委)/, '');
-            const noDigits = String((record && record.no) || '').replace(/\D/g, '');
-            const groupNo = (1 + (parseInt(noDigits || '0', 10) % 12));
-            return groupNo + '组' + houseNo;
+        // ---------------- HTML 转义 ----------------
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        function escapeAttr(s) {
+            return escapeHtml(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         // 侧边栏模块配置：key / icon / title / tag
@@ -343,7 +340,6 @@
             patrol: 0,
             measure: 0,
             measureProject: 0,
-            close: 0,
             designConstruction: 0
         };
 
@@ -436,17 +432,10 @@
         function renderSidebar() {
             const menu = document.getElementById('sidebarMenu');
             const moduleParam = getUrlParam('module');
-            if (moduleParam && sidebarModules.some(m => m.key === moduleParam)) currentModule = moduleParam;
-            if (moduleParam === 'designConstruction') {
-                currentOverviewSubTab = 'designConstruction';
-                currentModule = 'overview';
-            }
-            if (moduleParam === 'structure') {
-                currentOverviewSubTab = 'structure';
-                currentModule = 'overview';
-            }
-            if (moduleParam === 'usage') {
-                currentOverviewSubTab = 'usage';
+            if (moduleParam && sidebarModules.some(m => m.key === moduleParam)) {
+                currentModule = moduleParam;
+            } else if (moduleParam && overviewSubTabs.some(t => t.key === moduleParam)) {
+                currentOverviewSubTab = moduleParam;
                 currentModule = 'overview';
             }
             menu.innerHTML = sidebarModules.map(item => {
@@ -469,7 +458,6 @@
         function renderContent() {
             const s = currentHouse;
             const area = document.getElementById('contentArea');
-            const module = sidebarModules.find(m => m.key === currentModule);
             let html = '';
             switch (currentModule) {
                 case 'overview': html = renderOverview(s); break;
@@ -577,7 +565,7 @@
                 ['家庭成员信息', s.familyMembers || '—'],
                 ['常住或使用人数超过 10 人', s.overview && s.overview.over10People || '否'],
                 ['设计方式', s.designConstruction && s.designConstruction.designMode || '有专业设计'],
-                ['是否正规设计', s.designConstruction && s.designConstruction.hasProfessionalDesign ? '是' : '否'],
+                ['是否正规设计', s.designConstruction && s.designConstruction.designMode ? (s.designConstruction.hasProfessionalDesign ? '是' : '否') : '—'],
                 ['建造方式', s.designConstruction && s.designConstruction.buildMode || '有资质施工队伍'],
                 ['是否正规施工', s.designConstruction && s.designConstruction.hasQualificationTeam ? '是' : '否'],
                 ['建造工匠', s.designConstruction && s.designConstruction.builder || '—'],
@@ -625,12 +613,12 @@
             const u = s.usage || {};
             const usage = [
                 ['使用用途', u.usageType || '—'],
-                ['是否自住', u.isSelfLive ? '是' : '否'],
+                ['是否自住', u.isSelfLive === true ? '是' : u.isSelfLive === false ? '否' : '—'],
                 ['具体用途', u.specificUsage || '—'],
                 ['居住人数', u.occupancy || '—'],
-                ['人员聚集场所周边', u.crowdAround ? '是' : '否'],
-                ['其他人员密集场所周边', u.otherCrowdAround ? '是' : '否'],
-                ['超10人使用', u.over10People ? '是' : '否']
+                ['人员聚集场所周边', u.crowdAround === true ? '是' : u.crowdAround === false ? '否' : '—'],
+                ['其他人员密集场所周边', u.otherCrowdAround === true ? '是' : u.otherCrowdAround === false ? '否' : '—'],
+                ['超10人使用', u.over10People === true ? '是' : u.over10People === false ? '否' : '—']
             ];
             if (u.historyChanges && u.historyChanges.length) {
                 usage.push(['使用变更历史', '']);
@@ -741,75 +729,6 @@
             return '<div class="record-section-title"><span><i class="fas ' + (options.icon || 'fa-list') + '"></i> ' + title + '</span>' +
                 (options.addBtn ? '<button class="record-add-btn" onclick="' + options.addBtn.onclick + '"><i class="fas fa-plus"></i> ' + options.addBtn.text + '</button>' : '') +
                 '</div>' + listHtml;
-        }
-
-        function renderPhotos(s) {
-            const p = s.photos || {};
-            const sections = [
-                { key: 'exterior', title: '房屋外观照片' },
-                { key: 'interior', title: '房屋内部照片' },
-                { key: 'surrounding', title: '周边环境照片' },
-                { key: 'hazard', title: '隐患部位照片' },
-                { key: 'measure', title: '整治过程照片' },
-                { key: 'completion', title: '整治完成照片' }
-            ];
-            let body = '';
-            sections.forEach((sec, idx) => {
-                const list = (p[sec.key] && p[sec.key].length) ? p[sec.key] : mockPhotoPair(sec.title + ' 1', sec.title + ' 2');
-                body += '<div class="info-section-title"><i class="fas fa-image"></i> ' + sec.title + '</div>';
-                body += '<div class="photo-grid">' + list.map(u => '<img src="' + u + '" alt="' + sec.title + '" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>';
-            });
-            return card('房屋照片', 'fa-images', body);
-        }
-
-        function renderHomestead(s) {
-            const h = s.homestead || {};
-            const grid = [
-                kv('土地性质', h.landNature), kv('宅基地编号', h.plotNo), kv('宅基地面积', h.area),
-                kv('审批情况', h.approvalStatus), kv('权属证明号', h.certNo), kv('审批部门', h.approvalDept),
-                kv('审批日期', h.approvalDate), kv('备注', h.remark)
-            ].join('');
-            return card('宅基地信息', 'fa-map', '<div class="info-grid">' + grid + '</div>');
-        }
-
-        function renderDesignConstruction(s) {
-            const d = s.designConstruction || {};
-            const grid = [
-                kv('设计单位', d.designUnit), kv('设计单位代码', d.designUnitCode), kv('设计日期', d.designDate),
-                kv('施工单位', d.constructionUnit), kv('施工单位代码', d.constructionUnitCode), kv('施工资质', d.constructionQual),
-                kv('监理单位', d.supervisionUnit), kv('监理单位代码', d.supervisionUnitCode),
-                kv('设计方式', d.designMode), kv('建造方式', d.buildMode),
-                kv('是否有专业设计', d.hasProfessionalDesign ? '是' : '否'), kv('是否有资质队伍', d.hasQualificationTeam ? '是' : '否')
-            ].join('');
-            return card('设计施工信息', 'fa-hard-hat', '<div class="info-grid">' + grid + '</div>');
-        }
-
-        function renderStructure(s) {
-            const st = s.structure || {};
-            const grid = [
-                kv('结构形式', st.structureType), kv('建筑层数', st.floors), kv('建筑面积', st.buildingArea),
-                kv('屋盖类型', st.roofType), kv('墙体材料', st.wallMaterial), kv('楼盖材料', st.floorMaterial),
-                kv('基础形式', st.foundationType), kv('抗震信息', st.seismicInfo), kv('最大跨度', st.maxSpan),
-                kv('改扩建情况', st.expansionStatus), kv('装修情况', st.decorationStatus), kv('备注', st.remark)
-            ].join('');
-            return card('结构信息', 'fa-building', '<div class="info-grid">' + grid + '</div>');
-        }
-
-        function renderUsage(s) {
-            const u = s.usage || {};
-            let grid = [
-                kv('使用用途', u.usageType), kv('是否自住', u.isSelfLive), kv('具体用途', u.specificUsage),
-                kv('居住人数', u.occupancy), kv('人员聚集场所周边', u.crowdAround), kv('其他人员密集场所周边', u.otherCrowdAround),
-                kv('超10人使用', u.over10People)
-            ].join('');
-            let history = '';
-            if (u.historyChanges && u.historyChanges.length) {
-                history = '<div class="table-section-title">使用变更历史</div>' +
-                    '<table class="arch-table"><thead><tr><th>变更日期</th><th>变更类型</th><th>变更内容</th><th>审批情况</th><th>备注</th></tr></thead><tbody>' +
-                    u.historyChanges.map(h => '<tr><td>' + (h.changeDate || '—') + '</td><td>' + (h.changeType || '—') + '</td><td>' + (h.changeContent || '—') + '</td><td>' + (h.approvalStatus || '—') + '</td><td>' + (h.remark || '—') + '</td></tr>').join('') +
-                    '</tbody></table>';
-            }
-            return card('使用信息', 'fa-home', '<div class="info-grid">' + grid + '</div>' + history);
         }
 
         function mockInspectionPhotoSvg(title, color) {
@@ -1414,7 +1333,7 @@
             const acceptId = 'SA-' + (s.no || 'NF') + '-001';
             const isDone = s.governance === 'done';
             const acceptMethod = firstPrj.acceptMethod || '现场验收';
-            const hasAppraisalAfter = (s.appraisalReports || []).some(r => r.stage === '阶段性鉴定');
+            const hasAppraisalAfter = (s.appraisalReports || []).some(r => r.phaseTag === '阶段性鉴定');
             const thirdParty = firstPrj.thirdPartyResult || (isDone ? '复核合格' : '待复核');
             const contact = firstPrj.manager || s.responsiblePerson || '—';
             const phone = firstPrj.phone || s.managerPhone || '—';
@@ -1497,34 +1416,9 @@
         }
 
         function renderClose(s) {
-            const records = s.closeRecords || [];
             const statusClass = {
                 '未申请': 'info', '待审核': 'warning', '审核中': 'warning', '已通过': 'safe', '已驳回': 'danger'
             }[s.closeStatus] || 'info';
-            if (records.length) {
-                const activeIndex = recordViewState.close;
-                const listHtml = recordListTable(
-                    ['申请时间', '审核时间', '审核人', '审核结论', '填报人'],
-                    records.map(r => [r.applyTime || '—', r.auditTime || '—', r.auditor || '—', r.conclusion || '—', r.reporter || '—']),
-                    'close',
-                    activeIndex,
-                    { showAction: true }
-                );
-                const r = records[activeIndex] || records[0];
-                const grid = [
-                    kv('当前销号状态', '<span class="status-badge ' + statusClass + '">' + (r.status || s.closeStatus || '未申请') + '</span>'),
-                    kv('申请时间', r.applyTime), kv('审核时间', r.auditTime),
-                    kv('审核人', r.auditor), kv('审核意见', r.auditOpinion),
-                    (r.status === '已驳回' || s.closeStatus === '已驳回' ? kv('驳回原因', r.rejectReason || s.closeRejectReason) : ''),
-                    kv('重点监控名单', s.isRemovedFromFocus ? '<span class="status-badge safe">已退出</span>' : '<span class="status-badge warning">监控中</span>')
-                ].join('');
-                return card('验收销号', 'fa-check-circle',
-                    recordListWrapper('验收销号申请记录', listHtml, { icon: 'fa-check-circle' }) +
-                    '<div class="record-detail-header"><div class="title">验收销号详情（' + (activeIndex + 1) + ' / ' + records.length + '）</div>' +
-                    '<div class="meta">申请时间：' + (r.applyTime || '—') + '</div></div>' +
-                    '<div class="info-grid info-grid-2col">' + grid + '</div>'
-                );
-            }
             let body = '<div class="info-section-title"><i class="fas fa-clipboard-check"></i> 销号状态</div>' +
                 '<div class="info-grid info-grid-2col">' +
                 kv('当前销号状态', '<span class="status-badge ' + statusClass + '">' + (s.closeStatus || '未申请') + '</span>') +
@@ -1559,9 +1453,14 @@
                 body += '<div class="photo-empty">暂无归档记录</div>';
             }
             if (events.length) {
-                body += '<div class="table-section-title"><i class="fas fa-history"></i> 风险动态时间线</div><div class="timeline">' +
-                    events.map(e => '<div class="tl-node"><div class="tl-dot"></div><div class="tl-header"><span class="tl-date">' + (e.date || '—') + '</span><span class="tl-title">' + e.type + '：' + e.title + '</span></div><div class="tl-body">' + e.desc + '</div></div>').join('') +
-                    '</div>';
+                const cards = events.map(e =>
+                    '<div class="tl-node"><div class="tl-date">' + escapeHtml(e.date || '—') + '</div>' +
+                    '<div class="tl-type-tag">' + escapeHtml(e.type) + '</div>' +
+                    '<div class="tl-title" title="' + escapeAttr(e.title) + '">' + escapeHtml(e.title) + '</div>' +
+                    '<div class="tl-body" title="' + escapeAttr(e.desc) + '">' + escapeHtml(e.desc) + '</div></div>').join('');
+                const hint = events.length > 3 ? '<div class="tl-scroll-hint"><i class="fas fa-arrows-alt-h"></i> 共 ' + events.length + ' 条，左右滑动查看更多</div>' : '';
+                body += '<div class="table-section-title"><i class="fas fa-history"></i> 风险动态时间线</div>' +
+                    '<div class="timeline-wrap"><div class="timeline">' + cards + '</div></div>' + hint;
             }
             return card('整治档案', 'fa-folder-open', body);
         }
