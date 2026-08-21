@@ -38,11 +38,12 @@ let map, markers = [];
 let footprintPolygons = [];
 let leftChart, streetRankingChart, measurePieChart;
 
+// 新口径：疑似危房/严重损坏房→第三类(红)；一般损坏房→第二类(黄)；完好房(基本完好房)→第一类(蓝)
 const RISK_CONFIG = {
-    danger: { label: '疑似危房', color: '#d93025', class: 'danger', shape: 'circle' },
-    major: { label: '严重损坏房', color: '#f57c00', class: 'major', shape: 'circle' },
-    warning: { label: '一般损坏房', color: '#f9ab00', class: 'warning', shape: 'circle' },
-    safe: { label: '完好房(基本完好房)', color: '#1a73e8', class: 'safe', shape: 'circle' }
+    danger: { label: '第三类', color: '#d93025', class: 'danger', shape: 'circle' },
+    major: { label: '第三类', color: '#d93025', class: 'major', shape: 'circle' },
+    warning: { label: '第二类', color: '#f9ab00', class: 'warning', shape: 'circle' },
+    safe: { label: '第一类', color: '#1a73e8', class: 'safe', shape: 'circle' }
 };
 
 const STATUS_CONFIG = {
@@ -85,9 +86,9 @@ const LAYER_MODES = {
     base: {
         name: '房屋底图', colorBy: 'risk', shapeBy: 'risk', statusMap: RISK_CONFIG,
         filters: [
-            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'danger', label: '疑似危房', icon: 'fa-exclamation-triangle' },
-            { key: 'major', label: '严重损坏房', icon: 'fa-exclamation-circle' }, { key: 'warning', label: '一般损坏房', icon: 'fa-exclamation' },
-            { key: 'safe', label: '完好房(基本完好房)', icon: 'fa-check-circle' }
+            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'danger', label: '第三类', icon: 'fa-exclamation-triangle' },
+            { key: 'major', label: '第三类', icon: 'fa-exclamation-circle' }, { key: 'warning', label: '第二类', icon: 'fa-exclamation' },
+            { key: 'safe', label: '第一类', icon: 'fa-check-circle' }
         ]
     },
     governance: {

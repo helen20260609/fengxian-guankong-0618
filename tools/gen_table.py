@@ -1,7 +1,7 @@
 import pandas as pd
 
 df = pd.read_excel('城镇农村自建房安全风险辨识清单0602.xlsx', header=1)
-df = df[df['序号'].notna() & (df['序号'] != '红：疑似危房\n橙：严重损坏房\n黄：一般损坏房\n蓝：完好房（基本完好房）')]
+df = df[df['序号'].notna() & (df['序号'] != '红：第三类\n橙：第三类\n黄：第二类\n蓝：第一类')]
 df['主项'] = df['主项'].ffill()
 df['分项'] = df['分项'].ffill()
 df['分项内容'] = df['分项内容'].ffill()

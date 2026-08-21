@@ -75,10 +75,10 @@
         let currentProjectTab = 'type';
 
         const riskMap = {
-            danger: { label: '疑似危房', color: '#d93025' },
-            major: { label: '严重损坏房', color: '#f57c00' },
-            warning: { label: '一般损坏房', color: '#f9ab00' },
-            safe: { label: '完好房(基本完好房)', color: '#1a73e8' }
+            danger: { label: '第三类', color: '#d93025' },
+            major: { label: '第三类', color: '#d93025' },
+            warning: { label: '第二类', color: '#f9ab00' },
+            safe: { label: '第一类', color: '#1a73e8' }
         };
 
         const houseTypeMap = {

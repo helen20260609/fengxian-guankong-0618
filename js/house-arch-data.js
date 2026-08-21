@@ -29,11 +29,12 @@ const MODULE_RISKS = ['danger', 'major', 'warning', 'safe'];
 const MODULE_GOVERNANCE = ['pending', 'doing', 'done', 'overdue'];
 
 // 把房屋风险状态映射到统一风险等级（内部数据层）
+// 新口径：疑似危房(红)/严重损坏房(橙)→第三类(红)；一般损坏房(黄)→第二类(黄)；完好房(基本完好房)(蓝)→第一类(蓝)
 const RISK_LABEL_MAP = {
-    'danger': '疑似危房',
-    'major': '严重损坏房',
-    'warning': '一般损坏房',
-    'safe': '完好房(基本完好房)'
+    'danger': '第三类',
+    'major': '第三类',
+    'warning': '第二类',
+    'safe': '第一类'
 };
 const APPRAISAL_LEVEL_MAP = {
     'danger': 'D级',
@@ -42,8 +43,11 @@ const APPRAISAL_LEVEL_MAP = {
     'safe': 'A级'
 };
 const RISK_LABEL_MAP_INV = {
+    '第三类': 'danger',
+    '第二类': 'warning',
+    '第一类': 'safe',
     '疑似危房': 'danger',
-    '严重损坏房': 'major',
+    '严重损坏房': 'danger',
     '一般损坏房': 'warning',
     '完好房(基本完好房)': 'safe',
     '安全': 'safe',
@@ -52,12 +56,15 @@ const RISK_LABEL_MAP_INV = {
 
 // 农村自建房展示用风险等级：与数据层保持一致（已统一为风险等级）
 const HAZARD_TO_RISK_LEVEL = {
-    '疑似危房': '疑似危房',
-    '严重损坏房': '严重损坏房',
-    '一般损坏房': '一般损坏房',
-    '完好房(基本完好房)': '完好房(基本完好房)',
-    '安全': '完好房(基本完好房)',
-    '无风险': '完好房(基本完好房)'
+    '第三类': '第三类',
+    '第二类': '第二类',
+    '第一类': '第一类',
+    '疑似危房': '第三类',
+    '严重损坏房': '第三类',
+    '一般损坏房': '第二类',
+    '完好房(基本完好房)': '第一类',
+    '安全': '第一类',
+    '无风险': '第一类'
 };
 const STATUS_LABEL_MAP = {
     'pending': '待整治',
@@ -140,7 +147,7 @@ function generateArchId(prefix) {
 // 默认单条房屋结构（兼容 house-arch-detail 的 DEFAULT_HOUSE_STATUS）
 const DEFAULT_HOUSE_STATUS = {
     no: '', name: '', owner: '', street: '', address: '', community: '', village: '',
-    riskLevel: '一般损坏房', governStatus: '待整治', currentMeasure: '',
+    riskLevel: '第二类', governStatus: '待整治', currentMeasure: '',
     managerName: '', managerPhone: '',
     manageRecords: [], projectRecords: [], qualityTrace: [], archiveRecords: [],
     closeStatus: '未申请', closeApplyTime: '', closeAuditTime: '', closeAuditor: '',
@@ -216,7 +223,7 @@ const DEFAULT_HOUSE_STATUS = {
 };
 
 // 规范化单条记录：保持 risk/riskLevel、governance/governStatus 两对字段一致，
-// 销号通过则统一为 safe/完好房(基本完好房) + done/已治理，并补全编号。
+// 销号通过则统一为 safe/第一类 + done/已治理，并补全编号。
 function normalizeHouseRecord(record) {
     if (!record) return record;
     const rec = record;
@@ -248,10 +255,10 @@ function normalizeHouseRecord(record) {
     // 销号已通过：强制无风险/已治理，但保留原始风险等级用于统计
     if (rec.closeStatus === '已通过') {
         rec.originalRisk = rec.originalRisk || rec.risk || 'warning';
-        rec.originalRiskLevel = rec.originalRiskLevel || rec.riskLevel || RISK_LABEL_MAP[rec.risk] || '完好房(基本完好房)';
+        rec.originalRiskLevel = rec.originalRiskLevel || rec.riskLevel || RISK_LABEL_MAP[rec.risk] || '第一类';
         rec.risk = 'safe';
         rec.governance = 'done';
-        rec.riskLevel = '完好房(基本完好房)';
+        rec.riskLevel = '第一类';
         rec.governStatus = '已治理';
         rec.isRemovedFromFocus = true;
         rec.riskDisplayLevel = HAZARD_TO_RISK_LEVEL[rec.originalRiskLevel] || rec.originalRiskLevel;
@@ -265,7 +272,7 @@ function normalizeHouseRecord(record) {
         rec.riskLevel = RISK_LABEL_MAP[rec.risk];
     } else {
         rec.risk = 'warning';
-        rec.riskLevel = '一般损坏房';
+        rec.riskLevel = '第二类';
     }
 
     // 保留原始风险信息（便于销号后追溯）
@@ -285,7 +292,7 @@ function normalizeHouseRecord(record) {
 
     if (!rec.closeStatus) rec.closeStatus = '未申请';
     if (!rec.riskInfo) rec.riskInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskInfo));
-    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '一般损坏房';
+    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '第二类';
     rec.riskInfo.riskStatus = rec.riskInfo.riskStatus || rec.governStatus || '待整治';
     rec.riskInfo.relatedHouse = rec.riskInfo.relatedHouse || rec.no || '';
     rec.riskInfo.relatedOwner = rec.riskInfo.relatedOwner || rec.owner || '';
@@ -843,7 +850,7 @@ function syncTaskToHouseRecords(task) {
                     checkDate: dateStr,
                     checker: task.person || '',
                     checkerPhone: '',
-                    structureStatus: rec.riskLevel || '一般损坏房',
+                    structureStatus: rec.riskLevel || '第二类',
                     damagePart: '',
                     overload: '否',
                     otherRisk: '暂无',
@@ -952,11 +959,11 @@ function generateHouseSeed() {
 
     // 真实的农村自建房风险分布：安全/轻微瑕疵占多数，危房占少数
     const RISK_DISTRIBUTION = [
-        { risk: 'danger',  governanceWeights: { done: 0.35, doing: 0.30, overdue: 0.20, pending: 0.15 }, ratio: 0.10 }, // 疑似危房
-        { risk: 'major',   governanceWeights: { done: 0.30, doing: 0.40, overdue: 0.15, pending: 0.15 }, ratio: 0.15 }, // 严重损坏房
-        { risk: 'warning', governanceWeights: { done: 0.45, doing: 0.25, overdue: 0.10, pending: 0.20 }, ratio: 0.25 }, // 一般损坏房（高整治权重）
-        { risk: 'warning', governanceWeights: { done: 0.70, doing: 0.15, overdue: 0.05, pending: 0.10 }, ratio: 0.15 }, // 一般损坏房（低整治权重）
-        { risk: 'safe',    governanceWeights: { done: 1.0 },                                 ratio: 0.35 }  // 完好房(基本完好房)
+        { risk: 'danger',  governanceWeights: { done: 0.35, doing: 0.30, overdue: 0.20, pending: 0.15 }, ratio: 0.10 }, // 第三类（原疑似危房）
+        { risk: 'major',   governanceWeights: { done: 0.30, doing: 0.40, overdue: 0.15, pending: 0.15 }, ratio: 0.15 }, // 第三类（原严重损坏房）
+        { risk: 'warning', governanceWeights: { done: 0.45, doing: 0.25, overdue: 0.10, pending: 0.20 }, ratio: 0.25 }, // 第二类（高整治权重）
+        { risk: 'warning', governanceWeights: { done: 0.70, doing: 0.15, overdue: 0.05, pending: 0.10 }, ratio: 0.15 }, // 第二类（低整治权重）
+        { risk: 'safe',    governanceWeights: { done: 1.0 },                                 ratio: 0.35 }  // 第一类
     ];
 
     const weightedPick = (weights) => {
@@ -1057,7 +1064,7 @@ function generateHouseSeed() {
         const originalRisk = risk;
         const originalRiskLevel = riskLevel;
         const displayRisk = isClosed ? 'safe' : risk;
-        const displayRiskLevel = isClosed ? '完好房(基本完好房)' : riskLevel;
+        const displayRiskLevel = isClosed ? '第一类' : riskLevel;
 
         const managerName = owner;
         const managerPhone = MANAGER_PHONES[i % MANAGER_PHONES.length];
