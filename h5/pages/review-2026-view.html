@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>排查结果详情</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.view-body { flex: 1; overflow-y: auto; padding: 14px 14px calc(14px + var(--safe-bottom)); background: var(--bg); }
+.page-hero { padding-bottom: 58px; }
+.page-hero .ph-sub { position: absolute; left: 50%; top: calc(34px + 16px + 36px); transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; z-index: 2; }
+
+.house-card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.house-card .hc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.house-card .hc-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.house-card .hc-no { font-size: 11px; color: var(--text2); background: var(--bg); padding: 2px 8px; border-radius: 8px; }
+.house-card .hc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.house-card .hc-item { font-size: 12px; }
+.house-card .hc-item .lbl { color: var(--text2); margin-bottom: 2px; }
+.house-card .hc-item .val { color: var(--text-primary); font-weight: 500; }
+.house-card .hc-item.full { grid-column: 1 / -1; }
+
+.section { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.section .sec-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.section .sec-title::before { content: ''; width: 3px; height: 14px; background: var(--primary); border-radius: 2px; }
+.section-num { color: var(--primary); font-weight: 600; margin-right: 6px; }
+
+.field-item { margin-bottom: 12px; }
+.field-item:last-child { margin-bottom: 0; }
+.field-item .fi-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.field-item .fi-value { font-size: 13px; color: var(--text-primary); font-weight: 500; line-height: 1.6; }
+.field-item .fi-value.empty { color: var(--text2); font-weight: 400; font-style: italic; }
+
+.pill-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { padding: 4px 10px; border-radius: 12px; font-size: 12px; background: var(--bg); color: var(--text2); border: 1px solid var(--border); }
+.pill.active { background: rgba(26,115,232,.1); color: var(--primary); border-color: var(--primary); }
+.pill.active.danger { background: rgba(217,48,37,.12); color: #d93025; border-color: #d93025; }
+.pill.active.warning { background: rgba(249,171,0,.15); color: #c68400; border-color: #f9ab00; }
+.pill.active.safe { background: rgba(24,128,56,.12); color: #188038; border-color: #188038; }
+
+.photo-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo-item { width: 78px; height: 78px; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid var(--border); background: var(--bg); }
+.photo-item img { width: 100%; height: 100%; object-fit: cover; }
+.photo-item .pi-tag { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); color: #fff; font-size: 10px; text-align: center; padding: 2px 0; }
+
+.checkin-card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.checkin-card .sec-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.checkin-card .sec-title::before { content: ''; width: 3px; height: 14px; background: var(--primary); border-radius: 2px; }
+.checkin-card .sec-title .ck-status { margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 8px; }
+.ck-status.ck-done { background: rgba(24,128,56,.12); color: #188038; }
+.ck-status.ck-far { background: rgba(217,48,37,.12); color: #d93025; }
+.checkin-info { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
+.checkin-info .ck-row { display: flex; font-size: 12px; margin-top: 6px; }
+.checkin-info .ck-row:first-child { margin-top: 0; }
+.checkin-info .ck-label { width: 72px; flex-shrink: 0; color: var(--text2); }
+.checkin-info .ck-value { flex: 1; color: var(--text-primary); word-break: break-all; }
+.checkin-info .ck-value.far { color: #d93025; font-weight: 600; }
+.checkin-info .ck-value.ok { color: #188038; font-weight: 600; }
+
+.ck-map-wrap { margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+#ckMap { width: 100%; height: 180px; }
+.ck-map-legend { display: flex; gap: 14px; padding: 6px 10px; background: var(--bg); font-size: 11px; color: var(--text2); }
+.ck-map-legend .lg-item { display: flex; align-items: center; gap: 4px; }
+.ck-map-legend .lg-dot { width: 8px; height: 8px; border-radius: 50%; }
+.lg-dot.lg-house { background: #1a73e8; }
+.lg-dot.lg-checkin { background: #188038; }
+.lg-dot.lg-line { width: 14px; height: 2px; border-radius: 0; background: #d93025; }
+
+.ck-marker { position: relative; }
+.ck-marker .ckm-pin { width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; }
+.ck-marker .ckm-pin i { transform: rotate(45deg); color: #fff; font-size: 12px; }
+.ck-marker.ckm-house .ckm-pin { background: #1a73e8; }
+.ck-marker.ckm-checkin .ckm-pin { background: #188038; }
+
+.sign-block { padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); margin-bottom: 8px; }
+.sign-block .sb-title { font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+.sign-block .sb-content { font-size: 13px; color: var(--text-primary); }
+.sign-block .sb-meta { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+.submit-info { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.submit-info .si-row { display: flex; font-size: 12px; margin-top: 6px; }
+.submit-info .si-row:first-child { margin-top: 0; }
+.submit-info .si-label { width: 72px; flex-shrink: 0; color: var(--text2); }
+.submit-info .si-value { flex: 1; color: var(--text-primary); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">排查结果详情</div>
+        <div class="ph-sub">2026回头看 · 奉贤区农村自建房</div>
+    </div>
+
+    <div class="view-body" id="viewBody">
+        <!-- 提交信息 -->
+        <div class="submit-info" id="submitInfo">
+            <div class="si-row"><div class="si-label">提交时间</div><div class="si-value" id="siTime">—</div></div>
+            <div class="si-row"><div class="si-label">照片数量</div><div class="si-value" id="siPhotoCount">—</div></div>
+        </div>
+
+        <!-- 现场打卡 -->
+        <div class="checkin-card" id="checkinCard" style="display:none">
+            <div class="sec-title">现场打卡 <span class="ck-status ck-done" id="ckStatus">已打卡</span></div>
+            <div class="checkin-info" id="checkinInfo">
+                <div class="ck-row"><div class="ck-label">打卡时间</div><div class="ck-value" id="ckTime">—</div></div>
+                <div class="ck-row"><div class="ck-label">打卡坐标</div><div class="ck-value" id="ckCoord">—</div></div>
+                <div class="ck-row"><div class="ck-label">定位精度</div><div class="ck-value" id="ckAccuracy">—</div></div>
+                <div class="ck-row"><div class="ck-label">距房屋图斑</div><div class="ck-value" id="ckDistance">—</div></div>
+                <div class="ck-row"><div class="ck-label">打卡人</div><div class="ck-value" id="ckOperator">—</div></div>
+                <div class="ck-row"><div class="ck-label">定位方式</div><div class="ck-value" id="ckSource">—</div></div>
+                <div class="ck-row" id="ckHouseCoordRow" style="display:none"><div class="ck-label">房屋图斑</div><div class="ck-value" id="ckHouseCoord">—</div></div>
+            </div>
+            <div class="ck-map-wrap" id="ckMapWrap">
+                <div id="ckMap"></div>
+                <div class="ck-map-legend">
+                    <div class="lg-item"><div class="lg-dot lg-house"></div>房屋图斑</div>
+                    <div class="lg-item"><div class="lg-dot lg-checkin"></div>现场打卡点</div>
+                    <div class="lg-item"><div class="lg-dot lg-line"></div>连线距离</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 房屋信息 -->
+        <div class="house-card" id="houseCard" style="display:none">
+            <div class="hc-head">
+                <div class="hc-title" id="hName">—</div>
+            </div>
+            <div class="hc-grid">
+                <div class="hc-item full"><div class="lbl">详细地址</div><div class="val" id="hAddr">—</div></div>
+                <div class="hc-item"><div class="lbl">户主</div><div class="val" id="hOwner">—</div></div>
+                <div class="hc-item"><div class="lbl">联系电话</div><div class="val" id="hPhone">—</div></div>
+                <div class="hc-item"><div class="lbl">结构类型</div><div class="val" id="hStruct">—</div></div>
+                <div class="hc-item"><div class="lbl">建造年代</div><div class="val" id="hYear">—</div></div>
+                <div class="hc-item"><div class="lbl">初判风险</div><div class="val" id="hRisk">—</div></div>
+                <div class="hc-item"><div class="lbl">治理状态</div><div class="val" id="hStatus">—</div></div>
+            </div>
+        </div>
+
+        <!-- 基本信息 -->
+        <div class="section" id="section-basic">
+            <div class="sec-title"><span class="section-num">1.</span>基本信息</div>
+            <div id="basicFields"></div>
+        </div>
+
+        <!-- 建设情况 -->
+        <div class="section" id="section-construction">
+            <div class="sec-title"><span class="section-num">2.</span>建设情况</div>
+            <div id="constructionFields"></div>
+        </div>
+
+        <!-- 房屋安全隐患初判情况 -->
+        <div class="section" id="section-safety">
+            <div class="sec-title"><span class="section-num">3.</span>房屋安全隐患初判情况</div>
+            <div id="safetyFields"></div>
+        </div>
+
+        <!-- 现场照片 -->
+        <div class="section" id="section-photos">
+            <div class="sec-title"><span class="section-num">4.</span>现场照片</div>
+            <div id="photoFields"></div>
+        </div>
+    </div>
+
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="../../js/house-arch-data.js"></script>
+<script>
+(function() {
+    var houseNo = (App.getQuery('no') || '').trim().toUpperCase();
+    var recordIndex = parseInt(App.getQuery('idx') || '-1', 10);
+    var record = null;
+    var house = null;
+
+    initHouseArchSeed();
+    if (houseNo) {
+        house = getHouseRecord(houseNo);
+    }
+
+    // ---------- 归一化风险等级 ----------
+    function normalizeRisk(lv) {
+        if (!lv) return '—';
+        if (/第三类|重大|疑似危房|严重损坏/.test(lv)) return '第三类';
+        if (/第二类|一般损坏|一般隐患|较大/.test(lv)) return '第二类';
+        if (/第一类|完好|基本完好|安全|无风险/.test(lv)) return '第一类';
+        return '第一类';
+    }
+
+    // ---------- 加载记录 ----------
+    function loadRecord() {
+        var list = [];
+        try { list = JSON.parse(localStorage.getItem('review-2026-records') || '[]'); } catch(e) {}
+        // 优先按索引取
+        if (recordIndex >= 0 && recordIndex < list.length) {
+            record = list[recordIndex];
+        } else if (houseNo) {
+            // 按 houseNo 找最新一条
+            var filtered = list.filter(function(r) { return r.houseNo === houseNo; });
+            if (filtered.length > 0) {
+                record = filtered[0];
+            }
+        }
+        if (!record) {
+            App.showToast('未找到排查记录');
+            setTimeout(function() { App.back(); }, 1500);
+        }
+    }
+
+    function fmtTime(isoStr) {
+        if (!isoStr) return '—';
+        var d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' +
+               String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+
+    function fmtCoord(lat, lng) {
+        return lat.toFixed(6) + ', ' + lng.toFixed(6);
+    }
+
+    // ---------- 字段定义 ----------
+    var FIELD_DEFS = {
+        basic: [
+            { key: 'address', label: '地址' },
+            { key: 'houseType', label: '农房类型' },
+            { key: 'communityName', label: '小区名称' },
+            { key: 'buildingName', label: '建筑名称' },
+            { key: 'apartmentCount', label: '住宅套数' },
+            { key: 'ownerName', label: '户主姓名/机构名称' },
+            { key: 'ownerId', label: '身份证号/机构代码' },
+            { key: 'ownerType', label: '户主类型' },
+            { key: 'buildingFloors', label: '建筑层数(层)' },
+            { key: 'buildingHeight', label: '建筑高度(m)' },
+            { key: 'buildingArea', label: '建筑面积(m²)' },
+            { key: 'buildEra', label: '建造年代' },
+            { key: 'buildYear', label: '建造时间' },
+            { key: 'forBusiness', label: '建筑用途' },
+            { key: 'businessUse', label: '生产经营用途', isArray: true },
+            { key: 'businessUseOther', label: '其他生产经营用途' },
+            { key: 'businessUseEdu', label: '教育设施细分', isArray: true },
+            { key: 'businessUseMedical', label: '医疗卫生细分', isArray: true },
+            { key: 'landNature', label: '土地性质' },
+            { key: 'stateLandType', label: '国有土地类型' },
+            { key: 'stateLandTypeOther', label: '其他国有土地类型' },
+            { key: 'collectiveLandType', label: '集体土地类型' },
+            { key: 'collectiveLandTypeOther', label: '其他集体土地类型' },
+            { key: 'propertyRight', label: '产权性质' },
+            { key: 'propertyRightOther', label: '其他产权性质' },
+            { key: 'crowdPlaceNearby', label: '人员聚集场所周边' },
+            { key: 'crowdPlaceType', label: '周边人员聚集场所类型', isArray: true },
+            { key: 'occupantsOver10', label: '常住或使用人数超过10人' }
+        ],
+        construction: [
+            { key: 'approval', label: '建房审批手续' },
+            { key: 'professionalDesign', label: '是否专业设计建造' },
+            { key: 'constructionMethod', label: '建造方式' },
+            { key: 'structureType', label: '结构类型' },
+            { key: 'masonryType', label: '砌体结构类型' },
+            { key: 'floorRoofType', label: '楼屋盖类型' },
+            { key: 'renovation', label: '是否改扩建' },
+            { key: 'renovationCount', label: '改扩建次数' },
+            { key: 'renovationContent', label: '改扩建内容', isArray: true },
+            { key: 'renovationContentOther', label: '其他改扩建内容' },
+            { key: 'violations', label: '是否存在违规行为', isArray: true },
+            { key: 'violationsOther', label: '其他违规行为' }
+        ],
+        safety: [
+            { key: 'damageCondition', label: '房屋损伤情况', isArray: true },
+            { key: 'overload', label: '增加堆载' },
+            { key: 'overloadOther', label: '其他增加堆载情况' },
+            { key: 'surfaceDamage', label: '房屋表观损坏程度初判' },
+            { key: 'structuralSafety', label: '房屋结构安全隐患初判' },
+            { key: 'structuralSafetyRemark', label: '结构安全隐患备注' },
+            { key: 'ownerSignature', label: '产权人签名' },
+            { key: 'ownerPhone', label: '产权人联系方式' },
+            { key: 'ownerDate', label: '产权人日期' },
+            { key: 'userSignature', label: '使用人签名' },
+            { key: 'userPhone', label: '使用人联系方式' },
+            { key: 'userDate', label: '使用人日期' },
+            { key: 'inspectorSignature', label: '排查人签名' },
+            { key: 'inspectorOrg', label: '排查单位' },
+            { key: 'inspectorPhone', label: '排查人联系方式' },
+            { key: 'inspectorDate', label: '排查人日期' }
+        ]
+    };
+
+    var PHOTO_CATS = [
+        { key: 'doorPlate', label: '门牌号', max: 1 },
+        { key: 'facade', label: '房屋外立面', max: 4, facadeLabels: ['东', '南', '西', '北'] },
+        { key: 'structure', label: '内部梁柱结构' },
+        { key: 'damage', label: '损坏点位特写' },
+        { key: 'currentStatus', label: '房屋现状照片', max: 2 },
+        { key: 'damagePhoto', label: '房屋损伤照片', max: 2 }
+    ];
+
+    // ---------- 渲染字段 ----------
+    function renderField(def, value) {
+        var div = document.createElement('div');
+        div.className = 'field-item';
+        var label = document.createElement('div');
+        label.className = 'fi-label';
+        label.textContent = def.label;
+        div.appendChild(label);
+
+        var valueEl = document.createElement('div');
+        valueEl.className = 'fi-value';
+
+        if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+            valueEl.textContent = '未填写';
+            valueEl.classList.add('empty');
+        } else if (def.isArray && Array.isArray(value)) {
+            var pillGroup = document.createElement('div');
+            pillGroup.className = 'pill-group';
+            value.forEach(function(v) {
+                var pill = document.createElement('span');
+                pill.className = 'pill active';
+                if (/严重|危险|停止|拆改|大幅增加|开挖/.test(v)) pill.classList.add('danger');
+                else if (/一般|观察|处理/.test(v)) pill.classList.add('warning');
+                else if (/安全|完好|无|未见/.test(v)) pill.classList.add('safe');
+                pill.textContent = v;
+                pillGroup.appendChild(pill);
+            });
+            valueEl.appendChild(pillGroup);
+        } else {
+            var text = String(value);
+            if (def.key === 'forBusiness') text = value === '是' ? '用于生产经营' : '非生产经营';
+            valueEl.textContent = text;
+        }
+
+        div.appendChild(valueEl);
+        return div;
+    }
+
+    function renderFields(containerId, defs, data) {
+        var container = document.getElementById(containerId);
+        container.innerHTML = '';
+        defs.forEach(function(def) {
+            var value = data[def.key];
+            // answers 中的单选/多选
+            if (data.answers && data.answers[def.key] !== undefined) {
+                value = data.answers[def.key];
+            }
+            container.appendChild(renderField(def, value));
+        });
+    }
+
+    // ---------- 渲染照片 ----------
+    function renderPhotos(containerId, photos) {
+        var container = document.getElementById(containerId);
+        container.innerHTML = '';
+        var hasAny = false;
+
+        PHOTO_CATS.forEach(function(cat) {
+            var catPhotos = photos[cat.key] || [];
+            if (catPhotos.length === 0) return;
+            hasAny = true;
+
+            var catDiv = document.createElement('div');
+            catDiv.className = 'field-item';
+            var label = document.createElement('div');
+            label.className = 'fi-label';
+            label.textContent = cat.label + ' (' + catPhotos.length + '张)';
+            catDiv.appendChild(label);
+
+            var grid = document.createElement('div');
+            grid.className = 'photo-grid';
+            catPhotos.forEach(function(p, idx) {
+                var item = document.createElement('div');
+                item.className = 'photo-item';
+                var img = document.createElement('img');
+                img.src = p.dataUrl || p.url || p;
+                img.onerror = function() { this.style.display = 'none'; };
+                item.appendChild(img);
+                if (cat.facadeLabels && idx < cat.facadeLabels.length) {
+                    var tag = document.createElement('div');
+                    tag.className = 'pi-tag';
+                    tag.textContent = cat.facadeLabels[idx] + '面';
+                    item.appendChild(tag);
+                }
+                grid.appendChild(item);
+            });
+            catDiv.appendChild(grid);
+            container.appendChild(catDiv);
+        });
+
+        if (!hasAny) {
+            container.innerHTML = '<div class="field-item"><div class="fi-value empty">暂无照片</div></div>';
+        }
+    }
+
+    // ---------- 渲染打卡信息 ----------
+    function renderCheckin() {
+        var card = document.getElementById('checkinCard');
+        var rec = record.checkin;
+        if (!rec || !rec.lat) {
+            card.style.display = 'none';
+            return;
+        }
+        card.style.display = 'block';
+        document.getElementById('ckTime').textContent = rec.time || '—';
+        document.getElementById('ckCoord').textContent = fmtCoord(rec.lat, rec.lng);
+        document.getElementById('ckOperator').textContent = rec.operator || '—';
+        document.getElementById('ckSource').textContent = rec.source || '—';
+        var accuracyEl = document.getElementById('ckAccuracy');
+        accuracyEl.textContent = (rec.accuracy ? '±' + Math.round(rec.accuracy) + ' m' : '—');
+        accuracyEl.className = 'ck-value' + (rec.accuracy && rec.accuracy <= 30 ? ' ok' : ' far');
+
+        var houseRec = null;
+        if (house && house.lat && house.lng) {
+            houseRec = house;
+        } else if (record.houseNo) {
+            houseRec = getHouseRecord(record.houseNo);
+        }
+
+        if (houseRec && houseRec.lat && houseRec.lng) {
+            var d = distanceMeters(rec.lat, rec.lng, houseRec.lat, houseRec.lng);
+            var distEl = document.getElementById('ckDistance');
+            distEl.textContent = App.formatDistance ? App.formatDistance(d) : (Math.round(d) + ' m');
+            distEl.className = 'ck-value' + (d <= 30 ? ' ok' : ' far');
+            document.getElementById('ckHouseCoordRow').style.display = 'flex';
+            document.getElementById('ckHouseCoord').textContent = fmtCoord(houseRec.lat, houseRec.lng);
+        } else {
+            document.getElementById('ckDistance').textContent = '无房屋坐标';
+            document.getElementById('ckDistance').className = 'ck-value';
+            document.getElementById('ckHouseCoordRow').style.display = 'none';
+        }
+
+        renderCkMap(rec.lat, rec.lng, houseRec);
+    }
+
+    function distanceMeters(lat1, lng1, lat2, lng2) {
+        var R = 6371000;
+        var rad = Math.PI / 180;
+        var dLat = (lat2 - lat1) * rad;
+        var dLng = (lng2 - lng1) * rad;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    // ---------- 打卡小地图 ----------
+    var ckMap = null;
+    var ckMapLayers = [];
+
+    function createCkIcon(cls, icon) {
+        return L.divIcon({
+            className: '',
+            html: '<div class="ck-marker ' + cls + '"><div class="ckm-pin"><i class="fa-solid ' + icon + '"></i></div></div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 28]
+        });
+    }
+
+    function ensureCkMap() {
+        if (!ckMap) {
+            ckMap = L.map('ckMap', { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+            L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+                maxZoom: 19, subdomains: '1234'
+            }).addTo(ckMap);
+        }
+        return ckMap;
+    }
+
+    function renderCkMap(checkinLat, checkinLng, houseRec) {
+        var map = ensureCkMap();
+        ckMapLayers.forEach(function(l) { map.removeLayer(l); });
+        ckMapLayers = [];
+        var points = [];
+
+        if (houseRec && houseRec.lat && houseRec.lng) {
+            points.push([houseRec.lat, houseRec.lng]);
+            ckMapLayers.push(L.marker([houseRec.lat, houseRec.lng], { icon: createCkIcon('ckm-house', 'fa-house') }).addTo(map));
+        }
+        if (typeof checkinLat === 'number' && typeof checkinLng === 'number') {
+            points.push([checkinLat, checkinLng]);
+            ckMapLayers.push(L.marker([checkinLat, checkinLng], { icon: createCkIcon('ckm-checkin', 'fa-location-crosshairs') }).addTo(map));
+            if (houseRec && houseRec.lat && houseRec.lng) {
+                ckMapLayers.push(L.polyline([[houseRec.lat, houseRec.lng], [checkinLat, checkinLng]], { color: '#d93025', weight: 2, dashArray: '6 4' }).addTo(map));
+            }
+        }
+
+        if (points.length === 0) {
+            map.setView([30.92, 121.47], 12);
+        } else if (points.length === 1) {
+            map.setView(points[0], 14);
+        } else {
+            map.fitBounds(L.latLngBounds(points).pad(0.5));
+        }
+    }
+
+    // ---------- 渲染房屋信息 ----------
+    function renderHouseCard() {
+        var card = document.getElementById('houseCard');
+        if (!house) {
+            card.style.display = 'none';
+            return;
+        }
+        card.style.display = 'block';
+        document.getElementById('hName').textContent = house.no || '—';
+        document.getElementById('hAddr').textContent = house.address || '—';
+        document.getElementById('hOwner').textContent = house.owner || '—';
+        document.getElementById('hPhone').textContent = house.managerPhone || '—';
+        document.getElementById('hStruct').textContent = house.category || house.houseType || '—';
+        document.getElementById('hYear').textContent = house.year ? house.year + ' 年' : '—';
+        var riskText = normalizeRisk(house.riskLevel || house.risk);
+        var hRiskEl = document.getElementById('hRisk');
+        hRiskEl.textContent = riskText;
+        hRiskEl.className = 'val';
+        if (riskText === '第三类') hRiskEl.style.color = '#d93025';
+        else if (riskText === '第二类') hRiskEl.style.color = '#c68400';
+        else if (riskText === '第一类') hRiskEl.style.color = '#1a73e8';
+        document.getElementById('hStatus').textContent = house.governStatus || house.governance || '—';
+    }
+
+    // ---------- 主渲染 ----------
+    function render() {
+        if (!record) return;
+
+        // 提交信息
+        document.getElementById('siTime').textContent = fmtTime(record.submitTime);
+        document.getElementById('siPhotoCount').textContent = (record.photoCount || 0) + ' 张';
+
+        renderHouseCard();
+        renderCheckin();
+        renderFields('basicFields', FIELD_DEFS.basic, record);
+        renderFields('constructionFields', FIELD_DEFS.construction, record);
+        renderFields('safetyFields', FIELD_DEFS.safety, record);
+        renderPhotos('photoFields', record.photos || {});
+    }
+
+    loadRecord();
+    if (record) {
+        render();
+    }
+})();
+</script>
+</body>
+</html>

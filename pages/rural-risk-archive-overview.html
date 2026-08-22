@@ -169,36 +169,41 @@ body {
     margin-left: 1px;
 }
 
-/* 现存总量：2x2 网格 */
+/* 现存总量：3 列横排 */
 .hazard-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 4px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
     margin-top: auto;
 }
 .hazard-grid-item {
     background: var(--bg-dark);
     border-radius: 6px;
-    padding: 4px 4px;
+    padding: 8px 4px 6px;
     text-align: center;
     display: flex;
-    flex-direction: row;
-    align-items: baseline;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 3px;
+    border-top: 2px solid transparent;
 }
+.hazard-grid-item.red    { border-top-color: var(--danger);  background: rgba(217,48,37,0.06); }
+.hazard-grid-item.yellow { border-top-color: #c78000;        background: rgba(199,128,0,0.06); }
+.hazard-grid-item.blue   { border-top-color: var(--primary); background: rgba(26,115,232,0.06); }
 .hazard-grid-value {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 700;
-    line-height: 1;
+    line-height: 1.1;
 }
 .hazard-grid-value.red    { color: var(--danger); }
 .hazard-grid-value.orange { color: var(--warning); }
 .hazard-grid-value.yellow { color: #c78000; }
 .hazard-grid-value.blue   { color: var(--primary); }
 .hazard-grid-label {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-secondary);
+    white-space: nowrap;
 }
 
 /* ===== Main Content Area ===== */
@@ -1498,20 +1503,34 @@ const RISK_TAB_STATE = {
 };
 
 function formatRiskInfo(riskLevel) {
+    // 统一将历史风险等级映射为 3 类口径
+    const norm = {
+        '疑似危房': '第三类',
+        '严重损坏房': '第三类',
+        '一般损坏房': '第二类',
+        '完好房(基本完好房)': '第一类',
+        '安全': '第一类',
+        '无风险': '第一类'
+    };
+    const normalized = norm[riskLevel] || riskLevel || '第一类';
     const map = {
         '第三类': { cls: 'red', icon: '', text: '第三类' },
         '第二类': { cls: 'yellow', icon: 'fa-exclamation', text: '第二类' },
-        '第一类': { cls: 'blue', icon: 'fa-shield-halved', text: '第一类' },
-        '安全': { cls: 'blue', icon: 'fa-shield-halved', text: '第一类' },
-        '无风险': { cls: 'blue', icon: 'fa-shield-halved', text: '第一类' }
+        '第一类': { cls: 'blue', icon: 'fa-shield-halved', text: '第一类' }
     };
-    return map[riskLevel] || { cls: 'blue', icon: 'fa-shield-halved', text: riskLevel || '第一类' };
+    return map[normalized] || { cls: 'blue', icon: 'fa-shield-halved', text: '第一类' };
 }
 
 function formatAppraisalStatus(riskLevel) {
-    if (riskLevel === '第三类') return { cls: 'red', text: 'D级' };
-    if (riskLevel === '第三类') return { cls: 'orange', text: 'C级' };
-    if (riskLevel === '第二类') return { cls: 'yellow', text: 'B级' };
+    // 先统一为 3 类口径
+    const norm = {
+        '疑似危房': '第三类', '严重损坏房': '第三类',
+        '一般损坏房': '第二类',
+        '完好房(基本完好房)': '第一类', '安全': '第一类', '无风险': '第一类'
+    };
+    const lv = norm[riskLevel] || riskLevel;
+    if (lv === '第三类') return { cls: 'red', text: 'D级' };
+    if (lv === '第二类') return { cls: 'yellow', text: 'B级' };
     return { cls: 'blue', text: 'A级' };
 }
 
@@ -1642,12 +1661,28 @@ function renderRuralArchivePage(tabKey, page) {
 function renderRuralArchiveRows() {
     if (typeof initHouseArchSeed !== 'function' || typeof getAllHouseRecords !== 'function') return;
     initHouseArchSeed();
-    const all = getAllHouseRecords().filter(r => (r.houseType || r.category) === '农村自建房');
+    // 统一将历史风险等级归一化为 3 类口径，避免陈旧值（疑似危房/严重损坏房/一般损坏房/完好房(基本完好房)）走老逻辑
+    const LEGACY_RISK_NORM = {
+        '疑似危房': '第三类',
+        '严重损坏房': '第三类',
+        '一般损坏房': '第二类',
+        '完好房(基本完好房)': '第一类',
+        '安全': '第一类',
+        '无风险': '第一类'
+    };
+    const all = getAllHouseRecords()
+        .filter(r => (r.houseType || r.category) === '农村自建房')
+        .map(r => {
+            if (r.riskLevel && LEGACY_RISK_NORM[r.riskLevel]) {
+                r.riskLevel = LEGACY_RISK_NORM[r.riskLevel];
+            }
+            return r;
+        });
 
     ruralFilteredRecords = all;
     RISK_TAB_STATE.major.records = all.filter(r => r.riskLevel === '第三类');
     RISK_TAB_STATE.general.records = all.filter(r => r.riskLevel === '第二类');
-    RISK_TAB_STATE.low.records = all.filter(r => r.riskLevel === '第一类' || r.riskLevel === '安全' || r.riskLevel === '无风险');
+    RISK_TAB_STATE.low.records = all.filter(r => r.riskLevel === '第一类');
 
     RURAL_ALL_PAGER.page = 1;
     Object.keys(RISK_TAB_STATE).forEach(k => { RISK_TAB_STATE[k].page = 1; });
@@ -1809,7 +1844,7 @@ document.addEventListener('DOMContentLoaded', function() {
         baseCounts = {
             major: all.filter(r => r.riskLevel === '第三类').length,
             general: all.filter(r => r.riskLevel === '第二类').length,
-            low: all.filter(r => r.riskLevel === '第一类' || r.riskLevel === '安全' || r.riskLevel === '无风险').length
+            low: all.filter(r => r.riskLevel === '第一类').length
         };
     }
     const baseTotal = baseCounts.major + baseCounts.general + baseCounts.low;
@@ -1831,7 +1866,7 @@ document.addEventListener('DOMContentLoaded', function() {
             hazardCounts = {
                 major: active.filter(r => r.riskLevel === '第三类').length,
                 general: active.filter(r => r.riskLevel === '第二类').length,
-                low: active.filter(r => r.riskLevel === '第一类' || r.riskLevel === '安全' || r.riskLevel === '无风险').length
+                low: active.filter(r => r.riskLevel === '第一类').length
             };
         }
     }
