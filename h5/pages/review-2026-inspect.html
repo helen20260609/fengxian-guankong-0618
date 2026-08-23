@@ -1343,6 +1343,8 @@
             houseName: house ? (house.name || house.no) : houseNo,
             houseAddress: house ? (house.address || '') : '',
             owner: house ? (house.owner || '') : '',
+            town: house ? (house.street || '') : '',
+            village: house ? (house.community || house.village || '') : '',
             answers: answers,
             zoneId: null,
             zoneName: '',
@@ -1388,13 +1390,44 @@
         if (!validate()) return;
         var data = collectData();
         data.status = 'submitted';
-        var list = [];
-        try { list = JSON.parse(localStorage.getItem('review-2026-records') || '[]'); } catch(e) {}
-        list.unshift(data);
-        localStorage.setItem('review-2026-records', JSON.stringify(list));
-        localStorage.removeItem('review-2026-draft-' + houseNo);
-        App.showToast('排查结果已提交', 1500);
-        setTimeout(function() { App.back(); }, 1600);
+        
+        // 先同步服务端数据，防止覆盖PC端修改
+        fetch('/api/review-2026-records')
+            .then(function(r) { return r.ok ? r.json() : []; })
+            .then(function(serverList) {
+                if (!Array.isArray(serverList)) serverList = [];
+                var localList = [];
+                try { localList = JSON.parse(localStorage.getItem('review-2026-records') || '[]'); } catch(e) {}
+                
+                // 合并：先放本地，再放服务端（服务端优先，保留PC端修改）
+                var map = {};
+                localList.forEach(function(r) { if (r && r.houseNo) map[r.houseNo] = r; });
+                serverList.forEach(function(r) { if (r && r.houseNo) map[r.houseNo] = r; });
+                
+                // 新记录放最前
+                delete map[data.houseNo];
+                var merged = [data].concat(Object.keys(map).map(function(k) { return map[k]; }));
+                
+                localStorage.setItem('review-2026-records', JSON.stringify(merged));
+                localStorage.removeItem('review-2026-draft-' + houseNo);
+                
+                // 同步到服务端
+                return fetch('/api/review-2026-records', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(merged)
+                });
+            })
+            .then(function(r) {
+                if (!r.ok) console.warn('[review-2026] 服务端保存失败，已保留本地副本');
+                App.showToast('排查结果已提交', 1500);
+                setTimeout(function() { App.back(); }, 1600);
+            })
+            .catch(function() {
+                console.warn('[review-2026] 服务端不可用，已保留本地副本');
+                App.showToast('排查结果已提交（离线）', 1500);
+                setTimeout(function() { App.back(); }, 1600);
+            });
     });
 
     // ---------- 恢复草稿 ----------

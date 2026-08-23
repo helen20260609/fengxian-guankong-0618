@@ -138,6 +138,51 @@ function handleApi(req, res, urlPath) {
         return true;
     }
 
+    // GET /api/review-2026-records -> 读取 2026回头看 排查记录
+    if (req.method === 'GET' && urlPath === '/api/review-2026-records') {
+        var reviewFile = path.join(dataDir, 'review-2026-records.json');
+        fs.readFile(reviewFile, 'utf8', function(err, data) {
+            if (err) {
+                if (err.code === 'ENOENT') {
+                    sendJson(res, 200, []);
+                } else {
+                    sendJson(res, 500, { error: '读取失败' });
+                }
+                return;
+            }
+            try {
+                var list = JSON.parse(data);
+                sendJson(res, 200, Array.isArray(list) ? list : []);
+            } catch (e) {
+                sendJson(res, 500, { error: '数据格式错误' });
+            }
+        });
+        return true;
+    }
+
+    // POST /api/review-2026-records -> 保存 2026回头看 排查记录（全量覆盖）
+    if (req.method === 'POST' && urlPath === '/api/review-2026-records') {
+        readJsonBody(req, function(err, list) {
+            if (err) {
+                sendJson(res, 400, { error: '请求体格式错误' });
+                return;
+            }
+            if (!Array.isArray(list)) {
+                sendJson(res, 400, { error: '数据必须是数组' });
+                return;
+            }
+            var reviewFile = path.join(dataDir, 'review-2026-records.json');
+            fs.writeFile(reviewFile, JSON.stringify(list, null, 2), 'utf8', function(err2) {
+                if (err2) {
+                    sendJson(res, 500, { error: '保存失败' });
+                    return;
+                }
+                sendJson(res, 200, { success: true, count: list.length });
+            });
+        });
+        return true;
+    }
+
     return false;
 }
 

@@ -50,6 +50,13 @@
 .search-bar input::placeholder { color: var(--text2); }
 .search-bar .clear-btn { display: none; color: var(--text2); font-size: 14px; cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
 .search-bar .clear-btn.show { display: block; }
+
+.sync-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.sync-info { flex: 1; min-width: 0; }
+.sync-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.sync-desc { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.btn-sync { flex-shrink: 0; height: 34px; padding: 0 12px; border: none; border-radius: 8px; background: var(--primary); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn-sync:disabled { opacity: .6; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -90,6 +97,14 @@
             <i class="fa-solid fa-magnifying-glass"></i>
             <input type="text" id="searchInput" placeholder="搜索唯一标识" autocomplete="off">
             <i class="fa-solid fa-circle-xmark clear-btn" id="searchClear"></i>
+        </div>
+
+        <div class="sync-bar" id="syncBar" style="display:none">
+            <div class="sync-info">
+                <div class="sync-title">数据同步</div>
+                <div class="sync-desc" id="syncDesc">可同步PC端补充修改</div>
+            </div>
+            <button class="btn-sync" id="btnSync"><i class="fa-solid fa-rotate"></i> 同步</button>
         </div>
         <div id="ticketList"></div>
     </div>
@@ -258,14 +273,21 @@
     }
 
     // ---------- Tab 切换 ----------
+    var syncBar = document.getElementById('syncBar');
+    function updateSyncBarVisibility() {
+        if (syncBar) syncBar.style.display = currentTab === 'submitted' ? '' : 'none';
+    }
+
     document.querySelectorAll('.tab-item').forEach(function(tab) {
         tab.addEventListener('click', function() {
             document.querySelectorAll('.tab-item').forEach(function(t) { t.classList.remove('active'); });
             this.classList.add('active');
             currentTab = this.getAttribute('data-tab');
+            updateSyncBarVisibility();
             renderList();
         });
     });
+    updateSyncBarVisibility();
 
     // ---------- 搜索 ----------
     var searchInput = document.getElementById('searchInput');
@@ -284,7 +306,59 @@
         renderList();
     });
 
+    // ---------- 服务端同步 ----------
+    var btnSync = document.getElementById('btnSync');
+    var syncDesc = document.getElementById('syncDesc');
+
+    function setSyncState(text, disabled) {
+        if (syncDesc) syncDesc.textContent = text;
+        if (btnSync) btnSync.disabled = !!disabled;
+    }
+
+    function mergeRecords(localList, remoteList) {
+        var map = {};
+        (localList || []).forEach(function(r) {
+            if (r && r.houseNo) map[r.houseNo] = r;
+        });
+        (remoteList || []).forEach(function(r) {
+            if (r && r.houseNo) map[r.houseNo] = r; // 服务端优先，PC补填覆盖本地
+        });
+        return Object.keys(map).map(function(k) { return map[k]; });
+    }
+
+    function syncFromServer(silent) {
+        if (!btnSync) return;
+        setSyncState('同步中…', true);
+        fetch('/api/review-2026-records')
+            .then(function(r) { return r.ok ? r.json() : []; })
+            .then(function(remote) {
+                if (!Array.isArray(remote)) remote = [];
+                var local = [];
+                try { local = JSON.parse(localStorage.getItem('review-2026-records') || '[]'); } catch(e) {}
+                var merged = mergeRecords(local, remote);
+                localStorage.setItem('review-2026-records', JSON.stringify(merged));
+                var pcEdited = remote.filter(function(r) { return r && r.editedByPC; }).length;
+                setSyncState('已同步 ' + merged.length + ' 条' + (pcEdited ? '，含PC补充 ' + pcEdited + ' 条' : ''), false);
+                if (!silent) App.showToast('同步完成');
+                renderList();
+            })
+            .catch(function(e) {
+                setSyncState(silent ? '自动同步失败，可手动重试' : ('同步失败：' + e.message), false);
+                if (!silent) App.showToast('同步失败');
+            });
+    }
+
+    if (btnSync) {
+        btnSync.addEventListener('click', function(e) {
+            e.stopPropagation();
+            syncFromServer(false);
+        });
+    }
+
     renderList();
+
+    // 打开页面自动同步一次（静默），让 PC 端补填及时回传到小程序
+    syncFromServer(true);
 })();
 </script>
 </body>

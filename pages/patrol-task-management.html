@@ -790,6 +790,7 @@ body {
         <button class="tab-nav-item" data-tab="special" onclick="switchTab(&#39;special&#39;)">专项巡查</button>
         <button class="tab-nav-item" data-tab="temporary" onclick="switchTab(&#39;temporary&#39;)">临时巡查</button>
         <button class="tab-nav-item" data-tab="review" onclick="switchTab(&#39;review&#39;)">隐患复查</button>
+        <button class="tab-nav-item" data-tab="review2026" onclick="switchTab(&#39;review2026&#39;)">回头看</button>
     </div>
 
     <!-- Filter Section -->
@@ -2078,6 +2079,44 @@ body {
     </div>
 </div>
 
+<div class="tab-content-wrapper" id="tab-review2026">
+    <div class="section-card">
+        <div class="section-header">
+            <i class="fa-solid fa-rotate-left"></i>
+            2026回头看 · 排查记录
+            <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+                <span style="font-size:12px;color:var(--text-secondary);">按村聚合，点击查看该村所有户的排查记录</span>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="table-scroll-wrapper">
+                <table class="data-table" id="taskTable-review2026" style="display: table;">
+                    <thead>
+                        <tr>
+                            <th>任务名称</th>
+                            <th>紧急程度</th>
+                            <th>排查户数</th>
+                            <th>镇/街道</th>
+                            <th>村/居委</th>
+                            <th>排查人员</th>
+                            <th>完成日期</th>
+                            <th>发现隐患</th>
+                            <th>PC补充</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody-review2026"></tbody>
+                </table>
+            </div>
+            <div class="empty-state" id="emptyState-review2026" style="display:none;">
+                <i class="fas fa-clipboard-list"></i>
+                <p>暂无2026回头看排查记录</p>
+            </div>
+        </div>
+        <div class="pagination" id="pagination-review2026"></div>
+    </div>
+</div>
+
 <!-- Add Task Modal -->
 <div class="modal-overlay" id="taskModal">
     <div class="modal">
@@ -2312,7 +2351,7 @@ function getOverdueMark(t) {
 
 let currentTab = 'all';
 const PAGE_SIZE = 10;
-const pageState = { all: 1, routine: 1, special: 1, temporary: 1, review: 1 };
+const pageState = { all: 1, routine: 1, special: 1, temporary: 1, review: 1, review2026: 1 };
 
 function goToPage(tab, page) {
     pageState[tab] = page;
@@ -2367,6 +2406,7 @@ function switchTab(tab) {
 
 function getTasksByTab(tab) {
     if (tab === 'all') return tasks;
+    if (tab === 'review2026') return tasks.filter(t => t.isReview2026 === true);
     const typeMap = { 'routine': 'routine', 'special': 'special', 'temporary': 'temporary', 'review': 'review' };
     return tasks.filter(t => t.type === typeMap[tab]);
 }
@@ -2410,6 +2450,32 @@ function renderTasksByTab(tab, data) {
     const pageData = sortedData.slice(pageStart, pageStart + PAGE_SIZE);
 
     tbody.innerHTML = pageData.map(t => {
+        // 回头看 tab 专属行渲染
+        if (tab === 'review2026') {
+            const urgencyColor = getUrgencyColor(t.urgency || t.urgencyLabel);
+            const urgencyClass = getUrgencyClass(t.urgency || t.urgencyLabel);
+            const urgencyLabel = t.urgencyLabel || '中';
+            const hasHidden = (t.hiddenCount || 0) > 0;
+            const pcEdited = (t.records || []).some(r => r && r.editedByPC);
+            return `
+        <tr data-task-id="${t.id}">
+            <td><strong>${t.name}</strong></td>
+            <td><span class="${urgencyClass}" style="font-size:12px;font-weight:600;color:${urgencyColor};">${urgencyLabel}</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">${t.houseCount || t.total || 0}</span> 户</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">${t.town || '-'}</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">${t.village || '-'}</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>${t.person || '-'}</td>
+            <td>${t.finishTime || t.endDate || '-'}</td>
+            <td>${hasHidden ? `<span class="rectify-cell unfixed">${t.hiddenCount}处 · 有隐患</span>` : '<span class="rectify-cell none">无隐患</span>'}</td>
+            <td>${pcEdited ? '<span class="edited-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:8px;background:#f9f0ff;color:#9254de;font-weight:600;"><i class="fas fa-pen"></i> 已补充</span>' : '<span style="color:var(--text-secondary);font-size:12px;">-</span>'}</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>
+                </div>
+            </td>
+        </tr>`;
+        }
+
         const pct = t.total ? Math.round((t.inspected / t.total) * 100) : 0;
         const color = getProgressColor(t.inspected, t.total);
         const urgencyColor = getUrgencyColor(t.urgency || t.urgencyLabel);
@@ -2473,11 +2539,147 @@ function renderTasksByTab(tab, data) {
 }
 
 function renderAllTabs() {
-    ['all', 'routine', 'special', 'temporary', 'review'].forEach(tab => {
+    ['all', 'routine', 'special', 'temporary', 'review', 'review2026'].forEach(tab => {
         const data = getTasksByTab(tab);
         renderTasksByTab(tab, data);
     });
     updateKPI(tasks);
+}
+
+// ===== 2026回头看 · 服务端记录聚合成隐患复查任务 =====
+// 策略：按 "镇|村" 聚合 submitted 记录，生成 type='review' 任务，追加到 tasks 尾部，不影响原有任务
+const REVIEW2026_TASK_PREFIX = 'FX-RW-2026-HLT-';   // 回头-Task
+const REVIEW2026_MIGRATE_KEY = 'review2026_migrated'; // localStorage 一次性迁移标记
+
+function review2026GenTaskNo(town, village) {
+    // 生成稳定任务编号：FX-RW-2026-HLT-{镇村hash}
+    const s = town + '|' + village;
+    let h = 0;
+    for (let i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+    return REVIEW2026_TASK_PREFIX + Math.abs(h % 10000).toString().padStart(4, '0');
+}
+
+function review2026Aggregate(records) {
+    // records: submitted 的 review-2026 记录数组
+    // 返回 [{town, village, houseNos[], hiddenCount, person, finishTime, records[]}]
+    const map = {};
+    records.filter(r => r && r.status === 'submitted').forEach(r => {
+        const town = r.town || r.addressTown || '未知镇';
+        const village = r.village || r.communityName || r.addressVillage || '未知村';
+        const key = town + '|' + village;
+        if (!map[key]) {
+            map[key] = { town, village, houseNos: [], hiddenCount: 0, persons: {}, finishTime: '', records: [] };
+        }
+        const g = map[key];
+        if (r.houseNo && g.houseNos.indexOf(r.houseNo) < 0) g.houseNos.push(r.houseNo);
+        // 结论判定隐患
+        const concl = (r.answers && (r.answers.conclusion || r.answers.result)) || '';
+        if (/隐患|危险|C级|D级|需要整改|存在/.test(concl)) g.hiddenCount++;
+        if (r.inspectorSignature) g.persons[r.inspectorSignature] = 1;
+        if (r.submitTime && r.submitTime > g.finishTime) g.finishTime = r.submitTime;
+        g.records.push(r);
+    });
+    return Object.values(map);
+}
+
+function review2026BuildTask(group) {
+    const person = Object.keys(group.persons)[0] || '排查员';
+    const finishDate = group.finishTime ? group.finishTime.slice(0, 10) : getLocalDateString();
+    const total = group.houseNos.length;
+    return {
+        id: 'R2026-' + group.town + '-' + group.village,
+        no: review2026GenTaskNo(group.town, group.village),
+        name: group.town + group.village + ' 2026年回头看',
+        type: 'review',
+        typeLabel: '隐患复查',
+        urgency: group.hiddenCount > 0 ? 'high' : 'medium',
+        urgencyLabel: group.hiddenCount > 0 ? '高' : '中',
+        houseCount: total,
+        town: group.town,
+        village: group.village,
+        houseType: '',
+        structure: '',
+        person: person,
+        createBy: '2026回头看',
+        inspected: total,
+        total: total,
+        status: 'completed',
+        statusLabel: '已完成',
+        statusClass: 'completed',
+        hiddenCount: group.hiddenCount,
+        hiddenFixed: 0,
+        startDate: finishDate,
+        endDate: finishDate,
+        finishTime: group.finishTime ? group.finishTime.replace('T', ' ').slice(0, 16) : finishDate,
+        houseNos: group.houseNos,
+        recordIds: [],
+        records: group.records,
+        isReview2026: true
+    };
+}
+
+function review2026MergeTasks(groups) {
+    // 把聚合后的 group 转成 task 并 merge 进 tasks，按 houseNos 完全一致的已有 review 任务则更新进度
+    let added = 0;
+    groups.forEach(g => {
+        if (!g.houseNos.length) return;
+        const existing = tasks.find(t => t.type === 'review' && t.town === g.town && t.village === g.village && t.isReview2026);
+        if (existing) {
+            // 更新进度
+            const newNos = g.houseNos.filter(n => existing.houseNos.indexOf(n) < 0);
+            if (newNos.length) {
+                existing.houseNos = existing.houseNos.concat(newNos);
+                existing.houseCount = existing.houseNos.length;
+                existing.total = existing.houseNos.length;
+                existing.inspected = existing.houseNos.length;
+            }
+            existing.hiddenCount = g.hiddenCount;
+            existing.records = g.records;
+            existing.finishTime = g.finishTime ? g.finishTime.replace('T', ' ').slice(0, 16) : existing.finishTime;
+        } else {
+            tasks.push(review2026BuildTask(g));
+            added++;
+        }
+    });
+    if (added > 0) saveTasksToStorage();
+    return added;
+}
+
+function review2026LoadAndMerge() {
+    // 1. 一次性迁移 localStorage 存量
+    if (!localStorage.getItem(REVIEW2026_MIGRATE_KEY)) {
+        try {
+            const local = JSON.parse(localStorage.getItem('review-2026-records') || '[]');
+            if (Array.isArray(local) && local.length) {
+                fetch('/api/review-2026-records', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(local)
+                }).then(() => {
+                    localStorage.setItem(REVIEW2026_MIGRATE_KEY, '1');
+                }).catch(() => {});
+            } else {
+                localStorage.setItem(REVIEW2026_MIGRATE_KEY, '1');
+            }
+        } catch (e) { localStorage.setItem(REVIEW2026_MIGRATE_KEY, '1'); }
+    }
+    // 2. 拉取服务端记录并聚合
+    fetch('/api/review-2026-records')
+        .then(r => r.ok ? r.json() : [])
+        .then(records => {
+            if (!Array.isArray(records) || !records.length) return;
+            const groups = review2026Aggregate(records);
+            const added = review2026MergeTasks(groups);
+            if (added > 0) renderAllTabs();
+        })
+        .catch(() => { /* 服务端不可用时静默 */ });
+}
+
+// 页面加载完成后执行
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', review2026LoadAndMerge);
+} else {
+    review2026LoadAndMerge();
 }
 
 function updateKPI(data) {
@@ -2761,23 +2963,23 @@ function getStatusActions(t) {
     }
     if (t.status === 'issued') {
         return `
-            <button class="action-link view" onclick="viewTask(${t.id})">接收任务</button>
-            <button class="action-link view" onclick="viewTask(${t.id})">查看</button>
+            <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>接收任务</button>
+            <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>
         `;
     }
     if (t.status === 'pending-assign') {
         return `
-            <button class="action-link view" onclick="viewTask(${t.id})">查看</button>
+            <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>
         `;
     }
     if (t.status === 'pending-exec' || t.status === 'processing') {
         return `
             <button class="action-link success" onclick="completeTask(${t.id})">完成任务</button>
             <button class="action-link view" onclick="adjustTask(${t.id})">调整</button>
-            <button class="action-link view" onclick="viewTask(${t.id})">查看</button>
+            <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>
         `;
     }
-    return `<button class="action-link view" onclick="viewTask(${t.id})">查看</button>`;
+    return `<button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>`;
 }
 
 function renderStatusActions(t) {
@@ -2789,6 +2991,11 @@ function adjustTask(id) {
 }
 
 function viewTask(id) {
+    const task = tasks.find(t => t.id == id || t.no == id);
+    if (task && task.isReview2026) {
+        window.location.href = 'review-2026-detail.html?town=' + encodeURIComponent(task.town) + '&village=' + encodeURIComponent(task.village);
+        return;
+    }
     window.location.href = 'rural-risk-task-detail.html?id=' + id;
 }
 
