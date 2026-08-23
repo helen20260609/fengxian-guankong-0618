@@ -8,7 +8,7 @@ param(
     [string]$TagPrefix = "backup"
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $projectRoot
 Set-Location $projectRoot
@@ -57,20 +57,12 @@ git tag -a $tagName -m "Full backup $dateStr" | ForEach-Object { Write-Host $_ }
 
 # 5. Push to remote (do not abort on push failure)
 Write-Host "Pushing to GitHub..." -ForegroundColor Cyan
-try {
-    git push origin master 2>&1 | ForEach-Object { Write-Host $_ }
-} catch {
-    Write-Host "master push issue: $_" -ForegroundColor Yellow
-}
+cmd /c "git push origin master 2>&1" | ForEach-Object { Write-Host $_ }
+if ($LASTEXITCODE -ne 0) { Write-Host "master push exit code: $LASTEXITCODE" -ForegroundColor Yellow }
 # Delete remote tag if exists, then push new tag (avoids rejection)
-try {
-    git push origin ":refs/tags/$tagName" 2>&1 | Out-Null
-} catch {}
-try {
-    git push origin $tagName 2>&1 | ForEach-Object { Write-Host $_ }
-} catch {
-    Write-Host "Tag push issue: $_" -ForegroundColor Yellow
-}
+cmd /c "git push origin :refs/tags/$tagName 2>&1" | Out-Null
+cmd /c "git push origin $tagName 2>&1" | ForEach-Object { Write-Host $_ }
+if ($LASTEXITCODE -ne 0) { Write-Host "Tag push exit code: $LASTEXITCODE" -ForegroundColor Yellow }
 
 # 6. Generate local zip archive
 $backupDir = Join-Path $projectRoot "backups"
