@@ -72,15 +72,41 @@ $zipPath = Join-Path $backupDir "full_backup_$timestamp.zip"
 Write-Host "Generating local zip archive: $zipPath" -ForegroundColor Cyan
 # Backup all first-level dirs/files except known heavy/derived folders
 $excludeDirs = @('.git', '.venv', '.vscode', '.backups', 'backups', 'node_modules', 'temp', 'temp_restore')
-$itemsToBackup = Get-ChildItem -Path $projectRoot -Force |
-    Where-Object { -not ($_.PSIsContainer -and ($excludeDirs -contains $_.Name)) } |
-    ForEach-Object { $_.FullName }
 try {
-    Compress-Archive -Path $itemsToBackup -DestinationPath $zipPath -Force -CompressionLevel Optimal -ErrorAction Stop
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    $zip = [System.IO.Compression.ZipFile]::Open($zipPath, 'Create')
+    $items = Get-ChildItem -Path $projectRoot -Force |
+        Where-Object { -not ($_.PSIsContainer -and ($excludeDirs -contains $_.Name)) }
+    $fileCount = 0
+    foreach ($item in $items) {
+        if ($item.PSIsContainer) {
+            $files = Get-ChildItem -Path $item.FullName -Recurse -File -Force -ErrorAction SilentlyContinue
+            foreach ($f in $files) {
+                $rel = $f.FullName.Substring($projectRoot.Length).TrimStart('\')
+                $entry = $zip.CreateEntry($rel.Replace('\', '/'))
+                $stream = $entry.Open()
+                $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+                $stream.Write($bytes, 0, $bytes.Length)
+                $stream.Close()
+                $fileCount++
+            }
+        } else {
+            $rel = $item.FullName.Substring($projectRoot.Length).TrimStart('\')
+            $entry = $zip.CreateEntry($rel.Replace('\', '/'))
+            $stream = $entry.Open()
+            $bytes = [System.IO.File]::ReadAllBytes($item.FullName)
+            $stream.Write($bytes, 0, $bytes.Length)
+            $stream.Close()
+            $fileCount++
+        }
+    }
+    $zip.Dispose()
     $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
-    Write-Host "Zip size: $zipSize MB" -ForegroundColor Green
+    Write-Host "Zip created: $zipSize MB ($fileCount files)" -ForegroundColor Green
 } catch {
-    Write-Host "Compress-Archive failed: $_" -ForegroundColor Red
+    Write-Host "Zip creation failed: $_" -ForegroundColor Red
+    if ($zip) { try { $zip.Dispose() } catch {} }
 }
 
 Write-Host "========================================" -ForegroundColor Green
@@ -89,6 +115,4 @@ Write-Host "  Git tag: $tagName" -ForegroundColor Green
 Write-Host "  Local zip: $zipPath" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 
-# Reset exit code so task runner shows success even if non-critical steps failed
-$global:LASTEXITCODE = 0
 exit 0
