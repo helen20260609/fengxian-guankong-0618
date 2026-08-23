@@ -55,13 +55,21 @@ if ($existingTag) {
 Write-Host "Creating Git tag: $tagName" -ForegroundColor Cyan
 git tag -a $tagName -m "Full backup $dateStr" | ForEach-Object { Write-Host $_ }
 
-# 5. Push to remote
+# 5. Push to remote (do not abort on push failure)
+Write-Host "Pushing to GitHub..." -ForegroundColor Cyan
 try {
-    Write-Host "Pushing to GitHub..." -ForegroundColor Cyan
-    git push origin master | ForEach-Object { Write-Host $_ }
-    git push origin $tagName | ForEach-Object { Write-Host $_ }
+    git push origin master 2>&1 | ForEach-Object { Write-Host $_ }
 } catch {
-    Write-Host "Git push encountered an issue, continuing to local zip backup." -ForegroundColor Yellow
+    Write-Host "master push issue: $_" -ForegroundColor Yellow
+}
+# Delete remote tag if exists, then push new tag (avoids rejection)
+try {
+    git push origin ":refs/tags/$tagName" 2>&1 | Out-Null
+} catch {}
+try {
+    git push origin $tagName 2>&1 | ForEach-Object { Write-Host $_ }
+} catch {
+    Write-Host "Tag push issue: $_" -ForegroundColor Yellow
 }
 
 # 6. Generate local zip archive
@@ -70,8 +78,14 @@ New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 $zipPath = Join-Path $backupDir "full_backup_$timestamp.zip"
 
 Write-Host "Generating local zip archive: $zipPath" -ForegroundColor Cyan
-$itemsToBackup = @("index.html", "server.js", "pages", "js", "tools", "data", ".gitignore")
-Compress-Archive -Path $itemsToBackup -DestinationPath $zipPath -Force
+# Backup all first-level dirs/files except known heavy/derived folders
+$excludeDirs = @('.git', '.venv', '.vscode', '.backups', 'backups', 'node_modules', 'temp', 'temp_restore')
+$itemsToBackup = Get-ChildItem -Path $projectRoot -Force |
+    Where-Object { -not ($_.PSIsContainer -and ($excludeDirs -contains $_.Name)) } |
+    ForEach-Object { $_.FullName }
+Compress-Archive -Path $itemsToBackup -DestinationPath $zipPath -Force -CompressionLevel Optimal
+$zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
+Write-Host "Zip size: $zipSize MB" -ForegroundColor Green
 
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  Full backup completed!" -ForegroundColor Green
