@@ -219,6 +219,13 @@ const DEFAULT_HOUSE_STATUS = {
     riskClassification: { level: '', basis: '', assessTime: '', assessor: '' },
     emergencyResponse: {
         planName: '', planDate: '', drillRecords: [], responseRecords: []
+    },
+    // 验收销号详情（close 模块 19 列）
+    closeInfo: {
+        projectMeasure: '', closeMethod: '', hazardEliminated: '', appraisalAfter: '',
+        thirdPartyResult: '', contactName: '', contactPhone: '', infoUpdated: '',
+        remark: '', reporter: '', reportTime: '',
+        completeCertFiles: [], expertOpinionFiles: [], afterPhotos: [], relatedFiles: []
     }
 };
 
@@ -251,6 +258,7 @@ function normalizeHouseRecord(record) {
     if (!rec.riskIdentification) rec.riskIdentification = [];
     if (!rec.riskClassification) rec.riskClassification = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskClassification));
     if (!rec.emergencyResponse) rec.emergencyResponse = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.emergencyResponse));
+    if (!rec.closeInfo) rec.closeInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.closeInfo));
 
     // 销号已通过：强制无风险/已治理，但保留原始风险等级用于统计
     if (rec.closeStatus === '已通过') {
