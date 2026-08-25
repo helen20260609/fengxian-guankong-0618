@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>农村自建房 - 风险巡查任务管理</title>
 <link rel="stylesheet" href="./all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 /* ===== Theme Variables ===== */
 :root {
@@ -677,6 +678,87 @@ body {
     padding: 14px 20px;
     border-top: 1px solid var(--border);
 }
+
+/* ===== 批量导入弹窗样式 ===== */
+#importTabs {
+    display: flex;
+    gap: 8px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0;
+}
+#importTabs .content-tab {
+    padding: 8px 18px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+#importTabs .content-tab:hover { color: var(--primary); }
+#importTabs .content-tab.active {
+    color: var(--primary);
+    font-weight: 600;
+    border-bottom-color: var(--primary);
+}
+.import-summary {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.import-stat {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.import-stat.new { background: #e6f4ea; color: #1e8e3e; }
+.import-stat.update { background: #e8f0fe; color: #1a73e8; }
+.import-stat.error { background: #fce8e6; color: #d93025; }
+.import-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.import-preview-table th, .import-preview-table td {
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    text-align: left;
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.import-preview-table th { background: #f1f3f4; font-weight: 600; position: sticky; top: 0; }
+.import-preview-table tr.row-error td { background: #fce8e6; }
+.import-preview-table tr.row-new td:first-child { border-left: 3px solid #1e8e3e; }
+.import-preview-table tr.row-update td:first-child { border-left: 3px solid #1a73e8; }
+.import-scroll { max-height: 260px; overflow: auto; border-radius: 8px; }
+
+/* Toast 轻提示 */
+.import-toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    padding: 10px 20px;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    z-index: 3000;
+    opacity: 0;
+    transition: all 0.25s;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+    max-width: 80%;
+}
+.import-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.import-toast.info { background: #202124; }
+.import-toast.success { background: #1e8e3e; }
+.import-toast.error { background: #d93025; }
 
 /* Form Styles */
 .form-grid {
@@ -2086,6 +2168,7 @@ body {
             2026回头看 · 排查记录
             <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
                 <span style="font-size:12px;color:var(--text-secondary);">按村聚合，点击查看该村所有户的排查记录</span>
+                <button class="btn btn-primary" style="padding:6px 14px;font-size:13px;" onclick="openImportModal()"><i class="fas fa-file-import"></i> 批量导入</button>
             </div>
         </div>
         <div class="section-body">
@@ -2114,6 +2197,41 @@ body {
             </div>
         </div>
         <div class="pagination" id="pagination-review2026"></div>
+    </div>
+</div>
+
+<!-- 批量导入弹窗（排查详情 / 隐患整治 两块） -->
+<div class="modal-overlay" id="importModal">
+    <div class="modal" style="max-width:760px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-file-import"></i> 2026回头看 · 批量导入</h3>
+            <button class="modal-close" onclick="closeImportModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <!-- 块切换 -->
+            <div class="content-tabs" id="importTabs" style="margin-bottom:16px;">
+                <div class="content-tab active" data-import-type="inspect" onclick="switchImportType('inspect')"><i class="fas fa-search"></i> 排查详情导入</div>
+                <div class="content-tab" data-import-type="rectify" onclick="switchImportType('rectify')"><i class="fas fa-tools"></i> 隐患整治导入</div>
+            </div>
+
+            <!-- 上传区 -->
+            <div style="border:1px dashed var(--border);border-radius:10px;padding:18px;text-align:center;background:#fafbfc;">
+                <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none;" onchange="handleImportFile(this)">
+                <i class="fas fa-cloud-upload-alt" style="font-size:28px;color:var(--primary);"></i>
+                <div style="margin:10px 0 14px;color:var(--text-secondary);font-size:13px;" id="importHint">请选择 Excel 文件（.xlsx / .xls），按模板列头填写，不含照片</div>
+                <div style="display:flex;gap:10px;justify-content:center;">
+                    <button class="btn btn-primary" onclick="document.getElementById('importFileInput').click()"><i class="fas fa-folder-open"></i> 选择文件</button>
+                    <button class="btn" onclick="downloadImportTemplate()"><i class="fas fa-download"></i> 下载模板</button>
+                </div>
+            </div>
+
+            <!-- 解析/校验结果与预览 -->
+            <div id="importPreview" style="display:none;margin-top:16px;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeImportModal()">取消</button>
+            <button class="btn btn-primary" id="importConfirmBtn" style="display:none;" onclick="confirmImport()"><i class="fas fa-check"></i> 确认导入</button>
+        </div>
     </div>
 </div>
 
@@ -3127,6 +3245,395 @@ bindTownVillageLinkage();
         if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 100);
 })();
+
+// ==================== 批量导入（排查详情 / 隐患整治） ====================
+// 轻提示
+function showToast(msg, type) {
+    type = type || 'info';
+    var old = document.querySelector('.import-toast');
+    if (old) old.remove();
+    var el = document.createElement('div');
+    el.className = 'import-toast ' + type;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('show'); });
+    setTimeout(function () {
+        el.classList.remove('show');
+        setTimeout(function () { el.remove(); }, 300);
+    }, 2600);
+}
+
+// 字段映射：列头(中文) -> 记录字段；scope: top=顶层 / answers / appraisal=rectify.appraisal / measures=rectify.measures
+var IMPORT_SPLIT_RE = /[,，、;；\/\n]+/; // 多选分隔符
+var IMPORT_INSPECT_COLS = [
+    { col: '房屋编号', key: 'houseNo', scope: 'top', required: true },
+    { col: '镇/街道', key: 'town', scope: 'top' },
+    { col: '村/居委', key: 'village', scope: 'top' },
+    { col: '地址', key: 'address', scope: 'answers' },
+    { col: '农房类型', key: 'houseType', scope: 'answers' },
+    { col: '小区名称', key: 'communityName', scope: 'answers' },
+    { col: '建筑名称', key: 'buildingName', scope: 'answers' },
+    { col: '住宅套数', key: 'apartmentCount', scope: 'answers' },
+    { col: '户主姓名/机构名称', key: 'ownerName', scope: 'answers' },
+    { col: '身份证号/机构代码', key: 'ownerId', scope: 'answers' },
+    { col: '户主类型', key: 'ownerType', scope: 'answers' },
+    { col: '建筑层数(层)', key: 'buildingFloors', scope: 'answers' },
+    { col: '建筑高度(m)', key: 'buildingHeight', scope: 'answers' },
+    { col: '建筑面积(m²)', key: 'buildingArea', scope: 'answers' },
+    { col: '建造年代', key: 'buildEra', scope: 'answers' },
+    { col: '建造时间', key: 'buildYear', scope: 'answers' },
+    { col: '建筑用途', key: 'forBusiness', scope: 'answers' },
+    { col: '生产经营用途', key: 'businessUse', scope: 'answers', multi: true },
+    { col: '其他生产经营用途', key: 'businessUseOther', scope: 'answers' },
+    { col: '教育设施细分', key: 'businessUseEdu', scope: 'answers', multi: true },
+    { col: '医疗卫生细分', key: 'businessUseMedical', scope: 'answers', multi: true },
+    { col: '土地性质', key: 'landNature', scope: 'answers' },
+    { col: '国有土地类型', key: 'stateLandType', scope: 'answers' },
+    { col: '其他国有土地类型', key: 'stateLandTypeOther', scope: 'answers' },
+    { col: '集体土地类型', key: 'collectiveLandType', scope: 'answers' },
+    { col: '其他集体土地类型', key: 'collectiveLandTypeOther', scope: 'answers' },
+    { col: '产权性质', key: 'propertyRight', scope: 'answers' },
+    { col: '其他产权性质', key: 'propertyRightOther', scope: 'answers' },
+    { col: '人员聚集场所周边', key: 'crowdPlaceNearby', scope: 'answers' },
+    { col: '周边人员聚集场所类型', key: 'crowdPlaceType', scope: 'answers', multi: true },
+    { col: '常住或使用人数超过10人', key: 'occupantsOver10', scope: 'answers' },
+    { col: '建房审批手续', key: 'approval', scope: 'answers' },
+    { col: '是否专业设计建造', key: 'professionalDesign', scope: 'answers' },
+    { col: '建造方式', key: 'constructionMethod', scope: 'answers' },
+    { col: '结构类型', key: 'structureType', scope: 'answers' },
+    { col: '砌体结构类型', key: 'masonryType', scope: 'answers' },
+    { col: '楼屋盖类型', key: 'floorRoofType', scope: 'answers' },
+    { col: '是否改扩建', key: 'renovation', scope: 'answers' },
+    { col: '改扩建次数', key: 'renovationCount', scope: 'answers' },
+    { col: '改扩建内容', key: 'renovationContent', scope: 'answers', multi: true },
+    { col: '其他改扩建内容', key: 'renovationContentOther', scope: 'answers' },
+    { col: '是否存在违规行为', key: 'violations', scope: 'answers', multi: true },
+    { col: '其他违规行为', key: 'violationsOther', scope: 'answers' },
+    { col: '房屋损伤情况', key: 'damageCondition', scope: 'answers', multi: true },
+    { col: '增加堆载', key: 'overload', scope: 'answers' },
+    { col: '其他增加堆载情况', key: 'overloadOther', scope: 'answers' },
+    { col: '房屋表观损坏程度初判', key: 'surfaceDamage', scope: 'answers' },
+    { col: '房屋结构安全隐患初判', key: 'structuralSafety', scope: 'answers' },
+    { col: '结构安全隐患备注', key: 'structuralSafetyRemark', scope: 'answers' },
+    { col: '排查结论', key: 'conclusion', scope: 'answers' },
+    { col: '产权人签名', key: 'ownerSignature', scope: 'answers' },
+    { col: '产权人联系方式', key: 'ownerPhone', scope: 'answers' },
+    { col: '产权人日期', key: 'ownerDate', scope: 'answers' },
+    { col: '使用人签名', key: 'userSignature', scope: 'answers' },
+    { col: '使用人联系方式', key: 'userPhone', scope: 'answers' },
+    { col: '使用人日期', key: 'userDate', scope: 'answers' },
+    { col: '排查人签名', key: 'inspectorSignature', scope: 'answers' },
+    { col: '排查单位', key: 'inspectorOrg', scope: 'answers' },
+    { col: '排查人联系方式', key: 'inspectorPhone', scope: 'answers' },
+    { col: '排查人日期', key: 'inspectorDate', scope: 'answers' }
+];
+var IMPORT_RECTIFY_COLS = [
+    { col: '房屋编号', key: 'houseNo', scope: 'top', required: true },
+    { col: '是否鉴定', key: 'done', scope: 'appraisal' },
+    { col: '鉴定日期', key: 'date', scope: 'appraisal' },
+    { col: '鉴定结论', key: 'conclusion', scope: 'appraisal' },
+    { col: '鉴定单位', key: 'orgName', scope: 'appraisal' },
+    { col: '鉴定单位信用代码', key: 'orgCode', scope: 'appraisal' },
+    { col: '是否采取管控措施', key: 'controlDone', scope: 'measures' },
+    { col: '管控措施类型', key: 'controlTypes', scope: 'measures', multi: true },
+    { col: '其他管控措施', key: 'controlTypeOther', scope: 'measures' },
+    { col: '是否采取工程措施', key: 'engineeringDone', scope: 'measures' },
+    { col: '工程措施类型', key: 'engineeringTypes', scope: 'measures', multi: true },
+    { col: '其他工程措施', key: 'engineeringTypeOther', scope: 'measures' },
+    { col: '产权人签字', key: 'ownerSign', scope: 'measures' },
+    { col: '产权人电话', key: 'ownerPhone', scope: 'measures' },
+    { col: '产权人签字日期', key: 'ownerDate', scope: 'measures' },
+    { col: '使用人签字', key: 'userSign', scope: 'measures' },
+    { col: '使用人电话', key: 'userPhone', scope: 'measures' },
+    { col: '使用人签字日期', key: 'userDate', scope: 'measures' },
+    { col: '镇级签字', key: 'townSign', scope: 'measures' },
+    { col: '镇级单位', key: 'townOrg', scope: 'measures' },
+    { col: '镇级电话', key: 'townPhone', scope: 'measures' },
+    { col: '镇级签字日期', key: 'townDate', scope: 'measures' },
+    { col: '区级签字', key: 'districtSign', scope: 'measures' },
+    { col: '区级单位', key: 'districtOrg', scope: 'measures' },
+    { col: '区级电话', key: 'districtPhone', scope: 'measures' },
+    { col: '区级签字日期', key: 'districtDate', scope: 'measures' }
+];
+
+var importState = {
+    type: 'inspect',          // inspect | rectify
+    rows: [],                 // 校验后行 {data, status:'new'|'update'|'error', error, preview}
+    serverList: []            // GET 到的全量
+};
+
+function openImportModal() {
+    if (typeof XLSX === 'undefined') {
+        showToast('Excel 解析组件未加载，请检查网络后刷新页面', 'error');
+        return;
+    }
+    importState.rows = [];
+    document.getElementById('importFileInput').value = '';
+    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('importPreview').innerHTML = '';
+    document.getElementById('importConfirmBtn').style.display = 'none';
+    switchImportType('inspect');
+    document.getElementById('importModal').classList.add('active');
+}
+function closeImportModal() {
+    document.getElementById('importModal').classList.remove('active');
+}
+function switchImportType(type) {
+    importState.type = type;
+    document.querySelectorAll('#importTabs .content-tab').forEach(function (t) {
+        t.classList.toggle('active', t.getAttribute('data-import-type') === type);
+    });
+    var hint = document.getElementById('importHint');
+    if (type === 'inspect') {
+        hint.textContent = '排查详情导入：按模板列头填写，房屋编号必填；不存在的编号将新建记录（状态=已提交），已存在的按编号更新排查字段';
+    } else {
+        hint.textContent = '隐患整治导入：房屋编号必填且记录须已存在；仅更新 rectify（鉴定情况 + 整治情况），不含照片';
+    }
+    importState.rows = [];
+    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('importPreview').innerHTML = '';
+    document.getElementById('importConfirmBtn').style.display = 'none';
+    document.getElementById('importFileInput').value = '';
+}
+
+function getImportCols() {
+    return importState.type === 'inspect' ? IMPORT_INSPECT_COLS : IMPORT_RECTIFY_COLS;
+}
+
+// 下载模板：表头 + 1 行示例
+function downloadImportTemplate() {
+    var cols = getImportCols();
+    var header = cols.map(function (c) { return c.col; });
+    var example = cols.map(function (c) {
+        if (c.key === 'houseNo') return 'NF-2025-00001';
+        if (c.multi) return '示例1，示例2';
+        return '';
+    });
+    var ws = XLSX.utils.aoa_to_sheet([header, example]);
+    ws['!cols'] = header.map(function () { return { wch: 18 }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, importState.type === 'inspect' ? '排查详情' : '隐患整治');
+    XLSX.writeFile(wb, (importState.type === 'inspect' ? '回头看排查详情导入模板' : '回头看隐患整治导入模板') + '.xlsx');
+}
+
+// 读取并解析文件
+async function handleImportFile(input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    try {
+        showToast('正在解析文件…', 'info');
+        var buf = await file.arrayBuffer();
+        var wb = XLSX.read(buf, { type: 'array' });
+        var sheet = wb.Sheets[wb.SheetNames[0]];
+        var aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+        if (!aoa || aoa.length < 2) {
+            showToast('Excel 为空或没有数据行', 'error');
+            return;
+        }
+        var headerRow = (aoa[0] || []).map(function (h) { return String(h).trim(); });
+        var cols = getImportCols();
+        // 列头 -> 列索引
+        var colIndex = {};
+        cols.forEach(function (c) {
+            var idx = headerRow.indexOf(c.col);
+            if (idx >= 0) colIndex[c.col] = idx;
+        });
+        if (colIndex['房屋编号'] === undefined) {
+            showToast('未找到必填列「房屋编号」，请使用下载的模板', 'error');
+            return;
+        }
+        // 拉取服务端全量用于判重
+        var serverList = [];
+        try {
+            var resp = await fetch('/api/review-2026-records');
+            if (resp.ok) serverList = await resp.json();
+        } catch (e) { /* 离线也允许预览 */ }
+        if (!Array.isArray(serverList)) serverList = [];
+        importState.serverList = serverList;
+        var existingByNo = {};
+        serverList.forEach(function (r) { if (r && r.houseNo) existingByNo[r.houseNo] = r; });
+
+        var rows = [];
+        var seenInFile = {};
+        for (var i = 1; i < aoa.length; i++) {
+            var line = aoa[i];
+            if (!line || line.every(function (v) { return String(v).trim() === ''; })) continue; // 跳过全空行
+            var rowNo = i + 1; // Excel 行号(1-based，含表头)
+            var parsed = parseImportRow(line, colIndex, cols, rowNo);
+            var houseNo = parsed.data.houseNo;
+            // 校验：必填
+            if (!houseNo) {
+                parsed.status = 'error'; parsed.error = '房屋编号为空';
+            } else if (seenInFile[houseNo]) {
+                parsed.status = 'error'; parsed.error = '文件内房屋编号重复（第' + seenInFile[houseNo] + '行）';
+            } else if (importState.type === 'rectify' && !existingByNo[houseNo]) {
+                parsed.status = 'error'; parsed.error = '记录不存在，无法导入整治（需先做排查导入）';
+            } else {
+                parsed.status = existingByNo[houseNo] ? 'update' : 'new';
+                seenInFile[houseNo] = rowNo;
+            }
+            rows.push(parsed);
+        }
+        importState.rows = rows;
+        renderImportPreview();
+    } catch (err) {
+        console.error('导入解析失败:', err);
+        showToast('文件解析失败：' + (err.message || err), 'error');
+    }
+}
+
+// 按列映射把一行 Excel 转成记录字段
+function parseImportRow(line, colIndex, cols, rowNo) {
+    var data = {};
+    var previewPairs = [];
+    cols.forEach(function (c) {
+        var idx = colIndex[c.col];
+        if (idx === undefined) return;
+        var raw = line[idx];
+        var val = (raw === undefined || raw === null) ? '' : String(raw).trim();
+        if (c.key === 'houseNo') { data.houseNo = val; if (val) previewPairs.push(c.col + '=' + val); return; }
+        if (val === '') return; // 空值不覆盖
+        if (c.multi) {
+            var arr = val.split(IMPORT_SPLIT_RE).map(function (s) { return s.trim(); }).filter(Boolean);
+            setScopedValue(data, c, arr);
+            previewPairs.push(c.col + '=' + arr.join('、'));
+        } else {
+            setScopedValue(data, c, val);
+            previewPairs.push(c.col + '=' + val);
+        }
+    });
+    return { data: data, status: 'new', error: '', rowNo: rowNo, preview: previewPairs.join('；') };
+}
+function setScopedValue(target, colDef, value) {
+    if (colDef.scope === 'top') { target[colDef.key] = value; return; }
+    if (!target[colDef.scope]) target[colDef.scope] = {};
+    target[colDef.scope][colDef.key] = value;
+}
+
+// 预览渲染
+function renderImportPreview() {
+    var rows = importState.rows;
+    var newCnt = rows.filter(function (r) { return r.status === 'new'; }).length;
+    var updCnt = rows.filter(function (r) { return r.status === 'update'; }).length;
+    var errCnt = rows.filter(function (r) { return r.status === 'error'; }).length;
+    var box = document.getElementById('importPreview');
+    var html = '<div class="import-summary">' +
+        '<span class="import-stat new">新增 ' + newCnt + '</span>' +
+        '<span class="import-stat update">更新 ' + updCnt + '</span>' +
+        '<span class="import-stat error">失败 ' + errCnt + '</span>' +
+        '<span style="margin-left:auto;font-size:12px;color:var(--text-secondary);align-self:center;">失败行不会被导入</span>' +
+        '</div>';
+    html += '<div class="import-scroll"><table class="import-preview-table"><thead><tr>' +
+        '<th>行</th><th>结果</th><th>房屋编号</th><th>内容 / 失败原因</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+        var statusText = r.status === 'new' ? '新增' : (r.status === 'update' ? '更新' : '失败');
+        var desc = r.status === 'error' ? ('<span style="color:#d93025;">' + escapeImportHtml(r.error) + '</span>') : escapeImportHtml(r.preview || '（仅编号，无其它字段）');
+        html += '<tr class="row-' + r.status + '"><td>' + r.rowNo + '</td><td>' + statusText + '</td><td>' + escapeImportHtml(r.data.houseNo || '—') + '</td><td title="' + escapeImportHtml(r.preview || r.error || '') + '">' + desc + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    box.innerHTML = html;
+    box.style.display = 'block';
+    var valid = newCnt + updCnt;
+    var btn = document.getElementById('importConfirmBtn');
+    btn.style.display = valid > 0 ? '' : 'none';
+    btn.textContent = '确认导入（' + valid + ' 条）';
+    showToast('解析完成：新增 ' + newCnt + '，更新 ' + updCnt + '，失败 ' + errCnt, valid > 0 ? 'success' : 'error');
+}
+function escapeImportHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+}
+
+// 确认导入：合并 -> 全量 POST -> 刷新
+async function confirmImport() {
+    var validRows = importState.rows.filter(function (r) { return r.status === 'new' || r.status === 'update'; });
+    if (validRows.length === 0) { showToast('没有可导入的数据', 'error'); return; }
+    var btn = document.getElementById('importConfirmBtn');
+    btn.disabled = true;
+    try {
+        showToast('正在写回服务端…', 'info');
+        // 重新 GET 最新全量（防止预览期间他人改动）
+        var serverList = [];
+        var resp = await fetch('/api/review-2026-records');
+        if (resp.ok) serverList = await resp.json();
+        if (!Array.isArray(serverList)) serverList = [];
+        var indexByNo = {};
+        serverList.forEach(function (r, i) { if (r && r.houseNo) indexByNo[r.houseNo] = i; });
+        var now = new Date().toLocaleString('zh-CN', { hour12: false });
+        var isRectify = (importState.type === 'rectify');
+        validRows.forEach(function (r) {
+            var houseNo = r.data.houseNo;
+            var idx = indexByNo[houseNo];
+            if (isRectify) {
+                if (idx === undefined) return; // 预览时已拦截，双保险
+                var rec = serverList[idx];
+                rec.rectify = rec.rectify || {};
+                rec.rectify.appraisal = Object.assign({}, rec.rectify.appraisal, r.data.appraisal || {});
+                rec.rectify.measures = Object.assign({}, rec.rectify.measures, r.data.measures || {});
+                // 兜底：rectify 页渲染依赖这些数组字段，缺失会导致 .length 报错
+                var m = rec.rectify.measures;
+                if (!Array.isArray(m.controlTypes)) m.controlTypes = [];
+                if (!Array.isArray(m.engineeringTypes)) m.engineeringTypes = [];
+                if (!Array.isArray(m.controlPhotos)) m.controlPhotos = [];
+                if (!Array.isArray(m.engineeringPhotos)) m.engineeringPhotos = [];
+                rec.rectify.updateTime = now;
+                rec.editedByPC = true;
+                rec.editedTime = now;
+            } else {
+                if (idx === undefined) {
+                    // 新建记录
+                    var newRec = {
+                        id: 'R2026-IMPORT-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                        houseNo: houseNo,
+                        town: r.data.town || '',
+                        village: r.data.village || '',
+                        status: 'submitted',
+                        submitTime: now,
+                        source: 'pc-import',
+                        answers: Object.assign({}, r.data.answers || {}),
+                        photos: {},
+                        checkin: {},
+                        editedByPC: true,
+                        editedTime: now
+                    };
+                    serverList.unshift(newRec);
+                    // 重建索引（unshift 后全部前移）
+                    indexByNo = {};
+                    serverList.forEach(function (x, i) { if (x && x.houseNo) indexByNo[x.houseNo] = i; });
+                } else {
+                    var rec2 = serverList[idx];
+                    if (r.data.town) rec2.town = r.data.town;
+                    if (r.data.village) rec2.village = r.data.village;
+                    rec2.answers = Object.assign({}, rec2.answers, r.data.answers || {});
+                    rec2.status = 'submitted';
+                    if (!rec2.submitTime) rec2.submitTime = now;
+                    rec2.editedByPC = true;
+                    rec2.editedTime = now;
+                }
+            }
+        });
+        var post = await fetch('/api/review-2026-records', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(serverList)
+        });
+        if (!post.ok) throw new Error('写回失败 HTTP ' + post.status);
+        showToast('导入完成：成功 ' + validRows.length + ' 条', 'success');
+        closeImportModal();
+        // 刷新任务卡（review2026LoadAndMerge 内部 GET 后自聚合 + renderAllTabs）
+        if (typeof review2026LoadAndMerge === 'function') {
+            review2026LoadAndMerge();
+        } else if (typeof renderAllTabs === 'function') {
+            renderAllTabs();
+        }
+    } catch (err) {
+        console.error('导入写回失败:', err);
+        showToast('导入写回失败：' + (err.message || err), 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
 </script>
 
 

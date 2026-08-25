@@ -376,6 +376,21 @@ function ensureHouseRecord(no) {
     return all[no];
 }
 
+// 局部更新单条记录：来源页面只改自己负责的模块，避免整对象覆盖互相踩踏
+// 用法：patchHouseRecord(no, function(rec){ rec.patrolRecords.push(newPatrol); });
+// patcher 收到 normalize 后的完整记录，改完自动持久化
+function patchHouseRecord(no, patcher) {
+    const rec = getHouseRecord(no) || ensureHouseRecord(no);
+    if (typeof patcher === 'function') {
+        patcher(rec);
+    } else if (patcher && typeof patcher === 'object') {
+        // 也支持传对象做浅合并（数组按模块整体替换，调用方需先读再合并）
+        Object.keys(patcher).forEach(k => { rec[k] = patcher[k]; });
+    }
+    setHouseRecord(no, rec);
+    return rec;
+}
+
 // 根据治理状态生成管理措施记录（变更历史）
 function generateManageRecords(no, risk, governance, doneTask, totalTask, i) {
     if (risk === 'safe') return [];
