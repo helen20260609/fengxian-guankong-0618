@@ -1537,7 +1537,7 @@ function formatAppraisalStatus(record) {
 function formatHazardStock(record) {
     const total = record.totalTask || 0;
     const done = record.doneTask || 0;
-    const pending = total - done;
+    const pending = Math.max(0, total - done);
     // 已销号：治理完成 + 销号已通过
     const isClosed = record.governance === 'done' && record.closeStatus === '已通过';
     if (isClosed) {
@@ -1835,20 +1835,8 @@ function resetFilter(tabKey, panel) {
 }
 
 // ===== 镇/街道/乡与村/居委联动 =====
-const FENGXIAN_TOWN_VILLAGE = {
-    '南桥镇': ['光明村','杨王村','沈陆村','江海村','张弄村','吴塘村','五星村','八字村','南桥源社区','贝港社区','中街社区','育秀社区','阳光社区','正阳社区','解放社区','古华社区','运河社区'],
-    '奉城镇': ['高桥村','陈桥村','路口村','觉民村','爱民村','永益村','共耕村','胜利村','城东村','西门村','北门村','南门村','洪庙村','洪南村','洪西村','洪东村','协新村','朱新村','塘外村','卫季村','灯民村','幸福村','蔡建村','八字村','城东居委','南街居委','西街居委','北街居委','洪庙居委','塘外居委'],
-    '庄行镇': ['吕桥村','庄行村','汇安村','新叶村','渔沥村','长堤村','潘垫村','西校村','新华村','张塘村','存古村','杨溇村','长浜村','姚新村','芦泾村','东风村','庄行居委'],
-    '金汇镇': ['金汇村','东星村','金星村','新强村','白沙村','行前村','江苑居委','泰日居委','齐贤居委'],
-    '青村镇': ['青村社区','钱桥社区','南星村','北唐村','石海村','陶宅村','和中村','西吴村','岳和村','姚家村','朱店村','钟家村','新张村','元通村','方夏村','申隆一村','申隆二村','工农村','解放村','湾张村','花角村','吴房村','桃园村','沿钱村','李窑村','光明村'],
-    '柘林镇': ['柘林居委','新寺居委','胡桥居委','营房村','海湾村','华亭村','东海村','冯桥村','夹路村','新塘村','三桥村','农家村','南胜村','兴园村','临海村','下坊村','目华村'],
-    '四团镇': ['四团居委','平安居委','邵厂居委','三坎村','镇西村','大桥村','长堰村','平南村','平乐村','渔洋村','向阳村','龙尖村','前董村','新建村','民福村','中桥村','夏家村','红庄村','拾村村','五四村','小荡村','三团港村','横桥村','杨家宅村','平海村','天鹏村'],
-    '海湾镇': ['海兴社区','海棠社区','海农新村居委','星火居委','燎原居委','五四社区','新港村','海棠村','星火村','燎原村'],
-    '西渡街道': ['西渡居委','新南居委','文怡居委','水岸居委','浦江居委','北新居委','鸿宝居委','香榭居委','金港居委','灯塔村','刘港村','大同村','五宅村','益民村','金港村','南渡村','发展村','蒋桥村','关港村','北新村'],
-    '奉浦街道': ['奉浦居委','奉浦第二居委','国顺路居委','秋月居委','肖塘居委','高远居委','君望居委','陈湾村','公谊村','韩村村','九华村','吴塘村','八字桥村'],
-    '金海街道': ['金水苑社区','金水新苑社区','恒盛社区','恒贤社区','龙潭社区','少湖社区','文杏社区','韩树村','陈家村','屠家村','三长村','丁家村','齐贤村','石家村','欢河村'],
-    '海湾旅游区': ['海棠社区','海尚社区','新港村','海湾村','五四村']
-};
+// 统一使用数据层的 FENGXIAN_TOWN_VILLAGES（js/house-arch-data.js）
+const FENGXIAN_TOWN_VILLAGE = typeof FENGXIAN_TOWN_VILLAGES !== 'undefined' ? FENGXIAN_TOWN_VILLAGES : {};
 
 function initTownVillageLinkage() {
     function bindPair(townSelect, villageSelect) {
@@ -1928,18 +1916,32 @@ document.addEventListener('DOMContentLoaded', function() {
         if (el) el.style.width = val;
     };
 
-    // 左侧：固有风险 · 底数台账，根据农村自建房模拟数据统计
+    // 历史风险等级归一化映射（与 formatRiskInfo 共用）
+    const LEGACY_RISK_NORM = {
+        '疑似危房': '第三类',
+        '严重损坏房': '第三类',
+        '一般损坏房': '第二类',
+        '完好房(基本完好房)': '第一类',
+        '安全': '第一类',
+        '无风险': '第一类'
+    };
+    function normRisk(rl) { return LEGACY_RISK_NORM[rl] || rl || '第一类'; }
+
+    // 左侧：固有风险 · 底数台账，根据农村自建房模拟数据统计（经归一化）
     let baseCounts = { major: 0, general: 0, low: 0 };
+    let baseTotal = 0;
     if (typeof initHouseArchSeed === 'function' && typeof getAllHouseRecords === 'function') {
         initHouseArchSeed();
         const all = getAllHouseRecords().filter(r => r.houseType === '农村自建房');
-        baseCounts = {
-            major: all.filter(r => r.riskLevel === '第三类').length,
-            general: all.filter(r => r.riskLevel === '第二类').length,
-            low: all.filter(r => r.riskLevel === '第一类').length
-        };
+        baseTotal = all.length;
+        all.forEach(r => {
+            const norm = normRisk(r.riskLevel);
+            if (norm === '第三类') baseCounts.major++;
+            else if (norm === '第二类') baseCounts.general++;
+            else baseCounts.low++;
+        });
     }
-    const baseTotal = baseCounts.major + baseCounts.general + baseCounts.low;
+    if (!baseTotal) baseTotal = baseCounts.major + baseCounts.general + baseCounts.low;
     setText('kpiBaseStock', baseTotal.toLocaleString());
     setText('kpiBaseMajor', baseCounts.major);
     setText('kpiBaseGeneral', baseCounts.general);
@@ -1948,17 +1950,17 @@ document.addEventListener('DOMContentLoaded', function() {
     setWidth('kpiBaseBarGeneral', baseTotal ? ((baseCounts.general / baseTotal) * 100).toFixed(2) + '%' : '0%');
     setWidth('kpiBaseBarLow', baseTotal ? ((baseCounts.low / baseTotal) * 100).toFixed(2) + '%' : '0%');
 
-    // 右侧：动态隐患 · 现存总量（现存 = 尚未整治完成；已销号/已治理单独显示）
+    // 右侧：动态隐患 · 现存总量（现存 = 尚未整治完成；已销号/已治理单独显示；风险等级经归一化）
     let hazardCounts = { major: 0, general: 0, closed: 0 };
     if (typeof getAllHouseRecords === 'function') {
         const allRural = getAllHouseRecords().filter(r => r.houseType === '农村自建房');
-        // 现存隐患：治理状态为待整治/整治中/逾期未整治
-        const active = allRural.filter(r => r.governance && r.governance !== 'done');
+        // 现存隐患：治理状态非'已完成'（含空值兜底）
+        const active = allRural.filter(r => !r.governance || r.governance !== 'done');
         // 已销号/已治理：治理完成且销号已通过
         const closed = allRural.filter(r => r.governance === 'done' && r.closeStatus === '已通过');
         hazardCounts = {
-            major: active.filter(r => r.riskLevel === '第三类').length,
-            general: active.filter(r => r.riskLevel === '第二类').length,
+            major: active.filter(r => normRisk(r.riskLevel) === '第三类').length,
+            general: active.filter(r => normRisk(r.riskLevel) === '第二类').length,
             closed: closed.length
         };
     }
