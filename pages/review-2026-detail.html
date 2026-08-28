@@ -111,6 +111,14 @@ body { font-family: 'Microsoft YaHei','PingFang SC',-apple-system,sans-serif; ba
 .lr-photos { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
 .lr-time { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
 .lr-arrow { color: #bfbfbf; font-size: 13px; margin-left: 4px; }
+
+/* 列表搜索 */
+.list-search { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: #fafafa; border-bottom: 1px solid #f0f0f0; }
+.list-search .ls-icon { color: var(--text-secondary); font-size: 13px; }
+.list-search input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 13px; background: var(--bg-card); color: var(--text-primary); outline: none; transition: border-color .15s, box-shadow .15s; }
+.list-search input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,115,232,.12); }
+.list-search .ls-count { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.list-row.hidden-by-search { display: none; }
 .breadcrumb a { color: var(--primary); text-decoration: none; }
 .breadcrumb a:hover { text-decoration: underline; }
 </style>
@@ -226,6 +234,8 @@ function fmtTime(iso) {
 }
 
 function conclusionClass(text) {
+  // “无安全隐患/未发现隐患”优先判为中性蓝，避免被子串“隐患”误判为 danger
+  if (/无安全隐患|未发现隐患|无风险|基本完好|完好房/.test(text)) return 'neutral';
   if (/隐患|危险|C级|D级|需要整改|存在/.test(text)) return 'danger';
   if (/安全|完好|无风险|第一类/.test(text)) return 'safe';
   return 'neutral';
@@ -509,12 +519,48 @@ function renderListView(records, town, village) {
   var list = document.getElementById('recordList');
   var table = document.createElement('div');
   table.className = 'list-table';
+  // 搜索栏：房屋编号 / 地址 模糊匹配
+  var search = document.createElement('div');
+  search.className = 'list-search';
+  search.innerHTML =
+    '<i class="fas fa-magnifying-glass ls-icon"></i>' +
+    '<input type="text" id="listSearchInput" placeholder="搜索房屋编号 / 地址（模糊匹配）..." autocomplete="off">' +
+    '<span class="ls-count" id="listSearchCount">共 ' + records.length + ' 条</span>';
+  table.appendChild(search);
   var head = document.createElement('div');
   head.className = 'list-head';
   head.innerHTML = '<span class="lr-no">房屋编号</span><span class="lr-addr">地址</span><span style="white-space:nowrap">户主</span><span style="white-space:nowrap">照片</span><span style="white-space:nowrap">提交时间</span>';
   table.appendChild(head);
-  records.forEach(function(rec) { table.appendChild(renderListRow(rec, town, village)); });
+  var rows = [];
+  records.forEach(function(rec) {
+    var row = renderListRow(rec, town, village);
+    row.__no = String(rec.houseNo || '').toLowerCase();
+    row.__addr = String(rec.houseAddress || rec.address || '').toLowerCase();
+    rows.push(row);
+    table.appendChild(row);
+  });
+  var emptyTip = document.createElement('div');
+  emptyTip.className = 'empty-state';
+  emptyTip.style.display = 'none';
+  emptyTip.style.padding = '28px 20px';
+  emptyTip.innerHTML = '<i class="fas fa-magnifying-glass"></i><div>未找到匹配的房屋编号或地址</div>';
+  table.appendChild(emptyTip);
   list.appendChild(table);
+
+  var input = search.querySelector('#listSearchInput');
+  var countEl = search.querySelector('#listSearchCount');
+  function applyFilter() {
+    var kw = (input.value || '').trim().toLowerCase();
+    var visible = 0;
+    rows.forEach(function(row) {
+      var hit = !kw || row.__no.indexOf(kw) !== -1 || row.__addr.indexOf(kw) !== -1;
+      row.classList.toggle('hidden-by-search', !hit);
+      if (hit) visible++;
+    });
+    countEl.textContent = kw ? ('命中 ' + visible + ' / ' + rows.length + ' 条') : ('共 ' + rows.length + ' 条');
+    emptyTip.style.display = (kw && visible === 0) ? '' : 'none';
+  }
+  input.addEventListener('input', applyFilter);
 }
 
 // ================= 主流程 =================
@@ -530,6 +576,7 @@ function renderMeta(records) {
   var village = getQuery('village');
   var hiddenCount = records.filter(function(r) {
     var c = (r.answers && (r.answers.conclusion || r.answers.result)) || '';
+    if (/无安全隐患|未发现隐患/.test(c)) return false;
     return /隐患|危险|C级|D级|需要整改|存在/.test(c);
   }).length;
   var persons = {};

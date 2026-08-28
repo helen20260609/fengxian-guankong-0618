@@ -8,7 +8,7 @@ function openPointModal(point) {
             <div class="pc-modal-overlay" id="pointModalOverlay" onclick="closePointModal(event)">
                 <div class="pc-modal" onclick="event.stopPropagation()">
                     <div class="pc-modal-header">
-                        <div class="pc-modal-title"><i class="fa-solid fa-map-location-dot"></i> 巡查点详情</div>
+                        <div class="pc-modal-title"><i class="fa-solid fa-map-location-dot"></i> 巡查房屋详情</div>
                         <button class="pc-modal-close" onclick="closePointModal(event)"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                     <div class="pc-modal-body" id="pointModalBody"></div>
@@ -35,7 +35,6 @@ function closePointModal(event) {
 // 构建弹窗内容
 function buildPointModalContent(point) {
     const taskName = typeof taskData !== 'undefined' && taskData ? taskData.name : '-';
-    const company = point.company || point.enterprise || '-';
     const statusHtml = renderStatusLabel(point.status, point.statusLabel);
     const riskHtml = renderRiskLabel(point.risk, point.riskLabel);
 
@@ -45,22 +44,18 @@ function buildPointModalContent(point) {
 
     return `
         <div class="point-detail-section">
-            <div class="point-detail-section-title">巡查点信息</div>
+            <div class="point-detail-section-title">房屋信息</div>
             <div class="point-info-grid">
                 <div class="point-info-item">
-                    <span class="point-info-label">巡查点名称</span>
-                    <span class="point-info-value">${point.name}</span>
+                    <span class="point-info-label">房屋编号</span>
+                    <span class="point-info-value">${point.houseNo || ('FX-NC-ZF-' + String(point.id).padStart(4, '0'))}</span>
                 </div>
                 <div class="point-info-item">
                     <span class="point-info-label">所属任务</span>
                     <span class="point-info-value">${taskName}</span>
                 </div>
-                <div class="point-info-item">
-                    <span class="point-info-label">所属企业</span>
-                    <span class="point-info-value">${company}</span>
-                </div>
                 <div class="point-info-item full-width">
-                    <span class="point-info-label">地址</span>
+                    <span class="point-info-label">详细地址</span>
                     <span class="point-info-value">${point.address}</span>
                 </div>
                 <div class="point-info-item">
@@ -96,10 +91,9 @@ function renderRiskLabel(risk, label) {
 
 function buildCheckItemCard(item, index) {
     const levelMap = {
-        red: { class: 'red', label: '重大风险' },
-        orange: { class: 'orange', label: '较大风险' },
-        yellow: { class: 'yellow', label: '一般风险' },
-        blue: { class: 'blue', label: '低风险' }
+        red: { class: 'red', label: '第三类' },
+        yellow: { class: 'yellow', label: '第二类' },
+        blue: { class: 'blue', label: '第一类' }
     };
     const level = levelMap[item.level] || levelMap.blue;
     const hasDetail = item.result && item.result !== 'normal';
@@ -229,7 +223,7 @@ function viewScopePoint(id) {
     const data = (typeof scopeData !== 'undefined' && scopeData) ? scopeData : [];
     const point = data.find(s => s.id === id);
     if (!point) {
-        alert('未找到该巡查点信息');
+        alert('未找到该房屋信息');
         return;
     }
     openPointModal(point);
