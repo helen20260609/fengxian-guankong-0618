@@ -30,16 +30,7 @@
             color: var(--text-primary);
             min-height: 100vh;
         }
-        .page-wrapper { max-width: 1400px; margin: 0 auto; padding: 16px; }
-        .topbar {
-            background: #fff; border-radius: 8px; padding: 14px 18px;
-            box-shadow: 0 2px 8px var(--shadow); margin-bottom: 12px;
-            display: flex; align-items: center; justify-content: space-between;
-        }
-        .topbar-left { display: flex; align-items: center; gap: 12px; }
-        .topbar-title { font-size: 17px; font-weight: 600; }
-        .topbar-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-        .topbar-actions { display: flex; gap: 8px; }
+        .page-wrapper { width: 100%; margin: 0; padding: 16px; }
         .btn {
             display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;
             border-radius: 4px; font-size: 13px; cursor: pointer; border: 1px solid var(--border);
@@ -138,12 +129,17 @@
         .modal-close { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--bg-hover); cursor: pointer; font-size: 16px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
         .modal-close:hover { background: var(--danger); color: #fff; }
         .modal-body { padding: 18px; flex: 1; overflow-y: auto; }
+        /* 档案详情全屏嵌入层 */
+        .detail-embed-overlay { display: none; position: fixed; inset: 0; background: #f0f2f5; z-index: 2000; flex-direction: column; }
+        .detail-embed-overlay.active { display: flex; }
+        .detail-embed-frame { flex: 1; border: none; width: 100%; background: #fff; }
         .modal-footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; background: #fafbfc; }
         .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 16px; }
         .form-item { display: flex; flex-direction: column; gap: 5px; }
         .form-item.full { grid-column: 1 / -1; }
         .form-label { font-size: 12px; color: var(--text-secondary); }
         .form-input, .form-select, textarea.form-input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; color: var(--text-primary); font-family: inherit; background: #fff; }
+        textarea.form-input { display: block; width: 100%; resize: vertical; }
         .form-input:focus, .form-select:focus, textarea.form-input:focus { outline: none; border-color: var(--primary); }
         textarea.form-input { resize: vertical; }
         .file-upload-wrap { display: flex; flex-direction: column; gap: 8px; }
@@ -173,34 +169,70 @@
             display: flex; align-items: center; gap: 8px;
         }
         .toast.show { transform: translateX(-50%) translateY(0); }
+
+        /* 顶部分类 TAB */
+        .category-tabs {
+            display: flex; gap: 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 12px;
+            background: var(--bg-card);
+            border-radius: 8px 8px 0 0;
+            overflow: hidden;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+        .category-tab {
+            padding: 12px 28px;
+            font-size: 14px; font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border: none; background: transparent;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+            font-family: inherit;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .category-tab:hover { color: var(--primary); }
+        .category-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .category-tab .tab-count {
+            background: var(--bg-dark); color: var(--text-secondary);
+            font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 500;
+        }
+        .category-tab.active .tab-count { background: var(--primary-light); color: var(--primary); }
     </style>
 </head>
 <body>
     <div class="page-wrapper">
-        <div class="topbar">
-            <div class="topbar-left">
-                <div>
-                    <div class="topbar-title"><i class="fas fa-check-circle" style="color:var(--safe);"></i> 隐患销号申请与审核</div>
-                    <div class="topbar-sub">支持批量申请、批量审核，申请状态实时同步至房屋档案</div>
-                </div>
-            </div>
-            <div class="topbar-actions">
-                <button class="btn" onclick="exportData()"><i class="fas fa-file-export"></i> 导出</button>
-                <button class="btn" onclick="window.close()"><i class="fas fa-times"></i> 关闭</button>
-            </div>
+        <div class="category-tabs" id="categoryTabs">
+            <button class="category-tab active" data-category="农村自建房">
+                <i class="fas fa-home"></i> 农村自建房 <span class="tab-count" id="countRural">0</span>
+            </button>
+            <button class="category-tab" data-category="城镇自建房">
+                <i class="fas fa-city"></i> 城镇自建房 <span class="tab-count" id="countUrban">0</span>
+            </button>
         </div>
 
         <div class="filter-card">
             <div class="filter-item">
-                <input class="filter-input" id="filterKeyword" placeholder="请输入房屋编号/名称" oninput="renderTable()">
+                <input class="filter-input" id="filterKeyword" placeholder="请输入房屋编号" oninput="renderTable()">
             </div>
             <div class="filter-item">
                 <select class="filter-select" id="filterStatus" onchange="renderTable()">
                     <option value="">全部销号状态</option>
                     <option value="未申请">未申请</option>
                     <option value="待审核">待审核</option>
+                    <option value="审核中">审核中</option>
                     <option value="已通过">已通过</option>
                     <option value="已驳回">已驳回</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <select class="filter-select" id="filterGovern" onchange="renderTable()">
+                    <option value="">全部治理状态</option>
+                    <option value="待整治">待整治</option>
+                    <option value="整治中">整治中</option>
+                    <option value="逾期未整治">逾期未整治</option>
+                    <option value="已治理">已治理</option>
                 </select>
             </div>
             <div class="filter-item">
@@ -232,7 +264,6 @@
                         <tr>
                             <th><input type="checkbox" class="checkbox" id="checkAll" onchange="toggleCheckAll()"></th>
                             <th>房屋编号</th>
-                            <th>房屋名称</th>
                             <th>所在区域</th>
                             <th>风险等级</th>
                             <th>治理状态</th>
@@ -340,6 +371,11 @@
         </div>
     </div>
 
+    <!-- 房屋档案详情全屏嵌入层 -->
+    <div class="detail-embed-overlay" id="detailEmbedOverlay">
+        <iframe class="detail-embed-frame" id="detailEmbedFrame" src=""></iframe>
+    </div>
+
     <div class="toast" id="toast"></div>
 
     <script>
@@ -349,11 +385,40 @@
         let selectedIds = [];
         let auditTargetIds = [];
         let allData = [];
+        // 当前类别：从 URL 参数读取（?category=xxx），默认农村自建房
+        let currentCategory = new URLSearchParams(location.search).get('category') || '农村自建房';
 
         function init() {
             document.getElementById('batchApplyTime').value = new Date().toISOString().split('T')[0];
             allData = loadAll();
+            initCategoryTabs();
+            updateCategoryCounts();
             renderTable();
+        }
+
+        function initCategoryTabs() {
+            document.querySelectorAll('#categoryTabs .category-tab').forEach(tab => {
+                const isActive = tab.dataset.category === currentCategory;
+                tab.classList.toggle('active', isActive);
+                tab.addEventListener('click', () => {
+                    if (tab.dataset.category === currentCategory) return;
+                    currentCategory = tab.dataset.category;
+                    document.querySelectorAll('#categoryTabs .category-tab').forEach(t => {
+                        t.classList.toggle('active', t.dataset.category === currentCategory);
+                    });
+                    // 切换类别时清空选择和页码，避免跨类别串数据
+                    selectedIds = [];
+                    currentPage = 1;
+                    renderTable();
+                });
+            });
+        }
+
+        function updateCategoryCounts() {
+            const rural = allData.filter(d => d.houseType !== '城镇自建房').length;
+            const urban = allData.filter(d => d.houseType === '城镇自建房').length;
+            document.getElementById('countRural').textContent = rural;
+            document.getElementById('countUrban').textContent = urban;
         }
 
         function getHouseArchStorage() { return __getHouseArchStorage(); }
@@ -384,6 +449,8 @@
                     no: item.no,
                     name: item.name || '—',
                     street: item.street || '—',
+                    houseType: item.houseType || '农村自建房',
+                    risk: item.risk || 'warning',
                     riskLevel: item.riskLevel || '—',
                     governStatus: item.governStatus || '—',
                     closeStatus: item.closeStatus || '未申请',
@@ -417,7 +484,7 @@
                 if (d.closeStatus === '已通过') {
                     arch[d.no].governStatus = '已治理';
                     arch[d.no].risk = 'safe';
-                    arch[d.no].riskLevel = '无风险';
+                    arch[d.no].riskLevel = '第一类';
                 } else {
                     arch[d.no].risk = d.risk;
                     arch[d.no].riskLevel = d.riskLevel;
@@ -436,6 +503,7 @@
             return {
                 keyword: document.getElementById('filterKeyword').value.trim().toLowerCase(),
                 status: document.getElementById('filterStatus').value,
+                govern: document.getElementById('filterGovern').value,
                 applicant: document.getElementById('filterApplicant').value.trim().toLowerCase(),
                 start: document.getElementById('filterStart').value
             };
@@ -444,8 +512,13 @@
         function filterData() {
             const f = getFilter();
             return allData.filter(d => {
-                if (f.keyword && !d.no.toLowerCase().includes(f.keyword) && !d.name.toLowerCase().includes(f.keyword)) return false;
+                // 先按当前类别过滤
+                const isUrban = d.houseType === '城镇自建房';
+                if (currentCategory === '城镇自建房' && !isUrban) return false;
+                if (currentCategory === '农村自建房' && isUrban) return false;
+                if (f.keyword && !(d.no.toLowerCase().includes(f.keyword) || d.name.toLowerCase().includes(f.keyword) || d.street.toLowerCase().includes(f.keyword))) return false;
                 if (f.status && d.closeStatus !== f.status) return false;
+                if (f.govern && d.governStatus !== f.govern) return false;
                 if (f.applicant && !d.applicant.toLowerCase().includes(f.applicant)) return false;
                 if (f.start && d.applyTime && d.applyTime < f.start) return false;
                 return true;
@@ -473,7 +546,7 @@
             const pageData = list.slice(start, start + PAGE_SIZE);
             const tbody = document.getElementById('tableBody');
             if (pageData.length === 0) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="12">暂无数据</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="11">暂无数据</td></tr>';
             } else {
                 tbody.innerHTML = pageData.map(d => {
                     const statusClass = {
@@ -485,7 +558,6 @@
                     return '<tr>' +
                         '<td><input type="checkbox" class="checkbox" ' + checked + ' ' + disabled + ' onchange="toggleRow(\'' + d.no + '\')"></td>' +
                         '<td>' + d.no + '</td>' +
-                        '<td>' + d.name + '</td>' +
                         '<td>' + d.street + '</td>' +
                         '<td><span class="status-tag ' + riskClass + '">' + getRiskDisplayText(d.riskLevel) + '</span></td>' +
                         '<td>' + d.governStatus + '</td>' +
@@ -557,13 +629,21 @@
             renderTable();
         }
 
-        function openBatchApplyModal() {
-            const selectable = allData.filter(d => d.governStatus === '已治理' && (d.closeStatus === '未申请' || d.closeStatus === '已驳回'));
+        function openBatchApplyModal(presetNos) {
+            // 只针对当前类别的房屋
+            const selectable = filterData().filter(d => d.governStatus === '已治理' && (d.closeStatus === '未申请' || d.closeStatus === '已驳回'));
             if (selectable.length === 0) {
-                showToast('暂无可申请销号的房屋，请确保整治状态为“已治理”');
+                showToast('当前类别暂无可申请销号的房屋，请确保整治状态为"已治理"');
                 return;
             }
-            selectedIds = selectable.map(d => d.no);
+            // 单条申请时只选中该房屋；批量申请时选中全部可申请
+            selectedIds = (Array.isArray(presetNos) && presetNos.length > 0)
+                ? presetNos.filter(no => selectable.some(d => d.no === no))
+                : selectable.map(d => d.no);
+            if (selectedIds.length === 0) {
+                showToast('该房屋当前不可申请销号');
+                return;
+            }
             renderApplyPreview();
             document.getElementById('batchApplyRemark').value = '';
             document.getElementById('batchApplyFiles').value = '';
@@ -577,7 +657,7 @@
             const list = allData.filter(d => selectedIds.includes(d.no));
             document.getElementById('applyCount').textContent = list.length;
             document.getElementById('applyPreviewList').innerHTML = list.map(d =>
-                '<span class="apply-preview-tag">' + d.name + '（' + d.no + '）</span>'
+                '<span class="apply-preview-tag">' + d.no + '</span>'
             ).join('');
         }
 
@@ -627,7 +707,7 @@
                 d.auditOpinion = '';
                 d.rejectReason = '';
                 d.files = files;
-                d.governStatus = '已整治';
+                d.governStatus = '已治理';
                 d.riskLevel = d.risk === 'safe' ? '第一类' : RISK_LABEL_MAP[d.risk] || d.riskLevel;
             });
             const applyCount = selectedIds.length;
@@ -639,8 +719,7 @@
         }
 
         function openSingleApply(no) {
-            selectedIds = [no];
-            openBatchApplyModal();
+            openBatchApplyModal([no]);
         }
 
         function openBatchAuditModal(pass) {
@@ -665,7 +744,7 @@
             const list = allData.filter(d => nos.includes(d.no));
             document.getElementById('auditCount').textContent = list.length;
             document.getElementById('auditPreviewList').innerHTML = list.map(d =>
-                '<span class="apply-preview-tag">' + d.name + '（' + d.no + '）</span>'
+                '<span class="apply-preview-tag">' + d.no + '</span>'
             ).join('');
             openModal('auditModal');
         }
@@ -711,12 +790,34 @@
         }
 
         function openDetail(no) {
-            window.open('house-arch-detail.html?no=' + encodeURIComponent(no), '_blank');
+            const overlay = document.getElementById('detailEmbedOverlay');
+            const frame = document.getElementById('detailEmbedFrame');
+            if (!overlay || !frame) return;
+            frame.src = 'house-arch-detail.html?no=' + encodeURIComponent(no || '') + '&readonly=1';
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
         }
+
+        function closeDetailEmbed() {
+            const overlay = document.getElementById('detailEmbedOverlay');
+            const frame = document.getElementById('detailEmbedFrame');
+            if (!overlay || !frame) return;
+            overlay.classList.remove('active');
+            frame.src = '';
+            document.body.style.overflow = '';
+        }
+
+        // 嵌入的详情页点"返回"时，关闭嵌入层
+        window.addEventListener('message', function(e) {
+            if (e.data && e.data.action === 'closeDetailEmbed') {
+                closeDetailEmbed();
+            }
+        });
 
         function resetFilter() {
             document.getElementById('filterKeyword').value = '';
             document.getElementById('filterStatus').value = '';
+            document.getElementById('filterGovern').value = '';
             document.getElementById('filterApplicant').value = '';
             document.getElementById('filterStart').value = '';
             renderTable();

@@ -69,7 +69,7 @@ const HAZARD_TO_RISK_LEVEL = {
 const STATUS_LABEL_MAP = {
     'pending': '待整治',
     'doing': '整治中',
-    'done': '已整治',
+    'done': '已治理',
     'overdue': '逾期未整治'
 };
 const STATUS_LABEL_MAP_INV = {
@@ -122,6 +122,95 @@ function __getCloseApplyStorage() {
 }
 function __setCloseApplyStorage(list) {
     localStorage.setItem(CLOSE_APPLY_KEY, JSON.stringify(list));
+}
+
+// ---------------- 草稿区（风险档案工作区） ----------------
+// 业务模型：风险档案（农村/城镇各自仓库）→ 编辑写入草稿区 → 点同步 → 覆盖到发布区（房屋建筑档案）
+const HOUSE_ARCH_DRAFT_KEY = 'houseArchDraft';
+const HOUSE_ARCH_SYNC_LOG_KEY = 'houseArchSyncLog';
+
+function __getHouseArchDraft() {
+    try {
+        const raw = localStorage.getItem(HOUSE_ARCH_DRAFT_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) { return {}; }
+}
+function __setHouseArchDraft(all) {
+    localStorage.setItem(HOUSE_ARCH_DRAFT_KEY, JSON.stringify(all));
+}
+function __getSyncLog() {
+    try { const raw = localStorage.getItem(HOUSE_ARCH_SYNC_LOG_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+function __setSyncLog(list) {
+    localStorage.setItem(HOUSE_ARCH_SYNC_LOG_KEY, JSON.stringify(list.slice(-200))); // 只保留最近200条
+}
+
+// 读草稿（无草稿时回落到发布区，保证首次进入也能看到数据）
+function getDraftRecord(no) {
+    const draft = __getHouseArchDraft();
+    if (draft[no]) {
+        if (typeof normalizeHouseRecord === 'function') normalizeHouseRecord(draft[no]);
+        return draft[no];
+    }
+    return getHouseRecord(no);
+}
+function getAllDraftRecords() {
+    const draft = __getHouseArchDraft();
+    const publish = getHouseArchStorage();
+    // 合并：草稿优先，发布兜底
+    const merged = Object.assign({}, publish, draft);
+    Object.keys(merged).forEach(no => { if (typeof normalizeHouseRecord === 'function') normalizeHouseRecord(merged[no]); });
+    return Object.values(merged);
+}
+function setDraftRecord(no, record) {
+    const draft = __getHouseArchDraft();
+    draft[no] = record;
+    if (typeof normalizeHouseRecord === 'function') normalizeHouseRecord(draft[no]);
+    __setHouseArchDraft(draft);
+    return record;
+}
+// 同步：草稿 → 发布区，并写日志
+// 同步后保留草稿（让草稿=发布区，getSyncStatus 返回 synced）
+function publishDraftRecord(no, operator) {
+    const draft = __getHouseArchDraft();
+    if (!draft[no]) return { ok: false, msg: '草稿不存在' };
+    // 打同步时间戳（用于 getSyncStatus 判断）
+    draft[no]._syncedAt = new Date().toISOString();
+    setHouseRecord(no, draft[no]);
+    // 同步后保留草稿（草稿=发布区，状态为已同步）
+    // 关键：修改 draft 后要写回 localStorage，否则 _syncedAt 不生效
+    __setHouseArchDraft(draft);
+    // 写日志
+    const log = __getSyncLog();
+    log.push({ no: no, time: draft[no]._syncedAt, operator: operator || 'system' });
+    __setSyncLog(log);
+    return { ok: true };
+}
+// 查询同步状态：
+//   'synced'  — 有草稿且草稿._syncedAt 存在（用户显式同步过）
+//   'pending' — 有草稿但无 _syncedAt（编辑过但未同步）
+//   'new'     — 无草稿（从未编辑过）
+function getSyncStatus(no) {
+    const draft = __getHouseArchDraft();
+    if (!draft[no]) return 'new';
+    return draft[no]._syncedAt ? 'synced' : 'pending';
+}
+// 列出所有有草稿的编号
+function getDraftedNos() {
+    const draft = __getHouseArchDraft();
+    return Object.keys(draft);
+}
+// 批量同步
+function publishAllDrafts(operator) {
+    const draft = __getHouseArchDraft();
+    const keys = Object.keys(draft);
+    let ok = 0, fail = 0;
+    keys.forEach(no => {
+        const r = publishDraftRecord(no, operator);
+        if (r.ok) ok++; else fail++;
+    });
+    return { total: keys.length, ok: ok, fail: fail };
 }
 
 // 保持原有名称的全局别名
@@ -251,7 +340,9 @@ function normalizeHouseRecord(record) {
     // 历史缓存记录缺失鉴定报告时按编号补生成（非安全房才需要鉴定）
     if (rec.risk && rec.risk !== 'safe') {
         const idx = parseInt(String(rec.no || '').replace(/\D/g, '') || '0', 10);
-        rec.appraisalReports = generateAppraisalReports(rec.no, rec.risk, rec.governance || 'pending', idx);
+        if (!rec.appraisalReports.length) {
+            rec.appraisalReports = generateAppraisalReports(rec.no, rec.risk, rec.governance || 'pending', idx);
+        }
     } else if (!rec.appraisalReports.length) {
         rec.appraisalReports = [];
     }
@@ -422,7 +513,7 @@ function generateManageRecords(no, risk, governance, doneTask, totalTask, i) {
         reporter: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length],
         reportTime: startDate + ' 09:00'
     });
-    // 部分已整治/已治理房屋增加一条变更续期记录
+    // 部分已治理房屋增加一条变更续期记录
     if ((isDone || governance === 'doing') && i % 3 === 0) {
         records.push({
             id: 'M-' + no + '-002',
@@ -1053,8 +1144,11 @@ function generateHouseSeed() {
         let auditOpinion = '';
         let rejectReason = '';
         if (governance === 'done') {
-            closeStatus = i % 3 === 0 ? '已通过' : (i % 3 === 1 ? '待审核' : '审核中');
-            applyTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(1 + (i % 28));
+            // 已治理分布：部分尚未申请销号（可演示"申请销号"），部分审核中，部分已通过
+            closeStatus = i % 4 === 0 ? '未申请' : (i % 4 === 1 ? '待审核' : (i % 4 === 2 ? '审核中' : '已通过'));
+            if (closeStatus !== '未申请') {
+                applyTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(1 + (i % 28));
+            }
             if (closeStatus === '已通过') {
                 auditTime = '2025-' + pad2(1 + (i % 6)) + '-' + pad2(2 + (i % 27));
                 auditor = '区住建局 ' + AUDITORS[i % AUDITORS.length];
@@ -1079,7 +1173,8 @@ function generateHouseSeed() {
             note: closeStatus === '已通过' ? '已销号' : (closeStatus === '已驳回' ? rejectReason : '尚未提交销号申请')
         };
 
-        const governStatus = STATUS_LABEL_MAP[governance];
+        // 治理完成（done）的房屋统一展示为"已治理"；其余按状态映射
+        const governStatus = governance === 'done' ? '已治理' : STATUS_LABEL_MAP[governance];
         const riskLevel = RISK_LABEL_MAP[risk];
 
         // 已销号且治理完成：展示用安全，但保留原始风险用于统计/追溯

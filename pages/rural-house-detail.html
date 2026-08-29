@@ -10,7 +10,7 @@
     <style>
         :root {
             --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
-            --danger: #d93025; --major: #f57c00; --warning: #f9ab00; --safe: #1e8e3e;
+            --danger: #d93025; --warning: #f9ab00; --safe: #1e8e3e;
             --text-primary: #202124; --text-secondary: #5f6368; --border: #e8eaed;
             --bg-dark: #f5f7fa; --bg-card: #ffffff; --bg-hover: #f0f2f5;
             --shadow: rgba(0,0,0,0.06);
@@ -75,7 +75,6 @@
             font-size: 12px; font-weight: 500; width: fit-content;
         }
         .status-badge.danger { background: #fce8e6; color: var(--danger); }
-        .status-badge.major { background: #fff3e0; color: var(--major); }
         .status-badge.warning { background: #fff8e1; color: #f9a825; }
         .status-badge.safe { background: #e6f4ea; color: var(--safe); }
         .status-badge.info { background: var(--primary-light); color: var(--primary); }
@@ -493,27 +492,21 @@
             const map = {
                 '第三类': 'danger',
                 '第二类': 'warning',
-                '第一类': 'info'
+                '第一类': 'safe'
             };
-            return map[display] || 'info';
+            return map[display] || 'safe';
         }
 
+        // 历史数据迁移：把旧风险等级名称映射到三类口径
+        // 只保留农村模块历史名称，去掉燃气/工程模块的术语
         function getRiskDisplayText(level) {
             const map = {
-                '重大风险': '第三类',
-                '重大隐患': '第三类',
-                '较大风险': '第三类',
-                '较大隐患': '第三类',
-                '一般风险': '第二类',
-                '一般隐患': '第二类',
-                '低风险': '第一类',
-                '安全': '第一类',
-                '无风险': '第一类',
                 '第三类': '第三类',
                 '第二类': '第二类',
                 '第一类': '第一类',
-                '严重损坏房': '第三类',
+                // 农村模块历史名称
                 '疑似危房': '第三类',
+                '严重损坏房': '第三类',
                 '一般损坏房': '第二类',
                 '完好房(基本完好房)': '第一类',
                 '完好房': '第一类'
@@ -521,18 +514,15 @@
             return map[level] || level || '—';
         }
 
+        // 历史数据迁移：把旧风险等级名称映射到三类口径（用于风险依据文本替换）
         function formatRiskBasisText(text) {
             if (!text) return '—';
             const map = {
-                '重大隐患': '第三类',
-                '较大隐患': '第三类',
-                '一般隐患': '第二类',
-                '重大风险': '第三类',
-                '较大风险': '第三类',
-                '一般风险': '第二类',
-                '低风险': '第一类',
-                '安全': '第一类',
-                '无风险': '第一类'
+                '疑似危房': '第三类',
+                '严重损坏房': '第三类',
+                '一般损坏房': '第二类',
+                '完好房(基本完好房)': '第一类',
+                '完好房': '第一类'
             };
             let result = text;
             for (const old in map) {
@@ -541,7 +531,7 @@
             return result;
         }
         function governBadgeClass(status) {
-            const map = { '待整治': 'info', '整治中': 'warning', '已整治': 'safe', '已治理': 'safe', '逾期未整治': 'danger' };
+            const map = { '待整治': 'info', '整治中': 'warning', '已治理': 'safe', '逾期未整治': 'danger' };
             return map[status] || 'info';
         }
 
@@ -1036,10 +1026,16 @@
         function formatAppraisalConclusion(v) {
             if (!v) return '—';
             const map = {
+                // 英文key映射
                 'danger': 'D级', 'major': 'C级', 'warning': 'B级', 'safe': 'A级',
-                '重大隐患': 'D级', '较大隐患': 'C级', '一般隐患': 'B级',
-                '第三类': 'D级', '第三类': 'C级', '第二类': 'B级',
-                '第一类': 'A级', '安全': 'A级', '无风险': 'A级'
+                // 隐患等级映射（三类）
+                '严重安全隐患': 'D级', '一定安全隐患': 'B级', '未发现安全隐患': 'A级',
+                // 风险等级映射（三类）
+                '第三类': 'D级', '第二类': 'B级', '第一类': 'A级',
+                // 历史名称映射
+                '疑似危房': 'D级', '严重损坏房': 'D级', '一般损坏房': 'B级',
+                '完好房(基本完好房)': 'A级', '完好房': 'A级',
+                '安全': 'A级', '无风险': 'A级'
             };
             return map[v] || v;
         }
@@ -1365,7 +1361,7 @@
             const firstMgmt = mgmt[0] || {};
             const firstPrj = prj[0] || {};
             const controlId = 'CTRL-' + (s.no || 'NF') + '-001';
-            const governanceLabel = { 'pending': '待整治', 'doing': '整治中', 'done': '已整治', 'overdue': '已逾期' }[s.governance] || (s.governStatus || '待整治');
+            const governanceLabel = { 'pending': '待整治', 'doing': '整治中', 'done': '已治理', 'overdue': '已逾期' }[s.governance] || (s.governStatus || '待整治');
             const isControlled = firstMgmt.riskControlled !== undefined ? firstMgmt.riskControlled :
                 (s.governance === 'done' || s.closeStatus === '已通过');
             const reporter = firstMgmt.reporter || firstPrj.reporter || s.responsiblePerson || '—';
@@ -1589,7 +1585,7 @@
             const prj = (s.projectRecords || [])[0] || {};
             const mgmt = (s.manageRecords || [])[0] || {};
             const isDone = s.governance === 'done';
-            const governanceLabel = { 'pending': '待整治', 'doing': '整治中', 'done': '已整治', 'overdue': '已逾期' }[s.governance] || (s.governStatus || '待整治');
+            const governanceLabel = { 'pending': '待整治', 'doing': '整治中', 'done': '已治理', 'overdue': '已逾期' }[s.governance] || (s.governStatus || '待整治');
 
             let body = '<div class="info-section-title"><i class="fas fa-clipboard-check"></i> 销号状态</div>' +
                 '<div class="info-grid info-grid-2col">' +
@@ -1924,7 +1920,7 @@
                 makeField(rec, 'checker', '排查人员', 'text'),
                 makeField(rec, 'checkUnit', '排查单位', 'text'),
                 makeField(rec, 'structureStatus', '结构状况', 'select', { options: ['完好', '一般损坏', '严重损坏', '疑似危房'] }),
-                makeField(rec, 'preliminaryJudge', '初步判定', 'select', { options: ['安全', '一般隐患', '较大隐患', '重大隐患'] }),
+                makeField(rec, 'preliminaryJudge', '初步判定', 'select', { options: ['未发现安全隐患', '一定安全隐患', '严重安全隐患'] }),
                 makeField(rec, 'checkConclusion', '排查结论', 'text'),
                 makeField(rec, 'foundProblems', '发现问题', 'textarea', { full: true }),
                 makeField(rec, 'hazardDesc', '隐患描述', 'textarea', { full: true }),
@@ -2194,13 +2190,13 @@
             }
             const mgmt = (s.manageRecords || [])[0] || {};
             const fields = [
-                makeField(s, 'governance', '隐患动态整治状态', 'select', { options: [{value:'pending',label:'待整治'},{value:'doing',label:'整治中'},{value:'done',label:'已整治'},{value:'overdue',label:'已逾期'}] }),
+                makeField(s, 'governance', '隐患动态整治状态', 'select', { options: [{value:'pending',label:'待整治'},{value:'doing',label:'整治中'},{value:'done',label:'已治理'},{value:'overdue',label:'已逾期'}] }),
                 makeField(mgmt, 'remark', '备注', 'textarea', { full: true }),
                 makeField(mgmt, 'reporter', '填报人', 'text')
             ];
             // 保存后同步 governStatus 中文标签，避免状态面板 badge 与此处不一致
             openEditModal('编辑隐患控制情况', fields, function() {
-                const map = { pending: '待整治', doing: '整治中', done: '已整治', overdue: '已逾期' };
+                const map = { pending: '待整治', doing: '整治中', done: '已治理', overdue: '已逾期' };
                 if (map[s.governance]) {
                     s.governStatus = map[s.governance];
                     setHouseRecord(s.no || getCurrentHouseNo(), s);

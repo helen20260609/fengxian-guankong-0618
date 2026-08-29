@@ -196,7 +196,6 @@
             line-height: 1.4;
         }
         .status-tag.danger { background: #fce8e6; color: #d93025; }
-        .status-tag.major { background: #fff3e0; color: #f57c00; }
         .status-tag.warning { background: #fff8e1; color: #f9a825; }
         .status-tag.safe { background: #e8f0fe; color: #1a73e8; }
         .view-btn {
@@ -947,14 +946,61 @@
             outline: none;
         }
         .total-info { color: var(--text-secondary); }
+
+        /* 顶部分类 TAB */
+        .category-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 16px;
+            background: var(--bg-card);
+        }
+        .category-tab {
+            padding: 12px 28px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .category-tab:hover { color: var(--primary); }
+        .category-tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        .category-tab .tab-count {
+            background: var(--bg-dark);
+            color: var(--text-secondary);
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+        .category-tab.active .tab-count {
+            background: var(--primary-light);
+            color: var(--primary);
+        }
     </style>
 </head>
 <body>
 <div class="page-card">
+<!-- 顶部分类 TAB -->
+<div class="category-tabs" id="categoryTabs">
+<button class="category-tab active" data-category="农村自建房"><i class="fas fa-home"></i> 农村自建房 <span class="tab-count" id="countRural">0</span></button>
+<button class="category-tab" data-category="城镇自建房"><i class="fas fa-city"></i> 城镇自建房 <span class="tab-count" id="countUrban">0</span></button>
+</div>
 <!-- Search toolbar -->
 <div class="search-toolbar">
 <div class="toolbar-group">
-<input class="search-input fulltext" id="fulltextSearch" placeholder="输入房屋编号/名称/地址/户主快速定位" type="text"/>
+<input class="search-input fulltext" id="fulltextSearch" placeholder="输入房屋编号/地址/户主快速定位" type="text"/>
 </div>
 <div class="toolbar-actions">
 <button class="search-btn" id="searchBtn" title="搜索"><i class="fas fa-search"></i> 搜索</button>
@@ -968,11 +1014,9 @@
 <tr>
 <th class="col-index">序</th>
 <th class="col-number">房屋编号</th>
-<th class="col-name">房屋名称</th>
 <th class="col-owner">户主姓名</th>
 <th class="col-street">所属街道</th>
 <th class="col-address">房屋地址</th>
-<th class="col-category">房屋类别</th>
 <th class="col-status">风险等级</th>
 <th class="col-view">操作</th>
 </tr>
@@ -1029,10 +1073,6 @@
 <div class="form-item">
 <label>房屋编号</label>
 <div class="form-value">NF-2025-00001</div>
-</div>
-<div class="form-item">
-<label>房屋名称</label>
-<div class="form-value">陈连明自住民居</div>
 </div>
 <div class="form-item">
 <label>房屋性质</label>
@@ -1810,11 +1850,14 @@
 
         let currentPage = 1;
         let pageSize = 10;
+        // 从 URL 参数初始化类别（详情页返回时保持上次类别）
+        const urlCategory = new URLSearchParams(location.search).get('category');
+        let currentCategory = (urlCategory === '城镇自建房' || urlCategory === '农村自建房') ? urlCategory : '农村自建房';
         let filteredData = [...baseData];
 
         function getRiskBadgeClass(level) {
             const map = {
-                '第一类': 'safe', '第二类': 'warning', '第三类': 'major', '第三类': 'danger'
+                '第一类': 'safe', '第二类': 'warning', '第三类': 'danger'
             };
             return map[level] || 'danger';
         }
@@ -1833,11 +1876,10 @@
             const basicInfo = document.getElementById('basic-info');
             if (basicInfo) {
                 const values = basicInfo.querySelectorAll('.form-value');
-                // 按基本信息字段顺序填充：房屋编号、房屋名称、房屋性质、所属乡镇、所属行政村、自然村、详细地址
+                // 按基本信息字段顺序填充：房屋编号、房屋性质、所属乡镇、所属行政村、自然村、详细地址
                 if (values[0]) values[0].textContent = data.no || '--';
-                if (values[1]) values[1].textContent = data.name || '--';
-                if (values[2]) values[2].textContent = data.category || '--';
-                if (values[6]) values[6].textContent = data.address || '--';
+                if (values[1]) values[1].textContent = data.category || '--';
+                if (values[5]) values[5].textContent = data.address || '--';
             }
             modal.classList.add('active');
         }
@@ -1909,11 +1951,9 @@
                 <tr>
                     <td class="col-index">${start + index + 1}</td>
                     <td>${item.no}</td>
-                    <td>${item.name}</td>
                     <td>${item.owner}</td>
                     <td>${item.street}</td>
                     <td>${item.address}</td>
-                    <td>${item.category}</td>
                     <td><span class="status-tag ${getRiskBadgeClass(item.status)}">${getRiskDisplayText(item.status)}</span></td>
                     <td class="col-view"><span class="view-btn" data-index="${start + index}">查看</span></td>
                 </tr>
@@ -1923,11 +1963,12 @@
                 btn.addEventListener('click', () => {
                     const dataIndex = parseInt(btn.getAttribute('data-index'));
                     const item = filteredData[dataIndex];
-                    const url = 'pages/house-arch-detail.html?no=' + encodeURIComponent(item.no);
+                    const cat = encodeURIComponent(currentCategory || item.category || '');
+                    const url = 'pages/house-arch-detail.html?no=' + encodeURIComponent(item.no) + '&category=' + cat + '&mode=publish';
                     if (window.parent && window.parent !== window) {
                         window.parent.postMessage({ action: 'navigate', url: url }, '*');
                     } else {
-                        window.location.href = 'house-arch-detail.html?no=' + encodeURIComponent(item.no);
+                        window.location.href = 'house-arch-detail.html?no=' + encodeURIComponent(item.no) + '&category=' + cat + '&mode=publish';
                     }
                 });
             });
@@ -1965,17 +2006,42 @@
         }
 
         function filterData() {
-            const keyword = fulltextSearch.value.trim();
+            const keyword = fulltextSearch.value.trim().toLowerCase();
 
             filteredData = baseData.filter(item => {
+                if (currentCategory && item.category !== currentCategory) return false;
                 if (!keyword) return true;
-                const fields = [item.no, item.name, item.owner, item.address].join(' ');
+                const fields = [item.no, item.owner, item.address].join(' ').toLowerCase();
                 return fields.includes(keyword);
             });
 
             currentPage = 1;
             updatePage();
         }
+
+        function updateTabCounts() {
+            const rural = baseData.filter(i => i.category === '农村自建房').length;
+            const urban = baseData.filter(i => i.category === '城镇自建房').length;
+            const ruralEl = document.getElementById('countRural');
+            const urbanEl = document.getElementById('countUrban');
+            if (ruralEl) ruralEl.textContent = rural;
+            if (urbanEl) urbanEl.textContent = urban;
+        }
+
+        document.querySelectorAll('#categoryTabs .category-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('#categoryTabs .category-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentCategory = tab.dataset.category;
+                filterData();
+            });
+        });
+
+        // 根据 URL 参数初始化 TAB 高亮状态
+        document.querySelectorAll('#categoryTabs .category-tab').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.category === currentCategory);
+        });
+        updateTabCounts();
 
         pageSizeSelect.addEventListener('change', () => {
             pageSize = parseInt(pageSizeSelect.value);
@@ -2024,7 +2090,7 @@
             filterData();
         });
 
-        updatePage();
+        filterData();
 
         // ================= 上传 / 附件预览 / 图片轮播功能 =================
         const singleFileInput = document.getElementById('singleFileInput');

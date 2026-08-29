@@ -52,8 +52,8 @@
                 const fundPer = house.projectMeasure > 0 ? Math.round(house.fundTotal / house.projectMeasure) : 0;
                 types.forEach((type, idx) => {
                     const company = projectCompanyNames[(house.no.length + idx) % projectCompanyNames.length];
-                    const fund = fundPer + Math.round((Math.random() - 0.5) * 10000);
-                    const status = house.completeStatus === '已完成' ? '已完成' : (house.completeStatus === '整治中' ? '进行中' : '未开工');
+                    const fund = fundPer + Math.round(((house.no.charCodeAt(0) + house.no.charCodeAt(house.no.length-1)) % 100 - 50) * 100);
+                    const status = house.completeStatus === '已治理' ? '已完成' : (house.completeStatus === '整治中' ? '进行中' : '未开工');
                     records.push({
                         id: house.no + '-P' + (idx + 1),
                         houseNo: house.no,
@@ -217,15 +217,22 @@
         function getFilteredData() {
             const street = document.getElementById('streetFilter').value;
             const risk = document.getElementById('riskFilter').value;
+            const cat = window.hsStatsCategory || '农村自建房';
             return baseData.filter(item => {
-                return (!street || item.street === street) && (!risk || item.risk === risk);
+                const isUrban = item.houseType === '城镇自建房';
+                if (cat === '城镇自建房' && !isUrban) return false;
+                if (cat === '农村自建房' && isUrban) return false;
+                if (street && item.street !== street) return false;
+                if (risk === 'danger') return item.risk === 'danger' || item.risk === 'major';
+                if (risk) return item.risk === risk;
+                return true;
             });
         }
 
         function updateSummary(data) {
             document.getElementById('totalCount').textContent = data.length;
-            document.getElementById('dangerCount').textContent = data.filter(i => i.risk === 'danger').length;
-            document.getElementById('warningCount').textContent = data.filter(i => i.risk === 'major' || i.risk === 'warning').length;
+            document.getElementById('dangerCount').textContent = data.filter(i => i.risk === 'danger' || i.risk === 'major').length;
+            document.getElementById('warningCount').textContent = data.filter(i => i.risk === 'warning').length;
             document.getElementById('safeCount').textContent = data.filter(i => i.risk === 'safe').length;
         }
 
@@ -289,14 +296,17 @@
 
         function renderRiskTable(data) {
             const total = data.length || 1;
-            const order = ['danger', 'major', 'warning', 'safe'];
-            const tagMap = { danger: 'tag-danger', major: 'tag-major', warning: 'tag-warning', safe: 'tag-safe' };
+            const order = ['danger', 'warning', 'safe'];
+            const tagMap = { danger: 'tag-danger', warning: 'tag-warning', safe: 'tag-safe' };
+            const labelMap = { danger: '第三类', warning: '第二类', safe: '第一类' };
             const tbody = document.querySelector('#riskTable tbody');
             tbody.innerHTML = order.map(risk => {
-                const count = data.filter(i => i.risk === risk).length;
+                const count = risk === 'danger'
+                    ? data.filter(i => i.risk === 'danger' || i.risk === 'major').length
+                    : data.filter(i => i.risk === risk).length;
                 const pct = ((count / total) * 100).toFixed(2) + '%';
                 const tagClass = tagMap[risk];
-                return `<tr><td><span class="tag ${tagClass}">${riskMap[risk].label}</span></td><td>${count}</td><td>${pct}</td></tr>`;
+                return `<tr><td><span class="tag ${tagClass}">${labelMap[risk]}</span></td><td>${count}</td><td>${pct}</td></tr>`;
             }).join('');
         }
 
@@ -335,8 +345,8 @@
                 for (let i = 0; i < count; i++) {
                     const mType = types[i % types.length];
                     const done = (risk === 'danger' && i === 0) || (risk === 'major' && i < 2) || (risk === 'warning' && i < 2) || (risk === 'safe' && i < 1);
-                    const controlled = done && Math.random() > 0.15;
-                    const effectIdx = controlled ? 0 : (Math.random() > 0.5 ? 1 : 3);
+                    const controlled = done && ((h.no.charCodeAt(0) + h.no.charCodeAt(h.no.length-1)) % 100) > 15;
+                    const effectIdx = controlled ? 0 : ((h.no.charCodeAt(0) + h.no.charCodeAt(h.no.length-1)) % 100) > 50 ? 1 : 3;
                     const effect = effectEvaluations[effectIdx % effectEvaluations.length];
                     records.push({
                         id: 'M-' + h.no + '-' + (i + 1),
@@ -597,11 +607,7 @@
         }
 
         function getProjectRecords() {
-            const street = document.getElementById('streetFilter').value;
-            const risk = document.getElementById('riskFilter').value;
-            const filteredHouses = baseData.filter(item => {
-                return (!street || item.street === street) && (!risk || item.risk === risk);
-            });
+            const filteredHouses = getFilteredData();
             const validNos = new Set(filteredHouses.map(h => h.no));
             return projectRecords.filter(r => validNos.has(r.houseNo));
         }
@@ -872,8 +878,8 @@
             }
             if (view === 'measure') {
                 const records = generateMeasureRecords();
-                const headers = ['变更编号', '房屋编号', '房屋名称', '街镇', '风险等级', '措施类型', '责任人', '责任单位', '是否完成', '是否有效控制', '效果评估', '变更次数'];
-                const rows = records.map(r => [r.id, r.houseNo, r.houseName, r.street, riskMap[r.risk].label, r.measureType, r.responsiblePerson, r.responsibleDept, r.done ? '是' : '否', r.controlled ? '是' : '否', r.effectEvaluation, r.changeCount]);
+                const headers = ['变更编号', '房屋编号', '街镇', '风险等级', '措施类型', '责任人', '责任单位', '是否完成', '是否有效控制', '效果评估', '变更次数'];
+                const rows = records.map(r => [r.id, r.houseNo, r.street, riskMap[r.risk].label, r.measureType, r.responsiblePerson, r.responsibleDept, r.done ? '是' : '否', r.controlled ? '是' : '否', r.effectEvaluation, r.changeCount]);
                 const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
                 const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
@@ -885,8 +891,8 @@
             if (view === 'project') {
                 projectRecords = generateProjectRecords();
                 const records = getProjectRecords();
-                const headers = ['工程编号', '房屋编号', '房屋名称', '街镇', '措施类型', '施工单位', '资金(元)', '工程状态', '开工日期'];
-                const rows = records.map(r => [r.id, r.houseNo, r.houseName, r.street, r.type, r.company, r.fund, r.status, r.startDate]);
+                const headers = ['工程编号', '房屋编号', '街镇', '措施类型', '施工单位', '资金(元)', '工程状态', '开工日期'];
+                const rows = records.map(r => [r.id, r.houseNo, r.street, r.type, r.company, r.fund, r.status, r.startDate]);
                 const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
                 const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
@@ -896,8 +902,8 @@
                 return;
             }
             const data = getFilteredData();
-            const headers = ['编号', '名称', '街镇', '地址', '结构类型', '建成年代', '风险等级', '产权人'];
-            const rows = data.map(i => [i.no, i.name, i.street, i.address, categoryMap[i.category], i.year, riskMap[i.risk].label, i.owner]);
+            const headers = ['编号', '街镇', '地址', '结构类型', '建成年代', '风险等级', '产权人'];
+            const rows = data.map(i => [i.no, i.street, i.address, categoryMap[i.category], i.year, riskMap[i.risk].label, i.owner]);
             const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
             const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
@@ -1324,6 +1330,8 @@ ${bodyRows}
             charts.projectFundType = echarts.init(document.getElementById('chartProjectFundType'));
             charts.projectFundTrend = echarts.init(document.getElementById('chartProjectFundTrend'));
             initFilters();
+            initCategoryTabs();
+            updateCategoryCounts();
             updateStats();
             window.addEventListener('resize', () => {
                 Object.values(charts).forEach(c => c.resize());
@@ -1332,4 +1340,43 @@ ${bodyRows}
         }
 
         init();
+
+        // =========================================================
+        // 农村/城镇自建房分类 TAB
+        // =========================================================
+        function initCategoryTabs() {
+            // 支持 URL 参数 ?category=
+            const urlCat = new URLSearchParams(location.search).get('category');
+            window.hsStatsCategory = urlCat || '农村自建房';
+            document.querySelectorAll('#categoryTabs .category-tab').forEach(tab => {
+                const isActive = tab.dataset.category === window.hsStatsCategory;
+                tab.classList.toggle('active', isActive);
+                tab.addEventListener('click', () => {
+                    if (tab.dataset.category === window.hsStatsCategory) return;
+                    window.hsStatsCategory = tab.dataset.category;
+                    document.querySelectorAll('#categoryTabs .category-tab').forEach(t => {
+                        t.classList.toggle('active', t.dataset.category === window.hsStatsCategory);
+                    });
+                    // 刷新当前视图
+                    const view = document.getElementById('viewFilter').value;
+                    if (view === 'house') updateStats();
+                    else if (view === 'measure') updateMeasureStats();
+                    else if (view === 'project') updateProjectStats();
+                    else if (view === 'report') initReport();
+                    setTimeout(() => {
+                        Object.values(charts).forEach(c => c && c.resize());
+                        Object.values(reportCharts).forEach(c => c && c.resize());
+                    }, 50);
+                });
+            });
+        }
+
+        function updateCategoryCounts() {
+            const rural = baseData.filter(d => d.houseType !== '城镇自建房').length;
+            const urban = baseData.filter(d => d.houseType === '城镇自建房').length;
+            const elR = document.getElementById('countRural');
+            const elU = document.getElementById('countUrban');
+            if (elR) elR.textContent = rural;
+            if (elU) elU.textContent = urban;
+        }
     

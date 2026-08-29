@@ -16,12 +16,77 @@
             return new URLSearchParams(location.search).get(key) || '';
         }
 
-        // 返回列表页：框架内则通知外层切回登记表列表，独立打开则后退
-        function goBackToList() {
-            if (window.parent && window.parent !== window) {
-                window.parent.postMessage({ action: 'navigate', url: 'pages/hs-register.html' }, '*');
+        // 数据模式：'draft'（草稿，风险档案嵌入用，可编辑） / 'publish'（发布，房屋建筑档案入口，只读）
+        // 兼容旧参数 readonly=1 → 视为 publish
+        function getDataMode() {
+            const m = getUrlParam('mode');
+            if (m === 'draft' || m === 'publish') return m;
+            if (getUrlParam('readonly') === '1') return 'publish';
+            return 'publish'; // 默认发布区
+        }
+        const DATA_MODE = getDataMode();
+        const IS_DRAFT_MODE = DATA_MODE === 'draft';
+
+        // 只读模式：publish 模式下隐藏所有编辑入口
+        (function applyReadonlyMode() {
+            if (!IS_DRAFT_MODE) {
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', function() { document.body.classList.add('readonly-mode'); });
+                } else {
+                    document.body.classList.add('readonly-mode');
+                }
+            }
+        })();
+
+        // 草稿模式下显示同步按钮，绑定推送逻辑
+        (function setupSyncButton() {
+            if (!IS_DRAFT_MODE) return;
+            const show = function() {
+                const btn = document.getElementById('syncBtn');
+                if (btn) btn.style.display = '';
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', show);
+            } else { show(); }
+        })();
+
+        // 同步草稿到发布区（房屋建筑档案）
+        function syncToPublish() {
+            const no = getCurrentHouseNo();
+            if (typeof publishDraftRecord !== 'function') { alert('数据层未就绪'); return; }
+            // 先把内存里最新的字段保存到草稿，再推送
+            if (typeof saveCurrentHouseArch === 'function' && typeof currentHouseArch !== 'undefined') {
+                saveCurrentHouseArch(currentHouseArch);
+            }
+            if (!confirm('确认将当前草稿同步到房屋建筑档案？\n同步后房屋建筑档案将显示本记录的最新内容。')) return;
+            const r = publishDraftRecord(no, 'user');
+            if (r && r.ok) {
+                alert('✅ 已同步到房屋建筑档案');
+                // 通知外层列表刷新状态
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ action: 'draftSynced', no: no }, '*');
+                }
             } else {
-                window.location.href = 'hs-register.html';
+                alert('❌ 同步失败：' + (r && r.msg ? r.msg : '未知错误'));
+            }
+        }
+
+        // 返回列表页：框架内则通知外层切回登记表列表，独立打开则后退
+        // 携带来源类别参数，让列表页保持上次的农村/城镇TAB选中
+        function goBackToList() {
+            // 嵌入模式（草稿或只读）：来自风险档案总览嵌入层，通知外层关闭嵌入即可
+            if (IS_DRAFT_MODE || getUrlParam('readonly') === '1') {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ action: 'closeDetailEmbed' }, '*');
+                    return;
+                }
+            }
+            const cat = getUrlParam('category') || (currentHouseArch && currentHouseArch.houseType) || '';
+            const catQ = cat ? ('?category=' + encodeURIComponent(cat)) : '';
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ action: 'navigate', url: 'pages/hs-register.html' + catQ }, '*');
+            } else {
+                window.location.href = 'hs-register.html' + catQ;
             }
         }
 
@@ -32,10 +97,16 @@
         }
 
         // 兼容：house-arch-detail 原有局部函数优先调用统一数据层
+        // 根据 DATA_MODE 选择读草稿区还是发布区
         function getCurrentHouseArch() {
             initHouseArchSeed();
             const no = getCurrentHouseNo();
-            let rec = getHouseRecord(no);
+            let rec;
+            if (IS_DRAFT_MODE && typeof getDraftRecord === 'function') {
+                rec = getDraftRecord(no); // 草稿区（无草稿自动回落到发布区）
+            } else {
+                rec = getHouseRecord(no); // 发布区
+            }
             if (!rec) {
                 rec = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS));
                 rec.no = no;
@@ -47,11 +118,43 @@
             return rec;
         }
 
+        // 字段库 → 根级字段映射（保存时同步）
+        function syncLibToRootFields(record) {
+            if (!record || !record._fieldsLibrary) return record;
+            const lib = record._fieldsLibrary;
+            const jbxx = lib.basic_RURAL?.jbxx || lib.basic_URBAN?.jbxx || [];
+            function getVal(label) {
+                const r = jbxx.find(row => row[0] === label);
+                return r ? r[1] : undefined;
+            }
+            // 产权人 / 使用人信息 → owner
+            const owner = getVal('产权人 / 使用人信息');
+            if (owner !== undefined && owner !== '—') record.owner = owner;
+            // 所在区域 → street（去掉"奉贤区"前缀）
+            const area = getVal('所在区域');
+            if (area !== undefined && area !== '—') {
+                record.street = area.replace(/^奉贤区/, '');
+            }
+            // 房屋性质 → houseType
+            const ht = getVal('房屋性质');
+            if (ht !== undefined && ht !== '—') record.houseType = ht;
+            // 路号信息 → address
+            const addr = getVal('路号信息');
+            if (addr !== undefined && addr !== '—') record.address = addr;
+            return record;
+        }
+
         function saveCurrentHouseArch(status) {
             const no = getCurrentHouseNo();
-            const all = getHouseArchStorage();
-            all[no] = status;
-            setHouseArchStorage(all);
+            // 同步字段库到根级字段
+            status = syncLibToRootFields(status);
+            if (IS_DRAFT_MODE && typeof setDraftRecord === 'function') {
+                setDraftRecord(no, status); // 草稿区
+            } else {
+                const all = getHouseArchStorage();
+                all[no] = status;
+                setHouseArchStorage(all); // 发布区
+            }
         }
 
         function generateArchId(prefix) {
@@ -235,6 +338,12 @@
         .bottom-btn:hover { background: var(--bg-hover); }
         .bottom-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
         .bottom-btn.primary:hover { background: var(--primary-dark); }
+        /* 只读模式（供风险档案总览嵌入）：隐藏所有编辑入口 */
+        body.readonly-mode .bottom-actions { display: none !important; }
+        body.readonly-mode .table-actions,
+        body.readonly-mode .row-actions { display: none !important; }
+        body.readonly-mode .bottom-info .readonly-tag { display: inline-block; margin-left: 8px; padding: 2px 8px; background: var(--warning); color: #fff; border-radius: 10px; font-size: 11px; }
+        .bottom-info .readonly-tag { display: none; }
 
         @media (max-width: 900px) {
             .main-body { flex-direction: column; }
@@ -749,11 +858,12 @@
         <div class="topbar">
             <div class="topbar-left">
                 <div>
-                    <div class="topbar-title" id="topbarTitle">陈连明自住民居</div>
+                    <div class="topbar-title" id="topbarTitle">NF-2025-00001</div>
                 </div>
             </div>
             <div class="topbar-actions">
-                <span class="topbar-sub" id="topbarSub" style="margin-top:0;align-self:center;">房屋编号：NF-2025-00001</span>
+                <span class="topbar-sub" id="topbarSub" style="margin-top:0;align-self:center;">所属街道：西渡街道</span>
+                <button class="topbar-btn" id="syncBtn" onclick="syncToPublish()" style="display:none;background:var(--safe);color:#fff;border-color:var(--safe);" title="把当前草稿推送到房屋建筑档案"><i class="fas fa-cloud-upload-alt"></i> 同步到档案</button>
                 <button class="topbar-btn" onclick="goBackToList()" title="返回"><i class="fas fa-arrow-left"></i> 返回</button>
             </div>
         </div>
@@ -764,7 +874,7 @@
 
         <div class="main-body">
             <div class="sidebar" id="sidebar">
-                <div class="sidebar-header">农村自建房安全排查</div>
+                <div class="sidebar-header" id="sidebarHeader">自建房安全排查</div>
                 <div class="sidebar-menu" id="sidebarMenu"></div>
             </div>
             <div class="content-area" id="contentArea"></div>
@@ -772,7 +882,7 @@
     </div>
 
     <script>
-        const sidebarItems = [
+        const sidebarItems_RURAL = [
             { key: 'basic', icon: 'fa-id-card', title: '基础信息', tag: '静态档案' },
             { key: 'survey', icon: 'fa-search', title: '排查信息', tag: '动态录入' },
             { key: 'assessment', icon: 'fa-clipboard-check', title: '安全鉴定', tag: '动态录入' },
@@ -785,20 +895,20 @@
             { key: 'archive', icon: 'fa-folder', title: '整治档案', tag: '归档总结' }
         ];
 
-        const basicSubTabs = [
+        const basicSubTabs_RURAL = [
             { key: 'jbxx', title: '基本信息', icon: 'fa-id-card', count: 20 },
             { key: 'zjd', title: '宅基地信息', icon: 'fa-map', count: 3 },
             { key: 'jsqk', title: '建设情况', icon: 'fa-hard-hat', count: 7 },
             { key: 'glqk', title: '管理情况', icon: 'fa-file-alt', count: 2 }
         ];
 
-        const surveySubTabs = [
+        const surveySubTabs_RURAL = [
             { key: 'survey1', title: '排查情况', icon: 'fa-search' },
             { key: 'survey2', title: '建房现场安全自查情况', icon: 'fa-hard-hat' },
             { key: 'survey3', title: '房屋用途现场情况', icon: 'fa-home' }
         ];
 
-        const surveyData = {
+        const surveyData_RURAL = {
             survey1: {
                 columns: ['结构状况', '损伤具体部位', '增加堆载（二层及以上堆放大量重物）', '其他使用安全隐患', '初步判定', '位置标注', '房屋安全责任人', '联系方式', '安全监管责任人', '联系方式', '排查照片', '安全鉴定：是否整治前鉴定', '未进行鉴定房屋原因', '上传证明文件', '排查备注', '更新时间'],
                 rows: [
@@ -819,10 +929,9 @@
             }
         };
 
-        const basicData = {
+        const basicData_RURAL = {
             jbxx: [
                 ['房屋编号', 'NF-2025-00001'],
-                ['房屋名称', '陈连明自住民居'],
                 ['房屋性质', '自住民居'],
                 ['所在区域', '奉贤区西渡街道'],
                 ['路号信息', '西闸公路二一三九弄35号'],
@@ -862,7 +971,7 @@
             ]
         };
 
-        const tableData = {
+        const tableData_RURAL = {
             survey: { title: '排查信息', columns: [], rows: [] },
             assessment: { title: '安全鉴定', columns: ['隐患动态整治状态', '鉴定机构名称', '统一社会信用代码', '鉴定时间', '鉴定负责人', '鉴定结论', '阶段性标识', '鉴定报告', '备注', '填报人', '填报时间'], rows: [
                 ['整治中', '奉贤区房屋安全鉴定中心', '91310120MA1K123456', '2024-06-20', '张伟', 'C级（局部危险）', '阶段性鉴定', '—', '东侧承重墙需加固', '李志强', '2024-06-21 10:00']
@@ -898,12 +1007,12 @@
             ]}
         };
 
-        const measureSubTabs = [
+        const measureSubTabs_RURAL = [
             { key: 'manage', title: '管理措施', icon: 'fa-shield-alt' },
             { key: 'project', title: '工程措施', icon: 'fa-hammer' }
         ];
 
-        const measureData = {
+        const measureData_RURAL = {
             manage: {
                 baseColumns: ['措施类型', '实施部位', '开始时间', '计划结束时间', '实施要求', '责任单位', '责任人', '联系电话', '管理措施', '管理措施实施照片', '管理措施完成照片（最少上传两张照片）', '措施是否完成', '措施效果评估', '风险是否已有效控制', '变更或延长申请审批', '备注', '填报人', '填报时间'],
                 baseValues: ['停止使用', '整栋房屋', '2024-07-05', '2024-09-30', '立即停止使用危险区域，设置围挡和警示标识，组织人员撤离', '街道安全管理办公室', '李志强', '138-1234-5678', '停止使用、设置警示标识', '—', '—', '是', '风险已有效控制，无新增变形', '是', '—', '已设置围挡和警示标识', '李志强', '2024-07-05 14:30'],
@@ -952,24 +1061,100 @@
             },
         };
 
+        // =========================================================
+        // 城镇自建房字段库（暂以农村版本深拷贝初始化，后续在此差异维护）
+        // =========================================================
+        const sidebarItems_URBAN  = JSON.parse(JSON.stringify(sidebarItems_RURAL));
+        const basicSubTabs_URBAN  = JSON.parse(JSON.stringify(basicSubTabs_RURAL));
+        const surveySubTabs_URBAN = JSON.parse(JSON.stringify(surveySubTabs_RURAL));
+        const surveyData_URBAN    = JSON.parse(JSON.stringify(surveyData_RURAL));
+        const basicData_URBAN     = JSON.parse(JSON.stringify(basicData_RURAL));
+        const tableData_URBAN     = JSON.parse(JSON.stringify(tableData_RURAL));
+        const measureSubTabs_URBAN= JSON.parse(JSON.stringify(measureSubTabs_RURAL));
+        const measureData_URBAN   = JSON.parse(JSON.stringify(measureData_RURAL));
+
+        // =========================================================
+        // 字段库分发器：根据当前房屋类别返回对应版本
+        // =========================================================
+        function isUrbanHouse() {
+            return currentHouseArch && currentHouseArch.houseType === '城镇自建房';
+        }
+        function getSidebarItems()   { return isUrbanHouse() ? sidebarItems_URBAN   : sidebarItems_RURAL; }
+        function getBasicSubTabs()   { return isUrbanHouse() ? basicSubTabs_URBAN   : basicSubTabs_RURAL; }
+        function getBasicData()      { return isUrbanHouse() ? basicData_URBAN      : basicData_RURAL; }
+        function getSurveySubTabs()  { return isUrbanHouse() ? surveySubTabs_URBAN  : surveySubTabs_RURAL; }
+        function getSurveyData()     { return isUrbanHouse() ? surveyData_URBAN     : surveyData_RURAL; }
+        function getTableData()      { return isUrbanHouse() ? tableData_URBAN      : tableData_RURAL; }
+        function getMeasureSubTabs() { return isUrbanHouse() ? measureSubTabs_URBAN : measureSubTabs_RURAL; }
+        function getMeasureData()    { return isUrbanHouse() ? measureData_URBAN    : measureData_RURAL; }
+
         let currentSidebar = 'basic';
         let currentSubTab = 'jbxx';
         let currentMeasureSubTab = 'manage';
         let currentSurveySubTab = 'survey1';
         let currentHouseArch = getCurrentHouseArch();
 
+        // =========================================================
+        // 字段库持久化：编辑保存时把整个字段库写进 currentHouseArch._fieldsLibrary
+        // 页面加载时如果存在 _fieldsLibrary，恢复字段库内容（覆盖静态默认值）
+        // =========================================================
+        function dumpFieldsLibrary() {
+            return {
+                basic_RURAL: basicData_RURAL,
+                survey_RURAL: surveyData_RURAL,
+                table_RURAL: tableData_RURAL,
+                measure_RURAL: measureData_RURAL,
+                basic_URBAN: basicData_URBAN,
+                survey_URBAN: surveyData_URBAN,
+                table_URBAN: tableData_URBAN,
+                measure_URBAN: measureData_URBAN
+            };
+        }
+        function restoreFieldsLibrary(lib) {
+            if (!lib) return;
+            const pairs = [
+                [basicData_RURAL, lib.basic_RURAL],
+                [surveyData_RURAL, lib.survey_RURAL],
+                [tableData_RURAL, lib.table_RURAL],
+                [measureData_RURAL, lib.measure_RURAL],
+                [basicData_URBAN, lib.basic_URBAN],
+                [surveyData_URBAN, lib.survey_URBAN],
+                [tableData_URBAN, lib.table_URBAN],
+                [measureData_URBAN, lib.measure_URBAN]
+            ];
+            pairs.forEach(function(p) {
+                const target = p[0], src = p[1];
+                if (!src) return;
+                // 清空 target 再把 src 的 key 合并进来，保持 target 引用不变（因为字段库是 const）
+                Object.keys(target).forEach(k => delete target[k]);
+                Object.keys(src).forEach(k => target[k] = src[k]);
+            });
+        }
+        // 页面加载时恢复草稿里的字段库（如有）
+        if (currentHouseArch && currentHouseArch._fieldsLibrary) {
+            restoreFieldsLibrary(currentHouseArch._fieldsLibrary);
+        }
+
         const riskBadgeClass = {
             '第一类': 'safe',
             '第二类': 'warning',
             '第三类': 'danger',
-            '已治理': 'safe'
+            '已治理': 'safe',
+            '疑似危房': 'danger',
+            '严重损坏房': 'danger',
+            '一般损坏房': 'warning',
+            '完好房(基本完好房)': 'safe'
         };
 
         const riskLabelMap = {
             '第三类': '第三类',
             '第二类': '第二类',
             '第一类': '第一类',
-            '已治理': '第一类'
+            '已治理': '第一类',
+            '疑似危房': '第三类',
+            '严重损坏房': '第三类',
+            '一般损坏房': '第二类',
+            '完好房(基本完好房)': '第一类'
         };
 
         function getRiskDisplayLabel(level) {
@@ -979,7 +1164,7 @@
         const governBadgeClass = {
             '待整治': 'info',
             '整治中': 'warning',
-            '已整治': 'safe',
+            '已治理': 'safe',
             '已治理': 'safe',
             '逾期未整治': 'danger'
         };
@@ -987,12 +1172,14 @@
         function syncHouseArchFromStatus() {
             const s = currentHouseArch;
             // 从统一数据层补齐缺省字段，避免覆盖已有有效值
-            if (!s.riskLevel) s.riskLevel = '第二类';
-            if (!s.governStatus) s.governStatus = '待整治';
-            if (!s.currentMeasure) s.currentMeasure = '管理措施（停止使用） + 工程措施（维修加固）';
-            if (!s.managerName) s.managerName = '李志强';
-            if (!s.managerPhone) s.managerPhone = '138****1234';
-            saveCurrentHouseArch(s);
+            let changed = false;
+            if (!s.riskLevel) { s.riskLevel = '第二类'; changed = true; }
+            if (!s.governStatus) { s.governStatus = '待整治'; changed = true; }
+            if (!s.currentMeasure) { s.currentMeasure = '管理措施（停止使用） + 工程措施（维修加固）'; changed = true; }
+            if (!s.managerName) { s.managerName = '李志强'; changed = true; }
+            if (!s.managerPhone) { s.managerPhone = '138****1234'; changed = true; }
+            // 只在真的有字段被补齐时才保存（避免只查看就触发草稿写入）
+            if (changed) saveCurrentHouseArch(s);
         }
 
         function renderStatusPanel() {
@@ -1040,7 +1227,7 @@
 
         function renderSidebar() {
             const menu = document.getElementById('sidebarMenu');
-            menu.innerHTML = sidebarItems.map(item => {
+            menu.innerHTML = getSidebarItems().map(item => {
                 const active = item.key === currentSidebar ? 'active' : '';
                 return '<div class="sidebar-item ' + active + '" data-key="' + item.key + '">' +
                     '<div class="sidebar-item-left"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div>' +
@@ -1060,8 +1247,17 @@
             const s = currentHouseArch;
             const titleEl = document.getElementById('topbarTitle');
             const subEl = document.getElementById('topbarSub');
-            if (titleEl) titleEl.textContent = (s.name || '—') + (s.owner ? '（' + s.owner + '）' : '');
-            if (subEl) subEl.textContent = '房屋编号：' + (s.no || '—');
+            if (titleEl) titleEl.textContent = s.no || '—';
+            if (subEl) subEl.textContent = '所属街道：' + (s.street || '—');
+
+            // 根据房屋类别动态设置侧边栏标题（农村自建房 / 城镇自建房）
+            const sidebarHeaderEl = document.getElementById('sidebarHeader');
+            if (sidebarHeaderEl) {
+                const houseType = s.houseType === '城镇自建房' ? '城镇自建房' : '农村自建房';
+                const isRural = houseType === '农村自建房';
+                sidebarHeaderEl.innerHTML = '<i class="fas ' + (isRural ? 'fa-home' : 'fa-city') + '" style="margin-right:8px;color:' + (isRural ? '#1e8e3e' : '#1a73e8') + ';"></i>' + houseType + '安全排查';
+                sidebarHeaderEl.style.borderLeft = '3px solid ' + (isRural ? '#1e8e3e' : '#1a73e8');
+            }
         }
 
         function renderContent() {
@@ -1085,6 +1281,7 @@
 
         function renderBasicContent() {
             const s = currentHouseArch;
+            const basicSubTabs = getBasicSubTabs();
             const tabsHtml = basicSubTabs.map(tab => {
                 const active = tab.key === currentSubTab ? 'active' : '';
                 return '<div class="content-tab ' + active + '" data-key="' + tab.key + '">' +
@@ -1092,47 +1289,58 @@
                     '</div>';
             }).join('');
 
+            // 优先读字段库（用户编辑过的值），回落到默认/根级字段
+            const libBasic = getBasicData(); // basicData_RURAL 或 basicData_URBAN（已被 restoreFieldsLibrary 覆盖）
+            const libJbxx = libBasic.jbxx || [];
+            const libZjd = libBasic.zjd || [];
+            const libJsqk = libBasic.jsqk || [];
+            const libGlqk = libBasic.glqk || [];
+            // 从字段库取值的小工具：按 label 找 value
+            function libVal(rows, label, fallback) {
+                const r = rows.find(function(row) { return row[0] === label; });
+                return r ? r[1] : fallback;
+            }
             const jbxx = [
-                ['房屋编号', s.no || 'NF-2025-00001'],
-                ['房屋名称', s.name || '—'],
-                ['房屋性质', s.houseType || '自住民居'],
-                ['所在区域', '奉贤区' + (s.street || '—')],
-                ['路号信息', s.address || '—'],
-                ['不需要排查原因', '—'],
-                ['产权人 / 使用人信息', s.owner || '—'],
-                ['身份证号码', '—'],
-                ['房屋用途', '自住'],
-                ['是否同时自住', '是'],
-                ['具体用途', '日常居住'],
-                ['人员聚集场所周边', '否'],
-                ['其他人员密集场所周边', '否'],
-                ['土地性质', '集体土地'],
-                ['集体土地', '宅基地'],
-                ['所在区域（区域类型）', '建制镇'],
-                ['建筑层数', '3层'],
-                ['建筑面积 (m²)', '—'],
-                ['建成时间', (s.year || '—') + '年'],
-                ['具体年份', (s.year || '—') + '年']
+                ['房屋编号', libVal(libJbxx, '房屋编号', s.no || 'NF-2025-00001')],
+                ['房屋性质', libVal(libJbxx, '房屋性质', s.houseType || '自住民居')],
+                ['所在区域', libVal(libJbxx, '所在区域', '奉贤区' + (s.street || '—'))],
+                ['路号信息', libVal(libJbxx, '路号信息', s.address || '—')],
+                ['不需要排查原因', libVal(libJbxx, '不需要排查原因', '—')],
+                ['产权人 / 使用人信息', libVal(libJbxx, '产权人 / 使用人信息', s.owner || '—')],
+                ['身份证号码', libVal(libJbxx, '身份证号码', '—')],
+                ['房屋用途', libVal(libJbxx, '房屋用途', '自住')],
+                ['是否同时自住', libVal(libJbxx, '是否同时自住', '是')],
+                ['具体用途', libVal(libJbxx, '具体用途', '日常居住')],
+                ['人员聚集场所周边', libVal(libJbxx, '人员聚集场所周边', '否')],
+                ['其他人员密集场所周边', libVal(libJbxx, '其他人员密集场所周边', '否')],
+                ['土地性质', libVal(libJbxx, '土地性质', '集体土地')],
+                ['集体土地', libVal(libJbxx, '集体土地', '宅基地')],
+                ['所在区域（区域类型）', libVal(libJbxx, '所在区域（区域类型）', '建制镇')],
+                ['建筑层数', libVal(libJbxx, '建筑层数', '3层')],
+                ['建筑面积 (m²)', libVal(libJbxx, '建筑面积 (m²)', '—')],
+                ['建成时间', libVal(libJbxx, '建成时间', (s.year || '—') + '年')],
+                ['具体年份', libVal(libJbxx, '具体年份', (s.year || '—') + '年')]
             ];
             const zjd = [
-                ['宅基地面积', '132㎡'],
-                ['审批情况', '自然资源部门审批通过'],
-                ['权属证明', '—']
+                ['宅基地面积', libVal(libZjd, '宅基地面积', '132㎡')],
+                ['审批情况', libVal(libZjd, '审批情况', '自然资源部门审批通过')],
+                ['权属证明', libVal(libZjd, '权属证明', '—')]
             ];
             const jsqk = [
-                ['常住或使用人数超过 10 人', '否'],
-                ['设计方式', '有专业设计'],
-                ['建造方式', '有资质施工队伍'],
-                ['结构类型', s.category === '框架' ? '框架结构' : '砌体结构'],
-                ['楼屋盖', '现浇板'],
-                ['是否改扩建', '否'],
-                ['是否装修', '否']
+                ['常住或使用人数超过 10 人', libVal(libJsqk, '常住或使用人数超过 10 人', '否')],
+                ['设计方式', libVal(libJsqk, '设计方式', '有专业设计')],
+                ['建造方式', libVal(libJsqk, '建造方式', '有资质施工队伍')],
+                ['结构类型', libVal(libJsqk, '结构类型', s.category === '框架' ? '框架结构' : '砌体结构')],
+                ['楼屋盖', libVal(libJsqk, '楼屋盖', '现浇板')],
+                ['是否改扩建', libVal(libJsqk, '是否改扩建', '否')],
+                ['是否装修', libVal(libJsqk, '是否装修', '否')]
             ];
             const glqk = [
-                ['已取得的行政许可', '宅基地批准书'],
-                ['违法建设和违法审批', '否']
+                ['已取得的行政许可', libVal(libGlqk, '已取得的行政许可', '宅基地批准书')],
+                ['违法建设和违法审批', libVal(libGlqk, '违法建设和违法审批', '否')]
             ];
             const dynamicBasic = { jbxx, zjd, jsqk, glqk };
+            const basicData = getBasicData();
             const rows = dynamicBasic[currentSubTab] || basicData[currentSubTab] || [];
             const gridHtml = rows.map(r => {
                 return '<div class="info-item">' +
@@ -1142,7 +1350,7 @@
             }).join('');
 
             const sub = basicSubTabs.find(t => t.key === currentSubTab);
-            const item = sidebarItems.find(i => i.key === 'basic');
+            const item = getSidebarItems().find(i => i.key === 'basic');
 
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
@@ -1156,7 +1364,7 @@
             '<div class="bottom-bar">' +
                 '<div class="bottom-info">' +
                     '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
-                    '当前节点：<span class="bottom-node">基础信息</span> | <i class="far fa-eye"></i> 查看/编辑' +
+                    '当前节点：<span class="bottom-node">基础信息</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span><span class="readonly-tag">只读</span>' +
                 '</div>' +
                 '<div class="bottom-actions">' +
                     '<button class="bottom-btn primary" onclick="openBasicEditModal()"><i class="fas fa-edit"></i> 编辑基础信息</button>' +
@@ -1180,7 +1388,7 @@
         }
 
         function getMeasureManageData() {
-            const data = measureData.manage;
+            const data = getMeasureData().manage;
             const rec = (currentHouseArch.manageRecords || [])[0];
             if (rec) {
                 data.baseValues[0] = rec.measureType || '—';
@@ -1210,6 +1418,8 @@
         }
 
         function renderMeasureContent() {
+            const measureSubTabs = getMeasureSubTabs();
+            const measureData = getMeasureData();
             const tabsHtml = measureSubTabs.map(tab => {
                 const active = tab.key === currentMeasureSubTab ? 'active' : '';
                 return '<div class="content-tab ' + active + '" data-key="' + tab.key + '" data-scope="measure">' +
@@ -1299,13 +1509,13 @@
             }).join('');
 
             const sub = measureSubTabs.find(t => t.key === currentMeasureSubTab);
-            const item = sidebarItems.find(i => i.key === 'measure');
+            const item = getSidebarItems().find(i => i.key === 'measure');
 
             let reminderHtml = '';
             if (currentMeasureSubTab === 'manage') {
-                const reminder = measureData.manage.reminder || { enabled: false };
-                const endDateIndex = measureData.manage.baseColumns.indexOf('计划结束时间');
-                const endDate = (endDateIndex >= 0 ? measureData.manage.baseValues[endDateIndex] : '') || '';
+                const reminder = getMeasureData().manage.reminder || { enabled: false };
+                const endDateIndex = getMeasureData().manage.baseColumns.indexOf('计划结束时间');
+                const endDate = (endDateIndex >= 0 ? getMeasureData().manage.baseValues[endDateIndex] : '') || '';
                 const statusClass = reminder.enabled ? 'safe' : 'info';
                 const statusText = reminder.enabled ? '已开启' : '未开启';
                 const actionText = reminder.enabled ? (reminder.action || '续期') : '-';
@@ -1325,7 +1535,7 @@
             let changeFlowHtml = '';
             let pendingAuditButton = '';
             if (currentMeasureSubTab === 'manage') {
-                const flow = measureData.manage.changeFlow || { current: null, records: [] };
+                const flow = getMeasureData().manage.changeFlow || { current: null, records: [] };
                 const pending = flow.current && flow.current.status === 'pending' ? flow.current : null;
                 const latestApproved = flow.records.slice().reverse().find(r => r.status === 'approved');
 
@@ -1383,7 +1593,7 @@
 
             let projectExtraHtml = '';
             if (currentMeasureSubTab === 'project') {
-                const pdata = measureData.project;
+                const pdata = getMeasureData().project;
                 const org = pdata.orgId ? (getOrgById(pdata.orgId) || {}) : null;
                 const orgHtml = org
                     ? '<div class="info-grid info-grid-table">' +
@@ -1442,6 +1652,8 @@
         }
 
         function renderSurveyContent() {
+            const surveySubTabs = getSurveySubTabs();
+            const surveyData = getSurveyData();
             const tabsHtml = surveySubTabs.map(tab => {
                 const active = tab.key === currentSurveySubTab ? 'active' : '';
                 return '<div class="content-tab ' + active + '" data-key="' + tab.key + '">' +
@@ -1473,7 +1685,7 @@
             }).join('');
 
             const sub = surveySubTabs.find(t => t.key === currentSurveySubTab);
-            const item = sidebarItems.find(i => i.key === 'survey');
+            const item = getSidebarItems().find(i => i.key === 'survey');
 
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
@@ -1514,7 +1726,7 @@
         }
 
         function renderTableContent(key) {
-            const item = sidebarItems.find(i => i.key === key);
+            const item = getSidebarItems().find(i => i.key === key);
             const s = currentHouseArch;
             let html = '<div class="content-card">' +
                 '<div class="content-card-header">' +
@@ -1535,7 +1747,7 @@
             } else if (key === 'archive') {
                 html += renderArchiveTable(s);
             } else {
-                const data = tableData[key];
+                const data = getTableData()[key];
                 const columns = data.columns;
                 const values = data.rows[0] || [];
                 html += '<div class="info-grid info-grid-2col">' + renderKeyValueGrid(columns, values) + '</div>';
@@ -1723,7 +1935,7 @@
         function buildCloseAuditList() {
             const applies = getCloseApplyStorage().filter(a => a.no === getCurrentHouseNo());
             if (applies.length === 0) {
-                return tableData.close.auditList || [];
+                return getTableData().close.auditList || [];
             }
             // 按申请时间倒序
             return applies.slice().sort((a, b) => (b.applyTime || '').localeCompare(a.applyTime || '')).map(a => ({
@@ -1750,6 +1962,7 @@
 
         function renderEditModalTabs() {
             const wrap = document.getElementById('editModalTabs');
+            const basicSubTabs = getBasicSubTabs();
             const tabsHtml = basicSubTabs.map(tab => {
                 const active = tab.key === editModalSubTab ? 'active' : '';
                 return '<div class="content-tab ' + active + '" data-key="' + tab.key + '" data-scope="edit">' +
@@ -1767,7 +1980,7 @@
         }
 
         function renderEditModalForm() {
-            const rows = basicData[editModalSubTab] || [];
+            const rows = getBasicData()[editModalSubTab] || [];
             const gridHtml = rows.map((r, idx) => {
                 return '<div class="form-item">' +
                     '<label class="form-label">' + r[0] + '</label>' +
@@ -1779,7 +1992,7 @@
 
         function saveBasicEdit() {
             const inputs = document.querySelectorAll('#editModalForm .form-input');
-            const rows = basicData[editModalSubTab];
+            const rows = getBasicData()[editModalSubTab];
             inputs.forEach(input => {
                 const idx = parseInt(input.dataset.idx, 10);
                 if (rows && rows[idx]) {
@@ -1787,6 +2000,10 @@
                 }
             });
             currentSubTab = editModalSubTab;
+            // 字段库改动持久化到草稿
+            currentHouseArch._fieldsLibrary = dumpFieldsLibrary();
+            delete currentHouseArch._syncedAt; // 编辑后标记为未同步
+            saveCurrentHouseArch(currentHouseArch);
             closeBasicEditModal();
             renderSidebar();
             renderContent();
@@ -1805,6 +2022,7 @@
 
         function renderSurveyEditModalTabs() {
             const wrap = document.getElementById('surveyEditModalTabs');
+            const surveySubTabs = getSurveySubTabs();
             const tabsHtml = surveySubTabs.map(tab => {
                 const active = tab.key === surveyEditModalSubTab ? 'active' : '';
                 return '<div class="content-tab ' + active + '" data-key="' + tab.key + '" data-scope="edit-survey">' +
@@ -1822,7 +2040,7 @@
         }
 
         function renderSurveyEditModalForm() {
-            const data = surveyData[surveyEditModalSubTab] || { columns: [], rows: [] };
+            const data = getSurveyData()[surveyEditModalSubTab] || { columns: [], rows: [] };
             const rows = data.rows[0] || [];
             const photoIndex = data.columns.indexOf('排查照片');
             const proofIndex = data.columns.indexOf('上传证明文件');
@@ -1905,8 +2123,8 @@
             const idx = parseInt(wrap.dataset.idx, 10);
             const files = Array.from(input.files || []);
             if (files.length === 0) return;
-            const proofIndex = surveyData[surveyEditModalSubTab].columns.indexOf('上传证明文件');
-            const photoIndex = surveyData[surveyEditModalSubTab].columns.indexOf('排查照片');
+            const proofIndex = getSurveyData()[surveyEditModalSubTab].columns.indexOf('上传证明文件');
+            const photoIndex = getSurveyData()[surveyEditModalSubTab].columns.indexOf('排查照片');
             const isProofField = idx === proofIndex;
             const isPhotoField = idx === photoIndex;
             const urlInput = wrap.querySelector('.file-url-input');
@@ -1973,7 +2191,7 @@
         }
 
         function saveSurveyEdit() {
-            const data = surveyData[surveyEditModalSubTab];
+            const data = getSurveyData()[surveyEditModalSubTab];
             const inputs = document.querySelectorAll('#surveyEditModalForm .form-input');
             const row = data.rows[0];
             inputs.forEach(input => {
@@ -1983,6 +2201,10 @@
                 }
             });
             currentSurveySubTab = surveyEditModalSubTab;
+            // 字段库改动持久化到草稿
+            currentHouseArch._fieldsLibrary = dumpFieldsLibrary();
+            delete currentHouseArch._syncedAt; // 编辑后标记为未同步
+            saveCurrentHouseArch(currentHouseArch);
             closeSurveyEditModal();
             renderSidebar();
             renderContent();
@@ -2020,6 +2242,7 @@
 
         function renderMeasureEditModalTabs() {
             const wrap = document.getElementById('measureEditModalTabs');
+            const measureSubTabs = getMeasureSubTabs();
             const tabsHtml = measureSubTabs.map(tab => {
                 const active = tab.key === measureEditModalSubTab ? 'active' : '';
                 return '<div class="content-tab ' + active + '" data-key="' + tab.key + '" data-scope="edit-measure">' +
@@ -2045,7 +2268,7 @@
         }
 
         function renderManageEditModalForm() {
-            const data = measureData.manage;
+            const data = getMeasureData().manage;
             const measureType = data.baseValues[0] || '停止使用';
             const extra = data.extraFields[measureType] || {};
             const measureOptions = [
@@ -2159,7 +2382,7 @@
         }
 
         function onMeasureTypeChange(newType) {
-            const data = measureData.manage;
+            const data = getMeasureData().manage;
             // 切换类型时只保存基础字段，避免旧类型的额外字段污染新类型
             document.querySelectorAll('#measureEditModalForm [data-base-idx]').forEach(input => {
                 const idx = parseInt(input.dataset.baseIdx, 10);
@@ -2173,7 +2396,7 @@
         }
 
         function readMeasureEditForm() {
-            const data = measureData.manage;
+            const data = getMeasureData().manage;
             document.querySelectorAll('#measureEditModalForm [data-base-idx]').forEach(input => {
                 const idx = parseInt(input.dataset.baseIdx, 10);
                 if (data.baseValues[idx] !== undefined) {
@@ -2192,7 +2415,7 @@
         }
 
         function renderProjectEditModalForm() {
-            const data = measureData.project;
+            const data = getMeasureData().project;
             const rows = data.rows[0] || [];
             const projectIndex = data.columns.indexOf('工程措施');
             const orgUnitIndex = data.columns.indexOf('施工单位');
@@ -2268,7 +2491,7 @@
             document.querySelectorAll('#measureEditModalForm .file-upload-wrap[data-field-key]').forEach(wrap => {
                 const key = wrap.dataset.fieldKey;
                 const acceptImages = wrap.dataset.acceptImages === 'true';
-                const files = measureData.project[key] || projectFilesFromString(wrap.querySelector('.file-url-input').value || '');
+                const files = getMeasureData().project[key] || projectFilesFromString(wrap.querySelector('.file-url-input').value || '');
                 renderProjectFileList(wrap, files, key, acceptImages);
             });
 
@@ -2279,7 +2502,7 @@
         }
 
         function onProjectTypeChange(value) {
-            const data = measureData.project;
+            const data = getMeasureData().project;
             const idx = data.columns.indexOf('工程措施');
             if (idx >= 0 && data.rows[0]) data.rows[0][idx] = value;
             updateMajorProjectUI();
@@ -2290,7 +2513,7 @@
         }
 
         function renderProjectOrgQualPanel() {
-            const data = measureData.project;
+            const data = getMeasureData().project;
             const panel = document.getElementById('projectOrgQualPanel');
             if (!panel) return;
             if (!data.orgId) {
@@ -2348,7 +2571,7 @@
         }
 
         function readProjectEditForm() {
-            const data = measureData.project;
+            const data = getMeasureData().project;
             const inputs = document.querySelectorAll('#measureEditModalForm .form-grid .form-input');
             const row = data.rows[0];
             inputs.forEach(input => {
@@ -2378,7 +2601,7 @@
         function saveMeasureEdit() {
             if (measureEditModalSubTab === 'manage') {
                 readMeasureEditForm();
-                const data = measureData.manage;
+                const data = getMeasureData().manage;
                 const reminderSwitch = document.getElementById('measureReminderSwitch');
                 if (reminderSwitch) {
                     data.reminder = {
@@ -2422,7 +2645,7 @@
                 });
             } else {
                 readProjectEditForm();
-                const data = measureData.project;
+                const data = getMeasureData().project;
                 if (data.isMajorProject && !(data.expertOpinion && data.expertOpinion.expertId)) {
                     alert('本工程属于重大工程方案，必须关联专家评审意见。请先选择评审专家并填写意见。');
                     return;
@@ -2486,6 +2709,10 @@
                 }
             }
             currentMeasureSubTab = measureEditModalSubTab;
+            // 字段库改动持久化到草稿
+            currentHouseArch._fieldsLibrary = dumpFieldsLibrary();
+            delete currentHouseArch._syncedAt; // 编辑后标记为未同步
+            saveCurrentHouseArch(currentHouseArch);
             closeMeasureEditModal();
             renderSidebar();
             renderContent();
@@ -2494,7 +2721,7 @@
 
         // 管理措施变更流程
         function getManageMeasureFlatFields() {
-            const data = measureData.manage;
+            const data = getMeasureData().manage;
             const fields = [];
             data.baseColumns.forEach((c, i) => {
                 if (c === '变更或延长申请审批') return;
@@ -2509,7 +2736,7 @@
         }
 
         function getFieldValueByKey(key) {
-            const data = measureData.manage;
+            const data = getMeasureData().manage;
             if (key.startsWith('base:')) {
                 const idx = parseInt(key.split(':')[1], 10);
                 return data.baseValues[idx] || '';
@@ -2523,7 +2750,7 @@
         }
 
         function setFieldValueByKey(key, value) {
-            const data = measureData.manage;
+            const data = getMeasureData().manage;
             if (key.startsWith('base:')) {
                 const idx = parseInt(key.split(':')[1], 10);
                 data.baseValues[idx] = value;
@@ -2536,7 +2763,7 @@
         }
 
         function openMeasureChangeApplyModal() {
-            const flow = measureData.manage.changeFlow;
+            const flow = getMeasureData().manage.changeFlow;
             if (flow.current && flow.current.status === 'pending') {
                 alert('当前已存在一条审批中的变更申请，请等待审批完成后再提交。');
                 return;
@@ -2578,7 +2805,7 @@
                 alert('请至少修改一个字段后再提交。');
                 return;
             }
-            const flow = measureData.manage.changeFlow;
+            const flow = getMeasureData().manage.changeFlow;
             const seq = (flow.records.length + 1).toString().padStart(3, '0');
             flow.current = {
                 id: 'CHG-' + new Date().getFullYear() + '-' + seq,
@@ -2604,7 +2831,7 @@
         }
 
         function renderCommonPhotoThumbs(wrap, urls) {
-            const flow = measureData.manage.changeFlow;
+            const flow = getMeasureData().manage.changeFlow;
             const current = flow.current;
             if (!current || current.status !== 'pending') {
                 alert('当前没有待审批的变更申请。');
@@ -2628,7 +2855,7 @@
         }
 
         function submitMeasureChangeAudit() {
-            const flow = measureData.manage.changeFlow;
+            const flow = getMeasureData().manage.changeFlow;
             const current = flow.current;
             if (!current || current.status !== 'pending') return;
             const conclusion = document.getElementById('measureChangeAuditConclusion').value;
@@ -2652,7 +2879,7 @@
         }
 
         function viewMeasureChangeDetail(recordIndex) {
-            const flow = measureData.manage.changeFlow;
+            const flow = getMeasureData().manage.changeFlow;
             const record = flow.records[recordIndex];
             if (!record) return;
             document.getElementById('measureChangeAuditConclusion').value = record.auditConclusion || '通过';
@@ -2670,8 +2897,8 @@
 
         function openCommonEditModal(key) {
             commonEditKey = key;
-            const data = tableData[commonEditKey];
-            const item = sidebarItems.find(i => i.key === key);
+            const data = getTableData()[commonEditKey];
+            const item = getSidebarItems().find(i => i.key === key);
             document.getElementById('commonEditTitle').innerHTML = '<i class="fas fa-edit"></i> 编辑' + item.title;
             const rows = data.rows[0] || [];
             const isImageUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
@@ -2837,7 +3064,7 @@
         }
 
         function saveCommonEdit() {
-            const data = tableData[commonEditKey];
+            const data = getTableData()[commonEditKey];
             const inputs = document.querySelectorAll('#commonEditForm .form-input:not(.audit-row .form-input)');
             const row = data.rows[0];
             inputs.forEach(input => {
@@ -2868,6 +3095,10 @@
                 updateStatusPanel({ governStatus: '已治理' });
                 alert('治理档案已归档，房屋治理状态已更新为“已治理”。');
             }
+            // 字段库改动持久化到草稿
+            currentHouseArch._fieldsLibrary = dumpFieldsLibrary();
+            delete currentHouseArch._syncedAt; // 编辑后标记为未同步
+            saveCurrentHouseArch(currentHouseArch);
             closeCommonEditModal();
             renderSidebar();
             renderContent();
@@ -3171,7 +3402,7 @@
         // 施工单位选择
         function openOrgSelectModal(forWhat) {
             currentOrgSelectFor = forWhat || 'project';
-            selectedOrgId = measureData.project.orgId || '';
+            selectedOrgId = getMeasureData().project.orgId || '';
             document.getElementById('orgSelectKeyword').value = '';
             renderOrgSelectList();
             document.getElementById('orgSelectModal').classList.add('open');
@@ -3267,7 +3498,7 @@
             const org = getOrgById(selectedOrgId);
             if (!org) return;
             const credit = getCreditByOrg(selectedOrgId) || {};
-            const data = measureData.project;
+            const data = getMeasureData().project;
             data.orgId = selectedOrgId;
             data.orgName = org.orgName;
             data.orgInfo = {
@@ -3291,7 +3522,7 @@
 
         // 重大工程与专家评审
         function checkMajorProject() {
-            const data = measureData.project;
+            const data = getMeasureData().project;
             const rows = data.rows[0] || [];
             const projectIdx = data.columns.indexOf('工程措施');
             const projectType = (rows[projectIdx] || '').trim();
@@ -3302,7 +3533,7 @@
             const panel = document.getElementById('expertOpinionPanel');
             if (!panel) return;
             const isMajor = checkMajorProject();
-            measureData.project.isMajorProject = isMajor;
+            getMeasureData().project.isMajorProject = isMajor;
             panel.style.display = isMajor ? 'block' : 'none';
             if (isMajor) renderExpertOpinionPanel();
         }
@@ -3310,7 +3541,7 @@
         function renderExpertOpinionPanel() {
             const panel = document.getElementById('expertOpinionPanel');
             if (!panel) return;
-            const data = measureData.project.expertOpinion || {};
+            const data = getMeasureData().project.expertOpinion || {};
             const expertText = data.expertId
                 ? data.expertName + '（' + (data.orgName || '') + ' · ' + (data.title || '') + '）'
                 : '未选择专家';
@@ -3352,7 +3583,7 @@
         }
 
         function openExpertSelectModal() {
-            selectedExpertId = measureData.project.expertOpinion.expertId || '';
+            selectedExpertId = getMeasureData().project.expertOpinion.expertId || '';
             document.getElementById('expertSelectKeyword').value = '';
             renderExpertSelectList();
             document.getElementById('expertSelectModal').classList.add('open');
@@ -3408,7 +3639,7 @@
             }
             const expert = getExpertById(selectedExpertId);
             if (!expert) return;
-            const data = measureData.project.expertOpinion;
+            const data = getMeasureData().project.expertOpinion;
             data.expertId = expert.expertId;
             data.expertName = expert.name;
             data.orgName = expert.orgName || expert.workplace || '';
@@ -3420,7 +3651,7 @@
         // 施工时间轴
         function renderProjectTimeline(container) {
             if (!container) return;
-            const data = measureData.project.timeline || [];
+            const data = getMeasureData().project.timeline || [];
             const isEdit = container.dataset && container.dataset.mode === 'edit';
             if (!data || data.length === 0) {
                 container.innerHTML = '<div class="ct-node-empty">暂无施工过程记录</div>';
@@ -3455,7 +3686,7 @@
         function renderProjectTimelineEdit(container) {
             if (!container) return;
             container.dataset.mode = 'edit';
-            const data = measureData.project.timeline || [];
+            const data = getMeasureData().project.timeline || [];
             if (!data || data.length === 0) {
                 container.innerHTML = '<div class="ct-node-empty">暂无施工过程记录，点击“新增节点”添加。</div>';
                 return;
@@ -3491,7 +3722,7 @@
         function openProjectTimelineNodeModal(nodeId) {
             editingTimelineNodeId = nodeId || '';
             const node = editingTimelineNodeId
-                ? (measureData.project.timeline || []).find(n => n.nodeId === editingTimelineNodeId)
+                ? (getMeasureData().project.timeline || []).find(n => n.nodeId === editingTimelineNodeId)
                 : null;
             document.getElementById('timelineNodeModalTitle').innerHTML = node ? '<i class="fas fa-edit"></i> 编辑施工节点' : '<i class="fas fa-plus"></i> 新增施工节点';
             document.getElementById('timelineNodeTitle').value = node ? node.title : '';
@@ -3589,7 +3820,7 @@
                 alert('请填写节点日期。');
                 return;
             }
-            const timeline = measureData.project.timeline || [];
+            const timeline = getMeasureData().project.timeline || [];
             const node = {
                 nodeId: editingTimelineNodeId || ('NODE-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100)),
                 title: title,
@@ -3608,7 +3839,7 @@
             else timeline.push(node);
             // 按日期排序
             timeline.sort((a, b) => a.nodeDate.localeCompare(b.nodeDate));
-            measureData.project.timeline = timeline;
+            getMeasureData().project.timeline = timeline;
             closeProjectTimelineNodeModal();
             if (measureEditModalSubTab === 'project') {
                 renderProjectEditModalForm();
@@ -3617,7 +3848,7 @@
 
         function deleteProjectTimelineNode(nodeId) {
             if (!confirm('确定删除该施工节点吗？')) return;
-            measureData.project.timeline = (measureData.project.timeline || []).filter(n => n.nodeId !== nodeId);
+            getMeasureData().project.timeline = (getMeasureData().project.timeline || []).filter(n => n.nodeId !== nodeId);
             if (measureEditModalSubTab === 'project') {
                 renderProjectEditModalForm();
             }
@@ -3689,12 +3920,12 @@
             s.closeAuditor = '';
             s.closeAuditOpinion = '';
             s.closeRejectReason = '';
-            s.governStatus = '已整治';
+            s.governStatus = '已治理';
             s.risk = s.risk === 'safe' ? 'safe' : (RISK_LABEL_MAP_INV[s.riskLevel] || s.risk || 'warning');
             s.riskLevel = s.risk === 'safe' ? '第一类' : RISK_LABEL_MAP[s.risk] || s.riskLevel;
             saveCurrentHouseArch(s);
             // 同步到审核列表
-            const closeData = tableData.close;
+            const closeData = getTableData().close;
             closeData.auditList = closeData.auditList || [];
             closeData.auditList.push({
                 submitter: applicant,
@@ -3799,7 +4030,7 @@
             }
             saveCurrentHouseArch(s);
             // 同步审核列表最后一条
-            const closeData = tableData.close;
+            const closeData = getTableData().close;
             closeData.auditList = closeData.auditList || [];
             const last = closeData.auditList[closeData.auditList.length - 1];
             if (last) {

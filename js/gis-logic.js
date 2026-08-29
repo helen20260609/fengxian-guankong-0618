@@ -8,6 +8,7 @@ const baseData = (() => {
         community: r.community,
         address: r.address,
         category: r.category,
+        houseType: r.houseType,
         year: r.year,
         risk: r.risk,
         governance: r.governance,
@@ -27,6 +28,7 @@ const baseData = (() => {
 })();
 
 let filteredData = [...baseData];
+let currentCategory = 'all';
 let activeFilter = 'all';
 let activeTimeFilter = 'all';
 let activeIndex = -1;
@@ -95,7 +97,7 @@ const LAYER_MODES = {
         name: '治理状态', colorBy: 'governance', shapeBy: 'risk', statusMap: STATUS_CONFIG,
         filters: [
             { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'pending', label: '待整治', icon: 'fa-clock' },
-            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已整治', icon: 'fa-check' },
+            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已治理', icon: 'fa-check' },
             { key: 'overdue', label: '逾期未整治', icon: 'fa-exclamation-triangle' }
         ]
     },
@@ -103,7 +105,7 @@ const LAYER_MODES = {
         name: '管理措施', colorBy: 'governance', shapeBy: 'risk', statusMap: STATUS_CONFIG, measureType: 'management',
         filters: [
             { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'pending', label: '待整治', icon: 'fa-clock' },
-            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已整治', icon: 'fa-check' },
+            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已治理', icon: 'fa-check' },
             { key: 'overdue', label: '逾期未整治', icon: 'fa-exclamation-triangle' }
         ]
     },
@@ -111,7 +113,7 @@ const LAYER_MODES = {
         name: '工程措施', colorBy: 'governance', shapeBy: 'risk', statusMap: STATUS_CONFIG, measureType: 'engineering',
         filters: [
             { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'pending', label: '待整治', icon: 'fa-clock' },
-            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已整治', icon: 'fa-check' },
+            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已治理', icon: 'fa-check' },
             { key: 'overdue', label: '逾期未整治', icon: 'fa-exclamation-triangle' }
         ]
     },
@@ -375,7 +377,6 @@ function buildClusterPopup(name, items, level) {
 function drillFromPopup(level, name) { if (level === 'street') drillToStreet(name); else drillToCommunity(name); }
 
 function buildHousePopup(item, idx) {
-    const info = item.eliminationInfo || {};
     const riskCfg = getRiskConfig(item.risk);
     const statusCfg = getStatusConfig(item.governance);
     const measureHtml = item.measures && item.measures.length ? '<ul>' + item.measures.map(m => '<li>' + (m.type === 'management' ? '管理' : '工程') + '措施：' + m.name + '（' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '）</li>').join('') + '</ul>' : '<p style="color:var(--text-secondary);font-size:12px;">暂无整治措施</p>';
@@ -386,7 +387,6 @@ function buildHousePopup(item, idx) {
         '<span class="popup-status-tag" style="color:' + statusCfg.color + ';background:' + hexToRgba(statusCfg.color, 0.12) + '">整治状态：' + statusCfg.label + '</span>' +
         '</div>' +
         '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-home"></i> 基本信息</div>' +
-        '<div class="kv"><span>房屋名称</span><b>' + item.name + '</b></div>' +
         '<div class="kv"><span>房屋编号</span><b>' + item.no + '</b></div>' +
         '<div class="kv"><span>地址</span><b>' + item.address + '</b></div>' +
         '<div class="kv"><span>产权人</span><b>' + (item.owner || '-') + '</b></div>' +
@@ -397,18 +397,7 @@ function buildHousePopup(item, idx) {
         '<div class="kv"><span>完成率</span><b>' + item.progress + '%</b></div>' +
         '<div class="progress-bar"><div class="fill" style="width:' + item.progress + '%"></div></div>' +
         '</div>' +
-        '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-sitemap"></i> 责任单位/责任人</div>' +
-        '<div class="kv"><span>责任单位</span><b>' + (item.responsibleDept || '-') + '</b></div>' +
-        '<div class="kv"><span>责任人</span><b>' + (item.responsiblePerson || '-') + '</b></div>' +
-        '</div>' +
-        '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-check-double"></i> 销号信息</div>' +
-        '<div class="kv"><span>申请时间</span><b>' + (info.applyTime || '未申请') + '</b></div>' +
-        '<div class="kv"><span>审核时间</span><b>' + (info.reviewTime || '待审核') + '</b></div>' +
-        '<div class="kv"><span>审核人</span><b>' + (info.reviewer || '-') + '</b></div>' +
-        '<div class="kv"><span>证明文件</span><b>' + (info.certFiles && info.certFiles.length ? info.certFiles.map(f => '<span class="file-tag"><i class="fas fa-file-alt"></i> ' + f + '</span>').join(' ') : '暂无') + '</b></div>' +
-        '<div class="kv"><span>备注</span><b>' + (info.note || '-') + '</b></div>' +
-        '</div>' +
-        '<button class="archive-btn" onclick="openArchive(' + idx + ')"><i class="fas fa-folder-open"></i> 房屋档案</button>' +
+        '<button class="archive-btn" onclick="openArchive(' + idx + ')"><i class="fas fa-arrow-right"></i> 查看详情</button>' +
         '</div>';
 }
 function drillToStreet(street) { currentLevel = 'street'; currentStreet = street; currentCommunity = null; updateBreadcrumb(); renderMap(); renderList(); }
@@ -514,13 +503,13 @@ function renderLeftStatusChart() {
     leftChart.setOption({
         tooltip: { trigger: 'axis' },
         grid: { left: '3%', right: '10%', bottom: '3%', top: '10%', containLabel: true },
-        xAxis: { type: 'category', data: ['待整治', '整治中', '已整治', '逾期'], axisLabel: { fontSize: 11 } },
+        xAxis: { type: 'category', data: ['待整治', '整治中', '已治理', '逾期'], axisLabel: { fontSize: 11 } },
         yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
         series: [{ type: 'bar', data: [{ value: counts.pending, itemStyle: { color: STATUS_CONFIG.pending.color } }, { value: counts.doing, itemStyle: { color: STATUS_CONFIG.doing.color } }, { value: counts.done, itemStyle: { color: STATUS_CONFIG.done.color } }, { value: counts.overdue, itemStyle: { color: STATUS_CONFIG.overdue.color } }], label: { show: true, position: 'top', fontSize: 10 } }]
     }, true);
     leftChart.off('click');
     leftChart.on('click', params => {
-        const map = { '待整治': 'pending', '整治中': 'doing', '已整治': 'done', '逾期': 'overdue' };
+        const map = { '待整治': 'pending', '整治中': 'doing', '已治理': 'done', '逾期': 'overdue' };
         activeFilter = map[params.name] || 'all'; updateFilterTags(); applyFilter();
     });
 }
@@ -604,7 +593,7 @@ function renderList() {
         const shape = getHouseShape(item);
         const statusCfg = getStatusConfig(item.governance);
         return '<div class="house-card ' + (idx === activeIndex ? 'active' : '') + '" data-index="' + idx + '" data-no="' + item.no + '">' +
-            '<div class="house-card-header"><div class="house-name" style="color:' + color + '">' + getShapeHtml(shape, color, 12) + ' ' + item.name + '</div><div class="house-code">' + item.no + '</div></div>' +
+            '<div class="house-card-header"><div class="house-name" style="color:' + color + '">' + getShapeHtml(shape, color, 12) + ' ' + item.no + '</div><div class="house-code">' + item.no + '</div></div>' +
             '<div class="house-address"><i class="fas fa-map-marker-alt"></i> ' + item.address + '</div>' +
             '<div class="house-address"><i class="fas fa-user"></i> ' + (item.owner || '-') + ' · ' + (item.responsiblePerson || '-') + '</div>' +
             '<div class="house-tags">' +
@@ -629,7 +618,10 @@ function selectHouse(idx) {
 function applyFilter() {
     const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
     filteredData = baseData.filter(item => {
-        const matchKeyword = !keyword || item.name.toLowerCase().includes(keyword) || item.address.toLowerCase().includes(keyword) || item.no.toLowerCase().includes(keyword) || (item.owner && item.owner.toLowerCase().includes(keyword)) || (item.community && item.community.toLowerCase().includes(keyword)) || (item.street && item.street.toLowerCase().includes(keyword));
+        // 房屋类别过滤（all 表示不过滤）
+        if (currentCategory === '农村自建房' && item.houseType === '城镇自建房') return false;
+        if (currentCategory === '城镇自建房' && item.houseType !== '城镇自建房') return false;
+        const matchKeyword = !keyword || item.address.toLowerCase().includes(keyword) || item.no.toLowerCase().includes(keyword) || (item.owner && item.owner.toLowerCase().includes(keyword)) || (item.community && item.community.toLowerCase().includes(keyword)) || (item.street && item.street.toLowerCase().includes(keyword));
         let matchFilter = true;
         const mode = getLayerConfig();
         if (activeFilter !== 'all') {
@@ -649,8 +641,7 @@ function openArchive(idx) {
     if (!item) return;
     const modal = document.getElementById('archiveModal');
     modal.dataset.index = idx;
-    document.getElementById('archTitle').textContent = item.name;
-    document.getElementById('archNo').textContent = item.no;
+    document.getElementById('archTitle').textContent = item.no;
     switchTab('basic');
     modal.classList.add('active');
 }
@@ -664,7 +655,7 @@ function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     const body = document.getElementById('archiveBody');
     if (tab === 'basic') {
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">房屋名称</div><div class="arch-value">' + item.name + '</div></div><div class="arch-row"><div class="arch-label">房屋编号</div><div class="arch-value">' + item.no + '</div></div><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">房屋编号</div><div class="arch-value">' + item.no + '</div></div><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
     } else if (tab === 'hazard') {
         body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">风险等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level).class + '">' + getRiskConfig(h.level).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
     } else if (tab === 'measure') {
@@ -672,7 +663,7 @@ function switchTab(tab) {
     } else if (tab === 'progress') {
         body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">完成率</div><div class="arch-value"><b>' + item.progress + '%</b></div></div><div class="progress-bar" style="margin:8px 0;"><div class="fill" style="width:' + item.progress + '%"></div></div><div class="arch-row"><div class="arch-label">整治状态</div><div class="arch-value"><span class="risk-tag ' + getStatusConfig(item.governance).class + '">' + getStatusConfig(item.governance).label + '</span></div></div><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + (item.elimination === 'done' ? 'safe' : 'pending') + '">' + (item.elimination === 'done' ? '已销号' : '未销号') + '</span></div></div></div>';
     } else if (tab === 'responsible') {
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">责任单位</div><div class="arch-value">' + (item.responsibleDept || '-') + '</div></div><div class="arch-row"><div class="arch-label">责任人</div><div class="arch-value">' + (item.responsiblePerson || '-') + '</div></div><div class="arch-row"><div class="arch-label">联系电话</div><div class="arch-value">021-5710' + (1000 + Math.floor(Math.random() * 8999)) + '</div></div></div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">责任单位</div><div class="arch-value">' + (item.responsibleDept || '-') + '</div></div><div class="arch-row"><div class="arch-label">责任人</div><div class="arch-value">' + (item.responsiblePerson || '-') + '</div></div><div class="arch-row"><div class="arch-label">联系电话</div><div class="arch-value">021-5710' + (1000 + (parseInt(String(item.no || '').replace(/\D/g, '') || '0', 10) % 8999)) + '</div></div></div>';
     } else if (tab === 'elimination') {
         const info = item.eliminationInfo || {};
         const cfg = ELIMINATION_CONFIG[item.elimination] || ELIMINATION_CONFIG.pending;
@@ -747,15 +738,38 @@ function bindEvents() {
     document.getElementById('resetZoom').addEventListener('click', () => { currentLevel = 'district'; currentStreet = null; currentCommunity = null; updateBreadcrumb(); map.setView([30.92, 121.47], 12); renderMap(); renderList(); });
     window.addEventListener('resize', () => { if (leftChart) leftChart.resize(); if (streetRankingChart) streetRankingChart.resize(); if (measurePieChart) measurePieChart.resize(); });
 }
+function updateCategoryCounts() {
+    const rural = baseData.filter(d => d.houseType !== '城镇自建房').length;
+    const urban = baseData.filter(d => d.houseType === '城镇自建房').length;
+    const el = document.getElementById('countAll'); if (el) el.textContent = baseData.length;
+    const er = document.getElementById('countRural'); if (er) er.textContent = rural;
+    const eu = document.getElementById('countUrban'); if (eu) eu.textContent = urban;
+}
+function initCategoryTabs() {
+    // URL 参数支持（可选）
+    const urlCat = new URLSearchParams(location.search).get('category');
+    if (urlCat === '城镇自建房' || urlCat === '农村自建房' || urlCat === 'all') currentCategory = urlCat;
+    document.querySelectorAll('#categoryTabs .category-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.category === currentCategory);
+        btn.addEventListener('click', () => {
+            if (btn.dataset.category === currentCategory) return;
+            currentCategory = btn.dataset.category;
+            document.querySelectorAll('#categoryTabs .category-tab').forEach(b => b.classList.toggle('active', b === btn));
+            applyFilter();
+        });
+    });
+}
 function init() {
     initMap();
+    initCategoryTabs();
+    updateCategoryCounts();
     updateBreadcrumb();
     updateFilterTags();
     renderTimeFilterTags();
     renderLeftChart();
     renderDashboard();
     bindEvents();
-    renderList();
+    applyFilter();
 }
 
 init();
