@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>农村自建房 - 风险控制效果评估</title>
+    <title>城镇自建房 - 风险控制效果评估</title>
     <link rel="stylesheet" href="./all.min.css">
-    <script src="../js/house-arch-data.js"></script>
+    <script src="../js/urban-house-arch-data.js"></script>
     <script src="./echarts.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -257,6 +257,7 @@
         .risk-tag {
             padding: 3px 10px; border-radius: 4px; font-size: 12px;
             font-weight: 600; display: inline-flex; align-items: center; gap: 4px;
+            white-space: nowrap;
         }
         .risk-tag.red { background: rgba(217,48,37,0.15); color: var(--danger); }
         .risk-tag.orange { background: rgba(227,116,0,0.15); color: var(--warning); }
@@ -281,7 +282,7 @@
                 <option value="">全部镇/街道</option>
             </select>
             <select class="filter-select" id="filterVillage">
-                <option value="">全部村/居委</option>
+                <option value="">全部社区/居委</option>
             </select>
             <select class="filter-select" id="filterStructure">
                 <option value="">全部结构形式</option>
@@ -299,9 +300,10 @@
             </select>
             <select class="filter-select" id="filterRiskLevel">
                 <option value="">全部风险等级</option>
-                <option value="第三类" style="color: #d93025;">第三类</option>
-                <option value="第二类" style="color: #f9ab00;">第二类</option>
-                <option value="第一类" style="color: #1a73e8;">第一类</option>
+                <option value="疑似危房" style="color: #d93025;">疑似危房</option>
+                <option value="严重损坏房" style="color: #e65100;">严重损坏房</option>
+                <option value="一般损坏房" style="color: #c78000;">一般损坏房</option>
+                <option value="完好房" style="color: #1a73e8;">完好房</option>
             </select>
             <select class="filter-select" id="filterPeriod" onchange="onPeriodChange()">
                 <option value="">全部周期</option>
@@ -509,7 +511,7 @@ const RANK_DIMS = {
 function fmtPct(v) { return (v * 100).toFixed(1); }
 function fmtNum(n) { return n.toLocaleString('zh-CN'); }
 
-function isRural(r) { return r.houseType === '农村自建房'; }
+function isRural(r) { return r.houseType === '城镇自建房'; }
 
 function yearGroup(y) {
     if (!y) return '未知';
@@ -636,7 +638,7 @@ function computeMetrics(records) {
     const dangerHouses = records.filter(r => {
         const originalLevel = r.originalRiskLevel || r.riskLevel;
         const riskDisplay = typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[originalLevel] ? HAZARD_TO_RISK_LEVEL[originalLevel] : originalLevel;
-        return riskDisplay === '第三类';
+        return riskDisplay === '疑似危房';
     });
     const reliefRate = dangerHouses.length
         ? dangerHouses.filter(r => r.closeStatus === '已通过').length / dangerHouses.length
@@ -690,7 +692,7 @@ function populateFilters(selectedTown) {
     const villages = selectedTown
         ? ((FENGXIAN_TOWN_VILLAGES || {})[selectedTown] || [])
         : Object.values(FENGXIAN_TOWN_VILLAGES || {}).flat();
-    villageSel.innerHTML = '<option value="">全部村/居委</option>' + [...new Set(villages)].sort().map(v => `<option value="${v}">${v}</option>`).join('');
+    villageSel.innerHTML = '<option value="">全部社区/居委</option>' + [...new Set(villages)].sort().map(v => `<option value="${v}">${v}</option>`).join('');
 }
 
 function updateVillageOptions() {
@@ -703,9 +705,9 @@ function updateVillageOptions() {
         ? ((FENGXIAN_TOWN_VILLAGES || {})[selectedTown] || [])
         : Object.values(FENGXIAN_TOWN_VILLAGES || {}).flat();
     const sortedVillages = [...new Set(villages)].sort();
-    villageSel.innerHTML = '<option value="">全部村/居委</option>' + sortedVillages.map(v => `<option value="${v}">${v}</option>`).join('');
+    villageSel.innerHTML = '<option value="">全部社区/居委</option>' + sortedVillages.map(v => `<option value="${v}">${v}</option>`).join('');
 
-    // 如果当前选中的村/居委仍在可用范围内，则保留选中状态
+    // 如果当前选中的社区/居委仍在可用范围内，则保留选中状态
     if (currentVillage && sortedVillages.includes(currentVillage)) {
         villageSel.value = currentVillage;
     } else {
@@ -804,17 +806,18 @@ function renderRiskDist(records) {
         return typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
     };
     const groups = groupBy(records, riskDisplayOf);
-    const order = ['第三类', '第二类', '第一类'];
+    const order = ['疑似危房', '严重损坏房', '一般损坏房', '完好房'];
     const colorMap = {
-        '第三类': '#d93025',
-        '第二类': '#f9c846',
-        '第一类': '#1a73e8'
+        '疑似危房': '#d93025',
+        '严重损坏房': '#e65100',
+        '一般损坏房': '#f9c846',
+        '完好房': '#1a73e8'
     };
     const data = order.filter(k => groups[k]).map(k => ({ value: groups[k].length, name: k, itemStyle: { color: colorMap[k] } }));
     initChart('chartRiskDist', {
         tooltip: { trigger: 'item', formatter: function(p) { return p.name + ': ' + p.value + ' (' + p.percent.toFixed(1) + '%)'; } },
         legend: { bottom: 0, textStyle: { color: getThemeColors().text } },
-        color: ['#d93025', '#f9c846', '#1a73e8'],
+        color: ['#d93025', '#e65100', '#f9c846', '#1a73e8'],
         series: [{
             type: 'pie', radius: ['40%', '65%'], center: ['50%', '45%'],
             label: { color: getThemeColors().text },
@@ -920,14 +923,14 @@ function renderRankChart(records) {
 }
 
 function renderHeatmap(records) {
-    // 行政村 × 风险等级矩阵；销号房屋使用原始风险等级
+    // 行政社区 × 风险等级矩阵；销号房屋使用原始风险等级
     const riskDisplayOf = r => {
         if (r.riskDisplayLevel) return r.riskDisplayLevel;
         const level = r.originalRiskLevel || r.riskLevel || '未知';
         return typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
     };
     const villages = [...new Set(records.map(villageLabel))].sort();
-    const levels = ['第三类', '第二类', '第一类'];
+    const levels = ['疑似危房', '严重损坏房', '一般损坏房', '完好房'];
     const data = [];
     villages.forEach((v, y) => {
         levels.forEach((lvl, x) => {
@@ -1062,7 +1065,7 @@ function collectReportData() {
     const fr = document.getElementById('filterRiskLevel').value;
     const fp = document.getElementById('filterPeriod').value;
     if (ft) filters.push('镇/街道：' + ft);
-    if (fv) filters.push('村/居委：' + fv);
+    if (fv) filters.push('社区/居委：' + fv);
     if (fs) filters.push('结构形式：' + fs);
     if (fy) filters.push('建筑年代：' + document.getElementById('filterYear').selectedOptions[0].text);
     if (fr) filters.push('风险等级：' + fr);
@@ -1084,7 +1087,7 @@ function collectReportData() {
         return typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
     };
     const riskGroups = groupBy(filteredRecords, riskDisplayOf);
-    const riskDist = ['第三类', '第二类', '第一类'].filter(k => riskGroups[k]).map(k => ({
+    const riskDist = ['疑似危房', '严重损坏房', '一般损坏房', '完好房'].filter(k => riskGroups[k]).map(k => ({
         level: k, count: riskGroups[k].length
     }));
 
@@ -1122,7 +1125,7 @@ function exportExcel(data) {
 
     // Sheet1: 综合指标
     const kpiRows = [
-        ['农村自建房风险控制效果评估报告'],
+        ['城镇自建房风险控制效果评估报告'],
         ['生成时间', data.genTime],
         ['评估范围', data.filters.length ? data.filters.join('；') : '全部'],
         ['纳入档案数', data.recordCount + ' 条'],
@@ -1173,7 +1176,7 @@ function exportExcel(data) {
     ws4['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws4, '镇街道排名');
 
-    XLSX.writeFile(wb, '农村自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.xlsx');
+    XLSX.writeFile(wb, '城镇自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.xlsx');
 }
 
 // ===== Word 导出 =====
@@ -1184,7 +1187,7 @@ function exportWord(data) {
     const blob = new Blob(['\ufeff' + html], { type: 'application/msword;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = '农村自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.doc';
+    link.download = '城镇自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.doc';
     link.click();
     URL.revokeObjectURL(link.href);
 }
@@ -1215,7 +1218,7 @@ function buildReportHtml(data) {
 
     const html = `
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><title>农村自建房风险控制效果评估报告</title>
+<head><meta charset="utf-8"><title>城镇自建房风险控制效果评估报告</title>
 <style>
 body { font-family: 'Microsoft YaHei', SimSun, serif; margin: 40px; color: #333; }
 h1 { font-size: 22px; text-align: center; color: #1a73e8; margin-bottom: 8px; }
@@ -1230,7 +1233,7 @@ td { padding: 7px 10px; border: 1px solid #dadce0; }
 .kpi-value { font-size: 22px; font-weight: 700; color: #1a73e8; }
 .filter-info { background: #f1f3f4; border-radius: 6px; padding: 10px 14px; font-size: 13px; color: #555; margin-top: 8px; }
 </style></head><body>
-<h1>农村自建房风险控制效果评估报告</h1>
+<h1>城镇自建房风险控制效果评估报告</h1>
 <div class="meta">生成时间：${data.genTime}</div>
 ${data.filters.length ? '<div class="filter-info">评估范围：' + data.filters.join('；') + '</div>' : '<div class="filter-info">评估范围：全部</div>'}
 <p style="font-size:13px;color:#555;">纳入评估档案总数：<strong>${data.recordCount}</strong> 条</p>
@@ -1311,7 +1314,7 @@ async function exportPdf(data) {
             doc.addImage(pageImg, 'JPEG', margin, margin, imgW, drawH);
         }
 
-        doc.save('农村自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.pdf');
+        doc.save('城镇自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.pdf');
     } catch (err) {
         console.error('PDF生成失败:', err);
         alert('PDF 生成失败：' + err.message);

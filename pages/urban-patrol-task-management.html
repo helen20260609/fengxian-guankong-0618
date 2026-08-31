@@ -1,0 +1,3636 @@
+﻿<!DOCTYPE html>
+<!-- saved from url=(0046)http://192.168.70.210/pages/urban-risk-task.html -->
+<html lang="zh-CN" data-theme="light"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>城镇自建房 - 风险巡查任务管理</title>
+<link rel="stylesheet" href="./all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+/* ===== Theme Variables ===== */
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    padding: 20px;
+    min-height: 100vh;
+}
+
+/* ===== KPI Cards ===== */
+.kpi-wrapper {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s;
+    box-shadow: 0 1px 3px var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    overflow: hidden;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+
+.kpi-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.kpi-card-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.kpi-card-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+}
+.kpi-card-icon.blue   { background: rgba(26,115,232,0.12); color: var(--primary); }
+.kpi-card-icon.yellow { background: rgba(249,200,70,0.12); color: #c78000; }
+.kpi-card-icon.green  { background: rgba(30,142,62,0.12); color: var(--success); }
+.kpi-card-icon.red    { background: rgba(217,48,37,0.12); color: var(--danger); }
+.kpi-card-icon.purple { background: rgba(139,92,246,0.12); color: #8b5cf6; }
+.kpi-card-icon.orange { background: rgba(230,81,0,0.12); color: #e65100; }
+
+.kpi-card-main {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.kpi-card-total {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+}
+.kpi-card-total.blue   { color: var(--primary); }
+.kpi-card-total.yellow { color: #c78000; }
+.kpi-card-total.green  { color: var(--success); }
+.kpi-card-total.red    { color: var(--danger); }
+.kpi-card-total.purple { color: #8b5cf6; }
+.kpi-card-total.orange { color: #e65100; }
+.kpi-card-unit {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* ===== Filter Section ===== */
+.filter-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px var(--shadow);
+}
+.filter-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+.filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 120px;
+    position: relative;
+}
+.filter-item.wide {
+    min-width: 200px;
+    flex: 1.5;
+}
+.filter-item label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.filter-input,
+.filter-select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+    min-width: 90px;
+}
+.filter-input:focus,
+.filter-select:focus { border-color: var(--primary); }
+
+/* Urgency */
+.urgency-high { color: var(--danger); font-weight: 600; }
+.urgency-medium { color: #c78000; font-weight: 600; }
+.urgency-low { color: var(--success); font-weight: 600; }
+
+/* Searchable Select */
+.searchable-select {
+    position: relative;
+    width: 100%;
+}
+.searchable-select-input {
+    width: 100%;
+    padding-right: 28px;
+    cursor: pointer;
+}
+.searchable-select-arrow {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    color: var(--text-secondary);
+    pointer-events: none;
+}
+.searchable-select-list {
+    position: fixed;
+    left: 0;
+    min-width: 160px;
+    max-height: 240px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 10000;
+    display: none;
+    box-sizing: border-box;
+    top: calc(100% + 4px);
+}
+.searchable-select-list.upward {
+    top: auto;
+    bottom: calc(100% + 4px);
+}
+.searchable-select-list .search-item {
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    height: 36px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+}
+.searchable-select-list .search-item:hover,
+.searchable-select-list .search-item.active {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+.searchable-select-list .search-item.selected {
+    background: var(--primary);
+    color: #fff;
+}
+.searchable-select-list .no-match {
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    height: 36px;
+    color: var(--text-secondary);
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+.btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+}
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+}
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-secondary {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--border); }
+
+/* ===== Section Card ===== */
+.section-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: visible;
+    box-shadow: 0 1px 3px var(--shadow);
+}
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 18px;
+    background: var(--bg-hover);
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+    font-weight: 700;
+}
+.section-header i { color: var(--primary); font-size: 14px; }
+.section-body { padding: 0; }
+
+/* ===== Tab + Filter Combined Card ===== */
+.tab-filter-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px var(--shadow);
+}
+.tab-filter-card .tab-nav {
+    display: flex;
+    gap: 4px;
+    padding: 6px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+    align-items: center;
+}
+.tab-filter-card .filter-section {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 16px 18px;
+    margin-bottom: 0;
+    box-shadow: none;
+    overflow: visible;
+}
+.tab-nav-item {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    font-family: inherit;
+    white-space: nowrap;
+}
+.tab-nav-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.tab-nav-item.active {
+    background: var(--primary);
+    color: #fff;
+}
+.tab-content-wrapper {
+    display: none;
+    overflow: visible;
+}
+.tab-content-wrapper.active {
+    display: block;
+    overflow: visible;
+}
+.table-scroll-wrapper {
+    overflow-x: auto;
+    position: relative;
+}
+.table-scroll-wrapper::-webkit-scrollbar {
+    height: 8px;
+}
+.table-scroll-wrapper::-webkit-scrollbar-track {
+    background: var(--bg-hover);
+    border-radius: 4px;
+}
+.table-scroll-wrapper::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+.table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+.data-table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+}
+.data-table thead th {
+    background: var(--bg-hover);
+    padding: 12px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    font-size: 13px;
+}
+.data-table tbody td {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    vertical-align: middle;
+    white-space: nowrap;
+    background: var(--bg-card);
+}
+.data-table tbody tr:hover td { background: #f1f7fe; }
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+/* Fixed columns */
+.data-table th:first-child,
+.data-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 20;
+    min-width: 200px;
+    max-width: 280px;
+    background: var(--bg-hover);
+    border-right: 1px solid var(--border);
+}
+.data-table td:first-child {
+    background: var(--bg-card);
+}
+.data-table tbody tr:hover td:first-child {
+    background: #f1f7fe;
+}
+.data-table th:first-child {
+    z-index: 30;
+}
+
+.data-table th:last-child,
+.data-table td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 20;
+    background: var(--bg-hover);
+    border-left: 1px solid var(--border);
+}
+.data-table td:last-child {
+    background: var(--bg-card);
+}
+.data-table tbody tr:hover td:last-child {
+    background: #f1f7fe;
+}
+.data-table th:last-child {
+    z-index: 30;
+}
+
+/* Progress Bar */
+.progress-cell {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.progress-bar {
+    width: 100px;
+    height: 8px;
+    background: var(--bg-hover);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+.progress-fill.blue   { background: var(--primary); }
+.progress-fill.yellow { background: #c78000; }
+.progress-fill.green  { background: var(--success); }
+.progress-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* Status Tags */
+.status-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.status-tag.draft {
+    background: rgba(128,128,128,0.12);
+    color: #666;
+}
+.status-tag.issued {
+    background: rgba(26,115,232,0.12);
+    color: var(--primary);
+}
+.status-tag.pending-assign {
+    background: rgba(249,200,70,0.12);
+    color: #c78000;
+}
+.status-tag.pending-exec {
+    background: rgba(139,92,246,0.12);
+    color: #8b5cf6;
+}
+.status-tag.processing {
+    background: rgba(0,151,167,0.12);
+    color: var(--secondary);
+}
+.status-tag.completed {
+    background: rgba(30,142,62,0.12);
+    color: var(--success);
+}
+.status-tag.rejected {
+    background: rgba(217,48,37,0.12);
+    color: var(--danger);
+}
+.status-tag.terminated {
+    background: rgba(128,128,128,0.12);
+    color: #888;
+}
+
+
+/* Overdue Mark */
+.overdue-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.overdue-mark.overdue {
+    background: rgba(217,48,37,0.12);
+    color: var(--danger);
+}
+.overdue-mark.completed-late {
+    background: rgba(230,81,0,0.12);
+    color: var(--warning);
+}
+.overdue-mark.on-time {
+    background: rgba(30,142,62,0.12);
+    color: var(--success);
+}
+.overdue-mark.na {
+    background: transparent;
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+/* Action Links */
+.actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+.action-link {
+    font-size: 13px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    transition: opacity 0.2s;
+    color: var(--primary);
+    text-decoration: none;
+    font-family: inherit;
+    line-height: 1.5;
+}
+.action-link:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+}
+.action-link.delete { color: var(--danger); }
+.action-link.success { color: var(--success); }
+.house-count-link { text-decoration: none; }
+.house-count-link:hover { text-decoration: underline; }
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.page-info { display: flex; align-items: center; gap: 8px; }
+.page-btns { display: flex; gap: 4px; }
+.page-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+.page-btn:hover { background: var(--bg-hover); }
+.page-btn.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+.page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Empty State */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+    gap: 12px;
+}
+.empty-state i { font-size: 48px; opacity: 0.3; }
+.empty-state p { font-size: 14px; }
+
+/* ===== Hidden rectify status cell ===== */
+.rectify-cell {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.rectify-cell.none { color: #2e7d32; }
+.rectify-cell.unfixed { color: var(--danger); }
+.rectify-cell.partial { color: #e65100; }
+.rectify-cell.fully { color: var(--success); }
+.rectify-cell.pending { color: var(--text-secondary); }
+
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s;
+}
+.modal-overlay.active { opacity: 1; visibility: visible; }
+.modal {
+    background: var(--bg-card);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    transform: translateY(-20px);
+    transition: transform 0.3s;
+}
+.modal-overlay.active .modal { transform: translateY(0); }
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+.modal-header h3 {
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.modal-header h3 i { color: var(--primary); }
+.modal-close {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+.modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: calc(90vh - 130px);
+}
+.modal-title {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.highlight-task-row {
+    background: var(--primary-light) !important;
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 16px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+}
+
+/* ===== 批量导入弹窗样式 ===== */
+#importTabs {
+    display: flex;
+    gap: 8px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0;
+}
+#importTabs .content-tab {
+    padding: 8px 18px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+#importTabs .content-tab:hover { color: var(--primary); }
+#importTabs .content-tab.active {
+    color: var(--primary);
+    font-weight: 600;
+    border-bottom-color: var(--primary);
+}
+.import-summary {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.import-stat {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.import-stat.new { background: #e6f4ea; color: #1e8e3e; }
+.import-stat.update { background: #e8f0fe; color: #1a73e8; }
+.import-stat.error { background: #fce8e6; color: #d93025; }
+.import-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.import-preview-table th, .import-preview-table td {
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    text-align: left;
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.import-preview-table th { background: #f1f3f4; font-weight: 600; position: sticky; top: 0; }
+.import-preview-table tr.row-error td { background: #fce8e6; }
+.import-preview-table tr.row-new td:first-child { border-left: 3px solid #1e8e3e; }
+.import-preview-table tr.row-update td:first-child { border-left: 3px solid #1a73e8; }
+.import-scroll { max-height: 260px; overflow: auto; border-radius: 8px; }
+
+/* Toast 轻提示 */
+.import-toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    padding: 10px 20px;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    z-index: 3000;
+    opacity: 0;
+    transition: all 0.25s;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+    max-width: 80%;
+}
+.import-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.import-toast.info { background: #202124; }
+.import-toast.success { background: #1e8e3e; }
+.import-toast.error { background: #d93025; }
+
+/* Form Styles */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+.form-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.form-item.full-width { grid-column: span 2; }
+.form-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.form-label .required { color: var(--danger); margin-left: 2px; }
+.form-input,
+.form-select,
+.form-textarea {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+}
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus { border-color: var(--primary); }
+.form-textarea { resize: vertical; min-height: 80px; }
+.form-select { cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- ========== TOP: KPI Cards ========== -->
+<div class="kpi-wrapper">
+    <div class="kpi-card">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label">待接收任务</span>
+            <div class="kpi-card-icon blue"><i class="fas fa-clipboard-list"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total blue" id="kpiPendingReceive">12</span>
+            <span class="kpi-card-unit">个</span>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label">进行中任务</span>
+            <div class="kpi-card-icon yellow"><i class="fas fa-spinner"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total yellow" id="kpiProcessing">45</span>
+            <span class="kpi-card-unit">个</span>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label">已逾期任务</span>
+            <div class="kpi-card-icon red"><i class="fas fa-exclamation-triangle"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total red" id="kpiOverdue">11</span>
+            <span class="kpi-card-unit">个</span>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label">待销号任务</span>
+            <div class="kpi-card-icon purple"><i class="fas fa-user-clock"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total purple" id="kpiPendingClose">8</span>
+            <span class="kpi-card-unit">个</span>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label">高紧急程度数</span>
+            <div class="kpi-card-icon orange"><i class="fas fa-bug"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total orange" id="kpiMajorHidden">3</span>
+            <span class="kpi-card-unit">个</span>
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label">完成率</span>
+            <div class="kpi-card-icon green"><i class="fas fa-check-circle"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total green" id="kpiCompletionRate">72</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+    </div>
+</div>
+
+<!-- ========== MIDDLE: Tab Navigation + Filter (Combined Card) ========== -->
+<div class="tab-filter-card" id="tabFilterCard">
+    <div class="tab-nav" id="taskTabNav">
+        <button class="tab-nav-item active" data-tab="all" onclick="switchTab(&#39;all&#39;)">全部</button>
+        <button class="tab-nav-item" data-tab="routine" onclick="switchTab(&#39;routine&#39;)">日常巡查</button>
+        <button class="tab-nav-item" data-tab="special" onclick="switchTab(&#39;special&#39;)">专项巡查</button>
+        <button class="tab-nav-item" data-tab="temporary" onclick="switchTab(&#39;temporary&#39;)">临时巡查</button>
+        <button class="tab-nav-item" data-tab="review" onclick="switchTab(&#39;review&#39;)">隐患复查</button>
+        <button class="tab-nav-item" data-tab="review2026" onclick="switchTab(&#39;review2026&#39;)">回头看</button>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section" id="filterSection">
+        <div class="filter-row" style="margin-bottom:12px;">
+            <div class="filter-item" style="min-width:200px;flex:1.5;">
+                <label>任务名称</label>
+                <input type="text" class="filter-input" id="filterName" placeholder="请输入任务名称">
+            </div>
+            <div class="filter-item" style="min-width:160px;">
+                <label>镇/街道</label>
+                <select class="filter-select" id="filterUnit">
+                    <option value="">全部</option>
+                    <option value="南桥镇">南桥镇</option>
+                    <option value="奉城镇">奉城镇</option>
+                    <option value="庄行镇">庄行镇</option>
+                    <option value="金汇镇">金汇镇</option>
+                    <option value="青村镇">青村镇</option>
+                    <option value="柘林镇">柘林镇</option>
+                    <option value="四团镇">四团镇</option>
+                    <option value="海湾镇">海湾镇</option>
+                    <option value="西渡街道">西渡街道</option>
+                    <option value="奉浦街道">奉浦街道</option>
+                    <option value="海湾旅游区">海湾旅游区</option>
+                    <option value="头桥街道">头桥街道</option>
+                    <option value="金海街道">金海街道</option>
+                </select>
+            </div>
+            <div class="filter-item" style="min-width:150px;" id="filterVillageItem">
+                <label>社区/居委</label>
+                <div class="searchable-select" id="filterVillageWrapper">
+                    <input type="text" class="filter-input searchable-select-input" id="filterVillageInput" placeholder="请选择社区/居委" autocomplete="off">
+                    <i class="fas fa-chevron-down searchable-select-arrow"></i>
+                    <input type="hidden" id="filterVillage" value="">
+                    <div class="searchable-select-list" id="filterVillageList"></div>
+                </div>
+            </div>
+            <div class="filter-item" style="min-width:140px;">
+                <label>巡查人员</label>
+                <input type="text" class="filter-input" id="filterPerson" placeholder="请输入巡查人员">
+            </div>
+            <div class="filter-item" style="min-width:120px;">
+                <label>紧急程度</label>
+                <select class="filter-select" id="filterUrgency">
+                    <option value="">全部</option>
+                    <option value="高">高</option>
+                    <option value="中">中</option>
+                    <option value="低">低</option>
+                </select>
+            </div>
+            <div class="filter-item" style="min-width:130px;">
+                <label>房屋类型</label>
+                <select class="filter-select" id="filterHouseType">
+                    <option value="">全部</option>
+                    <option value="纯自住类">纯自住类</option>
+                    <option value="经营类">经营类</option>
+                    <option value="闲置类">闲置类</option>
+                </select>
+            </div>
+            <div class="filter-item" style="min-width:130px;">
+                <label>结构形式</label>
+                <select class="filter-select" id="filterStructure">
+                    <option value="">全部</option>
+                    <option value="砖混结构">砖混结构</option>
+                    <option value="砖木结构">砖木结构</option>
+                    <option value="框架结构">框架结构</option>
+                    <option value="土木结构">土木结构</option>
+                </select>
+            </div>
+        </div>
+        <div class="filter-row">
+            <div class="filter-item" style="min-width:120px;flex:0 0 auto;width:160px;">
+                <label>状态</label>
+                <select class="filter-select" id="filterStatus">
+                    <option value="">全部</option>
+                    <option value="draft">草稿</option>
+                    <option value="issued">待接收</option>
+                    <option value="processing">进行中</option>
+                    <option value="completed">已完成</option>
+                    <option value="rejected">任务回退</option>
+                    <option value="terminated">已终止</option>
+                </select>
+            </div>
+            <div class="filter-item" style="min-width:200px;flex:0 0 auto;width:280px;">
+                <label>日期范围</label>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <input type="date" class="filter-input" id="filterStartDateFrom" style="flex:1;min-width:0;">
+                    <span style="color:var(--text-secondary);font-size:12px;white-space:nowrap;">至</span>
+                    <input type="date" class="filter-input" id="filterStartDateTo" style="flex:1;min-width:0;">
+                </div>
+            </div>
+            <div class="filter-actions" style="margin-left:auto;">
+                <button class="btn btn-primary" onclick="applyFilter()"><i class="fas fa-search"></i> 搜索</button>
+                <button class="btn btn-secondary" onclick="resetFilter()"><i class="fas fa-undo"></i> 重置</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== TAB: 全部 ========== -->
+<div class="tab-content-wrapper active" id="tab-all">
+    <div class="section-card">
+        <div class="section-header">
+            <i class="fa-solid fa-list-check"></i>
+            全部任务列表
+            <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+                <button class="btn btn-primary" onclick="window.location.href=&#39;urban-risk-task-add.html&#39;" style="height:32px;padding:0 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-plus" style="color:#fff;"></i> 新增任务</button>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="table-scroll-wrapper">
+                <table class="data-table" id="taskTable-all" style="display: table;">
+                    <thead>
+                        <tr>
+                            <th>任务名称</th>
+                            <th>任务类型</th>
+                            <th>紧急程度</th>
+                            <th>镇/街道</th>
+                            <th>社区/居委</th>
+                            <th>巡查人员</th>
+                            <th>开始日期</th>
+                            <th>截至日期</th>
+                            <th>巡查进度</th>
+                            <th>状态</th>
+                            <th>标记</th>
+                            <th>完成时间</th>
+                            <th>隐患整改情况</th>
+                            <th>创建人</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody-all"></tbody>
+                </table>
+            </div>
+            <div class="empty-state" id="emptyState-all" style="display:none;">
+                <i class="fas fa-clipboard-list"></i>
+                <p>暂无任务记录</p>
+            </div>
+        </div>
+        <div class="pagination" id="pagination-all"></div>
+    </div>
+</div>
+
+<!-- ========== TAB: 日常巡查 ========== -->
+<div class="tab-content-wrapper" id="tab-routine">
+    <div class="section-card">
+        <div class="section-header">
+            <i class="fa-solid fa-list-check"></i>
+            日常巡查任务列表
+            <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+                <button class="btn btn-primary" onclick="window.location.href=&#39;urban-risk-task-add.html&#39;" style="height:32px;padding:0 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-plus" style="color:#fff;"></i> 新增任务</button>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="table-scroll-wrapper">
+                <table class="data-table" id="taskTable-routine" style="display: table;">
+                    <thead>
+                        <tr>
+                            <th>任务名称</th>
+                            <th>紧急程度</th>
+                            <th>镇/街道</th>
+                            <th>社区/居委</th>
+                            <th>巡查人员</th>
+                            <th>开始日期</th>
+                            <th>截至日期</th>
+                            <th>巡查进度</th>
+                            <th>状态</th>
+                            <th>标记</th>
+                            <th>完成时间</th>
+                            <th>隐患整改情况</th>
+                            <th>创建人</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody-routine">
+        <tr>
+            <td><strong>南桥镇经营性自建房日常巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--danger);">高</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">3</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">南桥镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">张翁庙社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>2025-06-01</td>
+            <td>2025-06-10</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:33%"></div>
+                    </div>
+                    <span class="progress-text">1/3 (33%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag processing">进行中</span></td>
+            <td><span class="overdue-mark overdue"><i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>已逾期</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">1处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="adjustTask(1)">调整</button>
+            <button class="action-link view" onclick="viewTask(1)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>奉城镇C级危房专项排查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:#c78000;">中</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">4</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">奉城镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">洪庙社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张建国</td>
+            <td>2025-06-15</td>
+            <td>2025-06-30</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:60%"></div>
+                    </div>
+                    <span class="progress-text">3/5 (60%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag completed">已完成</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="adjustTask(2)">调整</button>
+            <button class="action-link view" onclick="viewTask(2)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>四团镇危旧房屋安全隐患排查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--primary);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">5</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">四团镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">五四社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>李秀英</td>
+            <td>2025-05-20</td>
+            <td>2025-06-10</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="progress-text">4/4 (100%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag draft">草稿</span></td>
+            <td><span class="overdue-mark on-time"><i class="fas fa-check-circle" style="font-size:10px;"></i>按时完成</span></td>
+            <td>2025-06-08 10:00</td>
+            <td><span class="rectify-cell partial">2处 · 部分整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(3)">查看</button>
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>柘林镇城镇自建房汛期检查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--success);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">6</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">柘林镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">新寺社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>王志强</td>
+            <td>2025-05-15</td>
+            <td>2025-06-05</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="progress-text">6/6 (100%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag issued">待接收</span></td>
+            <td><span class="overdue-mark completed-late"><i class="fas fa-exclamation-circle" style="font-size:10px;"></i>逾期完成</span></td>
+            <td>2025-06-07 16:30</td>
+            <td><span class="rectify-cell fully">3处 · 全部整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(4)">查看</button>
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>庄行镇城镇房屋翻建工地巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--danger);">高</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">7</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">庄行镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">潘垫社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>2025-06-10</td>
+            <td>2025-06-25</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag rejected">任务回退</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">2处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="receiveTask(5)">接收任务</button>
+            <button class="action-link view" onclick="viewTask(5)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>金汇镇城镇自建房安全复查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:#c78000;">中</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">8</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">金汇镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">明星社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张建国</td>
+            <td>2025-06-08</td>
+            <td>2025-06-30</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag terminated">已终止</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="editTask(6)">编辑</button>
+            <button class="action-link delete" onclick="deleteTask(6)">删除</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>青村镇经营性自建房联合检查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--primary);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">9</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">青村镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">李窑社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>李秀英</td>
+            <td>2025-06-12</td>
+            <td>2025-06-28</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag processing">进行中</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">1处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张三</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="editReturnedTask(7)">修改</button>
+            <button class="action-link delete" onclick="deleteTask(7)">删除</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>海湾镇城镇房屋辅助用房专项检查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--success);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">10</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">海湾镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">星火社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>王志强</td>
+            <td>2025-06-01</td>
+            <td>2025-06-15</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:50%"></div>
+                    </div>
+                    <span class="progress-text">1/2 (50%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag completed">已完成</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(8)">查看</button>
+                </div>
+            </td>
+        </tr>
+        </tbody>
+                </table>
+            </div>
+            <div class="empty-state" id="emptyState-routine" style="display:none;">
+                <i class="fas fa-clipboard-list"></i>
+                <p>暂无日常巡查任务记录</p>
+            </div>
+        </div>
+        <div class="pagination" id="pagination-routine"></div>
+    </div>
+</div>
+
+<!-- ========== TAB: 专项巡查 ========== -->
+<div class="tab-content-wrapper" id="tab-special">
+    <div class="section-card">
+        <div class="section-header">
+            <i class="fa-solid fa-list-check"></i>
+            专项巡查任务列表
+            <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+                <button class="btn btn-primary" onclick="window.location.href=&#39;urban-risk-task-add.html&#39;" style="height:32px;padding:0 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-plus" style="color:#fff;"></i> 新增任务</button>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="table-scroll-wrapper">
+                <table class="data-table" id="taskTable-special" style="display: table;">
+                    <thead>
+                        <tr>
+                            <th>任务名称</th>
+                            <th>紧急程度</th>
+                            <th>镇/街道</th>
+                            <th>社区/居委</th>
+                            <th>巡查人员</th>
+                            <th>开始日期</th>
+                            <th>截至日期</th>
+                            <th>巡查进度</th>
+                            <th>状态</th>
+                            <th>标记</th>
+                            <th>完成时间</th>
+                            <th>隐患整改情况</th>
+                            <th>创建人</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody-special">
+        <tr>
+            <td><strong>南桥镇城镇危房销号核查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--danger);">高</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">3</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">南桥镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">杨王社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>2025-06-01</td>
+            <td>2025-06-10</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:40%"></div>
+                    </div>
+                    <span class="progress-text">2/5 (40%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag draft">草稿</span></td>
+            <td><span class="overdue-mark overdue"><i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>已逾期</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell partial">2处 · 部分整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="adjustTask(11)">调整</button>
+            <button class="action-link view" onclick="viewTask(11)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>奉城镇城镇自建房安全回头看</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:#c78000;">中</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">4</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">奉城镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">久茂社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张建国</td>
+            <td>2025-06-15</td>
+            <td>2025-06-30</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:33%"></div>
+                    </div>
+                    <span class="progress-text">1/3 (33%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag issued">待接收</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell fully">3处 · 全部整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="adjustTask(12)">调整</button>
+            <button class="action-link view" onclick="viewTask(12)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>四团镇D级危房紧急排查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--primary);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">5</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">四团镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">三坎社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>李秀英</td>
+            <td>2025-05-20</td>
+            <td>2025-06-10</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="progress-text">8/8 (100%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag rejected">任务回退</span></td>
+            <td><span class="overdue-mark on-time"><i class="fas fa-check-circle" style="font-size:10px;"></i>按时完成</span></td>
+            <td>2025-06-08 14:00</td>
+            <td><span class="rectify-cell unfixed">2处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(13)">查看</button>
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>柘林镇自建房安全隐患整治复查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--success);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">6</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">柘林镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">营房社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>王志强</td>
+            <td>2025-05-15</td>
+            <td>2025-06-05</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="progress-text">6/6 (100%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag terminated">已终止</span></td>
+            <td><span class="overdue-mark completed-late"><i class="fas fa-exclamation-circle" style="font-size:10px;"></i>逾期完成</span></td>
+            <td>2025-06-07 10:30</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(14)">查看</button>
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>庄行镇城镇自建房网格化巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--danger);">高</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">7</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">庄行镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">张翁庙社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>2025-06-10</td>
+            <td>2025-06-25</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag processing">进行中</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">1处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="receiveTask(15)">接收任务</button>
+            <button class="action-link view" onclick="viewTask(15)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>金汇镇老旧自建房安全体检</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:#c78000;">中</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">8</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">金汇镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">洪庙社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张建国</td>
+            <td>2025-06-12</td>
+            <td>2025-06-28</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag completed">已完成</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="editTask(16)">编辑</button>
+            <button class="action-link delete" onclick="deleteTask(16)">删除</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>青村镇城镇房屋风险点常态化巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--primary);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">9</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">青村镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">五四社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>李秀英</td>
+            <td>2025-06-15</td>
+            <td>2025-06-30</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag draft">草稿</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell partial">2处 · 部分整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张三</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="editReturnedTask(17)">修改</button>
+            <button class="action-link delete" onclick="deleteTask(17)">删除</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>海湾镇临河自建房防汛专项巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--success);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">10</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">海湾镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">新寺社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>王志强</td>
+            <td>2025-06-01</td>
+            <td>2025-06-20</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:50%"></div>
+                    </div>
+                    <span class="progress-text">2/4 (50%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag issued">待接收</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell fully">3处 · 全部整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(18)">查看</button>
+                </div>
+            </td>
+        </tr>
+        </tbody>
+                </table>
+            </div>
+            <div class="empty-state" id="emptyState-special" style="display:none;">
+                <i class="fas fa-clipboard-list"></i>
+                <p>暂无专项巡查任务记录</p>
+            </div>
+        </div>
+        <div class="pagination" id="pagination-special"></div>
+    </div>
+</div>
+
+<!-- ========== TAB: 临时巡查 ========== -->
+<div class="tab-content-wrapper" id="tab-temporary">
+    <div class="section-card">
+        <div class="section-header">
+            <i class="fa-solid fa-list-check"></i>
+            临时巡查任务列表
+            <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+                <button class="btn btn-primary" onclick="window.location.href=&#39;urban-risk-task-add.html&#39;" style="height:32px;padding:0 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-plus" style="color:#fff;"></i> 新增任务</button>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="table-scroll-wrapper">
+                <table class="data-table" id="taskTable-temporary" style="display: table;">
+                    <thead>
+                        <tr>
+                            <th>任务名称</th>
+                            <th>紧急程度</th>
+                            <th>镇/街道</th>
+                            <th>社区/居委</th>
+                            <th>巡查人员</th>
+                            <th>开始日期</th>
+                            <th>截至日期</th>
+                            <th>巡查进度</th>
+                            <th>状态</th>
+                            <th>标记</th>
+                            <th>完成时间</th>
+                            <th>隐患整改情况</th>
+                            <th>创建人</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody-temporary">
+        <tr>
+            <td><strong>南桥镇经营性自建房日常巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--danger);">高</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">3</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">南桥镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">潘垫社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>2025-06-01</td>
+            <td>2025-06-08</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:25%"></div>
+                    </div>
+                    <span class="progress-text">1/4 (25%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag rejected">任务回退</span></td>
+            <td><span class="overdue-mark overdue"><i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>已逾期</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">2处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="adjustTask(21)">调整</button>
+            <button class="action-link view" onclick="viewTask(21)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>奉城镇C级危房专项排查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:#c78000;">中</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">4</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">奉城镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">明星社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张建国</td>
+            <td>2025-06-15</td>
+            <td>2025-06-25</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:33%"></div>
+                    </div>
+                    <span class="progress-text">1/3 (33%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag terminated">已终止</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="adjustTask(22)">调整</button>
+            <button class="action-link view" onclick="viewTask(22)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>四团镇危旧房屋安全隐患排查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--primary);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">5</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">四团镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">李窑社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>李秀英</td>
+            <td>2025-06-10</td>
+            <td>2025-06-15</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="progress-text">2/2 (100%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag processing">进行中</span></td>
+            <td><span class="overdue-mark on-time"><i class="fas fa-check-circle" style="font-size:10px;"></i>按时完成</span></td>
+            <td>2025-06-14 09:00</td>
+            <td><span class="rectify-cell unfixed">1处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(23)">查看</button>
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>柘林镇城镇自建房汛期检查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--success);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">6</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">柘林镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">星火社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>王志强</td>
+            <td>2025-06-01</td>
+            <td>2025-06-05</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="progress-text">5/5 (100%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag completed">已完成</span></td>
+            <td><span class="overdue-mark completed-late"><i class="fas fa-exclamation-circle" style="font-size:10px;"></i>逾期完成</span></td>
+            <td>2025-06-07 11:00</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(24)">查看</button>
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>庄行镇城镇房屋翻建工地巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--danger);">高</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">7</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">庄行镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">杨王社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>2025-06-12</td>
+            <td>2025-06-20</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag draft">草稿</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell partial">2处 · 部分整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="receiveTask(25)">接收任务</button>
+            <button class="action-link view" onclick="viewTask(25)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>金汇镇城镇自建房安全复查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:#c78000;">中</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">8</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">金汇镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">久茂社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张建国</td>
+            <td>2025-06-15</td>
+            <td>2025-06-25</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag issued">待接收</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell fully">3处 · 全部整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="editTask(26)">编辑</button>
+            <button class="action-link delete" onclick="deleteTask(26)">删除</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>青村镇经营性自建房联合检查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--primary);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">9</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">青村镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">三坎社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>李秀英</td>
+            <td>2025-06-10</td>
+            <td>2025-06-28</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag rejected">任务回退</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">2处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张三</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="editReturnedTask(27)">修改</button>
+            <button class="action-link delete" onclick="deleteTask(27)">删除</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>海湾镇城镇房屋辅助用房专项检查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--success);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">10</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">海湾镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">营房社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>王志强</td>
+            <td>2025-06-05</td>
+            <td>2025-06-15</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:25%"></div>
+                    </div>
+                    <span class="progress-text">1/4 (25%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag terminated">已终止</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(28)">查看</button>
+                </div>
+            </td>
+        </tr>
+        </tbody>
+                </table>
+            </div>
+            <div class="empty-state" id="emptyState-temporary" style="display:none;">
+                <i class="fas fa-clipboard-list"></i>
+                <p>暂无临时巡查任务记录</p>
+            </div>
+        </div>
+        <div class="pagination" id="pagination-temporary"></div>
+    </div>
+</div>
+
+<!-- ========== TAB: 隐患复查 ========== -->
+<div class="tab-content-wrapper" id="tab-review">
+    <div class="section-card">
+        <div class="section-header">
+            <i class="fa-solid fa-list-check"></i>
+            隐患复查列表
+            <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+                <button class="btn btn-primary" onclick="window.location.href=&#39;urban-risk-task-add.html&#39;" style="height:32px;padding:0 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-plus" style="color:#fff;"></i> 新增任务</button>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="table-scroll-wrapper">
+                <table class="data-table" id="taskTable-review" style="display: table;">
+                    <thead>
+                        <tr>
+                            <th>任务名称</th>
+                            <th>紧急程度</th>
+                            <th>镇/街道</th>
+                            <th>社区/居委</th>
+                            <th>巡查人员</th>
+                            <th>开始日期</th>
+                            <th>截至日期</th>
+                            <th>巡查进度</th>
+                            <th>状态</th>
+                            <th>标记</th>
+                            <th>完成时间</th>
+                            <th>隐患整改情况</th>
+                            <th>创建人</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody-review">
+        <tr>
+            <td><strong>南桥镇城镇危房销号核查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--danger);">高</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">3</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">南桥镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">张翁庙社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>2025-06-01</td>
+            <td>2025-06-08</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:50%"></div>
+                    </div>
+                    <span class="progress-text">1/2 (50%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag processing">进行中</span></td>
+            <td><span class="overdue-mark overdue"><i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>已逾期</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">1处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="adjustTask(31)">调整</button>
+            <button class="action-link view" onclick="viewTask(31)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>奉城镇城镇自建房安全回头看</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:#c78000;">中</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">4</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">奉城镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">洪庙社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张建国</td>
+            <td>2025-06-15</td>
+            <td>2025-06-25</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:33%"></div>
+                    </div>
+                    <span class="progress-text">1/3 (33%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag completed">已完成</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="adjustTask(32)">调整</button>
+            <button class="action-link view" onclick="viewTask(32)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>四团镇D级危房紧急排查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--primary);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">5</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">四团镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">五四社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>李秀英</td>
+            <td>2025-05-20</td>
+            <td>2025-06-10</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="progress-text">4/4 (100%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag draft">草稿</span></td>
+            <td><span class="overdue-mark on-time"><i class="fas fa-check-circle" style="font-size:10px;"></i>按时完成</span></td>
+            <td>2025-06-09 10:00</td>
+            <td><span class="rectify-cell partial">2处 · 部分整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(33)">查看</button>
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>柘林镇自建房安全隐患整治复查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--success);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">6</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">柘林镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">新寺社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>王志强</td>
+            <td>2025-05-15</td>
+            <td>2025-06-05</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill green" style="width:100%"></div>
+                    </div>
+                    <span class="progress-text">3/3 (100%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag issued">待接收</span></td>
+            <td><span class="overdue-mark completed-late"><i class="fas fa-exclamation-circle" style="font-size:10px;"></i>逾期完成</span></td>
+            <td>2025-06-08 16:00</td>
+            <td><span class="rectify-cell fully">3处 · 全部整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(34)">查看</button>
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>庄行镇城镇自建房网格化巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--danger);">高</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">7</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">庄行镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">潘垫社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>2025-06-10</td>
+            <td>2025-06-20</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag rejected">任务回退</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">2处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="receiveTask(35)">接收任务</button>
+            <button class="action-link view" onclick="viewTask(35)">查看</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>金汇镇老旧自建房安全体检</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:#c78000;">中</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">8</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">金汇镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">明星社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张建国</td>
+            <td>2025-06-12</td>
+            <td>2025-06-25</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag terminated">已终止</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="editTask(36)">编辑</button>
+            <button class="action-link delete" onclick="deleteTask(36)">删除</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>青村镇城镇房屋风险点常态化巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--primary);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">9</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">青村镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">李窑社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>李秀英</td>
+            <td>2025-06-15</td>
+            <td>2025-06-28</td>
+            <td>
+                -
+            </td>
+            <td><span class="status-tag processing">进行中</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell unfixed">1处 · 未整改</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>张三</td>
+            <td>
+                <div class="actions">
+                    
+            <button class="action-link view" onclick="editReturnedTask(37)">修改</button>
+            <button class="action-link delete" onclick="deleteTask(37)">删除</button>
+        
+                </div>
+            </td>
+        </tr>
+        
+        <tr>
+            <td><strong>海湾镇临河自建房防汛专项巡查</strong></td>
+            <td><span style="font-size:12px;font-weight:600;color:var(--success);">低</span></td>
+            <td><span style="color:var(--primary);font-weight:600;">10</span> 间</td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">海湾镇</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">星火社区</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>王志强</td>
+            <td>2025-06-05</td>
+            <td>2025-06-15</td>
+            <td>
+                
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill blue" style="width:33%"></div>
+                    </div>
+                    <span class="progress-text">1/3 (33%)</span>
+                </div>
+                
+            </td>
+            <td><span class="status-tag completed">已完成</span></td>
+            <td><span class="overdue-mark na">-</span></td>
+            <td>-</td>
+            <td><span class="rectify-cell none">0处 · 无隐患</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>系统管理员</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick="viewTask(38)">查看</button>
+                </div>
+            </td>
+        </tr>
+        </tbody>
+                </table>
+            </div>
+            <div class="empty-state" id="emptyState-review" style="display:none;">
+                <i class="fas fa-clipboard-list"></i>
+                <p>暂无隐患复查记录</p>
+            </div>
+        </div>
+        <div class="pagination" id="pagination-review"></div>
+    </div>
+</div>
+
+<div class="tab-content-wrapper" id="tab-review2026">
+    <div class="section-card">
+        <div class="section-header">
+            <i class="fa-solid fa-rotate-left"></i>
+            2026回头看 · 排查记录
+            <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+                <span style="font-size:12px;color:var(--text-secondary);">按社区聚合，点击查看该社区所有户的排查记录</span>
+                <button class="btn btn-primary" style="padding:6px 14px;font-size:13px;" onclick="openImportModal()"><i class="fas fa-file-import"></i> 批量导入</button>
+            </div>
+        </div>
+        <div class="section-body">
+            <div class="table-scroll-wrapper">
+                <table class="data-table" id="taskTable-review2026" style="display: table;">
+                    <thead>
+                        <tr>
+                            <th>任务名称</th>
+                            <th>紧急程度</th>
+                            <th>排查户数</th>
+                            <th>镇/街道</th>
+                            <th>社区/居委</th>
+                            <th>排查人员</th>
+                            <th>完成日期</th>
+                            <th>发现隐患</th>
+                            <th>PC补充</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody-review2026"></tbody>
+                </table>
+            </div>
+            <div class="empty-state" id="emptyState-review2026" style="display:none;">
+                <i class="fas fa-clipboard-list"></i>
+                <p>暂无2026回头看排查记录</p>
+            </div>
+        </div>
+        <div class="pagination" id="pagination-review2026"></div>
+    </div>
+</div>
+
+<!-- 批量导入弹窗（排查详情 / 隐患整治 两块） -->
+<div class="modal-overlay" id="importModal">
+    <div class="modal" style="max-width:760px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-file-import"></i> 2026回头看 · 批量导入</h3>
+            <button class="modal-close" onclick="closeImportModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <!-- 块切换 -->
+            <div class="content-tabs" id="importTabs" style="margin-bottom:16px;">
+                <div class="content-tab active" data-import-type="inspect" onclick="switchImportType('inspect')"><i class="fas fa-search"></i> 排查详情导入</div>
+                <div class="content-tab" data-import-type="rectify" onclick="switchImportType('rectify')"><i class="fas fa-tools"></i> 隐患整治导入</div>
+            </div>
+
+            <!-- 上传区 -->
+            <div style="border:1px dashed var(--border);border-radius:10px;padding:18px;text-align:center;background:#fafbfc;">
+                <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none;" onchange="handleImportFile(this)">
+                <i class="fas fa-cloud-upload-alt" style="font-size:28px;color:var(--primary);"></i>
+                <div style="margin:10px 0 14px;color:var(--text-secondary);font-size:13px;" id="importHint">请选择 Excel 文件（.xlsx / .xls），按模板列头填写，不含照片</div>
+                <div style="display:flex;gap:10px;justify-content:center;">
+                    <button class="btn btn-primary" onclick="document.getElementById('importFileInput').click()"><i class="fas fa-folder-open"></i> 选择文件</button>
+                    <button class="btn" onclick="downloadImportTemplate()"><i class="fas fa-download"></i> 下载模板</button>
+                </div>
+            </div>
+
+            <!-- 解析/校验结果与预览 -->
+            <div id="importPreview" style="display:none;margin-top:16px;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="closeImportModal()">取消</button>
+            <button class="btn btn-primary" id="importConfirmBtn" style="display:none;" onclick="confirmImport()"><i class="fas fa-check"></i> 确认导入</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal-overlay" id="taskModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-plus-circle"></i> 新增风险巡查任务</h3>
+            <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-grid">
+                <div class="form-item">
+                    <label class="form-label">任务编号 <span class="required">*</span></label>
+                    <input type="text" class="form-input" id="taskNo" placeholder="例如：FX-RW-2025-001">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">任务名称 <span class="required">*</span></label>
+                    <input type="text" class="form-input" id="taskName" placeholder="请输入任务名称">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">任务类型 <span class="required">*</span></label>
+                    <select class="form-select" id="taskType">
+                        <option value="">请选择</option>
+                        <option value="routine">日常巡查</option>
+                        <option value="special">专项巡查</option>
+                        <option value="temporary">临时巡查</option>
+                    </select>
+                </div>
+                <div class="form-item">
+                    <label class="form-label">巡查人员 <span class="required">*</span></label>
+                    <input type="text" class="form-input" id="taskPerson" placeholder="请输入巡查人员">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">巡查房屋数</label>
+                    <input type="number" class="form-input" id="taskArchiveCount" placeholder="请输入巡查房屋数量" min="0">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">需巡查总数 <span class="required">*</span></label>
+                    <input type="number" class="form-input" id="taskTotalCount" placeholder="请输入巡查总数" min="1">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">任务开始日期 <span class="required">*</span></label>
+                    <input type="date" class="form-input" id="taskStartDate">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">任务结束日期 <span class="required">*</span></label>
+                    <input type="date" class="form-input" id="taskEndDate">
+                </div>
+                <div class="form-item full-width">
+                    <label class="form-label">巡查内容描述</label>
+                    <textarea class="form-textarea" id="taskDesc" placeholder="请输入巡查内容、重点关注事项等..."></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveTask()"><i class="fas fa-check"></i> 保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="../js/urban-house-arch-data.js"></script>
+<script>
+// Theme sync
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') {
+        document.documentElement.setAttribute('data-theme', e.data.theme);
+    }
+});
+
+// Demo data (initial fallback)
+let tasks = loadTasksFromStorage();
+
+// 首次无缓存时把演示数据写入缓存
+(function initDemoData() {
+    if (!localStorage.getItem('urbanPatrolTasks')) {
+        saveTasksToStorage();
+    }
+})();
+
+function getUrlParam(name) {
+    return new URLSearchParams(window.location.search).get(name);
+}
+
+function getLocalDateString(d = new Date()) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function saveTasksToStorage() {
+    try {
+        localStorage.setItem('urbanPatrolTasks', JSON.stringify(tasks));
+    } catch (e) { /* ignore */ }
+}
+
+function loadTasksFromStorage() {
+    let saved = [];
+    try {
+        saved = JSON.parse(localStorage.getItem('urbanPatrolTasks') || '[]');
+    } catch (e) { saved = []; }
+    if (Array.isArray(saved) && saved.length > 0) return saved;
+    return [
+        // ========== 日常巡查 ==========
+        { id: 1, no: 'FX-RW-2025-001', name: "南桥镇经营性自建房日常巡查", type: 'routine', typeLabel: '日常巡查', urgency: "high", urgencyLabel: '高', houseCount: 3, town: "南桥镇", village: "张翁庙社区", houseType: "经营类", structure: "砖混结构", person: "张建国", createBy: '系统管理员', inspected: 1, total: 3, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 1, hiddenFixed: 0, startDate: '2025-06-01', endDate: '2025-06-10', houseNos: ['NF-2025-00001','NF-2025-00002','NF-2025-00003'], recordIds: [] },
+    { id: 2, no: 'FX-RW-2025-002', name: "奉城镇C级危房专项排查", type: 'special', typeLabel: '专项巡查', urgency: "medium", urgencyLabel: '中', houseCount: 5, town: "奉城镇", village: "洪庙社区", houseType: "纯自住类", structure: "砖木结构", person: "李秀英", createBy: '系统管理员', inspected: 3, total: 5, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 0, startDate: '2025-06-15', endDate: '2025-06-30', houseNos: ['NF-2025-00004','NF-2025-00005','NF-2025-00006','NF-2025-00007','NF-2025-00008'], recordIds: [] },
+    { id: 3, no: 'FX-RW-2025-003', name: "四团镇危旧房屋安全隐患排查", type: 'routine', typeLabel: '日常巡查', urgency: "low", urgencyLabel: '低', houseCount: 4, town: "四团镇", village: "五四社区", houseType: "纯自住类", structure: "土木结构", person: "王志强", createBy: '系统管理员', inspected: 4, total: 4, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 3, hiddenFixed: 0, overdueStatus: 'on-time', startDate: '2025-05-20', endDate: '2025-06-10', finishTime: '2025-06-08 10:00', houseNos: ['NF-2025-00009','NF-2025-00010','NF-2025-00011','NF-2025-00012'], recordIds: [] },
+    { id: 4, no: 'FX-RW-2025-004', name: "柘林镇城镇自建房汛期检查", type: 'routine', typeLabel: '日常巡查', urgency: "high", urgencyLabel: '高', houseCount: 6, town: "柘林镇", village: "新寺社区", houseType: "经营类", structure: "砖混结构", person: "陈美华", createBy: '系统管理员', inspected: 6, total: 6, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 2, hiddenFixed: 2, overdueStatus: 'completed-late', startDate: '2025-05-15', endDate: '2025-06-05', finishTime: '2025-06-07 16:30', houseNos: ['NF-2025-00013','NF-2025-00014','NF-2025-00015','NF-2025-00016','NF-2025-00017','NF-2025-00018'], recordIds: [] },
+    { id: 5, no: 'FX-RW-2025-005', name: "庄行镇城镇房屋翻建工地巡查", type: 'routine', typeLabel: '日常巡查', urgency: "low", urgencyLabel: '低', houseCount: 3, town: "庄行镇", village: "潘垫社区", houseType: "闲置类", structure: "框架结构", person: "刘大海", createBy: '系统管理员', inspected: 0, total: 3, status: 'issued', statusLabel: '待接收', statusClass: 'issued', hiddenCount: 0, startDate: '2025-06-10', endDate: '2025-06-25', houseNos: ['NF-2025-00019','NF-2025-00020','NF-2025-00021'], recordIds: [] },
+    { id: 6, no: 'FX-RW-2025-006', name: "金汇镇城镇自建房安全复查", type: 'routine', typeLabel: '日常巡查', urgency: "high", urgencyLabel: '高', houseCount: 8, town: "金汇镇", village: "明星社区", houseType: "纯自住类", structure: "砖混结构", person: "孙明华", createBy: '系统管理员', inspected: 0, total: 8, status: 'draft', statusLabel: '草稿', statusClass: 'draft', hiddenCount: 0, startDate: '2025-06-08', endDate: '2025-06-30', houseNos: ['NF-2025-00022','NF-2025-00023','NF-2025-00024','NF-2025-00025','NF-2025-00026','NF-2025-00027','NF-2025-00028','NF-2025-00029'], recordIds: [] },
+    { id: 7, no: 'FX-RW-2025-007', name: "青村镇经营性自建房联合检查", type: 'routine', typeLabel: '日常巡查', urgency: "low", urgencyLabel: '低', houseCount: 4, town: "青村镇", village: "李窑社区", houseType: "经营类", structure: "砖木结构", person: "赵敏", createBy: '李秀英', inspected: 0, total: 4, status: 'rejected', statusLabel: '任务回退', statusClass: 'rejected', hiddenCount: 0, startDate: '2025-06-12', endDate: '2025-06-28', houseNos: ['NF-2025-00030','NF-2025-00031','NF-2025-00032','NF-2025-00033'], recordIds: [] },
+    { id: 8, no: 'FX-RW-2025-008', name: "海湾镇城镇房屋辅助用房专项检查", type: 'routine', typeLabel: '日常巡查', urgency: "low", urgencyLabel: '低', houseCount: 2, town: "海湾镇", village: "星火社区", houseType: "闲置类", structure: "框架结构", person: "周强", createBy: '系统管理员', inspected: 1, total: 2, status: 'terminated', statusLabel: '已终止', statusClass: 'terminated', hiddenCount: 0, startDate: '2025-06-01', endDate: '2025-06-15', houseNos: ['NF-2025-00034','NF-2025-00035'], recordIds: [] },
+
+    // ========== 专项巡查 ==========
+    { id: 11, no: 'FX-RW-2025-011', name: "南桥镇城镇危房销号核查", type: 'special', typeLabel: '专项巡查', urgency: "low", urgencyLabel: '低', houseCount: 5, town: "南桥镇", village: "杨王社区", houseType: "纯自住类", structure: "砖混结构", person: "吴芳", createBy: '系统管理员', inspected: 2, total: 5, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 1, hiddenFixed: 0, startDate: '2025-06-01', endDate: '2025-06-10' },
+    { id: 12, no: 'FX-RW-2025-012', name: "奉城镇城镇自建房安全回头看", type: 'special', typeLabel: '专项巡查', urgency: "high", urgencyLabel: '高', houseCount: 3, town: "奉城镇", village: "久茂社区", houseType: "纯自住类", structure: "砖木结构", person: "郑辉", createBy: '系统管理员', inspected: 1, total: 3, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 0, startDate: '2025-06-15', endDate: '2025-06-30' },
+    { id: 13, no: 'FX-RW-2025-013', name: "四团镇D级危房紧急排查", type: 'special', typeLabel: '专项巡查', urgency: "low", urgencyLabel: '低', houseCount: 8, town: "四团镇", village: "三坎社区", houseType: "纯自住类", structure: "土木结构", person: "张建国", createBy: '系统管理员', inspected: 8, total: 8, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 5, hiddenFixed: 2, overdueStatus: 'on-time', startDate: '2025-05-20', endDate: '2025-06-10', finishTime: '2025-06-08 14:00' },
+    { id: 14, no: 'FX-RW-2025-014', name: "柘林镇自建房安全隐患整治复查", type: 'special', typeLabel: '专项巡查', urgency: "high", urgencyLabel: '高', houseCount: 6, town: "柘林镇", village: "营房社区", houseType: "经营类", structure: "砖混结构", person: "李秀英", createBy: '系统管理员', inspected: 6, total: 6, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 1, hiddenFixed: 1, overdueStatus: 'completed-late', startDate: '2025-05-15', endDate: '2025-06-05', finishTime: '2025-06-07 10:30' },
+    { id: 15, no: 'FX-RW-2025-015', name: "庄行镇城镇自建房网格化巡查", type: 'special', typeLabel: '专项巡查', urgency: "low", urgencyLabel: '低', houseCount: 6, town: "庄行镇", village: "张翁庙社区", houseType: "纯自住类", structure: "框架结构", person: "王志强", createBy: '系统管理员', inspected: 0, total: 6, status: 'issued', statusLabel: '待接收', statusClass: 'issued', hiddenCount: 0, startDate: '2025-06-10', endDate: '2025-06-25' },
+    { id: 16, no: 'FX-RW-2025-016', name: "金汇镇老旧自建房安全体检", type: 'special', typeLabel: '专项巡查', urgency: "high", urgencyLabel: '高', houseCount: 2, town: "金汇镇", village: "洪庙社区", houseType: "纯自住类", structure: "砖木结构", person: "陈美华", createBy: '系统管理员', inspected: 0, total: 2, status: 'draft', statusLabel: '草稿', statusClass: 'draft', hiddenCount: 0, startDate: '2025-06-12', endDate: '2025-06-28' },
+    { id: 17, no: 'FX-RW-2025-017', name: "青村镇城镇房屋风险点常态化巡查", type: 'special', typeLabel: '专项巡查', urgency: "low", urgencyLabel: '低', houseCount: 4, town: "青村镇", village: "五四社区", houseType: "闲置类", structure: "土木结构", person: "刘大海", createBy: '李秀英', inspected: 0, total: 4, status: 'rejected', statusLabel: '任务回退', statusClass: 'rejected', hiddenCount: 0, startDate: '2025-06-15', endDate: '2025-06-30' },
+    { id: 18, no: 'FX-RW-2025-018', name: "海湾镇临河自建房防汛专项巡查", type: 'special', typeLabel: '专项巡查', urgency: "low", urgencyLabel: '低', houseCount: 4, town: "海湾镇", village: "新寺社区", houseType: "纯自住类", structure: "框架结构", person: "郑辉", createBy: '系统管理员', inspected: 2, total: 4, status: 'terminated', statusLabel: '已终止', statusClass: 'terminated', hiddenCount: 0, startDate: '2025-06-01', endDate: '2025-06-20' },
+
+    // ========== 临时巡查 ==========
+    { id: 21, no: 'FX-RW-2025-021', name: "南桥镇经营性自建房日常巡查", type: 'temporary', typeLabel: '临时巡查', urgency: "low", urgencyLabel: '低', houseCount: 4, town: "南桥镇", village: "潘垫社区", houseType: "经营类", structure: "砖混结构", person: "孙明华", createBy: '系统管理员', inspected: 1, total: 4, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 1, hiddenFixed: 0, startDate: '2025-06-01', endDate: '2025-06-08' },
+    { id: 22, no: 'FX-RW-2025-022', name: "奉城镇C级危房专项排查", type: 'temporary', typeLabel: '临时巡查', urgency: "high", urgencyLabel: '高', houseCount: 3, town: "奉城镇", village: "明星社区", houseType: "纯自住类", structure: "砖木结构", person: "赵敏", createBy: '系统管理员', inspected: 1, total: 3, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 0, startDate: '2025-06-15', endDate: '2025-06-25' },
+    { id: 23, no: 'FX-RW-2025-023', name: "四团镇危旧房屋安全隐患排查", type: 'temporary', typeLabel: '临时巡查', urgency: "low", urgencyLabel: '低', houseCount: 2, town: "四团镇", village: "李窑社区", houseType: "纯自住类", structure: "土木结构", person: "张建国", createBy: '系统管理员', inspected: 2, total: 2, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 2, hiddenFixed: 1, overdueStatus: 'on-time', startDate: '2025-06-10', endDate: '2025-06-15', finishTime: '2025-06-14 09:00' },
+    { id: 24, no: 'FX-RW-2025-024', name: "柘林镇城镇自建房汛期检查", type: 'temporary', typeLabel: '临时巡查', urgency: "high", urgencyLabel: '高', houseCount: 5, town: "柘林镇", village: "星火社区", houseType: "经营类", structure: "砖混结构", person: "李秀英", createBy: '系统管理员', inspected: 5, total: 5, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 1, hiddenFixed: 1, overdueStatus: 'completed-late', startDate: '2025-06-01', endDate: '2025-06-05', finishTime: '2025-06-07 11:00' },
+    { id: 25, no: 'FX-RW-2025-025', name: "庄行镇城镇房屋翻建工地巡查", type: 'temporary', typeLabel: '临时巡查', urgency: "low", urgencyLabel: '低', houseCount: 3, town: "庄行镇", village: "杨王社区", houseType: "闲置类", structure: "框架结构", person: "周强", createBy: '系统管理员', inspected: 0, total: 3, status: 'issued', statusLabel: '待接收', statusClass: 'issued', hiddenCount: 0, startDate: '2025-06-12', endDate: '2025-06-20' },
+    { id: 26, no: 'FX-RW-2025-026', name: "金汇镇城镇自建房安全复查", type: 'temporary', typeLabel: '临时巡查', urgency: "high", urgencyLabel: '高', houseCount: 2, town: "金汇镇", village: "久茂社区", houseType: "纯自住类", structure: "砖木结构", person: "吴芳", createBy: '系统管理员', inspected: 0, total: 2, status: 'draft', statusLabel: '草稿', statusClass: 'draft', hiddenCount: 0, startDate: '2025-06-15', endDate: '2025-06-25' },
+    { id: 27, no: 'FX-RW-2025-027', name: "青村镇经营性自建房联合检查", type: 'temporary', typeLabel: '临时巡查', urgency: "low", urgencyLabel: '低', houseCount: 3, town: "青村镇", village: "三坎社区", houseType: "经营类", structure: "土木结构", person: "郑辉", createBy: '李秀英', inspected: 0, total: 3, status: 'rejected', statusLabel: '任务回退', statusClass: 'rejected', hiddenCount: 0, startDate: '2025-06-10', endDate: '2025-06-28' },
+    { id: 28, no: 'FX-RW-2025-028', name: "海湾镇城镇房屋辅助用房专项检查", type: 'temporary', typeLabel: '临时巡查', urgency: "low", urgencyLabel: '低', houseCount: 4, town: "海湾镇", village: "营房社区", houseType: "闲置类", structure: "框架结构", person: "王志强", createBy: '系统管理员', inspected: 1, total: 4, status: 'terminated', statusLabel: '已终止', statusClass: 'terminated', hiddenCount: 0, startDate: '2025-06-05', endDate: '2025-06-15' },
+    { id: 29, no: 'FX-RW-2025-029', name: "西渡街道临河城镇房屋防汛巡查", type: 'temporary', typeLabel: '临时巡查', urgency: "low", urgencyLabel: '低', houseCount: 3, town: "西渡街道", village: "灯塔社区", houseType: "纯自住类", structure: "砖混结构", person: "徐晓", createBy: '系统管理员', inspected: 1, total: 3, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 0, startDate: '2025-06-08', endDate: '2025-06-18' },
+    { id: 30, no: 'FX-RW-2025-030', name: "奉浦街道老旧小区加梯巡查", type: 'temporary', typeLabel: '临时巡查', urgency: "low", urgencyLabel: '低', houseCount: 5, town: "奉浦街道", village: "陈湾社区", houseType: "纯自住类", structure: "框架结构", person: "陈林", createBy: '系统管理员', inspected: 2, total: 5, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 1, hiddenFixed: 0, startDate: '2025-06-11', endDate: '2025-06-22' },
+
+    // ========== 隐患复查 ==========
+    { id: 31, no: 'FX-RW-2025-031', name: "南桥镇城镇危房销号核查", type: 'review', typeLabel: '隐患复查', urgency: "low", urgencyLabel: '低', houseCount: 2, town: "南桥镇", village: "张翁庙社区", houseType: "纯自住类", structure: "砖混结构", person: "张建国", createBy: '系统管理员', inspected: 1, total: 2, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 1, hiddenFixed: 0, startDate: '2025-06-01', endDate: '2025-06-08' },
+    { id: 32, no: 'FX-RW-2025-032', name: "奉城镇城镇自建房安全回头看", type: 'review', typeLabel: '隐患复查', urgency: "high", urgencyLabel: '高', houseCount: 3, town: "奉城镇", village: "洪庙社区", houseType: "纯自住类", structure: "砖木结构", person: "李秀英", createBy: '系统管理员', inspected: 1, total: 3, status: 'processing', statusLabel: '进行中', statusClass: 'processing', hiddenCount: 0, startDate: '2025-06-15', endDate: '2025-06-25' },
+    { id: 33, no: 'FX-RW-2025-033', name: "四团镇D级危房紧急排查", type: 'review', typeLabel: '隐患复查', urgency: "low", urgencyLabel: '低', houseCount: 4, town: "四团镇", village: "五四社区", houseType: "纯自住类", structure: "土木结构", person: "王志强", createBy: '系统管理员', inspected: 4, total: 4, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 0, hiddenFixed: 0, overdueStatus: 'on-time', startDate: '2025-05-20', endDate: '2025-06-10', finishTime: '2025-06-09 10:00' },
+    { id: 34, no: 'FX-RW-2025-034', name: "柘林镇自建房安全隐患整治复查", type: 'review', typeLabel: '隐患复查', urgency: "high", urgencyLabel: '高', houseCount: 3, town: "柘林镇", village: "新寺社区", houseType: "经营类", structure: "砖混结构", person: "陈美华", createBy: '系统管理员', inspected: 3, total: 3, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 1, hiddenFixed: 1, overdueStatus: 'completed-late', startDate: '2025-05-15', endDate: '2025-06-05', finishTime: '2025-06-08 16:00' },
+    { id: 35, no: 'FX-RW-2025-035', name: "庄行镇城镇自建房网格化巡查", type: 'review', typeLabel: '隐患复查', urgency: "low", urgencyLabel: '低', houseCount: 2, town: "庄行镇", village: "潘垫社区", houseType: "纯自住类", structure: "框架结构", person: "刘大海", createBy: '系统管理员', inspected: 0, total: 2, status: 'issued', statusLabel: '待接收', statusClass: 'issued', hiddenCount: 0, startDate: '2025-06-10', endDate: '2025-06-20' },
+    { id: 36, no: 'FX-RW-2025-036', name: "金汇镇老旧自建房安全体检", type: 'review', typeLabel: '隐患复查', urgency: "high", urgencyLabel: '高', houseCount: 3, town: "金汇镇", village: "明星社区", houseType: "纯自住类", structure: "砖木结构", person: "孙明华", createBy: '系统管理员', inspected: 0, total: 3, status: 'draft', statusLabel: '草稿', statusClass: 'draft', hiddenCount: 0, startDate: '2025-06-12', endDate: '2025-06-25' },
+    { id: 37, no: 'FX-RW-2025-037', name: "青村镇城镇房屋风险点常态化巡查", type: 'review', typeLabel: '隐患复查', urgency: "low", urgencyLabel: '低', houseCount: 2, town: "青村镇", village: "李窑社区", houseType: "闲置类", structure: "土木结构", person: "赵敏", createBy: '李秀英', inspected: 0, total: 2, status: 'rejected', statusLabel: '任务回退', statusClass: 'rejected', hiddenCount: 0, startDate: '2025-06-15', endDate: '2025-06-28' },
+    { id: 38, no: 'FX-RW-2025-038', name: "海湾镇临河自建房防汛专项巡查", type: 'review', typeLabel: '隐患复查', urgency: "low", urgencyLabel: '低', houseCount: 3, town: "海湾镇", village: "星火社区", houseType: "纯自住类", structure: "框架结构", person: "郑辉", createBy: '系统管理员', inspected: 1, total: 3, status: 'terminated', statusLabel: '已终止', statusClass: 'terminated', hiddenCount: 0, startDate: '2025-06-05', endDate: '2025-06-15' },
+    { id: 39, no: 'FX-RW-2025-039', name: "西渡街道城镇房屋结构安全复查", type: 'review', typeLabel: '隐患复查', urgency: "low", urgencyLabel: '低', houseCount: 2, town: "西渡街道", village: "发展社区", houseType: "纯自住类", structure: "砖木结构", person: "林静", createBy: '系统管理员', inspected: 1, total: 2, status: 'completed', statusLabel: '已完成', statusClass: 'completed', hiddenCount: 1, hiddenFixed: 1, overdueStatus: 'on-time', startDate: '2025-06-10', endDate: '2025-06-15', finishTime: '2025-06-14 16:00' },
+    { id: 40, no: 'FX-RW-2025-040', name: "金海街道经营性自建房核查", type: 'review', typeLabel: '隐患复查', urgency: "high", urgencyLabel: '高', houseCount: 4, town: "金海街道", village: "金水苑社区", houseType: "经营类", structure: "砖混结构", person: "钱程", createBy: '系统管理员', inspected: 0, total: 4, status: 'draft', statusLabel: '草稿', statusClass: 'draft', hiddenCount: 0, startDate: '2025-06-15', endDate: '2025-06-25' },
+];
+
+// 首次无缓存时把演示数据写入缓存
+}
+
+
+
+function renderHouseCountLink(t) {
+    const count = t.houseCount || 0;
+    const hasHouses = Array.isArray(t.houseNos) && t.houseNos.length > 0;
+    if (!hasHouses) {
+        return `<span style="color:var(--primary);font-weight:600;">${count}</span> 间`;
+    }
+    if (t.houseNos.length === 1) {
+        return `<a class="house-count-link" href="urban-house-detail.html?no=${encodeURIComponent(t.houseNos[0])}" title="查看房屋档案"><span style="color:var(--primary);font-weight:600;">${count}</span> 间</a>`;
+    }
+    const list = t.houseNos.map(no => `<a href="urban-house-detail.html?no=${encodeURIComponent(no)}">${no}</a>`).join('、');
+    return `<span class="house-count-link" title="${t.houseNos.join('、')}" onclick="showTaskHouseNos(${t.id})" style="cursor:pointer;color:var(--primary);font-weight:600;">${count} 间</span>`;
+}
+
+function showTaskHouseNos(id) {
+    const task = tasks.find(t => t.id === id);
+    if (!task || !Array.isArray(task.houseNos) || task.houseNos.length === 0) return;
+    const html = task.houseNos.map(no => `<div style="margin:6px 0;"><a href="urban-house-detail.html?no=${encodeURIComponent(no)}" style="color:var(--primary);">${no}</a></div>`).join('');
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-header"><div class="modal-title">关联房屋档案</div><button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button></div>
+            <div class="modal-body" style="max-height:400px;overflow:auto;">${html}</div>
+        </div>
+    `;
+    modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+}
+
+function getProgressColor(inspected, total) {
+    const pct = inspected / total;
+    if (pct >= 1) return 'green';
+    return 'blue';
+}
+
+function getUrgencyColor(urgency) {
+    if (urgency === 'high' || urgency === '高') return 'var(--danger)';
+    if (urgency === 'medium' || urgency === '中') return 'var(--warning)';
+    if (urgency === 'low' || urgency === '低') return 'var(--success)';
+    return 'var(--text-secondary)';
+}
+
+function getUrgencyClass(urgency) {
+    if (urgency === 'high' || urgency === '高') return 'urgency-high';
+    if (urgency === 'medium' || urgency === '中') return 'urgency-medium';
+    if (urgency === 'low' || urgency === '低') return 'urgency-low';
+    return '';
+}
+
+function getHiddenRectifyCell(t) {
+    const total = t.hiddenCount || 0;
+    const fixed = t.hiddenFixed || 0;
+    if (['issued','draft','rejected'].includes(t.status) || t.inspected === 0) {
+        return '<span class="rectify-cell pending">--</span>';
+    }
+    if (total === 0) return '<span class="rectify-cell none">0处 · 无隐患</span>';
+    if (fixed === total) return `<span class="rectify-cell fully">${total}处 · 全部整改</span>`;
+    if (fixed === 0) return `<span class="rectify-cell unfixed">${total}处 · 未整改</span>`;
+    return `<span class="rectify-cell partial">${total}处 · 部分整改(${fixed}/${total})</span>`;
+}
+
+function getOverdueMark(t) {
+    if (t.status !== 'completed' && t.status !== 'processing') {
+        return '<span class="overdue-mark na">-</span>';
+    }
+    const today = getLocalDateString();
+    const endDate = t.endDate;
+    if (t.status === 'completed') {
+        const finishTime = t.finishTime ? t.finishTime.split(' ')[0] : null;
+        if (finishTime && finishTime > endDate) {
+            return '<span class="overdue-mark completed-late"><i class="fas fa-exclamation-circle" style="font-size:10px;"></i>逾期完成</span>';
+        }
+        return '<span class="overdue-mark on-time"><i class="fas fa-check-circle" style="font-size:10px;"></i>按时完成</span>';
+    }
+    if (t.status === 'processing' && today > endDate) {
+        return '<span class="overdue-mark overdue"><i class="fas fa-exclamation-triangle" style="font-size:10px;"></i>已逾期</span>';
+    }
+    return '<span class="overdue-mark na">-</span>';
+}
+
+let currentTab = 'all';
+const PAGE_SIZE = 10;
+const pageState = { all: 1, routine: 1, special: 1, temporary: 1, review: 1, review2026: 1 };
+
+function goToPage(tab, page) {
+    pageState[tab] = page;
+    if (tab === currentTab) {
+        applyFilter(true);
+    } else {
+        renderTasksByTab(tab, getTasksByTab(tab));
+    }
+}
+
+function renderPagination(tab, total) {
+    const container = document.getElementById(`pagination-${tab}`);
+    if (!container) return;
+    if (total === 0) { container.innerHTML = ''; return; }
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    const current = Math.min(pageState[tab] || 1, totalPages);
+    const start = (current - 1) * PAGE_SIZE + 1;
+    const end = Math.min(current * PAGE_SIZE, total);
+
+    // 生成页码（最多显示7个页码，超出用省略号）
+    const pages = [];
+    if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+        pages.push(1);
+        if (current > 3) pages.push('...');
+        for (let i = Math.max(2, current - 1); i <= Math.min(totalPages - 1, current + 1); i++) pages.push(i);
+        if (current < totalPages - 2) pages.push('...');
+        pages.push(totalPages);
+    }
+
+    container.innerHTML = `
+        <div class="page-info">显示第 <strong>${start}</strong> 到 <strong>${end}</strong> 条，共 <strong>${total}</strong> 条</div>
+        <div class="page-btns">
+            <button class="page-btn" ${current === 1 ? 'disabled' : ''} onclick="goToPage('${tab}', ${current - 1})"><i class="fas fa-chevron-left"></i></button>
+            ${pages.map(p => p === '...'
+                ? '<button class="page-btn" disabled>…</button>'
+                : `<button class="page-btn ${p === current ? 'active' : ''}" onclick="goToPage('${tab}', ${p})">${p}</button>`
+            ).join('')}
+            <button class="page-btn" ${current === totalPages ? 'disabled' : ''} onclick="goToPage('${tab}', ${current + 1})"><i class="fas fa-chevron-right"></i></button>
+        </div>`;
+}
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-content-wrapper').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.tab-nav-item[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    applyFilter();
+}
+
+function getTasksByTab(tab) {
+    if (tab === 'all') return tasks;
+    if (tab === 'review2026') return tasks.filter(t => t.isReview2026 === true);
+    const typeMap = { 'routine': 'routine', 'special': 'special', 'temporary': 'temporary', 'review': 'review' };
+    return tasks.filter(t => t.type === typeMap[tab]);
+}
+
+function renderTasksByTab(tab, data) {
+    const tbody = document.getElementById(`taskTableBody-${tab}`);
+    const emptyState = document.getElementById(`emptyState-${tab}`);
+    const table = document.getElementById(`taskTable-${tab}`);
+
+    if (data.length === 0) {
+        table.style.display = 'none';
+        emptyState.style.display = 'flex';
+        renderPagination(tab, 0);
+        return;
+    }
+
+    table.style.display = 'table';
+    emptyState.style.display = 'none';
+
+    const statusOrder = { 'processing': 0, 'completed': 1, 'pending-exec': 2, 'pending-assign': 3, 'issued': 4, 'draft': 5, 'rejected': 6 };
+    const sortedData = [...data].sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+
+    // 处理 URL taskId 高亮：把目标任务置顶到当前 tab
+    const urlTaskId = getUrlParam('taskId');
+    if (urlTaskId) {
+        const target = sortedData.find(t => String(t.id) === urlTaskId);
+        if (target) {
+            const idx = sortedData.indexOf(target);
+            if (idx > 0) {
+                sortedData.splice(idx, 1);
+                sortedData.unshift(target);
+            }
+            pageState[tab] = 1;
+        }
+    }
+
+    // 分页切片
+    const totalPages = Math.ceil(sortedData.length / PAGE_SIZE);
+    pageState[tab] = Math.min(Math.max(1, pageState[tab] || 1), totalPages);
+    const pageStart = (pageState[tab] - 1) * PAGE_SIZE;
+    const pageData = sortedData.slice(pageStart, pageStart + PAGE_SIZE);
+
+    tbody.innerHTML = pageData.map(t => {
+        // 回头看 tab 专属行渲染
+        if (tab === 'review2026') {
+            const urgencyColor = getUrgencyColor(t.urgency || t.urgencyLabel);
+            const urgencyClass = getUrgencyClass(t.urgency || t.urgencyLabel);
+            const urgencyLabel = t.urgencyLabel || '中';
+            const hasHidden = (t.hiddenCount || 0) > 0;
+            const pcEdited = (t.records || []).some(r => r && r.editedByPC);
+            return `
+        <tr data-task-id="${t.id}">
+            <td><strong>${t.name}</strong></td>
+            <td><span class="${urgencyClass}" style="font-size:12px;font-weight:600;color:${urgencyColor};">${urgencyLabel}</span></td>
+            <td><a class="house-count-link" href="javascript:void(0);" onclick='viewTask(${JSON.stringify(t.id)});event.stopPropagation();' title="查看该社区排查记录"><span style="color:var(--primary);font-weight:600;">${t.houseCount || t.total || 0}</span> 户</a></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">${t.town || '-'}</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">${t.village || '-'}</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>${t.person || '-'}</td>
+            <td>${t.finishTime || t.endDate || '-'}</td>
+            <td>${hasHidden ? `<span class="rectify-cell unfixed">${t.hiddenCount}处 · 有隐患</span>` : '<span class="rectify-cell none">无隐患</span>'}</td>
+            <td>${pcEdited ? '<span class="edited-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:8px;background:#f9f0ff;color:#9254de;font-weight:600;"><i class="fas fa-pen"></i> 已补充</span>' : '<span style="color:var(--text-secondary);font-size:12px;">-</span>'}</td>
+            <td>
+                <div class="actions">
+                    <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>
+                </div>
+            </td>
+        </tr>`;
+        }
+
+        const pct = t.total ? Math.round((t.inspected / t.total) * 100) : 0;
+        const color = getProgressColor(t.inspected, t.total);
+        const urgencyColor = getUrgencyColor(t.urgency || t.urgencyLabel);
+        const urgencyClass = getUrgencyClass(t.urgency || t.urgencyLabel);
+        const urgencyLabel = t.urgencyLabel || (t.urgency === 'high' ? '高' : t.urgency === 'medium' ? '中' : t.urgency === 'low' ? '低' : t.urgency || '-');
+        const highlightClass = urlTaskId && String(t.id) === urlTaskId ? 'highlight-task-row' : '';
+        const typeTagColorMap = { 'routine': '#1a73e8', 'special': '#9334e6', 'temporary': '#e8710a', 'review': '#188038' };
+        const typeTagBgMap = { 'routine': '#e8f0fe', 'special': '#f3e8fd', 'temporary': '#fef3e8', 'review': '#e6f4ea' };
+        const typeTagColor = typeTagColorMap[t.type] || '#5f6368';
+        const typeTagBg = typeTagBgMap[t.type] || '#f1f3f4';
+        return `
+        <tr class="${highlightClass}" data-task-id="${t.id}">
+            <td><strong>${t.name}</strong></td>
+            ${tab === 'all' ? `<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;color:${typeTagColor};background:${typeTagBg};white-space:nowrap;">${t.typeLabel || '-'}</span></td>` : ''}
+            <td><span class="${urgencyClass}" style="font-size:12px;font-weight:600;">${urgencyLabel}</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">${t.town || '-'}</span></td>
+            <td><span style="font-size:12px;color:var(--text-secondary);">${t.village || '-'}</span></td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>${t.person || '-'}</td>
+            <td>${t.startDate || '-'}</td>
+            <td>${t.endDate || '-'}</td>
+            <td>
+                ${t.status !== 'draft' && t.status !== 'issued' && t.status !== 'rejected' ? `
+                <div class="progress-cell">
+                    <div class="progress-bar">
+                        <div class="progress-fill ${color}" style="width:${pct}%"></div>
+                    </div>
+                    <span class="progress-text">${t.inspected}/${t.total} (${pct}%)</span>
+                </div>
+                ` : '-'}
+            </td>
+            <td><span class="status-tag ${t.statusClass}">${t.statusLabel}</span></td>
+            <td>${getOverdueMark(t)}</td>
+            <td>${t.finishTime || '-'}</td>
+            <td>${getHiddenRectifyCell(t)}</td>
+            <td><i class="fas fa-user" style="color:var(--text-secondary);margin-right:4px;font-size:11px;"></i>${t.createBy || '-'}</td>
+            <td>
+                <div class="actions">
+                    ${getStatusActions(t)}
+                </div>
+            </td>
+        </tr>
+        `;
+    }).join('');
+
+    // 滚动到高亮行
+    if (urlTaskId) {
+        const highlighted = tbody.querySelector('.highlight-task-row');
+        if (highlighted) {
+            highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    // 日常巡查任务列表：筛选后记录不足5条时，补齐5条记录的高度占位
+    if ((tab === 'routine' || tab === 'all') && pageData.length < 5 && pageData.length > 0) {
+        const colspan = tab === 'all' ? 15 : 14;
+        tbody.innerHTML += Array(Math.max(0, 5 - pageData.length)).fill(0).map(() => `<tr><td colspan="${colspan}">&nbsp;</td></tr>`).join('');
+    }
+
+    renderPagination(tab, sortedData.length);
+}
+
+function renderAllTabs() {
+    ['all', 'routine', 'special', 'temporary', 'review', 'review2026'].forEach(tab => {
+        const data = getTasksByTab(tab);
+        renderTasksByTab(tab, data);
+    });
+    updateKPI(tasks);
+}
+
+// ===== 2026回头看 · 服务端记录聚合成隐患复查任务 =====
+// 策略：按 "镇|村" 聚合 submitted 记录，生成 type='review' 任务，追加到 tasks 尾部，不影响原有任务
+const REVIEW2026_TASK_PREFIX = 'FX-RW-2026-HLT-';   // 回头-Task
+const REVIEW2026_MIGRATE_KEY = 'review2026_migrated'; // localStorage 一次性迁移标记
+
+function review2026GenTaskNo(town, village) {
+    // 生成稳定任务编号：FX-RW-2026-HLT-{镇社区hash}
+    const s = town + '|' + village;
+    let h = 0;
+    for (let i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+    return REVIEW2026_TASK_PREFIX + Math.abs(h % 10000).toString().padStart(4, '0');
+}
+
+function review2026Aggregate(records) {
+    // records: submitted 的 review-2026 记录数组
+    // 返回 [{town, village, houseNos[], hiddenCount, person, finishTime, records[]}]
+    const map = {};
+    records.filter(r => r && r.status === 'submitted').forEach(r => {
+        const town = r.town || r.addressTown || '未知镇';
+        const village = r.village || r.communityName || r.addressVillage || '未知社区';
+        const key = town + '|' + village;
+        if (!map[key]) {
+            map[key] = { town, village, houseNos: [], hiddenCount: 0, persons: {}, finishTime: '', records: [] };
+        }
+        const g = map[key];
+        if (r.houseNo && g.houseNos.indexOf(r.houseNo) < 0) g.houseNos.push(r.houseNo);
+        // 结论判定隐患
+        const concl = (r.answers && (r.answers.conclusion || r.answers.result)) || '';
+        if (/隐患|危险|C级|D级|需要整改|存在/.test(concl)) g.hiddenCount++;
+        if (r.inspectorSignature) g.persons[r.inspectorSignature] = 1;
+        if (r.submitTime && r.submitTime > g.finishTime) g.finishTime = r.submitTime;
+        g.records.push(r);
+    });
+    return Object.values(map);
+}
+
+function review2026BuildTask(group) {
+    const person = Object.keys(group.persons)[0] || '排查员';
+    const finishDate = group.finishTime ? group.finishTime.slice(0, 10) : getLocalDateString();
+    const total = group.houseNos.length;
+    return {
+        id: 'R2026-' + group.town + '-' + group.village,
+        no: review2026GenTaskNo(group.town, group.village),
+        name: group.town + group.village + ' 2026年回头看',
+        type: 'review',
+        typeLabel: '隐患复查',
+        urgency: group.hiddenCount > 0 ? 'high' : 'medium',
+        urgencyLabel: group.hiddenCount > 0 ? '高' : '中',
+        houseCount: total,
+        town: group.town,
+        village: group.village,
+        houseType: '',
+        structure: '',
+        person: person,
+        createBy: '2026回头看',
+        inspected: total,
+        total: total,
+        status: 'completed',
+        statusLabel: '已完成',
+        statusClass: 'completed',
+        hiddenCount: group.hiddenCount,
+        hiddenFixed: 0,
+        startDate: finishDate,
+        endDate: finishDate,
+        finishTime: group.finishTime ? group.finishTime.replace('T', ' ').slice(0, 16) : finishDate,
+        houseNos: group.houseNos,
+        recordIds: [],
+        records: group.records,
+        isReview2026: true
+    };
+}
+
+function review2026MergeTasks(groups) {
+    // 把聚合后的 group 转成 task 并 merge 进 tasks，按 houseNos 完全一致的已有 review 任务则更新进度
+    let added = 0;
+    groups.forEach(g => {
+        if (!g.houseNos.length) return;
+        const existing = tasks.find(t => t.type === 'review' && t.town === g.town && t.village === g.village && t.isReview2026);
+        if (existing) {
+            // 更新进度
+            const newNos = g.houseNos.filter(n => existing.houseNos.indexOf(n) < 0);
+            if (newNos.length) {
+                existing.houseNos = existing.houseNos.concat(newNos);
+                existing.houseCount = existing.houseNos.length;
+                existing.total = existing.houseNos.length;
+                existing.inspected = existing.houseNos.length;
+            }
+            existing.hiddenCount = g.hiddenCount;
+            existing.records = g.records;
+            existing.finishTime = g.finishTime ? g.finishTime.replace('T', ' ').slice(0, 16) : existing.finishTime;
+        } else {
+            tasks.push(review2026BuildTask(g));
+            added++;
+        }
+    });
+    if (added > 0) saveTasksToStorage();
+    return added;
+}
+
+function review2026LoadAndMerge() {
+    // 1. 一次性迁移 localStorage 存量
+    if (!localStorage.getItem(REVIEW2026_MIGRATE_KEY)) {
+        try {
+            const local = JSON.parse(localStorage.getItem('review-2026-records') || '[]');
+            if (Array.isArray(local) && local.length) {
+                fetch('/api/review-2026-records', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(local)
+                }).then(() => {
+                    localStorage.setItem(REVIEW2026_MIGRATE_KEY, '1');
+                }).catch(() => {});
+            } else {
+                localStorage.setItem(REVIEW2026_MIGRATE_KEY, '1');
+            }
+        } catch (e) { localStorage.setItem(REVIEW2026_MIGRATE_KEY, '1'); }
+    }
+    // 2. 拉取服务端记录并聚合
+    fetch('/api/review-2026-records')
+        .then(r => r.ok ? r.json() : [])
+        .then(records => {
+            if (!Array.isArray(records) || !records.length) return;
+            const groups = review2026Aggregate(records);
+            const added = review2026MergeTasks(groups);
+            if (added > 0) renderAllTabs();
+        })
+        .catch(() => { /* 服务端不可用时静默 */ });
+}
+
+// 页面加载完成后执行
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', review2026LoadAndMerge);
+} else {
+    review2026LoadAndMerge();
+}
+
+function updateKPI(data) {
+    const total = data.length;
+    const processing = data.filter(t => t.status === 'processing').length;
+    const completed = data.filter(t => t.status === 'completed').length;
+    const pendingReceive = data.filter(t => t.status === 'issued').length;
+    // 待销号任务：存在未销号隐患的任务数（隐患数 > 已整改数）
+    const hidden = data.filter(t => (t.hiddenCount || 0) > (t.hiddenFixed || 0)).length;
+    const highUrgency = data.filter(t => t.urgency === 'high' || t.urgencyLabel === '高').length;
+    const today = getLocalDateString();
+    const overdue = data.filter(t => t.status === 'processing' && today > t.endDate).length;
+    const completionRate = total ? Math.round((completed / total) * 100) : 0;
+
+    document.getElementById('kpiPendingReceive').textContent = pendingReceive;
+    document.getElementById('kpiProcessing').textContent = processing;
+    document.getElementById('kpiOverdue').textContent = overdue;
+    document.getElementById('kpiPendingClose').textContent = hidden;
+    document.getElementById('kpiMajorHidden').textContent = highUrgency;
+    document.getElementById('kpiCompletionRate').textContent = completionRate;
+}
+
+function applyFilter(keepPage) {
+    if (!keepPage) pageState[currentTab] = 1;
+    const status = document.getElementById('filterStatus').value;
+    const urgency = document.getElementById('filterUrgency').value;
+    const town = document.getElementById('filterUnit').value;
+    const village = document.getElementById('filterVillage') ? document.getElementById('filterVillage').value : '';
+    const houseType = document.getElementById('filterHouseType') ? document.getElementById('filterHouseType').value : '';
+    const structure = document.getElementById('filterStructure') ? document.getElementById('filterStructure').value : '';
+    const name = document.getElementById('filterName').value.toLowerCase();
+    const person = document.getElementById('filterPerson').value.toLowerCase();
+    const startDateFrom = document.getElementById('filterStartDateFrom').value;
+    const startDateTo = document.getElementById('filterStartDateTo').value;
+
+    const baseData = getTasksByTab(currentTab);
+    const filtered = baseData.filter(t => {
+        const matchStatus = !status || t.status === status;
+        const matchUrgency = !urgency || (t.urgencyLabel === urgency || (urgency === '高' && t.urgency === 'high') || (urgency === '中' && t.urgency === 'medium') || (urgency === '低' && t.urgency === 'low'));
+        const matchTown = !town || t.town === town;
+        const matchVillage = !village || (t.village || '') === village;
+        const matchHouseType = !houseType || (t.houseType || '') === houseType;
+        const matchStructure = !structure || (t.structure || '') === structure;
+        const matchName = !name || t.name.toLowerCase().includes(name);
+        const matchPerson = !person || t.person.toLowerCase().includes(person);
+        const matchDateFrom = !startDateFrom || t.startDate >= startDateFrom;
+        const matchDateTo = !startDateTo || t.startDate <= startDateTo;
+        return matchStatus && matchUrgency && matchTown && matchVillage && matchHouseType && matchStructure && matchName && matchPerson && matchDateFrom && matchDateTo;
+    });
+
+    renderTasksByTab(currentTab, filtered);
+}
+
+function resetFilter() {
+    document.getElementById('filterStatus').value = '';
+    document.getElementById('filterUrgency').value = '';
+    document.getElementById('filterUnit').value = '';
+    updateVillageOptions('');
+    if (document.getElementById('filterVillage')) document.getElementById('filterVillage').value = '';
+    if (document.getElementById('filterVillageInput')) document.getElementById('filterVillageInput').value = '';
+    if (document.getElementById('filterHouseType')) document.getElementById('filterHouseType').value = '';
+    if (document.getElementById('filterStructure')) document.getElementById('filterStructure').value = '';
+    document.getElementById('filterName').value = '';
+    document.getElementById('filterPerson').value = '';
+    document.getElementById('filterStartDateFrom').value = '';
+    document.getElementById('filterStartDateTo').value = '';
+    renderAllTabs();
+}
+
+// ===== 奉贤区街镇与社区/居委联动 =====
+const FENGXIAN_TOWN_VILLAGE = {
+    '南桥镇': ['光明社区','杨王社区','沈陆社区','江海社区','张弄社区','吴塘社区','五星社区','八字社区','南桥源社区','贝港社区','中街社区','育秀社区','阳光社区','正阳社区','解放社区','古华社区','运河社区'],
+    '奉城镇': ['高桥社区','陈桥社区','路口社区','觉民社区','爱民社区','永益社区','共耕社区','胜利社区','城东社区','西门社区','北门社区','南门社区','洪庙社区','洪南社区','洪西社区','洪东社区','协新社区','朱新社区','塘外社区','卫季社区','灯民社区','幸福社区','蔡建社区','八字社区','城东居委','南街居委','西街居委','北街居委','洪庙居委','塘外居委'],
+    '庄行镇': ['吕桥社区','庄行社区','汇安社区','新叶社区','渔沥社区','长堤社区','潘垫社区','西校社区','新华社区','张塘社区','存古社区','杨溇社区','长浜社区','姚新社区','芦泾社区','东风社区','庄行居委'],
+    '金汇镇': ['金汇社区','东星社区','金星社区','新强社区','白沙社区','行前社区','江苑居委','泰日居委','齐贤居委'],
+    '青村镇': ['青村社区','钱桥社区','南星社区','北唐社区','石海社区','陶宅社区','和中社区','西吴社区','岳和社区','姚家社区','朱店社区','钟家社区','新张社区','元通社区','方夏社区','申隆一社区','申隆二社区','工农社区','解放社区','湾张社区','花角社区','吴房社区','桃园社区','沿钱社区','李窑社区','光明社区'],
+    '柘林镇': ['柘林居委','新寺居委','胡桥居委','营房社区','海湾社区','华亭社区','东海社区','冯桥社区','夹路社区','新塘社区','三桥社区','农家社区','南胜社区','兴园社区','临海社区','下坊社区','目华社区'],
+    '四团镇': ['四团居委','平安居委','邵厂居委','三坎社区','镇西社区','大桥社区','长堰社区','平南社区','平乐社区','渔洋社区','向阳社区','龙尖社区','前董社区','新建社区','民福社区','中桥社区','夏家社区','红庄社区','拾村社区','五四社区','小荡社区','三团港社区','横桥社区','杨家宅社区','平海社区','天鹏社区'],
+    '海湾镇': ['海兴社区','海棠社区','海农新村居委','星火居委','燎原居委','五四社区','新港社区','海棠社区','星火社区','燎原社区'],
+    '西渡街道': ['西渡居委','新南居委','文怡居委','水岸居委','浦江居委','北新居委','鸿宝居委','香榭居委','金港居委','灯塔社区','刘港社区','大同社区','五宅社区','益民社区','金港社区','南渡社区','发展社区','蒋桥社区','关港社区','北新社区'],
+    '奉浦街道': ['奉浦居委','奉浦第二居委','国顺路居委','秋月居委','肖塘居委','高远居委','君望居委','陈湾社区','公谊社区','韩村社区','九华社区','吴塘社区','八字桥社区'],
+    '金海街道': ['金水苑社区','金水新苑社区','恒盛社区','恒贤社区','龙潭社区','少湖社区','文杏社区','韩树社区','陈家社区','屠家社区','三长社区','丁家社区','齐贤社区','石家社区','欢河社区'],
+    '海湾旅游区': ['海棠社区','海尚社区','新港社区','海湾社区','五四社区'],
+    '头桥街道': ['头桥居委','幸福社区','红旗社区','冯家社区','东新市社区','南宋社区','蔡家桥社区','奉字社区','联工社区','陆家桥社区','二桥社区','蔡建社区','戴家社区','新北社区','四平社区','夏家社区','石角社区','陶家社区']
+};
+
+function updateVillageOptions(town) {
+    const villageSel = document.getElementById('filterVillage');
+    const villageInput = document.getElementById('filterVillageInput');
+    const villageList = document.getElementById('filterVillageList');
+    if (!villageSel || !villageInput || !villageList) return;
+
+    let options = [];
+    if (town && FENGXIAN_TOWN_VILLAGE[town]) {
+        options = FENGXIAN_TOWN_VILLAGE[town].slice();
+    } else {
+        options = [...new Set(Object.values(FENGXIAN_TOWN_VILLAGE).flat())].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    }
+
+    villageSel.dataset.options = JSON.stringify(options);
+    const currentValue = villageSel.value;
+    villageInput.value = currentValue ? currentValue : '';
+    renderSearchableVillageList(villageList, options, currentValue, '');
+}
+
+function renderSearchableVillageList(listEl, options, selectedValue, keyword) {
+    keyword = (keyword || '').trim();
+    const filtered = keyword
+        ? options.filter(v => v.includes(keyword))
+        : options.slice();
+    if (filtered.length === 0) {
+        listEl.innerHTML = '<div class="no-match">无匹配结果</div>';
+        return;
+    }
+    listEl.innerHTML = filtered.map(v => {
+        const cls = v === selectedValue ? 'search-item selected' : 'search-item';
+        return `<div class="${cls}" data-value="${v}">${v}</div>`;
+    }).join('');
+}
+
+function openSearchableVillageList() {
+    const listEl = document.getElementById('filterVillageList');
+    const input = document.getElementById('filterVillageInput');
+    listEl.style.display = 'block';
+    listEl.classList.remove('upward');
+
+    // 将绝对/固定定位的下拉与输入框对齐
+    if (input) {
+        const rect = input.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        listEl.style.left = rect.left + 'px';
+        listEl.style.top = (rect.bottom + 4) + 'px';
+        listEl.style.width = rect.width + 'px';
+
+        const listHeight = Math.min(listEl.scrollHeight || 240, 240);
+        const spaceBelow = window.innerHeight - rect.bottom - 8;
+        if (spaceBelow < listHeight && rect.top > listHeight) {
+            listEl.classList.add('upward');
+            listEl.style.top = (rect.top - listHeight - 4) + 'px';
+        }
+    }
+}
+
+function closeSearchableVillageList() {
+    setTimeout(() => {
+        const listEl = document.getElementById('filterVillageList');
+        if (listEl) listEl.style.display = 'none';
+    }, 200);
+}
+
+function bindSearchableVillage() {
+    const wrapper = document.getElementById('filterVillageWrapper');
+    const input = document.getElementById('filterVillageInput');
+    const hidden = document.getElementById('filterVillage');
+    const listEl = document.getElementById('filterVillageList');
+    if (!wrapper || !input || !hidden || !listEl) return;
+
+    input.addEventListener('focus', function() {
+        const options = JSON.parse(hidden.dataset.options || '[]');
+        renderSearchableVillageList(listEl, options, hidden.value, this.value);
+        openSearchableVillageList();
+    });
+
+    input.addEventListener('input', function() {
+        const options = JSON.parse(hidden.dataset.options || '[]');
+        renderSearchableVillageList(listEl, options, hidden.value, this.value);
+        openSearchableVillageList();
+    });
+
+    input.addEventListener('blur', function() {
+        closeSearchableVillageList();
+    });
+
+    listEl.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        const item = e.target.closest('.search-item');
+        if (!item) return;
+        const value = item.dataset.value;
+        hidden.value = value;
+        input.value = value;
+        renderSearchableVillageList(listEl, JSON.parse(hidden.dataset.options || '[]'), value, '');
+        listEl.style.display = 'none';
+        applyFilter();
+    });
+}
+
+function bindTownVillageLinkage() {
+    const townSel = document.getElementById('filterUnit');
+    const villageSel = document.getElementById('filterVillage');
+    const villageInput = document.getElementById('filterVillageInput');
+    if (townSel && villageSel) {
+        townSel.addEventListener('change', function() {
+            villageSel.value = '';
+            if (villageInput) villageInput.value = '';
+            updateVillageOptions(this.value);
+            applyFilter();
+        });
+    }
+}
+
+function openModal() {
+    document.getElementById('taskModal').classList.add('active');
+    const nextId = tasks.length + 1;
+    const date = new Date();
+    const year = date.getFullYear();
+    const seq = String(nextId).padStart(3, '0');
+    document.getElementById('taskNo').value = `FX-RW-${year}-${seq}`;
+}
+
+function closeModal() {
+    document.getElementById('taskModal').classList.remove('active');
+    document.getElementById('taskName').value = '';
+    document.getElementById('taskType').value = '';
+    document.getElementById('taskPerson').value = '';
+    document.getElementById('taskArchiveCount').value = '';
+    document.getElementById('taskTotalCount').value = '';
+    document.getElementById('taskStartDate').value = '';
+    document.getElementById('taskEndDate').value = '';
+    document.getElementById('taskDesc').value = '';
+}
+
+function saveTask() {
+    const no = document.getElementById('taskNo').value.trim();
+    const name = document.getElementById('taskName').value.trim();
+    const type = document.getElementById('taskType').value;
+    const urgency = document.getElementById('taskUrgency') ? document.getElementById('taskUrgency').value : 'medium';
+    const urgencyLabel = urgency === 'high' ? '高' : urgency === 'medium' ? '中' : '低';
+    const person = document.getElementById('taskPerson').value.trim();
+    const totalCount = parseInt(document.getElementById('taskTotalCount').value) || 0;
+
+    if (!no || !name || !type || !person || !totalCount) {
+        alert('请填写所有必填项');
+        return;
+    }
+
+    const typeMap = {
+        routine: '日常巡查',
+        special: '专项巡查',
+        temporary: '临时巡查',
+        review: '隐患复查'
+    };
+
+    const newTask = {
+        id: Date.now(),
+        no: no,
+        name: name,
+        type: type,
+        typeLabel: typeMap[type],
+        urgency: urgency,
+        urgencyLabel: urgencyLabel,
+        houseCount: parseInt(document.getElementById('taskArchiveCount').value) || 0,
+        person: person,
+        inspected: 0,
+        total: totalCount,
+        status: 'draft',
+        statusLabel: '草稿',
+        statusClass: 'draft',
+        hiddenCount: 0,
+        // 关联房屋档案字段（新增）
+        houseNos: [],
+        recordIds: []
+    };
+
+    tasks.unshift(newTask);
+    saveTasksToStorage();
+    renderAllTabs();
+    closeModal();
+}
+
+function getStatusActions(t) {
+    if (t.status === 'draft') {
+        return `
+            <button class="action-link view" onclick="editTask(${t.id})">编辑</button>
+            <button class="action-link delete" onclick="deleteTask(${t.id})">删除</button>
+        `;
+    }
+    if (t.status === 'rejected') {
+        return `
+            <button class="action-link view" onclick="editReturnedTask(${t.id})">修改</button>
+            <button class="action-link delete" onclick="deleteTask(${t.id})">删除</button>
+        `;
+    }
+    if (t.status === 'issued') {
+        return `
+            <button class="action-link view" onclick="receiveTask(${t.id})">接收任务</button>
+            <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>
+        `;
+    }
+    if (t.status === 'pending-assign') {
+        return `
+            <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>
+        `;
+    }
+    if (t.status === 'pending-exec' || t.status === 'processing') {
+        return `
+            <button class="action-link success" onclick="completeTask(${t.id})">完成任务</button>
+            <button class="action-link view" onclick="adjustTask(${t.id})">调整</button>
+            <button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>
+        `;
+    }
+    return `<button class="action-link view" onclick='viewTask(${JSON.stringify(t.id)})'>查看</button>`;
+}
+
+function renderStatusActions(t) {
+    return getStatusActions(t);
+}
+
+function adjustTask(id) {
+    window.location.href = 'urban-risk-task-adjust.html?id=' + id;
+}
+
+function viewTask(id) {
+    const task = tasks.find(t => t.id == id || t.no == id);
+    if (task && task.isReview2026) {
+        window.location.href = 'review-2026-detail.html?town=' + encodeURIComponent(task.town) + '&village=' + encodeURIComponent(task.village);
+        return;
+    }
+    window.location.href = 'urban-risk-task-detail.html?id=' + id;
+}
+
+function editTask(id) {
+    window.location.href = 'urban-risk-task-add.html?mode=edit&id=' + id;
+}
+
+function editReturnedTask(id) {
+    window.location.href = 'urban-risk-task-add.html?mode=returned&id=' + id;
+}
+
+function deleteTask(id) {
+    if (confirm('确定要删除该巡查任务吗？')) {
+        tasks = tasks.filter(t => t.id !== id);
+        saveTasksToStorage();
+        renderAllTabs();
+    }
+}
+
+function publishTask(id) {
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+        task.status = 'issued';
+        task.statusLabel = '待接收';
+        task.statusClass = 'issued';
+        saveTasksToStorage();
+        renderAllTabs();
+        alert('任务已发布');
+    }
+}
+
+function cancelTask(id) {
+    if (confirm('确定要取消该任务吗？')) {
+        tasks = tasks.filter(t => t.id !== id);
+        saveTasksToStorage();
+        renderAllTabs();
+    }
+}
+
+function assignPersonTask(id) {
+    window.location.href = 'urban-risk-task-detail.html?id=' + id;
+}
+
+function completeTask(id) {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    if (task.status !== 'pending-exec' && task.status !== 'processing') {
+        alert('当前任务状态不支持完成操作');
+        return;
+    }
+    if (!confirm(`确定将任务【${task.name || task.no}】标记为已完成吗？完成后将同步生成房屋档案的排查/巡查记录。`)) {
+        return;
+    }
+    const now = new Date();
+    const finishTime = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    task.status = 'completed';
+    task.statusLabel = '已完成';
+    task.statusClass = 'completed';
+    task.finishTime = finishTime;
+    task.inspected = task.total || 0;
+    if (!Array.isArray(task.houseNos)) task.houseNos = [];
+    if (!Array.isArray(task.recordIds)) task.recordIds = [];
+
+    // 双向同步：为关联房屋生成排查/巡查记录，并回填 recordIds
+    if (typeof syncTaskToHouseRecords === 'function') {
+        syncTaskToHouseRecords(task);
+    }
+
+    saveTasksToStorage();
+    renderAllTabs();
+    alert('任务已完成，并同步生成关联的房屋档案记录');
+}
+
+function receiveTask(id) {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    if (task.status !== 'issued') {
+        alert('当前任务状态不支持接收操作');
+        return;
+    }
+    task.status = 'processing';
+    task.statusLabel = '进行中';
+    task.statusClass = 'processing';
+    saveTasksToStorage();
+    renderAllTabs();
+    alert('任务已接收');
+}
+
+function reassignTask(id) {
+    window.location.href = 'urban-risk-task-detail.html?id=' + id;
+}
+
+function checkInTask(id) {
+    alert('点位打卡：打开打卡界面（演示）');
+}
+
+function reportIssueTask(id) {
+    alert('上报问题：打开问题上报界面（演示）');
+}
+
+// URL 参数：taskId 时自动切换到目标任务所在 tab 并高亮
+(function handleUrlTaskId() {
+    const taskId = getUrlParam('taskId');
+    if (!taskId) return;
+    const target = tasks.find(t => String(t.id) === taskId);
+    if (!target) return;
+    const targetTab = (target.type === 'routine' || target.type === 'special' || target.type === 'temporary' || target.type === 'review') ? target.type : 'routine';
+    // 切换 tab 导航
+    document.querySelectorAll('.tab-nav-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.tab === targetTab);
+    });
+    document.querySelectorAll('.tab-content-wrapper').forEach(el => {
+        el.classList.toggle('active', el.id === 'tab-' + targetTab);
+    });
+    currentTab = targetTab;
+})();
+
+// Init
+renderAllTabs();
+updateVillageOptions('');
+bindSearchableVillage();
+bindTownVillageLinkage();
+
+// 渲染完后再处理高亮滚动（因为 renderTasksByTab 在 renderAllTabs 中执行）
+(function scrollToTaskFromUrl() {
+    const taskId = getUrlParam('taskId');
+    if (!taskId) return;
+    setTimeout(() => {
+        const row = document.querySelector(`tr[data-task-id="${taskId}"]`);
+        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+})();
+
+// ==================== 批量导入（排查详情 / 隐患整治） ====================
+// 轻提示
+function showToast(msg, type) {
+    type = type || 'info';
+    var old = document.querySelector('.import-toast');
+    if (old) old.remove();
+    var el = document.createElement('div');
+    el.className = 'import-toast ' + type;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('show'); });
+    setTimeout(function () {
+        el.classList.remove('show');
+        setTimeout(function () { el.remove(); }, 300);
+    }, 2600);
+}
+
+// 字段映射：列头(中文) -> 记录字段；scope: top=顶层 / answers / appraisal=rectify.appraisal / measures=rectify.measures
+var IMPORT_SPLIT_RE = /[,，、;；\/\n]+/; // 多选分隔符
+var IMPORT_INSPECT_COLS = [
+    { col: '房屋编号', key: 'houseNo', scope: 'top', required: true },
+    { col: '镇/街道', key: 'town', scope: 'top' },
+    { col: '社区/居委', key: 'village', scope: 'top' },
+    { col: '地址', key: 'address', scope: 'answers' },
+    { col: '城镇房屋类型', key: 'houseType', scope: 'answers' },
+    { col: '小区名称', key: 'communityName', scope: 'answers' },
+    { col: '建筑名称', key: 'buildingName', scope: 'answers' },
+    { col: '住宅套数', key: 'apartmentCount', scope: 'answers' },
+    { col: '户主姓名/机构名称', key: 'ownerName', scope: 'answers' },
+    { col: '身份证号/机构代码', key: 'ownerId', scope: 'answers' },
+    { col: '户主类型', key: 'ownerType', scope: 'answers' },
+    { col: '建筑层数(层)', key: 'buildingFloors', scope: 'answers' },
+    { col: '建筑高度(m)', key: 'buildingHeight', scope: 'answers' },
+    { col: '建筑面积(m²)', key: 'buildingArea', scope: 'answers' },
+    { col: '建造年代', key: 'buildEra', scope: 'answers' },
+    { col: '建造时间', key: 'buildYear', scope: 'answers' },
+    { col: '建筑用途', key: 'forBusiness', scope: 'answers' },
+    { col: '生产经营用途', key: 'businessUse', scope: 'answers', multi: true },
+    { col: '其他生产经营用途', key: 'businessUseOther', scope: 'answers' },
+    { col: '教育设施细分', key: 'businessUseEdu', scope: 'answers', multi: true },
+    { col: '医疗卫生细分', key: 'businessUseMedical', scope: 'answers', multi: true },
+    { col: '土地性质', key: 'landNature', scope: 'answers' },
+    { col: '国有土地类型', key: 'stateLandType', scope: 'answers' },
+    { col: '其他国有土地类型', key: 'stateLandTypeOther', scope: 'answers' },
+    { col: '集体土地类型', key: 'collectiveLandType', scope: 'answers' },
+    { col: '其他集体土地类型', key: 'collectiveLandTypeOther', scope: 'answers' },
+    { col: '产权性质', key: 'propertyRight', scope: 'answers' },
+    { col: '其他产权性质', key: 'propertyRightOther', scope: 'answers' },
+    { col: '人员聚集场所周边', key: 'crowdPlaceNearby', scope: 'answers' },
+    { col: '周边人员聚集场所类型', key: 'crowdPlaceType', scope: 'answers', multi: true },
+    { col: '常住或使用人数超过10人', key: 'occupantsOver10', scope: 'answers' },
+    { col: '建房审批手续', key: 'approval', scope: 'answers' },
+    { col: '是否专业设计建造', key: 'professionalDesign', scope: 'answers' },
+    { col: '建造方式', key: 'constructionMethod', scope: 'answers' },
+    { col: '结构类型', key: 'structureType', scope: 'answers' },
+    { col: '砌体结构类型', key: 'masonryType', scope: 'answers' },
+    { col: '楼屋盖类型', key: 'floorRoofType', scope: 'answers' },
+    { col: '是否改扩建', key: 'renovation', scope: 'answers' },
+    { col: '改扩建次数', key: 'renovationCount', scope: 'answers' },
+    { col: '改扩建内容', key: 'renovationContent', scope: 'answers', multi: true },
+    { col: '其他改扩建内容', key: 'renovationContentOther', scope: 'answers' },
+    { col: '是否存在违规行为', key: 'violations', scope: 'answers', multi: true },
+    { col: '其他违规行为', key: 'violationsOther', scope: 'answers' },
+    { col: '房屋损伤情况', key: 'damageCondition', scope: 'answers', multi: true },
+    { col: '增加堆载', key: 'overload', scope: 'answers' },
+    { col: '其他增加堆载情况', key: 'overloadOther', scope: 'answers' },
+    { col: '房屋表观损坏程度初判', key: 'surfaceDamage', scope: 'answers' },
+    { col: '房屋结构安全隐患初判', key: 'structuralSafety', scope: 'answers' },
+    { col: '结构安全隐患备注', key: 'structuralSafetyRemark', scope: 'answers' },
+    { col: '排查结论', key: 'conclusion', scope: 'answers' },
+    { col: '产权人签名', key: 'ownerSignature', scope: 'answers' },
+    { col: '产权人联系方式', key: 'ownerPhone', scope: 'answers' },
+    { col: '产权人日期', key: 'ownerDate', scope: 'answers' },
+    { col: '使用人签名', key: 'userSignature', scope: 'answers' },
+    { col: '使用人联系方式', key: 'userPhone', scope: 'answers' },
+    { col: '使用人日期', key: 'userDate', scope: 'answers' },
+    { col: '排查人签名', key: 'inspectorSignature', scope: 'answers' },
+    { col: '排查单位', key: 'inspectorOrg', scope: 'answers' },
+    { col: '排查人联系方式', key: 'inspectorPhone', scope: 'answers' },
+    { col: '排查人日期', key: 'inspectorDate', scope: 'answers' }
+];
+var IMPORT_RECTIFY_COLS = [
+    { col: '房屋编号', key: 'houseNo', scope: 'top', required: true },
+    { col: '是否鉴定', key: 'done', scope: 'appraisal' },
+    { col: '鉴定日期', key: 'date', scope: 'appraisal' },
+    { col: '鉴定结论', key: 'conclusion', scope: 'appraisal' },
+    { col: '鉴定单位', key: 'orgName', scope: 'appraisal' },
+    { col: '鉴定单位信用代码', key: 'orgCode', scope: 'appraisal' },
+    { col: '是否采取管控措施', key: 'controlDone', scope: 'measures' },
+    { col: '管控措施类型', key: 'controlTypes', scope: 'measures', multi: true },
+    { col: '其他管控措施', key: 'controlTypeOther', scope: 'measures' },
+    { col: '是否采取工程措施', key: 'engineeringDone', scope: 'measures' },
+    { col: '工程措施类型', key: 'engineeringTypes', scope: 'measures', multi: true },
+    { col: '其他工程措施', key: 'engineeringTypeOther', scope: 'measures' },
+    { col: '产权人签字', key: 'ownerSign', scope: 'measures' },
+    { col: '产权人电话', key: 'ownerPhone', scope: 'measures' },
+    { col: '产权人签字日期', key: 'ownerDate', scope: 'measures' },
+    { col: '使用人签字', key: 'userSign', scope: 'measures' },
+    { col: '使用人电话', key: 'userPhone', scope: 'measures' },
+    { col: '使用人签字日期', key: 'userDate', scope: 'measures' },
+    { col: '镇级签字', key: 'townSign', scope: 'measures' },
+    { col: '镇级单位', key: 'townOrg', scope: 'measures' },
+    { col: '镇级电话', key: 'townPhone', scope: 'measures' },
+    { col: '镇级签字日期', key: 'townDate', scope: 'measures' },
+    { col: '区级签字', key: 'districtSign', scope: 'measures' },
+    { col: '区级单位', key: 'districtOrg', scope: 'measures' },
+    { col: '区级电话', key: 'districtPhone', scope: 'measures' },
+    { col: '区级签字日期', key: 'districtDate', scope: 'measures' }
+];
+
+var importState = {
+    type: 'inspect',          // inspect | rectify
+    rows: [],                 // 校验后行 {data, status:'new'|'update'|'error', error, preview}
+    serverList: []            // GET 到的全量
+};
+
+function openImportModal() {
+    if (typeof XLSX === 'undefined') {
+        showToast('Excel 解析组件未加载，请检查网络后刷新页面', 'error');
+        return;
+    }
+    importState.rows = [];
+    document.getElementById('importFileInput').value = '';
+    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('importPreview').innerHTML = '';
+    document.getElementById('importConfirmBtn').style.display = 'none';
+    switchImportType('inspect');
+    document.getElementById('importModal').classList.add('active');
+}
+function closeImportModal() {
+    document.getElementById('importModal').classList.remove('active');
+}
+function switchImportType(type) {
+    importState.type = type;
+    document.querySelectorAll('#importTabs .content-tab').forEach(function (t) {
+        t.classList.toggle('active', t.getAttribute('data-import-type') === type);
+    });
+    var hint = document.getElementById('importHint');
+    if (type === 'inspect') {
+        hint.textContent = '排查详情导入：按模板列头填写，房屋编号必填；不存在的编号将新建记录（状态=已提交），已存在的按编号更新排查字段';
+    } else {
+        hint.textContent = '隐患整治导入：房屋编号必填且记录须已存在；仅更新 rectify（鉴定情况 + 整治情况），不含照片';
+    }
+    importState.rows = [];
+    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('importPreview').innerHTML = '';
+    document.getElementById('importConfirmBtn').style.display = 'none';
+    document.getElementById('importFileInput').value = '';
+}
+
+function getImportCols() {
+    return importState.type === 'inspect' ? IMPORT_INSPECT_COLS : IMPORT_RECTIFY_COLS;
+}
+
+// 下载模板：表头 + 1 行示例
+function downloadImportTemplate() {
+    var cols = getImportCols();
+    var header = cols.map(function (c) { return c.col; });
+    var example = cols.map(function (c) {
+        if (c.key === 'houseNo') return 'NF-2025-00001';
+        if (c.multi) return '示例1，示例2';
+        return '';
+    });
+    var ws = XLSX.utils.aoa_to_sheet([header, example]);
+    ws['!cols'] = header.map(function () { return { wch: 18 }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, importState.type === 'inspect' ? '排查详情' : '隐患整治');
+    XLSX.writeFile(wb, (importState.type === 'inspect' ? '回头看排查详情导入模板' : '回头看隐患整治导入模板') + '.xlsx');
+}
+
+// 读取并解析文件
+async function handleImportFile(input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    try {
+        showToast('正在解析文件…', 'info');
+        var buf = await file.arrayBuffer();
+        var wb = XLSX.read(buf, { type: 'array' });
+        var sheet = wb.Sheets[wb.SheetNames[0]];
+        var aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+        if (!aoa || aoa.length < 2) {
+            showToast('Excel 为空或没有数据行', 'error');
+            return;
+        }
+        var headerRow = (aoa[0] || []).map(function (h) { return String(h).trim(); });
+        var cols = getImportCols();
+        // 列头 -> 列索引
+        var colIndex = {};
+        cols.forEach(function (c) {
+            var idx = headerRow.indexOf(c.col);
+            if (idx >= 0) colIndex[c.col] = idx;
+        });
+        if (colIndex['房屋编号'] === undefined) {
+            showToast('未找到必填列「房屋编号」，请使用下载的模板', 'error');
+            return;
+        }
+        // 拉取服务端全量用于判重
+        var serverList = [];
+        try {
+            var resp = await fetch('/api/review-2026-records');
+            if (resp.ok) serverList = await resp.json();
+        } catch (e) { /* 离线也允许预览 */ }
+        if (!Array.isArray(serverList)) serverList = [];
+        importState.serverList = serverList;
+        var existingByNo = {};
+        serverList.forEach(function (r) { if (r && r.houseNo) existingByNo[r.houseNo] = r; });
+
+        var rows = [];
+        var seenInFile = {};
+        for (var i = 1; i < aoa.length; i++) {
+            var line = aoa[i];
+            if (!line || line.every(function (v) { return String(v).trim() === ''; })) continue; // 跳过全空行
+            var rowNo = i + 1; // Excel 行号(1-based，含表头)
+            var parsed = parseImportRow(line, colIndex, cols, rowNo);
+            var houseNo = parsed.data.houseNo;
+            // 校验：必填
+            if (!houseNo) {
+                parsed.status = 'error'; parsed.error = '房屋编号为空';
+            } else if (seenInFile[houseNo]) {
+                parsed.status = 'error'; parsed.error = '文件内房屋编号重复（第' + seenInFile[houseNo] + '行）';
+            } else if (importState.type === 'rectify' && !existingByNo[houseNo]) {
+                parsed.status = 'error'; parsed.error = '记录不存在，无法导入整治（需先做排查导入）';
+            } else {
+                parsed.status = existingByNo[houseNo] ? 'update' : 'new';
+                seenInFile[houseNo] = rowNo;
+            }
+            rows.push(parsed);
+        }
+        importState.rows = rows;
+        renderImportPreview();
+    } catch (err) {
+        console.error('导入解析失败:', err);
+        showToast('文件解析失败：' + (err.message || err), 'error');
+    }
+}
+
+// 按列映射把一行 Excel 转成记录字段
+function parseImportRow(line, colIndex, cols, rowNo) {
+    var data = {};
+    var previewPairs = [];
+    cols.forEach(function (c) {
+        var idx = colIndex[c.col];
+        if (idx === undefined) return;
+        var raw = line[idx];
+        var val = (raw === undefined || raw === null) ? '' : String(raw).trim();
+        if (c.key === 'houseNo') { data.houseNo = val; if (val) previewPairs.push(c.col + '=' + val); return; }
+        if (val === '') return; // 空值不覆盖
+        if (c.multi) {
+            var arr = val.split(IMPORT_SPLIT_RE).map(function (s) { return s.trim(); }).filter(Boolean);
+            setScopedValue(data, c, arr);
+            previewPairs.push(c.col + '=' + arr.join('、'));
+        } else {
+            setScopedValue(data, c, val);
+            previewPairs.push(c.col + '=' + val);
+        }
+    });
+    return { data: data, status: 'new', error: '', rowNo: rowNo, preview: previewPairs.join('；') };
+}
+function setScopedValue(target, colDef, value) {
+    if (colDef.scope === 'top') { target[colDef.key] = value; return; }
+    if (!target[colDef.scope]) target[colDef.scope] = {};
+    target[colDef.scope][colDef.key] = value;
+}
+
+// 预览渲染
+function renderImportPreview() {
+    var rows = importState.rows;
+    var newCnt = rows.filter(function (r) { return r.status === 'new'; }).length;
+    var updCnt = rows.filter(function (r) { return r.status === 'update'; }).length;
+    var errCnt = rows.filter(function (r) { return r.status === 'error'; }).length;
+    var box = document.getElementById('importPreview');
+    var html = '<div class="import-summary">' +
+        '<span class="import-stat new">新增 ' + newCnt + '</span>' +
+        '<span class="import-stat update">更新 ' + updCnt + '</span>' +
+        '<span class="import-stat error">失败 ' + errCnt + '</span>' +
+        '<span style="margin-left:auto;font-size:12px;color:var(--text-secondary);align-self:center;">失败行不会被导入</span>' +
+        '</div>';
+    html += '<div class="import-scroll"><table class="import-preview-table"><thead><tr>' +
+        '<th>行</th><th>结果</th><th>房屋编号</th><th>内容 / 失败原因</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+        var statusText = r.status === 'new' ? '新增' : (r.status === 'update' ? '更新' : '失败');
+        var desc = r.status === 'error' ? ('<span style="color:#d93025;">' + escapeImportHtml(r.error) + '</span>') : escapeImportHtml(r.preview || '（仅编号，无其它字段）');
+        html += '<tr class="row-' + r.status + '"><td>' + r.rowNo + '</td><td>' + statusText + '</td><td>' + escapeImportHtml(r.data.houseNo || '—') + '</td><td title="' + escapeImportHtml(r.preview || r.error || '') + '">' + desc + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    box.innerHTML = html;
+    box.style.display = 'block';
+    var valid = newCnt + updCnt;
+    var btn = document.getElementById('importConfirmBtn');
+    btn.style.display = valid > 0 ? '' : 'none';
+    btn.textContent = '确认导入（' + valid + ' 条）';
+    showToast('解析完成：新增 ' + newCnt + '，更新 ' + updCnt + '，失败 ' + errCnt, valid > 0 ? 'success' : 'error');
+}
+function escapeImportHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+}
+
+// 确认导入：合并 -> 全量 POST -> 刷新
+async function confirmImport() {
+    var validRows = importState.rows.filter(function (r) { return r.status === 'new' || r.status === 'update'; });
+    if (validRows.length === 0) { showToast('没有可导入的数据', 'error'); return; }
+    var btn = document.getElementById('importConfirmBtn');
+    btn.disabled = true;
+    try {
+        showToast('正在写回服务端…', 'info');
+        // 重新 GET 最新全量（防止预览期间他人改动）
+        var serverList = [];
+        var resp = await fetch('/api/review-2026-records');
+        if (resp.ok) serverList = await resp.json();
+        if (!Array.isArray(serverList)) serverList = [];
+        var indexByNo = {};
+        serverList.forEach(function (r, i) { if (r && r.houseNo) indexByNo[r.houseNo] = i; });
+        var now = new Date().toLocaleString('zh-CN', { hour12: false });
+        var isRectify = (importState.type === 'rectify');
+        validRows.forEach(function (r) {
+            var houseNo = r.data.houseNo;
+            var idx = indexByNo[houseNo];
+            if (isRectify) {
+                if (idx === undefined) return; // 预览时已拦截，双保险
+                var rec = serverList[idx];
+                rec.rectify = rec.rectify || {};
+                rec.rectify.appraisal = Object.assign({}, rec.rectify.appraisal, r.data.appraisal || {});
+                rec.rectify.measures = Object.assign({}, rec.rectify.measures, r.data.measures || {});
+                // 兜底：rectify 页渲染依赖这些数组字段，缺失会导致 .length 报错
+                var m = rec.rectify.measures;
+                if (!Array.isArray(m.controlTypes)) m.controlTypes = [];
+                if (!Array.isArray(m.engineeringTypes)) m.engineeringTypes = [];
+                if (!Array.isArray(m.controlPhotos)) m.controlPhotos = [];
+                if (!Array.isArray(m.engineeringPhotos)) m.engineeringPhotos = [];
+                rec.rectify.updateTime = now;
+                rec.editedByPC = true;
+                rec.editedTime = now;
+            } else {
+                if (idx === undefined) {
+                    // 新建记录
+                    var newRec = {
+                        id: 'R2026-IMPORT-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                        houseNo: houseNo,
+                        town: r.data.town || '',
+                        village: r.data.village || '',
+                        status: 'submitted',
+                        submitTime: now,
+                        source: 'pc-import',
+                        answers: Object.assign({}, r.data.answers || {}),
+                        photos: {},
+                        checkin: {},
+                        editedByPC: true,
+                        editedTime: now
+                    };
+                    serverList.unshift(newRec);
+                    // 重建索引（unshift 后全部前移）
+                    indexByNo = {};
+                    serverList.forEach(function (x, i) { if (x && x.houseNo) indexByNo[x.houseNo] = i; });
+                } else {
+                    var rec2 = serverList[idx];
+                    if (r.data.town) rec2.town = r.data.town;
+                    if (r.data.village) rec2.village = r.data.village;
+                    rec2.answers = Object.assign({}, rec2.answers, r.data.answers || {});
+                    rec2.status = 'submitted';
+                    if (!rec2.submitTime) rec2.submitTime = now;
+                    rec2.editedByPC = true;
+                    rec2.editedTime = now;
+                }
+            }
+        });
+        var post = await fetch('/api/review-2026-records', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(serverList)
+        });
+        if (!post.ok) throw new Error('写回失败 HTTP ' + post.status);
+        showToast('导入完成：成功 ' + validRows.length + ' 条', 'success');
+        closeImportModal();
+        // 刷新任务卡（review2026LoadAndMerge 内部 GET 后自聚合 + renderAllTabs）
+        if (typeof review2026LoadAndMerge === 'function') {
+            review2026LoadAndMerge();
+        } else if (typeof renderAllTabs === 'function') {
+            renderAllTabs();
+        }
+    } catch (err) {
+        console.error('导入写回失败:', err);
+        showToast('导入写回失败：' + (err.message || err), 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+</script>
+
+
+</body></html>
