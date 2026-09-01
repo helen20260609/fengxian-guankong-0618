@@ -1,0 +1,2705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自建房安全风险一张图 - 大屏展示</title>
+    <link rel="stylesheet" href="all.min.css">
+    <script src="../js/third-party-data.js"></script>
+    <script src="../js/house-arch-data.js"></script>
+    <script src="../js/echarts.min.js"></script>
+    <style>
+        :root {
+            --primary: #38bdf8;
+            --primary-light: rgba(56, 189, 248, 0.12);
+            --primary-dark: #0ea5e9;
+            --secondary: #0ea5e9;
+            --bg-dark: #050b14;
+            --bg-card: rgba(10, 22, 40, 0.72);
+            --bg-card-solid: #0a1628;
+            --text-primary: #e6f7ff;
+            --text-secondary: #8aa4c0;
+            --border: rgba(56, 189, 248, 0.18);
+            --border-strong: rgba(56, 189, 248, 0.35);
+            --shadow: 0 0 24px rgba(14, 165, 233, 0.12);
+            --glow: 0 0 12px rgba(56, 189, 248, 0.35);
+            --radius: 10px;
+            --danger: #f43f5e;
+            --danger-soft: #fb7185;
+            --major: #f97316;
+            --warning: #facc15;
+            --safe: #38bdf8;
+            --success: #2dd4bf;
+            --info: #0ea5e9;
+            --purple: #8b5cf6;
+            --rose: #f43f5e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: #02050a;
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* ========== 底层：全屏地图 ========== */
+        .bigscreen-map-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+        }
+        #mapContainer {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        .mock-map { width: 100%; height: 100%; position: relative; background: radial-gradient(ellipse at 50% 50%, #0c1e35 0%, #050b14 70%, #02050a 100%); }
+        .mock-map svg { width: 100%; height: 100%; display: block; }
+        .mock-grid { stroke: rgba(14, 165, 233, 0.12); stroke-width: 1; stroke-dasharray: 4 4; }
+        .mock-boundary {
+            fill: rgba(14, 165, 233, 0.05);
+            stroke: rgba(56, 189, 248, 0.28);
+            stroke-width: 1.5;
+            cursor: pointer;
+            transition: fill 0.2s;
+        }
+        .mock-boundary:hover { fill: rgba(14, 165, 233, 0.14); stroke: rgba(56, 189, 248, 0.55); }
+        .mock-boundary.active { fill: rgba(14, 165, 233, 0.2); stroke: var(--primary); stroke-width: 2; }
+        .mock-boundary.drill-dim { fill: rgba(14, 165, 233, 0.015); stroke: rgba(56, 189, 248, 0.1); pointer-events: none; }
+        .mock-boundary.drill-focus {
+            fill: rgba(14, 165, 233, 0.1);
+            stroke: var(--primary);
+            stroke-width: 2.5;
+            filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.7));
+        }
+        .mock-boundary-label {
+            font-size: 11px;
+            fill: var(--text-secondary);
+            pointer-events: none;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            font-weight: 500;
+            text-shadow: 0 0 4px rgba(0,0,0,0.7);
+        }
+        .mock-boundary-label.drill-focus { fill: var(--text-primary); font-weight: 700; font-size: 13px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.9); }
+        .mock-boundary-label.drill-dim { opacity: 0.25; }
+
+        /* 房屋点位信息卡片（截图风格） */
+        .house-info-card {
+            position: fixed; width: 300px; z-index: 1000;
+            background: linear-gradient(160deg, rgba(10, 26, 48, 0.96), rgba(6, 16, 30, 0.94));
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 6px 16px 6px 16px;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 0 20px rgba(56, 189, 248, 0.15);
+            color: var(--text-primary);
+            overflow: hidden;
+            backdrop-filter: blur(4px);
+        }
+        .house-info-card::before {
+            content: ''; display: block; height: 3px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+        }
+        .house-info-card .hic-no {
+            padding: 12px 16px 10px;
+            font-size: 15px; font-weight: 700;
+            color: #6fd3ff; letter-spacing: 0.5px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.16);
+        }
+        .house-info-card .hic-body { padding: 10px 16px 12px; }
+        .house-info-card .hic-row {
+            display: flex; font-size: 12.5px; line-height: 22px;
+        }
+        .house-info-card .hic-label {
+            width: 70px; flex-shrink: 0;
+            color: var(--text-secondary);
+        }
+        .house-info-card .hic-value { flex: 1; color: var(--text-primary); }
+        .house-info-card .hic-tag {
+            display: inline-block; padding: 1px 10px;
+            border-radius: 999px; font-size: 11.5px;
+            background: rgba(56, 189, 248, 0.18);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #8fd8ff;
+        }
+        .house-info-card .hic-tag.danger { background: rgba(244, 63, 94, 0.18); border-color: rgba(244, 63, 94, 0.5); color: #ffb3c0; }
+        .house-info-card .hic-tag.major  { background: rgba(249, 115, 22, 0.18); border-color: rgba(249, 115, 22, 0.5); color: #ffd0a8; }
+        .house-info-card .hic-tag.warning{ background: rgba(250, 204, 21, 0.16); border-color: rgba(250, 204, 21, 0.45); color: #fde68a; }
+        .house-info-card .hic-footer {
+            padding: 0 16px 14px; text-align: right;
+        }
+        .house-info-card .hic-btn {
+            display: inline-block; padding: 5px 14px;
+            font-size: 12.5px; color: #e6f7ff;
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.5);
+            border-radius: 3px; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .house-info-card .hic-btn:hover {
+            background: rgba(56, 189, 248, 0.28);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+        }
+
+        /* 房屋详情弹窗 */
+        .house-detail-modal-mask {
+            position: fixed; inset: 0; z-index: 2000;
+            background: rgba(2, 8, 18, 0.72);
+            backdrop-filter: blur(2px);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .house-detail-modal {
+            width: 92vw; max-width: 1280px; height: 88vh;
+            display: flex; flex-direction: column;
+            background: linear-gradient(160deg, rgba(10, 26, 48, 0.98), rgba(6, 16, 30, 0.97));
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 6px 18px 6px 18px;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.2);
+            overflow: hidden;
+        }
+        .house-detail-modal .hdm-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 18px;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+            background: linear-gradient(90deg, rgba(56, 189, 248, 0.12), transparent 60%);
+        }
+        .house-detail-modal .hdm-title {
+            font-size: 15px; font-weight: 700; color: #6fd3ff;
+            letter-spacing: 1px;
+        }
+        .house-detail-modal .hdm-title::before {
+            content: ''; display: inline-block; width: 4px; height: 15px;
+            background: var(--primary); margin-right: 8px; vertical-align: -2px;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.7);
+        }
+        .house-detail-modal .hdm-close {
+            width: 30px; height: 30px; line-height: 28px; text-align: center;
+            font-size: 18px; color: var(--text-secondary);
+            border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 4px;
+            cursor: pointer; transition: all 0.2s; user-select: none;
+        }
+        .house-detail-modal .hdm-close:hover {
+            color: #fff; background: rgba(244, 63, 94, 0.25);
+            border-color: rgba(244, 63, 94, 0.6);
+            box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
+        }
+        .house-detail-modal .hdm-body { flex: 1; overflow: hidden; background: #0a1626; }
+        .house-detail-modal .hdm-body iframe {
+            width: 100%; height: 100%; border: none; display: block;
+        }
+        .house-info-card .hic-arrow {
+            position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
+            width: 0; height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid rgba(10, 26, 48, 0.96);
+            filter: drop-shadow(0 1px 0 rgba(56, 189, 248, 0.35));
+        }
+
+        /* ==================== 地图顶部工具条（风险筛选 + 街镇下钻） ==================== */
+        .map-toolbar {
+            position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+            z-index: 20; display: flex; align-items: center; gap: 4px;
+            padding: 6px 10px; white-space: nowrap;
+            background: linear-gradient(160deg, rgba(13, 32, 58, 0.9), rgba(8, 18, 34, 0.88));
+            border: 1px solid rgba(56, 189, 248, 0.32);
+            border-radius: 4px 12px 4px 12px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 24px rgba(14, 165, 233, 0.22), inset 0 1px 0 rgba(120, 220, 255, 0.14);
+        }
+        .map-toolbar::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary) 35%, #7dd3fc 50%, var(--primary) 65%, transparent);
+            opacity: 0.85; pointer-events: none;
+        }
+        .map-toolbar-group { display: flex; align-items: center; gap: 5px; }
+        .map-toolbar-label { font-size: 12px; color: var(--primary); padding: 0 2px 0 4px; filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.8)); }
+        .map-toolbar-divider {
+            width: 1px; height: 20px; margin: 0 7px;
+            background: linear-gradient(180deg, transparent, rgba(56, 189, 248, 0.45), transparent);
+        }
+        /* 风险筛选 chip */
+        .map-risk-chip {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 12px 4px 9px;
+            font-size: 12px; color: var(--text-secondary); letter-spacing: 1px;
+            background: rgba(13, 30, 55, 0.55);
+            border: 1px solid rgba(56, 189, 248, 0.16);
+            border-radius: 20px;
+            cursor: pointer; user-select: none;
+            transition: all 0.18s ease;
+        }
+        .map-risk-chip:hover { border-color: rgba(56, 189, 248, 0.45); color: var(--text-primary); }
+        .map-risk-chip .chip-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--chip-color); opacity: 0.4;
+            box-shadow: 0 0 6px var(--chip-color);
+            transition: opacity 0.18s;
+        }
+        .map-risk-chip.active {
+            color: #fff; font-weight: 600;
+            border-color: var(--chip-color);
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(13, 30, 55, 0.7));
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.3), inset 0 0 10px rgba(56, 189, 248, 0.12);
+            text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+        }
+        .map-risk-chip.active .chip-dot { opacity: 1; }
+        /* 街镇下拉 */
+        .map-street-select {
+            appearance: none; -webkit-appearance: none;
+            font-size: 12px; color: var(--text-primary); letter-spacing: 1px;
+            background: rgba(13, 30, 55, 0.75) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2338bdf8' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 20px;
+            padding: 5px 28px 5px 14px;
+            cursor: pointer; outline: none;
+            transition: all 0.18s ease;
+        }
+        .map-street-select:hover, .map-street-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+        }
+        .map-street-select option { background: #0b1a30; color: var(--text-primary); }
+        /* 返回全区 */
+        .map-drill-back {
+            display: none; align-items: center; gap: 6px;
+            font-size: 12px; font-weight: 600; letter-spacing: 1px;
+            color: var(--warning);
+            padding: 4px 13px;
+            border: 1px solid rgba(250, 204, 21, 0.45);
+            border-radius: 20px;
+            background: rgba(250, 204, 21, 0.08);
+            cursor: pointer; user-select: none;
+            text-shadow: 0 0 8px rgba(250, 204, 21, 0.5);
+            transition: all 0.18s ease;
+        }
+        .map-drill-back.show { display: flex; animation: mdsBackIn 0.3s ease; }
+        @keyframes mdsBackIn { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+        .map-drill-back:hover { background: rgba(250, 204, 21, 0.16); box-shadow: 0 0 12px rgba(250, 204, 21, 0.35); }
+
+        .mock-cluster {
+            cursor: pointer;
+            filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.45));
+            transition: filter 0.2s;
+        }
+        .mock-cluster:hover { filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.7)); }
+        .mock-cluster-circle { stroke: rgba(255,255,255,0.9); stroke-width: 2; transition: stroke-width 0.2s; }
+        .mock-cluster:hover .mock-cluster-circle { stroke-width: 3.5; }
+        .mock-cluster-text { font-size: 11px; font-weight: 600; fill: var(--text-primary); text-anchor: middle; dominant-baseline: middle; pointer-events: none; text-shadow: 0 0 4px rgba(0,0,0,0.6); }
+        .mock-cluster-sub { font-size: 9px; fill: var(--text-secondary); text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+        .mock-point { cursor: pointer; filter: drop-shadow(0 0 3px rgba(0,0,0,0.4)); transition: filter 0.15s, stroke-width 0.15s; }
+        .mock-point:hover { filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.6)); }
+        .map-watermark {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: rgba(5, 15, 30, 0.72);
+            border: 1px solid var(--border);
+            padding: 4px 10px;
+            border-radius: 12px;
+            pointer-events: none;
+        }
+        .map-zoom-control {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            /* 贴右侧面板左缘外侧：面板宽 clamp(320px, 24%, 420px) + body右padding 20px + 间距 16px */
+            right: calc(clamp(320px, 24%, 420px) + 36px);
+            z-index: 60;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        .map-zoom-control button {
+            width: 38px;
+            height: 38px;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            background: linear-gradient(135deg, rgba(13, 30, 55, 0.85), rgba(10, 22, 40, 0.92));
+            color: var(--text-secondary);
+            font-size: 15px;
+            cursor: pointer;
+            border-radius: 4px 10px 4px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.18s ease;
+            backdrop-filter: blur(8px);
+            position: relative;
+            overflow: hidden;
+        }
+        .map-zoom-control button::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0;
+            transition: opacity 0.18s ease;
+        }
+        .map-zoom-control button:hover {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(13, 30, 55, 0.9));
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.4), inset 0 0 8px rgba(56, 189, 248, 0.15);
+            transform: translateY(-1px);
+        }
+        .map-zoom-control button:hover::before { opacity: 1; }
+        .map-zoom-control button:active { transform: translateY(0); box-shadow: 0 0 6px rgba(56, 189, 248, 0.3); }
+        .map-zoom-control button.mzc-active {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(13, 30, 55, 0.9));
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+        }
+
+        /* ========== 上层：覆盖层 ========== */
+        .bigscreen-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部标题区 - 蓝色科技几何风 */
+        .bigscreen-header {
+            height: 88px;
+            flex-shrink: 0;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, rgba(5, 11, 20, 0.92) 0%, rgba(5, 11, 20, 0.6) 70%, transparent 100%);
+            pointer-events: auto;
+            overflow: visible;
+        }
+        .bigscreen-header::before {
+            content: '';
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 2px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(56, 189, 248, 0.25) 15%,
+                var(--primary) 50%,
+                rgba(56, 189, 248, 0.25) 85%,
+                transparent 100%);
+            opacity: 0.9;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.6), 0 0 16px rgba(56, 189, 248, 0.3);
+        }
+        /* 底部左右对称的几何科技感切角线条（仿截图） */
+        .bigscreen-header::after {
+            content: '';
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 38px;
+            pointer-events: none;
+            background-image:
+                /* 左侧主斜线 */
+                linear-gradient(115deg, transparent 0%, transparent calc(50% - 340px), rgba(56,189,248,0.55) calc(50% - 340px), rgba(56,189,248,0.55) calc(50% - 120px), transparent calc(50% - 120px)),
+                /* 右侧主斜线（镜像） */
+                linear-gradient(-115deg, transparent 0%, transparent calc(50% - 340px), rgba(56,189,248,0.55) calc(50% - 340px), rgba(56,189,248,0.55) calc(50% - 120px), transparent calc(50% - 120px)),
+                /* 左侧细线 */
+                linear-gradient(115deg, transparent 0%, transparent calc(50% - 300px), rgba(56,189,248,0.3) calc(50% - 300px), rgba(56,189,248,0.3) calc(50% - 160px), transparent calc(50% - 160px)),
+                /* 右侧细线 */
+                linear-gradient(-115deg, transparent 0%, transparent calc(50% - 300px), rgba(56,189,248,0.3) calc(50% - 300px), rgba(56,189,248,0.3) calc(50% - 160px), transparent calc(50% - 160px));
+            background-size: 100% 2px, 100% 2px, 100% 1px, 100% 1px;
+            background-position: 0 20px, 0 20px, 0 30px, 0 30px;
+            background-repeat: no-repeat;
+            opacity: 0.85;
+        }
+        /* 中央蓝色光点（菱形高光）*/
+        .header-glow-center {
+            position: absolute;
+            left: 50%; bottom: 6px;
+            transform: translateX(-50%);
+            width: 10px; height: 10px;
+            background: radial-gradient(circle, #fff 0%, #7dd3fc 40%, rgba(56,189,248,0.6) 70%, transparent 100%);
+            transform: translateX(-50%) rotate(45deg);
+            box-shadow: 0 0 16px 4px rgba(56, 189, 248, 0.8), 0 0 40px 12px rgba(56, 189, 248, 0.35);
+            pointer-events: none;
+            animation: headerGlowPulse 3s ease-in-out infinite;
+        }
+        .header-glow-center::before, .header-glow-center::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 90px; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(56,189,248,0.8), transparent);
+            pointer-events: none;
+        }
+        .header-glow-center::before { right: 18px; transform: translateY(-50%); }
+        .header-glow-center::after { left: 18px; transform: translateY(-50%); }
+        @keyframes headerGlowPulse {
+            0%, 100% { box-shadow: 0 0 16px 4px rgba(56,189,248,0.8), 0 0 40px 12px rgba(56,189,248,0.35); }
+            50% { box-shadow: 0 0 22px 6px rgba(56,189,248,1), 0 0 60px 20px rgba(56,189,248,0.55); }
+        }
+        .header-title-wrap {
+            text-align: center;
+            position: relative;
+        }
+        .header-title {
+            font-size: 34px;
+            font-weight: 700;
+            letter-spacing: 8px;
+            background: linear-gradient(180deg, #ffffff 10%, #a5d8ff 55%, #38bdf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(56, 189, 248, 0.55), 0 0 12px rgba(255,255,255,0.4);
+            line-height: 1.2;
+            filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.35));
+        }
+        .header-sub {
+            font-size: 13px;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+            margin-top: 4px;
+        }
+        .header-deco-left, .header-deco-right {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 280px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary) 60%, rgba(56,189,248,0.2));
+            opacity: 0.75;
+            box-shadow: 0 0 8px rgba(56,189,248,0.5);
+        }
+        .header-deco-left { left: 24px; }
+        .header-deco-right { right: 24px; transform: translateY(-50%) scaleX(-1); }
+        /* 装饰条末端的小菱点 */
+        .header-deco-left::before, .header-deco-right::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 7px; height: 7px;
+            background: var(--primary);
+            transform: translateY(-50%) rotate(45deg);
+            box-shadow: 0 0 8px 2px rgba(56,189,248,0.7);
+        }
+        .header-deco-left::before { left: 0; }
+        .header-deco-right::before { right: 0; }
+        .header-left-info {
+            position: absolute;
+            left: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header-right-info {
+            position: absolute;
+            right: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .clock {
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--primary);
+            font-family: 'Consolas', 'Monaco', monospace;
+            letter-spacing: 1px;
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.55);
+            line-height: 1.1;
+        }
+        .clock-date {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-family: 'Consolas', 'Monaco', monospace;
+            letter-spacing: 2px;
+            text-align: right;
+            margin-top: 3px;
+        }
+        .clock-date .clock-week { margin-left: 6px; color: var(--primary); opacity: 0.85; }
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .back-btn:hover {
+            background: rgba(56, 189, 248, 0.25);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+        }
+
+        /* 下方左中右区域 */
+        .bigscreen-body {
+            flex: 1;
+            display: flex;
+            gap: 16px;
+            padding: 16px 20px 20px;
+            min-height: 0;
+        }
+        .panel-col {
+            width: 24%;
+            min-width: 320px;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            pointer-events: auto;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .panel-col-scroll {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            overflow-y: auto; /* 高度不够时出现滚动条 */
+            overflow-x: hidden;
+            padding-right: 4px;
+        }
+        .panel-center {
+            flex: 1;
+            min-width: 0;
+            position: relative;
+            pointer-events: none; /* 中间留空，可穿透操作地图 */
+        }
+        .panel-center .map-toolbar,
+        .panel-center .map-toolbar * { pointer-events: auto; }
+
+        /* 占位卡片 */
+        .placeholder-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 120px;
+            color: var(--text-secondary);
+        }
+        .placeholder-card i {
+            font-size: 26px;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+        .placeholder-card span {
+            font-size: 13px;
+        }
+        .placeholder-card.dashed {
+            border-style: dashed;
+            background: rgba(10, 22, 40, 0.45);
+        }
+
+        /* ========== 自建房风险治理卡片 ========== */
+        .gov-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            padding: 14px 18px 20px;
+        }
+        .gov-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            position: relative;
+        }
+        .gov-card-header::after {
+            content: '';
+            position: absolute;
+            left: 0; bottom: -1px;
+            width: 120px; height: 2px;
+            background: linear-gradient(90deg, var(--primary), transparent);
+        }
+        .gov-card-title {
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-shadow: 0 0 16px rgba(56, 189, 248, 0.45);
+            white-space: nowrap;
+        }
+        .gov-card-title::before,
+        .gov-card-title::after {
+            content: '';
+            width: 9px; height: 9px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            transform: rotate(45deg);
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+            flex-shrink: 0;
+        }
+        /* 统一小标题（大标题下方子模块标题） */
+        .panel-sub-title {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+            position: relative;
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+        }
+        .panel-sub-title::before {
+            content: '';
+            width: 4px; height: 15px;
+            background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+            border-radius: 2px;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+        }
+        .panel-sub-title::after {
+            content: '';
+            position: absolute;
+            left: 0; bottom: -1px;
+            width: 90px; height: 2px;
+            background: linear-gradient(90deg, var(--primary), transparent);
+        }
+        /* 面板当前统计范围角标 */
+        .scope-badge {
+            margin-left: auto;
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 11px; font-weight: 400; letter-spacing: 1px;
+            color: var(--text-secondary);
+            padding: 2px 8px; border-radius: 4px;
+            border: 1px solid rgba(138, 164, 192, 0.3);
+            background: rgba(138, 164, 192, 0.08);
+            text-shadow: none;
+            white-space: nowrap;
+        }
+        .scope-badge i { font-size: 10px; color: var(--text-secondary); }
+        .scope-badge.is-drill {
+            color: var(--primary);
+            border-color: rgba(56, 189, 248, 0.45);
+            background: rgba(56, 189, 248, 0.12);
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+        }
+        .scope-badge.is-drill i { color: var(--primary); }
+        .gov-switch {
+            display: flex;
+            gap: 4px;
+            background: rgba(5, 15, 30, 0.65);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 3px;
+        }
+        .gov-switch button {
+            padding: 5px 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .gov-switch button:hover { color: var(--primary); }
+        .gov-switch button.active {
+            background: rgba(56, 189, 248, 0.22);
+            color: var(--primary);
+            font-weight: 600;
+            box-shadow: inset 0 0 8px rgba(56, 189, 248, 0.2);
+        }
+        .gov-stats {
+            display: flex;
+            gap: 14px;
+        }
+        .gov-stat {
+            flex: 1;
+            text-align: center;
+            padding: 16px 8px 14px;
+            background: linear-gradient(180deg, rgba(56, 189, 248, 0.10) 0%, rgba(56, 189, 248, 0.02) 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            position: relative;
+        }
+        .gov-stat::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 20%; right: 20%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0.7;
+        }
+        .gov-stat-icon {
+            font-size: 20px;
+            color: var(--primary);
+            margin-bottom: 8px;
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+        }
+        .gov-stat-value {
+            font-size: 30px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: linear-gradient(180deg, #ffffff 10%, #38bdf8 90%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.1;
+        }
+        .gov-stat-unit {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-left: 4px;
+            -webkit-text-fill-color: var(--text-secondary);
+        }
+        .gov-stat-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            letter-spacing: 1px;
+        }
+
+        /* ========== 风险辨识分级卡片 ========== */
+        .risk-grade-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            padding: 14px 18px 18px;
+        }
+        .risk-grade-cards {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .rg-card {
+            flex: 1;
+            min-width: 0;
+            background: rgba(13, 30, 55, 0.55);
+            border: 1px solid var(--rg-color, rgba(56, 189, 248, 0.35));
+            border-radius: 8px;
+            padding: 10px 4px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.25);
+        }
+        .rg-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 12px var(--rg-color, rgba(56, 189, 248, 0.35));
+        }
+        .rg-card-count {
+            font-size: 24px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--rg-color, #38bdf8);
+            line-height: 1.1;
+            text-shadow: 0 0 12px var(--rg-color, rgba(56, 189, 248, 0.5));
+        }
+        .rg-card-count .rg-unit {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 2px;
+            text-shadow: none;
+        }
+        .rg-card-label {
+            font-size: 12px;
+            color: var(--text-primary);
+            margin-top: 6px;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .risk-grade-chart-wrap {
+            display: flex;
+            justify-content: center;
+        }
+        #riskGradeChart { width: 210px; height: 190px; flex-shrink: 0; }
+
+        /* ========== 动态巡查卡片 ========== */
+        .patrol-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            padding: 14px 18px 18px;
+        }
+        .patrol-top {
+            display: flex;
+            gap: 10px;
+        }
+        .patrol-top-item {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(13, 30, 55, 0.55);
+            border: 1px solid rgba(56, 189, 248, 0.16);
+            border-radius: 8px;
+            padding: 12px 14px;
+        }
+        .patrol-top-icon {
+            width: 46px; height: 46px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: var(--primary);
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.18) 0%, transparent 70%);
+            border-bottom: 2px solid rgba(56, 189, 248, 0.5);
+            border-radius: 50% 50% 6px 6px;
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.8);
+        }
+        .patrol-top-info { min-width: 0; }
+        .patrol-top-label {
+            font-size: 13px;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+            white-space: nowrap;
+        }
+        .patrol-top-value {
+            font-size: 24px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+            line-height: 1.15;
+            margin-top: 2px;
+        }
+        .patrol-top-value .patrol-unit {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 4px;
+            text-shadow: none;
+        }
+        .patrol-bottom {
+            margin-top: 10px;
+            background: rgba(13, 30, 55, 0.55);
+            border: 1px solid rgba(56, 189, 248, 0.16);
+            border-radius: 8px;
+            padding: 4px 14px;
+        }
+        .patrol-line {
+            display: flex;
+            align-items: center;
+            padding: 9px 0;
+            border-bottom: 1px dashed rgba(56, 189, 248, 0.14);
+            font-size: 13px;
+        }
+        .patrol-line:last-child { border-bottom: none; }
+        .patrol-line-label { color: var(--text-primary); letter-spacing: 1px; }
+        .patrol-line-mid {
+            flex: 1;
+            text-align: right;
+            color: var(--text-secondary);
+            padding-right: 14px;
+        }
+        .patrol-line-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+        /* 专业人员复核：黄色高亮 */
+        .patrol-line-sub .patrol-line-value {
+            color: var(--warning);
+            text-shadow: 0 0 12px rgba(250, 204, 21, 0.65);
+        }
+        .patrol-line-sub .patrol-line-value .patrol-unit {
+            color: var(--warning);
+            opacity: 0.85;
+        }
+        .patrol-line-value .patrol-unit {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 3px;
+            text-shadow: none;
+        }
+        .patrol-line-sub {
+            margin-left: 0;
+        }
+        .patrol-line-sub .patrol-line-label { color: var(--text-primary); }
+
+        /* ========== 风险治理卡片 ========== */
+        .rectify-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            padding: 14px 18px 16px;
+        }
+        .rectify-stats {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .rectify-stat {
+            flex: 1;
+            min-width: 0;
+            background: rgba(13, 30, 55, 0.55);
+            border: 1px solid rgba(56, 189, 248, 0.16);
+            border-radius: 8px;
+            padding: 8px 4px 7px;
+            text-align: center;
+        }
+        .rectify-stat-value {
+            font-size: 19px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+            line-height: 1.1;
+        }
+        .rectify-stat-value .rectify-unit {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 2px;
+            text-shadow: none;
+        }
+        .rectify-stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            letter-spacing: 0.5px;
+            line-height: 1.35;
+            word-break: break-all;
+        }
+        .rectify-group {
+            margin-top: 10px;
+        }
+        .rectify-group-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .rectify-group-title {
+            font-size: 13px;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .rectify-group-title::before {
+            content: '';
+            width: 4px; height: 12px;
+            background: var(--primary);
+            border-radius: 2px;
+            box-shadow: 0 0 6px rgba(56, 189, 248, 0.8);
+        }
+        .rectify-group-count {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+        .rectify-group-count .rectify-unit {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 2px;
+            text-shadow: none;
+        }
+        .rectify-bars {
+            display: flex;
+            gap: 10px;
+        }
+        .rectify-bar {
+            flex: 1;
+            min-width: 0;
+        }
+        .rectify-bar-info {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+        .rectify-bar-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .rectify-bar-value {
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+        }
+        .rectify-bar-value .rectify-unit {
+            font-size: 10px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 1px;
+        }
+        .rectify-bar-track {
+            height: 6px;
+            background: rgba(56, 189, 248, 0.12);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .rectify-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, rgba(56, 189, 248, 0.6), var(--primary));
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+            transition: width 0.6s ease;
+        }
+
+        /* ========== 自建房隐患整治卡片 ========== */
+        .survey-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            padding: 14px 18px 16px;
+        }
+        .survey-cols {
+            display: flex;
+            gap: 10px;
+        }
+        /* ==================== 评估鉴定卡片 ==================== */
+        /* ==================== 整治进度卡片 ==================== */
+        .progress-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            padding: 14px 18px 18px;
+        }
+        .progress-top {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .progress-top-item {
+            flex: 1;
+            min-width: 0;
+            text-align: center;
+            padding: 10px 4px 12px;
+            background:
+                radial-gradient(ellipse 70% 32% at 50% 100%, rgba(56,189,248,0.3), transparent 70%),
+                linear-gradient(180deg, rgba(13,30,55,0.35), rgba(13,30,55,0.6));
+            border-bottom: 2px solid rgba(56, 189, 248, 0.55);
+            border-radius: 6px;
+        }
+        .progress-top-label {
+            font-size: 13px;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+            white-space: nowrap;
+        }
+        .progress-top-value {
+            font-size: 22px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+            line-height: 1.1;
+        }
+        .progress-top-value.is-zero { color: var(--warning); text-shadow: 0 0 12px rgba(250, 204, 21, 0.55); }
+        .progress-top-value .progress-unit {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 3px;
+            text-shadow: none;
+        }
+        .progress-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .progress-tab {
+            flex: 1;
+            min-width: 0;
+            padding: 7px 4px;
+            text-align: center;
+            font-size: 12px;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            background: rgba(13, 30, 55, 0.5);
+            border: 1px solid rgba(56, 189, 248, 0.16);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .progress-tab:hover { color: var(--primary); }
+        .progress-tab.active {
+            color: var(--text-primary);
+            font-weight: 600;
+            background: linear-gradient(90deg, rgba(56,189,248,0.05), rgba(56,189,248,0.3), rgba(56,189,248,0.05));
+            border-color: rgba(56, 189, 248, 0.55);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.25), inset 0 0 12px rgba(56, 189, 248, 0.12);
+        }
+        .progress-bottom {
+            display: flex;
+            gap: 8px;
+        }
+        .progress-btm-item {
+            flex: 1;
+            min-width: 0;
+            text-align: center;
+            padding: 10px 4px 0;
+        }
+        .progress-btm-value {
+            font-size: 21px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+            line-height: 1.15;
+        }
+        .progress-btm-value .progress-unit {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 3px;
+            text-shadow: none;
+        }
+        .progress-btm-label {
+            font-size: 12px;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+            margin: 4px 0 8px;
+            white-space: nowrap;
+        }
+        .progress-btm-icon {
+            width: 100%;
+            height: 52px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 8px;
+            background: radial-gradient(ellipse 62% 46% at 50% 100%, rgba(56,189,248,0.4), rgba(56,189,248,0.08) 62%, transparent 75%);
+            border-bottom: 2px solid rgba(56, 189, 248, 0.55);
+            border-radius: 6px;
+            color: var(--primary);
+            font-size: 19px;
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+        }
+        .assess-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow);
+            padding: 14px 18px 16px;
+        }
+        .assess-total {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            margin-bottom: 14px;
+            background: rgba(13, 30, 55, 0.55);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 8px;
+        }
+        .assess-total-label {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: var(--text-primary);
+        }
+        .assess-total-value {
+            font-size: 26px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 14px rgba(56, 189, 248, 0.6);
+        }
+        .assess-total-value .assess-unit {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 4px;
+            text-shadow: none;
+        }
+        .assess-group {
+            display: flex;
+            gap: 12px;
+            padding: 12px 0;
+        }
+        .assess-group + .assess-group {
+            border-top: 1px dashed rgba(56, 189, 248, 0.14);
+        }
+        .assess-side {
+            width: 76px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-align: center;
+        }
+        .assess-hex {
+            width: 40px; height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(160deg, rgba(56, 189, 248, 0.28), rgba(14, 165, 233, 0.1));
+            clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+            color: var(--primary);
+            font-size: 17px;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+        }
+        .assess-side-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+        .assess-side-value {
+            font-size: 19px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.55);
+            line-height: 1.1;
+        }
+        .assess-side-value .assess-unit {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 2px;
+            text-shadow: none;
+        }
+        .assess-rows {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 10px;
+        }
+        .assess-row-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 3px;
+        }
+        .assess-row-label {
+            font-size: 13px;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+        }
+        .assess-row-nums {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+            text-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
+        }
+        .assess-row-nums .assess-num-unit {
+            font-size: 10px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin: 0 6px 0 2px;
+            text-shadow: none;
+        }
+        .assess-row-nums .assess-pct { color: #34d399; text-shadow: 0 0 8px rgba(52, 211, 153, 0.45); }
+        .assess-row-track {
+            height: 3px;
+            border-radius: 2px;
+            background: rgba(56, 189, 248, 0.12);
+            overflow: hidden;
+        }
+        .assess-row-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, rgba(56,189,248,0.35), var(--primary));
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.7);
+            transition: width 0.6s ease;
+        }
+        .survey-col {
+            flex: 1;
+            min-width: 0;
+            background: rgba(13, 30, 55, 0.55);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .survey-col-head {
+            background: linear-gradient(90deg, rgba(56, 189, 248, 0.22), rgba(56, 189, 248, 0.05));
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+            text-align: center;
+            white-space: nowrap;
+        }
+        .survey-col-body { padding: 10px 12px 12px; }
+        .survey-line {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-secondary);
+            padding: 7px 0;
+        }
+        .survey-line + .survey-line {
+            border-top: 1px dashed rgba(56, 189, 248, 0.16);
+        }
+        .survey-line-value {
+            font-size: 19px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+        .survey-line-value .survey-unit {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 3px;
+            text-shadow: none;
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.25); border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+    </style>
+</head>
+<body>
+    <!-- 底层：全屏地图 -->
+    <div class="bigscreen-map-layer">
+        <div id="mapContainer"></div>
+    </div>
+
+    <!-- 上层：覆盖层 -->
+    <div class="bigscreen-overlay">
+        <!-- 地图竖排工具控件：贴右面板左缘 -->
+        <div class="map-zoom-control">
+            <button onclick="resetMapView()" title="复位到全区视图"><i class="fas fa-crosshairs"></i></button>
+            <button onclick="zoomMap(1.2)" title="放大"><i class="fas fa-magnifying-glass-plus"></i></button>
+            <button onclick="zoomMap(0.8)" title="缩小"><i class="fas fa-magnifying-glass-minus"></i></button>
+            <button onclick="resetMapView()" title="重置缩放与位置"><i class="fas fa-rotate-left"></i></button>
+            <button onclick="toggleFullscreen(this)" title="全屏/退出全屏"><i class="fas fa-expand"></i></button>
+        </div>
+        <!-- 顶部标题区 -->
+        <div class="bigscreen-header">
+            <div class="header-deco-left"></div>
+            <div class="header-deco-right"></div>
+            <div class="header-glow-center"></div>
+            <div class="header-left-info">
+                <i class="fas fa-map-marked-alt" style="color:var(--primary)"></i>
+                <span>奉贤区</span>
+            </div>
+            <div class="header-title-wrap">
+                <div class="header-title">自建房安全风险一张图</div>
+            </div>
+            <div class="header-right-info">
+                <div class="clock-wrap">
+                    <div class="clock" id="clock">--:--:--</div>
+                    <div class="clock-date" id="clockDate">----年--月--日</div>
+                </div>
+                <a href="situation-rural-house.html" class="back-btn"><i class="fas fa-compress"></i> 退出大屏</a>
+            </div>
+        </div>
+
+        <!-- 下方左中右区域 -->
+        <div class="bigscreen-body">
+            <!-- 左侧面板区 -->
+            <div class="panel-col" id="leftPanel">
+                <div class="gov-card">
+                    <div class="gov-card-header">
+                        <div class="gov-card-title">自建房风险治理</div>
+                        <div class="gov-switch">
+                            <button id="btnGovUrban" onclick="switchGovCategory('urban')">城镇自建房</button>
+                            <button id="btnGovRural" class="active" onclick="switchGovCategory('rural')">农村自建房</button>
+                        </div>
+                    </div>
+                    <div class="gov-stats">
+                        <div class="gov-stat">
+                            <div class="gov-stat-icon"><i class="fas fa-building"></i></div>
+                            <div class="gov-stat-value" id="govCount">0<span class="gov-stat-unit">栋</span></div>
+                            <div class="gov-stat-label">自建房栋数</div>
+                        </div>
+                        <div class="gov-stat">
+                            <div class="gov-stat-icon"><i class="fas fa-vector-square"></i></div>
+                            <div class="gov-stat-value" id="govArea">0<span class="gov-stat-unit">m²</span></div>
+                            <div class="gov-stat-label">自建房面积</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-col-scroll">
+                <div class="risk-grade-card">
+                    <div class="panel-sub-title">风险辨识分级</div>
+                    <div class="risk-grade-body">
+                        <div class="risk-grade-cards" id="riskGradeRows"></div>
+                        <div class="risk-grade-chart-wrap">
+                            <div id="riskGradeChart"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="patrol-card">
+                    <div class="panel-sub-title">动态巡查</div>
+                    <div class="patrol-top">
+                        <div class="patrol-top-item">
+                            <div class="patrol-top-icon"><i class="fas fa-chart-simple"></i></div>
+                            <div class="patrol-top-info">
+                                <div class="patrol-top-label">巡查次数</div>
+                                <div class="patrol-top-value" id="patrolCount">0<span class="patrol-unit">次</span></div>
+                            </div>
+                        </div>
+                        <div class="patrol-top-item">
+                            <div class="patrol-top-icon"><i class="fas fa-building"></i></div>
+                            <div class="patrol-top-info">
+                                <div class="patrol-top-label">巡查房屋</div>
+                                <div class="patrol-top-value" id="patrolHouses">0<span class="patrol-unit">栋</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="patrol-bottom">
+                        <div class="patrol-line">
+                            <span class="patrol-line-label">经判定无隐患销号</span>
+                            <span class="patrol-line-mid"></span>
+                            <span class="patrol-line-value" id="patrolNoRisk">0<span class="patrol-unit">栋</span></span>
+                        </div>
+                        <div class="patrol-line">
+                            <span class="patrol-line-label">鉴定为AB级</span>
+                            <span class="patrol-line-mid"></span>
+                            <span class="patrol-line-value" id="patrolAB">0<span class="patrol-unit">栋</span></span>
+                        </div>
+                        <div class="patrol-line patrol-line-sub">
+                            <span class="patrol-line-label">专业人员复核</span>
+                            <span class="patrol-line-mid"></span>
+                            <span class="patrol-line-value" id="patrolReview">0<span class="patrol-unit">栋</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="rectify-card">
+                    <div class="panel-sub-title">风险整治</div>
+                    <div class="rectify-stats">
+                        <div class="rectify-stat">
+                            <div class="rectify-stat-value" id="rectifyMeasure">0<span class="rectify-unit">次</span></div>
+                            <div class="rectify-stat-label">已采取风险治理措施</div>
+                        </div>
+                        <div class="rectify-stat">
+                            <div class="rectify-stat-value" id="rectifyClosed">0<span class="rectify-unit">栋</span></div>
+                            <div class="rectify-stat-label">已销号</div>
+                        </div>
+                        <div class="rectify-stat">
+                            <div class="rectify-stat-value" id="rectifyRate">0<span class="rectify-unit">%</span></div>
+                            <div class="rectify-stat-label">销号完成率</div>
+                        </div>
+                        <div class="rectify-stat">
+                            <div class="rectify-stat-value" id="rectifyEngRate">0<span class="rectify-unit">%</span></div>
+                            <div class="rectify-stat-label">工程措施采用率</div>
+                        </div>
+                    </div>
+                    <div class="rectify-group">
+                        <div class="rectify-group-head">
+                            <span class="rectify-group-title">工程措施治理</span>
+                            <span class="rectify-group-count" id="rectifyEngCount">0<span class="rectify-unit">次</span></span>
+                        </div>
+                        <div class="rectify-bars" id="rectifyEngBars"></div>
+                    </div>
+                    <div class="rectify-group">
+                        <div class="rectify-group-head">
+                            <span class="rectify-group-title">管理措施治理</span>
+                            <span class="rectify-group-count" id="rectifyMgrCount">0<span class="rectify-unit">次</span></span>
+                        </div>
+                        <div class="rectify-bars" id="rectifyMgrBars1"></div>
+                        <div class="rectify-bars" id="rectifyMgrBars2" style="margin-top:8px;"></div>
+                    </div>
+                </div>
+                </div><!-- /.panel-col-scroll -->
+            </div>
+
+            <!-- 中间区域（透明，露出底层地图） -->
+            <div class="panel-center">
+                <div class="map-toolbar">
+                    <div class="map-toolbar-group" id="mapRiskChips"></div>
+                    <div class="map-toolbar-divider"></div>
+                    <div class="map-toolbar-group">
+                        <span class="map-toolbar-label"><i class="fas fa-location-dot"></i></span>
+                        <select class="map-street-select" id="mapStreetSelect" onchange="drillToStreet(this.value)"></select>
+                        <div class="map-drill-back" id="mapDrillBack" onclick="resetStreetDrill()"><i class="fas fa-arrow-left"></i> 返回全区</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧面板区 -->
+            <div class="panel-col" id="rightPanel">
+                <div class="survey-card">
+                    <div class="gov-card-header">
+                        <div class="gov-card-title">自建房隐患整治</div>
+                    </div>
+                    <div class="panel-sub-title">排查情况</div>
+                    <div class="survey-cols">
+                        <div class="survey-col">
+                            <div class="survey-col-head">排查建筑</div>
+                            <div class="survey-col-body">
+                                <div class="survey-line">
+                                    <span>栋数：</span>
+                                    <span class="survey-line-value" id="surveyCount">0<span class="survey-unit">栋</span></span>
+                                </div>
+                                <div class="survey-line">
+                                    <span>面积：</span>
+                                    <span class="survey-line-value" id="surveyArea">0<span class="survey-unit">m²</span></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="survey-col">
+                            <div class="survey-col-head">初判存在隐患建筑</div>
+                            <div class="survey-col-body">
+                                <div class="survey-line">
+                                    <span>栋数：</span>
+                                    <span class="survey-line-value" id="surveyRiskCount">0<span class="survey-unit">栋</span></span>
+                                </div>
+                                <div class="survey-line">
+                                    <span>面积：</span>
+                                    <span class="survey-line-value" id="surveyRiskArea">0<span class="survey-unit">m²</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-col-scroll">
+                <div class="assess-card">
+                    <div class="panel-sub-title">评估鉴定</div>
+                    <div class="assess-total">
+                        <span class="assess-total-label">已鉴定评估栋数</span>
+                        <span class="assess-total-value" id="assessTotal">0<span class="assess-unit">栋</span></span>
+                    </div>
+                    <div class="assess-group">
+                        <div class="assess-side">
+                            <div class="assess-hex"><i class="fas fa-building"></i></div>
+                            <div class="assess-side-label">已评估栋数</div>
+                            <div class="assess-side-value" id="assessEvalCount">0<span class="assess-unit">栋</span></div>
+                        </div>
+                        <div class="assess-rows" id="assessEvalRows"></div>
+                    </div>
+                    <div class="assess-group">
+                        <div class="assess-side">
+                            <div class="assess-hex"><i class="fas fa-clipboard-check"></i></div>
+                            <div class="assess-side-label">已鉴定栋数</div>
+                            <div class="assess-side-value" id="assessIdentCount">0<span class="assess-unit">栋</span></div>
+                        </div>
+                        <div class="assess-rows" id="assessIdentRows"></div>
+                    </div>
+                </div>
+                <div class="progress-card">
+                    <div class="panel-sub-title">整治进度</div>
+                    <div class="progress-top">
+                        <div class="progress-top-item">
+                            <div class="progress-top-label">完成整治</div>
+                            <div class="progress-top-value" id="progDone">0<span class="progress-unit">栋</span></div>
+                        </div>
+                        <div class="progress-top-item">
+                            <div class="progress-top-label">未完成整治</div>
+                            <div class="progress-top-value" id="progTodo">0<span class="progress-unit">栋</span></div>
+                        </div>
+                        <div class="progress-top-item">
+                            <div class="progress-top-label">完成整治率</div>
+                            <div class="progress-top-value" id="progRate">0<span class="progress-unit">%</span></div>
+                        </div>
+                    </div>
+                    <div class="progress-tabs">
+                        <div class="progress-tab active" id="progTabDetail" onclick="switchProgressTab('detail')">整治具体情况</div>
+                        <div class="progress-tab" id="progTabYear" onclick="switchProgressTab('year')">年度整治计划完成情况</div>
+                    </div>
+                    <div class="progress-bottom">
+                        <div class="progress-btm-item">
+                            <div class="progress-btm-value" id="progAB">0<span class="progress-unit">栋</span></div>
+                            <div class="progress-btm-label">鉴定AB级排除</div>
+                            <div class="progress-btm-icon"><i class="fas fa-house-circle-check"></i></div>
+                        </div>
+                        <div class="progress-btm-item">
+                            <div class="progress-btm-value" id="progExclude">0<span class="progress-unit">栋</span></div>
+                            <div class="progress-btm-label">评估排除</div>
+                            <div class="progress-btm-icon"><i class="fas fa-clipboard-check"></i></div>
+                        </div>
+                        <div class="progress-btm-item">
+                            <div class="progress-btm-value" id="progMeasure">0<span class="progress-unit">栋</span></div>
+                            <div class="progress-btm-label">采取整治措施</div>
+                            <div class="progress-btm-icon"><i class="fas fa-screwdriver-wrench"></i></div>
+                        </div>
+                    </div>
+                </div>
+                </div><!-- /.panel-col-scroll -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 时钟 ====================
+        const WEEK_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
+        function updateClock() {
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            document.getElementById('clock').textContent =
+                pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+            document.getElementById('clockDate').innerHTML =
+                now.getFullYear() + '年' + pad(now.getMonth() + 1) + '月' + pad(now.getDate()) + '日' +
+                '<span class="clock-week">星期' + WEEK_NAMES[now.getDay()] + '</span>';
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ==================== 地图筛选与下钻 ====================
+        let mapRiskFilter = 'all';   // all | danger | warning | safe
+        let streetDrill = null;      // null 或街道名
+
+        function getMapRiskChips() {
+            if (govCategory === 'urban') {
+                return [
+                    { key: 'all', label: '全部', color: '#38bdf8' },
+                    { key: 'danger', label: '疑似危房', color: '#f43f5e' },
+                    { key: 'major', label: '严重损坏房', color: '#f97316' },
+                    { key: 'warning', label: '一般损坏房', color: '#facc15' },
+                    { key: 'safe', label: '完好房', color: '#38bdf8' }
+                ];
+            }
+            return [
+                { key: 'all', label: '全部', color: '#38bdf8' },
+                { key: 'danger', label: '第三类', color: '#f43f5e' },
+                { key: 'warning', label: '第二类', color: '#facc15' },
+                { key: 'safe', label: '第一类', color: '#38bdf8' }
+            ];
+        }
+        function riskMatchesFilter(risk) {
+            if (mapRiskFilter === 'all') return true;
+            if (mapRiskFilter === 'danger') {
+                // 农房「第三类」含 danger+major；城房「疑似危房」仅 danger
+                return govCategory === 'urban' ? risk === 'danger' : (risk === 'danger' || risk === 'major');
+            }
+            if (mapRiskFilter === 'major') return risk === 'major';
+            return risk === mapRiskFilter;
+        }
+        function renderMapToolbar() {
+            const chips = getMapRiskChips();
+            document.getElementById('mapRiskChips').innerHTML = chips.map(c =>
+                '<div class="map-risk-chip' + (mapRiskFilter === c.key ? ' active' : '') + '" style="--chip-color:' + c.color + '" onclick="setMapRiskFilter(\'' + c.key + '\')">' +
+                    '<span class="chip-dot"></span>' + c.label +
+                '</div>'
+            ).join('');
+
+            const streets = [
+                '南桥镇', '四团镇', '头桥街道', '奉城镇', '奉浦街道', '庄行镇', '柘林镇',
+                '海湾旅游区', '海湾镇', '西渡街道', '金汇镇', '金海街道', '青村镇'
+            ].filter(s => STREET_MOCK_POSITIONS[s]);
+            document.getElementById('mapStreetSelect').innerHTML =
+                '<option value="">全区</option>' +
+                streets.map(s => '<option value="' + s + '"' + (streetDrill === s ? ' selected' : '') + '>' + s + '</option>').join('');
+            document.getElementById('mapDrillBack').classList.toggle('show', !!streetDrill);
+        }
+        function setMapRiskFilter(key) {
+            mapRiskFilter = key;
+            renderMapToolbar();
+            refreshPanels(); // 筛选变化 → 左右面板联动
+            renderMap();
+        }
+        // 计算 SVG viewBox(1000×800) 经 preserveAspectRatio=meet 映射到屏幕 rect 的 letterbox 变换
+        function getSvgLetterbox() {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return null;
+            const rect = svg.getBoundingClientRect();
+            const k = Math.min(rect.width / MAP_VIEW.w, rect.height / MAP_VIEW.h);
+            const offsetX = (rect.width - MAP_VIEW.w * k) / 2;
+            const offsetY = (rect.height - MAP_VIEW.h * k) / 2;
+            return { k: k, offsetX: offsetX, offsetY: offsetY, rectW: rect.width, rectH: rect.height };
+        }
+        // SVG viewBox 坐标 → 未加 mapLayer 变换前的屏幕坐标
+        function svgToScreen(x, y) {
+            const lb = getSvgLetterbox();
+            if (!lb) return { x: 0, y: 0 };
+            return { x: lb.offsetX + x * lb.k, y: lb.offsetY + y * lb.k };
+        }
+        // 让指定 SVG viewBox 坐标点精确居中到【地图可视区(panel-center)】中心（考虑 letterbox + 当前 scale）
+        function centerOnSvgPoint(x, y, scale) {
+            const lb = getSvgLetterbox();
+            if (!lb) return;
+            const svg = document.getElementById('mockSvg');
+            const svgRect = svg.getBoundingClientRect();
+            // 可视区：panel-center（左右面板之间的留空）；取不到则用 SVG 元素中心
+            const centerEl = document.querySelector('.panel-center');
+            let targetX, targetY;
+            if (centerEl) {
+                const cr = centerEl.getBoundingClientRect();
+                targetX = cr.left + cr.width / 2;
+                targetY = cr.top + cr.height / 2;
+            } else {
+                targetX = svgRect.left + svgRect.width / 2;
+                targetY = svgRect.top + svgRect.height / 2;
+            }
+            // 转成 SVG 元素局部坐标
+            const cx = targetX - svgRect.left;
+            const cy = targetY - svgRect.top;
+            if (scale !== undefined) mapViewState.scale = Math.max(mapViewState.minScale, Math.min(mapViewState.maxScale, scale));
+            // 最终屏幕(局部)位置 = lb.offset + (pt*scale + t)*k  →  t = (中心 - lb.offset)/k - pt*scale
+            mapViewState.tx = (cx - lb.offsetX) / lb.k - x * mapViewState.scale;
+            mapViewState.ty = (cy - lb.offsetY) / lb.k - y * mapViewState.scale;
+            applyMapTransform();
+        }
+        function drillToStreet(street) {
+            if (!street) { resetStreetDrill(); return; }
+            streetDrill = street;
+            renderMapToolbar();
+            refreshPanels(); // 左右统计面板联动到该街镇
+            // 聚焦到该街道：精确把街镇中心对齐到可视区中心
+            const pos = STREET_MOCK_POSITIONS[street];
+            if (pos) {
+                centerOnSvgPoint(pos.x, pos.y, Math.min(mapViewState.maxScale, 2.2));
+            }
+            renderMap();
+        }
+        function resetStreetDrill() {
+            streetDrill = null;
+            renderMapToolbar();
+            refreshPanels(); // 左右统计面板回到全区口径
+            mapViewState.scale = 1;
+            mapViewState.tx = 0;
+            mapViewState.ty = 0;
+            applyMapTransform();
+            renderMap();
+        }
+
+        // 复位：退出下钻 + 回到全区初始视图
+        function resetMapView() {
+            if (streetDrill) {
+                resetStreetDrill();
+            } else {
+                mapViewState.scale = 1;
+                mapViewState.tx = 0;
+                mapViewState.ty = 0;
+                applyMapTransform();
+                renderMap();
+            }
+        }
+
+        // 全屏切换
+        function toggleFullscreen(btn) {
+            const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            if (!isFs) {
+                const el = document.documentElement;
+                if (el.requestFullscreen) el.requestFullscreen();
+                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+            }
+        }
+        // 全屏状态变化时切换图标
+        function syncFullscreenIcon() {
+            const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            document.querySelectorAll('.map-zoom-control button').forEach(b => {
+                const icon = b.querySelector('.fa-expand, .fa-compress');
+                if (!icon) return;
+                icon.classList.toggle('fa-expand', !isFs);
+                icon.classList.toggle('fa-compress', isFs);
+                b.classList.toggle('mzc-active', isFs);
+            });
+        }
+        document.addEventListener('fullscreenchange', syncFullscreenIcon);
+        document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
+
+        // ==================== 地图逻辑（复用态势感知页的示意地图） ====================
+        const RISK_CONFIG = {
+            danger: { label: '严重安全隐患', color: '#f43f5e', class: 'danger' },
+            major:  { label: '严重安全隐患', color: '#f43f5e', class: 'danger' },
+            warning:{ label: '一定安全隐患', color: '#facc15', class: 'warning' },
+            safe:   { label: '未发现安全隐患', color: '#38bdf8', class: 'safe' }
+        };
+
+        // 按当前类目动态取落点颜色/标签：城房 4 级（major=严重损坏房·橙），农房 3 级（major 并入第三类·红）
+        function getRiskVisual(risk) {
+            if (govCategory === 'urban') {
+                if (risk === 'danger') return { color: '#f43f5e', label: '疑似危房' };
+                if (risk === 'major')  return { color: '#f97316', label: '严重损坏房' };
+                if (risk === 'warning')return { color: '#facc15', label: '一般损坏房' };
+                return { color: '#38bdf8', label: '完好房' };
+            }
+            if (risk === 'danger' || risk === 'major') return { color: '#f43f5e', label: '第三类' };
+            if (risk === 'warning') return { color: '#facc15', label: '第二类' };
+            return { color: '#38bdf8', label: '第一类' };
+        }
+
+        const MAP_BOUNDS = { minLng: 121.35, maxLng: 121.60, minLat: 30.80, maxLat: 31.05 };
+        const MAP_VIEW = { w: 1000, h: 800 };
+        const STREET_MOCK_POSITIONS = {
+            '南桥镇': { x: 520, y: 380 }, '奉城镇': { x: 720, y: 360 }, '庄行镇': { x: 320, y: 420 },
+            '金汇镇': { x: 620, y: 280 }, '青村镇': { x: 680, y: 520 }, '柘林镇': { x: 400, y: 580 },
+            '四团镇': { x: 820, y: 480 }, '海湾镇': { x: 580, y: 680 }, '西渡街道': { x: 420, y: 260 },
+            '奉浦街道': { x: 500, y: 300 }, '海湾旅游区': { x: 650, y: 720 }, '头桥街道': { x: 780, y: 300 },
+            '金海街道': { x: 560, y: 340 }
+        };
+        const STREET_BOUNDARIES = {
+            '南桥镇': [[440,300],[600,300],[620,420],[540,480],[460,440]],
+            '奉城镇': [[680,260],[820,280],[840,400],[760,460],[680,420]],
+            '庄行镇': [[220,360],[380,340],[420,460],[300,520],[220,480]],
+            '金汇镇': [[560,180],[700,200],[720,280],[620,300],[560,260]],
+            '青村镇': [[620,440],[760,460],[780,580],[660,600],[600,520]],
+            '柘林镇': [[320,500],[480,480],[540,600],[420,660],[320,620]],
+            '四团镇': [[780,420],[920,400],[940,520],[840,560],[760,500]],
+            '海湾镇': [[500,620],[640,620],[660,760],[520,780],[460,680]],
+            '西渡街道': [[360,180],[500,200],[520,300],[420,320],[340,280]],
+            '奉浦街道': [[480,240],[580,240],[600,320],[500,340],[460,280]],
+            '海湾旅游区': [[640,640],[780,620],[800,760],[680,780],[620,700]],
+            '头桥街道': [[720,220],[860,200],[880,300],[780,320],[700,280]],
+            '金海街道': [[560,300],[660,300],[680,380],[580,400],[540,340]]
+        };
+
+        let allData = [];
+        let urbanData = [];
+        let govCategory = 'rural';
+        let riskGradeChart = null;
+        let mapViewState = { scale: 1, tx: 0, ty: 0, minScale: 0.6, maxScale: 6 };
+
+        // 当前激活的数据集（城房/农房全局切换）
+        function activeData() { return govCategory === 'urban' ? urbanData : allData; }
+
+        // 视野范围数据：下钻街镇时只取该镇，否则取全区（供左右统计面板联动）
+        function scopeData() {
+            const src = activeData();
+            return streetDrill ? src.filter(d => d.street === streetDrill) : src;
+        }
+
+        // 统一刷新左右统计面板（全区 ↔ 街镇 联动）
+        function refreshPanels() {
+            renderGovStats();
+            renderRiskGrade();
+            renderPatrol();
+            renderRectify();
+            renderSurvey();
+            renderAssess();
+            renderProgress();
+            updateScopeBadges();
+        }
+
+        // 面板角标：显示当前统计范围（全区 / 某街镇）
+        function updateScopeBadges() {
+            // 首次：给所有面板子标题注入角标元素
+            document.querySelectorAll('.panel-sub-title').forEach(h => {
+                if (!h.querySelector('.scope-badge')) {
+                    const b = document.createElement('span');
+                    b.className = 'scope-badge';
+                    b.setAttribute('data-scope-badge', '');
+                    b.innerHTML = '<i class="fas fa-location-dot"></i><span class="sb-text"></span>';
+                    h.appendChild(b);
+                }
+            });
+            const text = streetDrill ? streetDrill : '全区';
+            document.querySelectorAll('[data-scope-badge]').forEach(el => {
+                el.querySelector('.sb-text').textContent = text;
+                el.classList.toggle('is-drill', !!streetDrill);
+            });
+        }
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let mapLayer = null;
+        let mapBoundaryLayer = null;
+        let mapContentLayer = null;
+
+        function lngToX(lng) { return (lng - MAP_BOUNDS.minLng) / (MAP_BOUNDS.maxLng - MAP_BOUNDS.minLng) * MAP_VIEW.w; }
+        function latToY(lat) { return MAP_VIEW.h - (lat - MAP_BOUNDS.minLat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat) * MAP_VIEW.h; }
+
+        function loadData() {
+            const records = getAllHouseRecords();
+            const mapRecord = r => ({
+                no: r.no,
+                street: r.street || '',
+                risk: r.originalRisk || r.risk || 'safe',
+                lat: parseFloat(r.lat) || 30.92,
+                lng: parseFloat(r.lng) || 121.47,
+                buildingArea: parseFloat(r.buildingArea) || (parseFloat(r.structure?.buildingArea) || 0)
+            });
+            allData = records
+                .filter(r => r.houseType === '农村自建房' || r.category === '农村自建房')
+                .map(mapRecord);
+            urbanData = records
+                .filter(r => r.houseType === '城镇自建房' || r.category === '城镇自建房')
+                .map(mapRecord);
+        }
+
+        function switchGovCategory(cat) {
+            govCategory = cat;
+            document.getElementById('btnGovUrban').classList.toggle('active', cat === 'urban');
+            document.getElementById('btnGovRural').classList.toggle('active', cat === 'rural');
+            // 城/农风险类目不同：当前筛选在新类目中不存在时重置为「全部」
+            if (!getMapRiskChips().some(c => c.key === mapRiskFilter)) mapRiskFilter = 'all';
+            refreshPanels();
+            renderMapToolbar();
+            renderMap();
+        }
+
+        // 整治进度：顶部三项 + 底部三项，tab 切换底部统计口径
+        let progressTab = 'detail';
+        function switchProgressTab(tab) {
+            progressTab = tab;
+            document.getElementById('progTabDetail').classList.toggle('active', tab === 'detail');
+            document.getElementById('progTabYear').classList.toggle('active', tab === 'year');
+            renderProgress();
+        }
+        function renderProgress() {
+            const data = scopeData();
+            const riskCnt = data.filter(d => d.risk === 'danger' || d.risk === 'major').length;
+            const seed = govCategory === 'rural' ? 7 : 13;
+
+            // 顶部：完成整治 / 未完成整治 / 完成整治率
+            const todo = Math.round(riskCnt * patrolRand(seed + 31) * 0.25);
+            const done = riskCnt - todo;
+            const rate = riskCnt > 0 ? (done / riskCnt * 100).toFixed(1) : '100.0';
+            document.getElementById('progDone').innerHTML = done.toLocaleString() + '<span class="progress-unit">栋</span>';
+            const todoEl = document.getElementById('progTodo');
+            todoEl.innerHTML = todo.toLocaleString() + '<span class="progress-unit">栋</span>';
+            todoEl.classList.toggle('is-zero', todo === 0);
+            document.getElementById('progRate').innerHTML = rate + '<span class="progress-unit">%</span>';
+
+            // 底部：随 tab 切换系数（年度计划口径略小）
+            const factor = progressTab === 'year' ? 0.72 : 1;
+            const ab = Math.round(riskCnt * 0.5 * factor);
+            const exclude = Math.round(riskCnt * (0.9 + patrolRand(seed + 32) * 0.2) * factor);
+            const measure = done;
+            document.getElementById('progAB').innerHTML = ab.toLocaleString() + '<span class="progress-unit">栋</span>';
+            document.getElementById('progExclude').innerHTML = exclude.toLocaleString() + '<span class="progress-unit">栋</span>';
+            document.getElementById('progMeasure').innerHTML = measure.toLocaleString() + '<span class="progress-unit">栋</span>';
+        }
+
+        // 评估鉴定：已评估/已鉴定 各三项分布，种子化稳定
+        function renderAssess() {
+            const data = scopeData();
+            const total = data.length;
+            const riskCnt = data.filter(d => d.risk === 'danger' || d.risk === 'major').length;
+            const seed = govCategory === 'rural' ? 7 : 13;
+
+            const evalCount = Math.max(1, Math.round(total * (0.82 + patrolRand(seed + 21) * 0.1)));   // 已评估栋数
+            const identCount = Math.max(1, Math.round(evalCount * (0.04 + patrolRand(seed + 22) * 0.05))); // 已鉴定栋数
+            document.getElementById('assessTotal').innerHTML = (evalCount + identCount).toLocaleString() + '<span class="assess-unit">栋</span>';
+            document.getElementById('assessEvalCount').innerHTML = evalCount.toLocaleString() + '<span class="assess-unit">栋</span>';
+            document.getElementById('assessIdentCount').innerHTML = identCount.toLocaleString() + '<span class="assess-unit">栋</span>';
+
+            // 已评估：评估排除 / 一般隐患 / 评估危房（危房锚定 danger+major）
+            const evalDanger = Math.min(riskCnt, evalCount);
+            const evalGeneral = Math.min(Math.round(evalCount * (0.08 + patrolRand(seed + 23) * 0.05)), evalCount - evalDanger);
+            const evalExclude = evalCount - evalDanger - evalGeneral;
+            document.getElementById('assessEvalRows').innerHTML = [
+                { label: '评估排除', count: evalExclude },
+                { label: '一般隐患', count: evalGeneral },
+                { label: '评估危房', count: evalDanger }
+            ].map(r => renderAssessRow(r, evalCount)).join('');
+
+            // 已鉴定：鉴定排除 / 一般隐患 / 鉴定危房
+            const identGeneralPct = 0.55 + patrolRand(seed + 24) * 0.2;
+            const identDangerPct = 0.05 + patrolRand(seed + 25) * 0.12;
+            const identGeneral = Math.round(identCount * identGeneralPct);
+            const identDanger = Math.max(1, Math.round(identCount * identDangerPct));
+            const identExclude = Math.max(0, identCount - identGeneral - identDanger);
+            document.getElementById('assessIdentRows').innerHTML = [
+                { label: '鉴定排除', count: identExclude },
+                { label: '一般隐患', count: identGeneral },
+                { label: '鉴定危房', count: identDanger }
+            ].map(r => renderAssessRow(r, identCount)).join('');
+        }
+        function renderAssessRow(r, base) {
+            const pct = base > 0 ? (r.count / base * 100) : 0;
+            const pctText = pct.toFixed(2);
+            return '<div class="assess-row">' +
+                '<div class="assess-row-head">' +
+                    '<span class="assess-row-label">' + r.label + '</span>' +
+                    '<span class="assess-row-nums">' + r.count.toLocaleString() +
+                        '<span class="assess-num-unit">栋</span>' +
+                        '<span class="assess-pct">' + pctText + '%</span>' +
+                    '</span>' +
+                '</div>' +
+                '<div class="assess-row-track"><div class="assess-row-fill" style="width:' + Math.max(1.5, pct) + '%"></div></div>' +
+            '</div>';
+        }
+
+        // 自建房隐患整治 - 排查情况
+        function renderSurvey() {
+            const data = scopeData();
+            const area = data.reduce((s, d) => s + (d.buildingArea || 0), 0);
+            const riskData = data.filter(d => d.risk === 'danger' || d.risk === 'major');
+            const riskArea = riskData.reduce((s, d) => s + (d.buildingArea || 0), 0);
+            document.getElementById('surveyCount').innerHTML = data.length.toLocaleString() + '<span class="survey-unit">栋</span>';
+            document.getElementById('surveyArea').innerHTML = Math.round(area).toLocaleString() + '<span class="survey-unit">m²</span>';
+            document.getElementById('surveyRiskCount').innerHTML = riskData.length.toLocaleString() + '<span class="survey-unit">栋</span>';
+            document.getElementById('surveyRiskArea').innerHTML = Math.round(riskArea).toLocaleString() + '<span class="survey-unit">m²</span>';
+        }
+
+        // 风险治理：基于当前类别数据推导，种子化保证稳定
+        function renderRectify() {
+            const data = scopeData();
+            const total = data.length;
+            const riskCnt = data.filter(d => d.risk === 'danger' || d.risk === 'major').length || Math.round(total * 0.06);
+            const seed = govCategory === 'rural' ? 7 : 13;
+
+            const measure = Math.round(riskCnt * 1.05);                 // 已采取措施次数
+            const closed = Math.round(riskCnt * 2.8);                   // 已销号栋
+            const rate = Math.min(99, Math.round(38 + patrolRand(seed + 1) * 30));   // 销号完成率%
+            const engRate = Math.min(99, Math.round(30 + patrolRand(seed + 2) * 35)); // 工程措施采用率%
+
+            document.getElementById('rectifyMeasure').innerHTML = measure.toLocaleString() + '<span class="rectify-unit">次</span>';
+            document.getElementById('rectifyClosed').innerHTML = closed.toLocaleString() + '<span class="rectify-unit">栋</span>';
+            document.getElementById('rectifyRate').innerHTML = rate + '<span class="rectify-unit">%</span>';
+            document.getElementById('rectifyEngRate').innerHTML = engRate + '<span class="rectify-unit">%</span>';
+
+            // 工程措施治理：拆除重建 / 维修加固 / 其他
+            const engTotal = Math.round(measure * engRate / 100);
+            const engParts = [
+                { label: '拆除重建', pct: Math.round(30 + patrolRand(seed + 3) * 20) },
+                { label: '维修加固', pct: 0 },
+                { label: '其他', pct: 0 }
+            ];
+            engParts[1].pct = Math.round((100 - engParts[0].pct) * 0.9);
+            engParts[2].pct = Math.max(0, 100 - engParts[0].pct - engParts[1].pct);
+            document.getElementById('rectifyEngCount').innerHTML = engTotal.toLocaleString() + '<span class="rectify-unit">次</span>';
+            document.getElementById('rectifyEngBars').innerHTML = engParts.map(renderRectifyBar).join('');
+
+            // 管理措施治理：停止使用 / 停止经营 / 封控警告 / 人员撤离 / 持续监控 / 其他
+            const mgrTotal = measure - engTotal;
+            const mgrParts1 = [
+                { label: '停止使用', pct: Math.round(80 + patrolRand(seed + 4) * 20) },
+                { label: '停止经营', pct: Math.round(80 + patrolRand(seed + 5) * 20) },
+                { label: '封控警告', pct: Math.round(80 + patrolRand(seed + 6) * 20) }
+            ];
+            const mgrParts2 = [
+                { label: '人员撤离', pct: Math.round(80 + patrolRand(seed + 7) * 20) },
+                { label: '持续监控', pct: Math.round(80 + patrolRand(seed + 8) * 20) },
+                { label: '其他', pct: Math.round(patrolRand(seed + 9) * 30) }
+            ];
+            document.getElementById('rectifyMgrCount').innerHTML = mgrTotal.toLocaleString() + '<span class="rectify-unit">次</span>';
+            document.getElementById('rectifyMgrBars1').innerHTML = mgrParts1.map(renderRectifyBar).join('');
+            document.getElementById('rectifyMgrBars2').innerHTML = mgrParts2.map(renderRectifyBar).join('');
+        }
+        function renderRectifyBar(p) {
+            return '<div class="rectify-bar" title="' + p.label + ' ' + p.pct + '%">' +
+                '<div class="rectify-bar-info">' +
+                    '<span class="rectify-bar-label">' + p.label + '</span>' +
+                    '<span class="rectify-bar-value">' + p.pct + '<span class="rectify-unit">%</span></span>' +
+                '</div>' +
+                '<div class="rectify-bar-track"><div class="rectify-bar-fill" style="width:' + p.pct + '%"></div></div>' +
+            '</div>';
+        }
+
+        // 动态巡查：种子化伪随机，保证同一类别数据稳定
+        function patrolRand(seed) {
+            const x = Math.sin(seed * 9973) * 10000;
+            return x - Math.floor(x);
+        }
+        function renderPatrol() {
+            const data = scopeData();
+            const total = data.length;
+            const base = govCategory === 'rural' ? 7 : 13;
+            const patrolCount = Math.round(total * 1.2 + patrolRand(base) * 20);   // 巡查次数
+            const patrolHouses = Math.round(total * 0.21);                          // 巡查房屋
+            const noRisk = Math.round(total * 0.82);                                // 无隐患销号
+            const ab = Math.round(patrolHouses * 0.04);                             // 鉴定为AB级
+            const review = patrolHouses;                                            // 专业人员复核
+            document.getElementById('patrolCount').innerHTML = patrolCount.toLocaleString() + '<span class="patrol-unit">次</span>';
+            document.getElementById('patrolHouses').innerHTML = patrolHouses.toLocaleString() + '<span class="patrol-unit">栋</span>';
+            document.getElementById('patrolNoRisk').innerHTML = noRisk.toLocaleString() + '<span class="patrol-unit">栋</span>';
+            document.getElementById('patrolAB').innerHTML = ab.toLocaleString() + '<span class="patrol-unit">栋</span>';
+            document.getElementById('patrolReview').innerHTML = review.toLocaleString() + '<span class="patrol-unit">栋</span>';
+        }
+
+        function renderGovStats() {
+            const data = scopeData();
+            const total = data.length;
+            const area = data.reduce((sum, d) => sum + (d.buildingArea || 0), 0);
+            document.getElementById('govCount').innerHTML =
+                total.toLocaleString() + '<span class="gov-stat-unit">栋</span>';
+            document.getElementById('govArea').innerHTML =
+                Math.round(area).toLocaleString() + '<span class="gov-stat-unit">m²</span>';
+        }
+
+        // 风险辨识分级：农房 3 级（第三类/第二类/第一类），城房 4 级（疑似危房/严重损坏房/一般损坏房/完好房）
+        function getRiskGradeRows() {
+            const data = scopeData();
+            // 数据集中：danger=疑似危房(第三类·红)、major=第三类·橙、warning=第二类、safe=第一类
+            const cnt = {
+                danger: data.filter(d => d.risk === 'danger').length,
+                major:  data.filter(d => d.risk === 'major').length,
+                warning:data.filter(d => d.risk === 'warning').length,
+                safe:   data.filter(d => d.risk === 'safe').length
+            };
+            return govCategory === 'urban'
+                ? [
+                    { label: '疑似危房',   count: cnt.danger,  color: '#f43f5e' },
+                    { label: '严重损坏房', count: cnt.major,   color: '#f97316' },
+                    { label: '一般损坏房', count: cnt.warning, color: '#facc15' },
+                    { label: '完好房',     count: cnt.safe,    color: '#38bdf8' }
+                ]
+                : [
+                    { label: '第三类', count: cnt.danger + cnt.major, color: '#f43f5e' },
+                    { label: '第二类', count: cnt.warning,            color: '#facc15' },
+                    { label: '第一类', count: cnt.safe,               color: '#38bdf8' }
+                ];
+        }
+
+        function renderRiskGrade() {
+            const data = scopeData();
+            const total = data.length;
+            const rows = getRiskGradeRows();
+
+            // 上方：一个分级一张小卡片（数量 + 名称，悬停联动环形图）
+            document.getElementById('riskGradeRows').innerHTML = rows.map((r, i) => {
+                return '<div class="rg-card" style="--rg-color:' + r.color + '" data-idx="' + i + '" onmouseenter="highlightGrade(' + i + ')" onmouseleave="downplayGrade(' + i + ')">' +
+                    '<div class="rg-card-count">' + r.count.toLocaleString() + '<span class="rg-unit">栋</span></div>' +
+                    '<div class="rg-card-label">' + r.label + '</div>' +
+                '</div>';
+            }).join('');
+
+            // 环形图
+            if (!riskGradeChart) {
+                riskGradeChart = echarts.init(document.getElementById('riskGradeChart'));
+            }
+            riskGradeChart.setOption({
+                tooltip: {
+                    trigger: 'item',
+                    backgroundColor: 'rgba(5, 15, 30, 0.92)',
+                    borderColor: 'rgba(56, 189, 248, 0.35)',
+                    textStyle: { color: '#e6f7ff', fontSize: 12 },
+                    formatter: p =>
+                        '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + p.color + ';margin-right:6px"></span>' +
+                        p.name + '<br/>' +
+                        '<b style="font-size:16px;color:' + p.color + '">' + p.value.toLocaleString() + '</b> 栋' +
+                        '　<b style="font-size:16px;color:' + p.color + '">' + p.percent.toFixed(2) + '</b> %'
+                },
+                series: [{
+                    type: 'pie',
+                    radius: ['52%', '72%'],
+                    center: ['50%', '50%'],
+                    avoidLabelOverlap: true,
+                    label: { show: false },
+                    labelLine: { show: false },
+                    emphasis: {
+                        scaleSize: 6,
+                        itemStyle: { shadowBlur: 16, shadowColor: 'rgba(56, 189, 248, 0.45)' }
+                    },
+                    itemStyle: {
+                        borderColor: '#050b14',
+                        borderWidth: 2
+                    },
+                    data: rows.map(r => ({
+                        name: r.label,
+                        value: r.count,
+                        itemStyle: { color: r.color }
+                    }))
+                }, {
+                    // 中心总数
+                    type: 'pie',
+                    radius: ['0%', '0%'],
+                    center: ['50%', '50%'],
+                    label: {
+                        show: true,
+                        position: 'center',
+                        formatter: '{a|' + total.toLocaleString() + '}\n{b|总栋数}',
+                        rich: {
+                            a: { fontSize: 24, fontWeight: 700, color: '#e6f7ff', fontFamily: 'Consolas, monospace' },
+                            b: { fontSize: 11, color: '#8aa4c0', padding: [4, 0, 0, 0] }
+                        }
+                    },
+                    data: [{ value: 0, itemStyle: { color: 'transparent' } }],
+                    silent: true
+                }]
+            }, true);
+        }
+
+        function highlightGrade(idx) {
+            if (riskGradeChart) riskGradeChart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: idx });
+        }
+        function downplayGrade(idx) {
+            if (riskGradeChart) riskGradeChart.dispatchAction({ type: 'downplay', seriesIndex: 0, dataIndex: idx });
+        }
+
+        window.addEventListener('resize', () => { if (riskGradeChart) riskGradeChart.resize(); });
+
+        function computeStats(data) {
+            const total = data.length;
+            const danger = data.filter(d => d.risk === 'danger' || d.risk === 'major').length;
+            const warning = data.filter(d => d.risk === 'warning').length;
+            return { total, danger, warning, riskCount: danger + warning };
+        }
+
+        function initMap() {
+            const container = document.getElementById('mapContainer');
+            let mockMap = document.getElementById('mockMap');
+            if (!mockMap) {
+                const html =
+                    '<div class="mock-map" id="mockMap">' +
+                    '<svg id="mockSvg" viewBox="0 0 ' + MAP_VIEW.w + ' ' + MAP_VIEW.h + '" preserveAspectRatio="xMidYMid meet">' +
+                    '<g id="mapLayer"><g id="mapBoundaryLayer"></g><g id="mapContentLayer"></g></g>' +
+                    '</svg>' +
+                    '<div class="map-watermark"><i class="fas fa-info-circle"></i> 示意地图（非真实地理底图）</div>' +
+                    '</div>';
+                container.insertAdjacentHTML('afterbegin', html);
+            }
+            mapLayer = document.getElementById('mapLayer');
+            mapBoundaryLayer = document.getElementById('mapBoundaryLayer');
+            mapContentLayer = document.getElementById('mapContentLayer');
+            setupMapInteraction();
+            renderMap();
+        }
+
+        function setupMapInteraction() {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+            svg.addEventListener('wheel', e => {
+                e.preventDefault();
+                const rect = svg.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const factor = e.deltaY < 0 ? 1.15 : 0.87;
+                zoomMapAt(factor, mx, my);
+            }, { passive: false });
+
+            svg.addEventListener('mousedown', e => {
+                if (e.button !== 0) return;
+                isDragging = true;
+                dragStart = { x: e.clientX - mapViewState.tx, y: e.clientY - mapViewState.ty };
+                svg.style.cursor = 'grabbing';
+            });
+            window.addEventListener('mousemove', e => {
+                if (!isDragging) return;
+                mapViewState.tx = e.clientX - dragStart.x;
+                mapViewState.ty = e.clientY - dragStart.y;
+                clampMapView();
+                applyMapTransform();
+            });
+            window.addEventListener('mouseup', () => { isDragging = false; svg.style.cursor = 'grab'; });
+            svg.style.cursor = 'grab';
+
+            // 浏览器窗口尺寸变化：若已定位街镇，重新把它对齐到可视区中心
+            let resizeTimer = null;
+            window.addEventListener('resize', () => {
+                if (!streetDrill) return;
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                    const pos = STREET_MOCK_POSITIONS[streetDrill];
+                    if (pos) centerOnSvgPoint(pos.x, pos.y);
+                }, 120);
+            });
+        }
+
+        function zoomMap(factor) {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+            const rect = svg.getBoundingClientRect();
+            zoomMapAt(factor, rect.width / 2, rect.height / 2);
+        }
+
+        function zoomMapAt(factor, cx, cy) {
+            const newScale = Math.max(mapViewState.minScale, Math.min(mapViewState.maxScale, mapViewState.scale * factor));
+            if (newScale === mapViewState.scale) return;
+            mapViewState.tx = cx - (cx - mapViewState.tx) * (newScale / mapViewState.scale);
+            mapViewState.ty = cy - (cy - mapViewState.ty) * (newScale / mapViewState.scale);
+            mapViewState.scale = newScale;
+            clampMapView();
+            applyMapTransform();
+        }
+
+        function applyMapTransform() {
+            if (mapLayer) {
+                mapLayer.setAttribute('transform', 'translate(' + mapViewState.tx + ',' + mapViewState.ty + ') scale(' + mapViewState.scale + ')');
+            }
+        }
+
+        function clampMapView() {
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+            const rect = svg.getBoundingClientRect();
+            const scaledW = MAP_VIEW.w * mapViewState.scale;
+            const scaledH = MAP_VIEW.h * mapViewState.scale;
+            const minX = Math.min(0, rect.width - scaledW - 80);
+            const maxX = Math.max(0, 80);
+            const minY = Math.min(0, rect.height - scaledH - 80);
+            const maxY = Math.max(0, 80);
+            mapViewState.tx = Math.max(minX, Math.min(maxX, mapViewState.tx));
+            mapViewState.ty = Math.max(minY, Math.min(maxY, mapViewState.ty));
+        }
+
+        function renderMap() {
+            closeHouseInfoCard(); // 重绘前关闭点位信息卡片，避免残留错位
+            const svg = document.getElementById('mockSvg');
+            if (!svg) return;
+
+            mapLayer = document.getElementById('mapLayer');
+            mapBoundaryLayer = document.getElementById('mapBoundaryLayer');
+            mapContentLayer = document.getElementById('mapContentLayer');
+            if (!mapLayer) {
+                svg.innerHTML = '<g id="mapLayer"><g id="mapBoundaryLayer"></g><g id="mapContentLayer"></g></g>';
+                mapLayer = document.getElementById('mapLayer');
+                mapBoundaryLayer = document.getElementById('mapBoundaryLayer');
+                mapContentLayer = document.getElementById('mapContentLayer');
+            }
+
+            let defs = svg.querySelector('defs');
+            if (!defs) {
+                defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                svg.insertBefore(defs, svg.firstChild);
+            }
+
+            let gridGroup = document.getElementById('mockGridGroup');
+            if (!gridGroup) {
+                gridGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                gridGroup.setAttribute('id', 'mockGridGroup');
+                for (let i = 0; i <= 10; i++) {
+                    const x = (MAP_VIEW.w / 10) * i;
+                    const y = (MAP_VIEW.h / 10) * i;
+                    const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    vLine.setAttribute('x1', x); vLine.setAttribute('y1', 0);
+                    vLine.setAttribute('x2', x); vLine.setAttribute('y2', MAP_VIEW.h);
+                    vLine.setAttribute('class', 'mock-grid');
+                    gridGroup.appendChild(vLine);
+                    const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    hLine.setAttribute('x1', 0); hLine.setAttribute('y1', y);
+                    hLine.setAttribute('x2', MAP_VIEW.w); hLine.setAttribute('y2', y);
+                    hLine.setAttribute('class', 'mock-grid');
+                    gridGroup.appendChild(hLine);
+                }
+                svg.insertBefore(gridGroup, mapLayer);
+            }
+
+            mapBoundaryLayer.innerHTML = '';
+            mapContentLayer.innerHTML = '';
+
+            renderStreetBoundaries(mapBoundaryLayer);
+            if (streetDrill) {
+                renderStreetDetail(mapContentLayer, streetDrill);
+            } else {
+                renderDistrictAggregation(mapContentLayer);
+            }
+            applyMapTransform();
+        }
+
+        // 街道下钻：显示该街道内单栋房屋点位，按筛选过滤；点位散布限制在街镇多边形内
+        function renderStreetDetail(container, street) {
+            const data = activeData().filter(d => d.street === street && riskMatchesFilter(d.risk));
+            const poly = STREET_BOUNDARIES[street];
+            let cx0, cy0, spreadX, spreadY;
+            if (poly && poly.length >= 3) {
+                // 以多边形质心为中心、包围盒 70% 为散布半径（近似限制在边界内）
+                let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+                cx0 = 0; cy0 = 0;
+                poly.forEach(p => {
+                    cx0 += p[0]; cy0 += p[1];
+                    minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+                    minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
+                });
+                cx0 /= poly.length; cy0 /= poly.length;
+                spreadX = (maxX - minX) * 0.36;
+                spreadY = (maxY - minY) * 0.36;
+            } else {
+                const pos = STREET_MOCK_POSITIONS[street] || { x: MAP_VIEW.w / 2, y: MAP_VIEW.h / 2 };
+                cx0 = pos.x; cy0 = pos.y; spreadX = 90; spreadY = 70;
+            }
+            data.forEach((d, i) => {
+                // 确定性散布：角度 + 半径（0~1），再分别乘 X/Y 半径
+                const a = patrolRand(i * 31 + street.length * 17) * Math.PI * 2;
+                const r = 0.25 + patrolRand(i * 57 + 13) * 0.75;
+                const cx = cx0 + Math.cos(a) * r * spreadX;
+                const cy = cy0 + Math.sin(a) * r * spreadY;
+                const visual = getRiskVisual(d.risk);
+                const color = visual.color;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', 'translate(' + cx + ',' + cy + ')');
+                g.style.cursor = 'pointer';
+
+                const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                halo.setAttribute('r', 8);
+                halo.setAttribute('fill', color);
+                halo.setAttribute('opacity', 0.22);
+                g.appendChild(halo);
+
+                const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                dot.setAttribute('r', 3.5);
+                dot.setAttribute('fill', color);
+                dot.setAttribute('stroke', 'rgba(255,255,255,0.65)');
+                dot.setAttribute('stroke-width', 0.8);
+                g.appendChild(dot);
+
+                const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                title.textContent = (d.no || '') + ' ' + street + ' ' + visual.label;
+                g.appendChild(title);
+
+                // 点击点位：弹出房屋信息卡片
+                g.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    showHouseInfoCard(d, cx, cy, visual);
+                });
+
+                container.appendChild(g);
+            });
+        }
+
+        // =========================================================
+        // 房屋点位信息卡片（大屏风格）
+        // =========================================================
+        let houseInfoCardEl = null;
+
+        function closeHouseInfoCard() {
+            if (houseInfoCardEl) { houseInfoCardEl.remove(); houseInfoCardEl = null; }
+        }
+
+        // 根据房屋编号取完整记录（含排查记录），供信息卡片使用
+        function getFullHouseRecord(no) {
+            if (!no) return null;
+            try {
+                const all = getAllHouseRecords();
+                if (Array.isArray(all)) return all.find(x => x.no === no) || null;
+                return all[no] || null;
+            } catch (e) { return null; }
+        }
+
+        // 根据记录取排查摘要：优先 inspectionRecords，其次 riskInfo
+        function getInspectSummary(rec) {
+            let time = '';
+            let conclusion = '';
+            const ins = (rec && rec.inspectionRecords && rec.inspectionRecords.length) ? rec.inspectionRecords[0] : null;
+            if (ins) {
+                time = (ins.checkDate || '') + (ins.checkTime ? ' ' + ins.checkTime : '');
+                conclusion = ins.checkConclusion || ins.hazardDesc || ins.remark || '';
+            }
+            if (!time && rec && rec.riskInfo && rec.riskInfo.discoveryTime) time = rec.riskInfo.discoveryTime;
+            if (!conclusion && rec && rec.riskInfo) conclusion = rec.riskInfo.riskDesc || '';
+            return { time: time || '—', conclusion: conclusion || '—' };
+        }
+
+        function showHouseInfoCard(d, svgX, svgY, visual) {
+            closeHouseInfoCard();
+
+            const screenPt = (function () {
+                const ml = document.getElementById('mapLayer');
+                if (ml && ml.getScreenCTM) {
+                    const pt = new DOMPoint(svgX, svgY).matrixTransform(ml.getScreenCTM());
+                    return { x: pt.x, y: pt.y };
+                }
+                return svgToScreen(svgX, svgY);
+            })();
+            const summary = getInspectSummary(getFullHouseRecord(d.no));
+
+            const tagClass = (d.risk === 'danger') ? 'danger' : (d.risk === 'major' ? 'major' : (d.risk === 'warning' ? 'warning' : ''));
+            const card = document.createElement('div');
+            card.className = 'house-info-card';
+            card.innerHTML =
+                '<div class="hic-no">' + (d.no || '') + '</div>' +
+                '<div class="hic-body">' +
+                    '<div class="hic-row"><span class="hic-label">隐患等级</span>' +
+                        '<span class="hic-value"><span class="hic-tag ' + tagClass + '">' + visual.label + '</span></span></div>' +
+                    '<div class="hic-row"><span class="hic-label">排查时间</span>' +
+                        '<span class="hic-value">' + summary.time + '</span></div>' +
+                    '<div class="hic-row"><span class="hic-label">排查结论</span>' +
+                        '<span class="hic-value" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + summary.conclusion + '</span></div>' +
+                '</div>' +
+                '<div class="hic-footer"><span class="hic-btn" onclick="event.stopPropagation();openHouseDetailModal(\'' + (d.no || '') + '\')">查看详情</span></div>' +
+                '<div class="hic-arrow"></div>';
+
+            document.body.appendChild(card);
+            houseInfoCardEl = card;
+
+            // 定位：点位上方居中，避免越界
+            const cardW = card.offsetWidth, cardH = card.offsetHeight;
+            let left = screenPt.x - cardW / 2;
+            let top = screenPt.y - cardH - 16; // 箭头高度余量
+            left = Math.max(8, Math.min(left, window.innerWidth - cardW - 8));
+            if (top < 8) top = screenPt.y + 20; // 上方放不下则放下方
+            card.style.left = left + 'px';
+            card.style.top = top + 'px';
+        }
+
+        // 点击地图空白处关闭卡片
+        document.addEventListener('click', function (e) {
+            if (houseInfoCardEl && !houseInfoCardEl.contains(e.target)) closeHouseInfoCard();
+        });
+
+        // =========================================================
+        // 房屋详情弹窗（iframe 内嵌房屋风险档案，只读）
+        // =========================================================
+        function openHouseDetailModal(no) {
+            if (!no) return;
+            closeHouseDetailModal();
+            closeHouseInfoCard();
+            const cat = govCategory === 'urban' ? '城镇自建房' : '农村自建房';
+            const src = 'house-arch-detail.html?no=' + encodeURIComponent(no) + '&category=' + encodeURIComponent(cat);
+
+            const mask = document.createElement('div');
+            mask.className = 'house-detail-modal-mask';
+            mask.id = 'houseDetailModalMask';
+            mask.innerHTML =
+                '<div class="house-detail-modal">' +
+                    '<div class="hdm-header">' +
+                        '<span class="hdm-title">房屋风险档案　' + no + '</span>' +
+                        '<span class="hdm-close" onclick="closeHouseDetailModal()">✕</span>' +
+                    '</div>' +
+                    '<div class="hdm-body"><iframe src="' + src + '"></iframe></div>' +
+                '</div>';
+            // 点遮罩空白处关闭
+            mask.addEventListener('click', function (e) { if (e.target === mask) closeHouseDetailModal(); });
+            document.body.appendChild(mask);
+        }
+        function closeHouseDetailModal() {
+            const m = document.getElementById('houseDetailModalMask');
+            if (m) m.remove();
+        }
+        // Esc 关闭弹窗
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeHouseDetailModal();
+        });
+
+        function renderStreetBoundaries(container) {
+            const data = activeData();
+            Object.entries(STREET_BOUNDARIES).forEach(([street, points]) => {
+                if (!points || points.length < 3) return;
+                const stats = computeStats(data.filter(d => d.street === street));
+                const total = stats.total;
+
+                const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                polygon.setAttribute('points', points.map(p => p[0] + ',' + p[1]).join(' '));
+                polygon.setAttribute('class', 'mock-boundary');
+                polygon.setAttribute('data-street', street);
+                // 与地图联动：点击边界直接下钻
+                polygon.onclick = () => { if (!streetDrill) drillToStreet(street); };
+                polygon.onmouseenter = () => polygon.classList.add('active');
+                polygon.onmouseleave = () => polygon.classList.remove('active');
+                // 下钻模式：聚焦当前街镇、弱化其他
+                if (streetDrill) {
+                    if (street === streetDrill) {
+                        polygon.classList.add('drill-focus');
+                    } else {
+                        polygon.classList.add('drill-dim');
+                        polygon.onclick = null;
+                    }
+                }
+                container.appendChild(polygon);
+
+                let cx = 0, cy = 0;
+                points.forEach(p => { cx += p[0]; cy += p[1]; });
+                cx /= points.length;
+                cy /= points.length;
+
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', cx);
+                label.setAttribute('y', cy - 4);
+                label.setAttribute('class', 'mock-boundary-label');
+                label.textContent = street;
+                container.appendChild(label);
+
+                const subLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                subLabel.setAttribute('x', cx);
+                subLabel.setAttribute('y', cy + 10);
+                subLabel.setAttribute('class', 'mock-boundary-label');
+                subLabel.style.fontSize = '9px';
+                subLabel.textContent = total + '栋';
+                container.appendChild(subLabel);
+                if (streetDrill) {
+                    if (street === streetDrill) { label.classList.add('drill-focus'); subLabel.style.display = 'none'; }
+                    else { label.classList.add('drill-dim'); subLabel.style.display = 'none'; }
+                }
+            });
+        }
+
+        function renderDistrictAggregation(container) {
+            const data = activeData().filter(d => riskMatchesFilter(d.risk));
+            const streetMap = {};
+            data.forEach(d => {
+                if (!streetMap[d.street]) {
+                    streetMap[d.street] = { street: d.street, total: 0, risk: { danger: 0, major: 0, warning: 0, safe: 0 } };
+                }
+                streetMap[d.street].total++;
+                streetMap[d.street].risk[d.risk]++;
+            });
+
+            Object.values(streetMap).forEach(s => {
+                // 取该街镇最严重等级：danger > major > warning > safe（城房时 major 单独显橙色）
+                const maxRisk = s.risk.danger > 0 ? 'danger' : (s.risk.major > 0 ? 'major' : (s.risk.warning > 0 ? 'warning' : 'safe'));
+                const riskCount = s.risk.danger + s.risk.major + s.risk.warning;
+                const radius = Math.max(22, Math.min(48, 14 + riskCount * 1.5));
+                const pos = STREET_MOCK_POSITIONS[s.street] || { x: MAP_VIEW.w / 2, y: MAP_VIEW.h / 2 };
+                const cx = pos.x;
+                const cy = pos.y;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('class', 'mock-cluster');
+                g.setAttribute('data-risk', maxRisk);
+                g.setAttribute('transform', 'translate(' + cx + ',' + cy + ')');
+                // 与地图联动：点击聚合圈直接下钻该街镇
+                g.onclick = () => drillToStreet(s.street);
+                g.style.cursor = 'pointer';
+                const tip = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                tip.textContent = s.street + '：' + riskCount + ' 栋隐患，点击下钻查看';
+                g.appendChild(tip);
+
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', radius);
+                circle.setAttribute('fill', getRiskVisual(maxRisk).color);
+                circle.setAttribute('class', 'mock-cluster-circle');
+                g.appendChild(circle);
+
+                const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text1.setAttribute('y', -3);
+                text1.setAttribute('class', 'mock-cluster-text');
+                text1.textContent = s.street;
+                g.appendChild(text1);
+
+                const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text2.setAttribute('y', 10);
+                text2.setAttribute('class', 'mock-cluster-sub');
+                text2.textContent = riskCount + '栋';
+                g.appendChild(text2);
+
+                container.appendChild(g);
+            });
+        }
+
+        // ==================== 初始化 ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            initHouseArchSeed();
+            loadData();
+            renderGovStats();
+            renderRiskGrade();
+            renderPatrol();
+            renderRectify();
+            renderSurvey();
+            renderAssess();
+            renderProgress();
+            renderMapToolbar();
+            updateScopeBadges(); // 首屏注入"全区"角标
+            initMap();
+        });
+    </script>
+</body>
+</html>

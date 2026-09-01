@@ -6,7 +6,15 @@
     <title>房屋建筑档案 - 房屋安全管理</title>
     <link rel="stylesheet" href="./all.min.css">
     <script src="../js/third-party-data.js"></script>
-    <script src="../js/house-arch-data.js"></script>
+    <script>
+        // 按房屋类型动态加载对应数据层：农村自建房→house-arch-data.js（三类口径），城镇自建房→urban-house-arch-data.js（四级口径）
+        (function loadDataLayer() {
+            var params = new URLSearchParams(location.search);
+            var cat = params.get('category') || '';
+            var src = (cat === '城镇自建房') ? '../js/urban-house-arch-data.js' : '../js/house-arch-data.js';
+            document.write('<script src="' + src + '"><\/script>');
+        })();
+    </script>
     <script>
         // =========================================================
         // 房屋建筑档案状态联动数据层（已接入 house-arch-data.js 统一数据层）
@@ -318,6 +326,7 @@
         }
         .status-badge.major { background: #fff3e0; color: var(--major); }
         .status-badge.danger { background: #fce8e6; color: var(--danger); }
+        .status-badge.serious { background: #ffe0cc; color: #e65100; }
         .status-badge.warning { background: #fff8e1; color: #f9a825; }
 
         /* 主内容区：左右布局 */
@@ -1569,6 +1578,7 @@
         }
 
         const riskBadgeClass = {
+            // 农村三类口径
             '第一类': 'safe',
             '第二类': 'warning',
             '第三类': 'danger',
@@ -1576,10 +1586,25 @@
             '疑似危房': 'danger',
             '严重损坏房': 'danger',
             '一般损坏房': 'warning',
-            '完好房(基本完好房)': 'safe'
+            '完好房(基本完好房)': 'safe',
+            // 城镇四级口径
+            '完好房': 'safe'
         };
+        // 城镇四级专用：严重损坏房→橙色（serious）
+        if (isUrbanHouse()) riskBadgeClass['严重损坏房'] = 'serious';
 
-        const riskLabelMap = {
+        // 风险等级展示：农村三类（第一/二/三类），城镇四级（疑似危房/严重损坏房/一般损坏房/完好房）
+        const riskLabelMap = isUrbanHouse() ? {
+            '疑似危房': '疑似危房',
+            '严重损坏房': '严重损坏房',
+            '一般损坏房': '一般损坏房',
+            '完好房': '完好房',
+            '完好房(基本完好房)': '完好房',
+            // 兼容旧三类
+            '第三类': '疑似危房',
+            '第二类': '一般损坏房',
+            '第一类': '完好房'
+        } : {
             '第三类': '第三类',
             '第二类': '第二类',
             '第一类': '第一类',
@@ -1606,7 +1631,7 @@
             const s = currentHouseArch;
             // 从统一数据层补齐缺省字段，避免覆盖已有有效值
             let changed = false;
-            if (!s.riskLevel) { s.riskLevel = '第二类'; changed = true; }
+            if (!s.riskLevel) { s.riskLevel = isUrbanHouse() ? '一般损坏房' : '第二类'; changed = true; }
             if (!s.governStatus) { s.governStatus = '待整治'; changed = true; }
             if (!s.currentMeasure) { s.currentMeasure = '管理措施（停止使用） + 工程措施（维修加固）'; changed = true; }
             if (!s.managerName) { s.managerName = '李志强'; changed = true; }
@@ -3598,7 +3623,7 @@
                     { key: 'identifyDate', label: '辨识日期', type: 'text' },
                     { key: 'identifyPerson', label: '辨识人员', type: 'text' },
                     { key: 'hazardDesc', label: '隐患描述', type: 'textarea' },
-                    { key: 'riskLevel', label: '风险等级', type: 'select', options: ['一般', '较大', '重大'] },
+                    { key: 'riskLevel', label: '风险等级', type: 'select', options: isUrbanHouse() ? ['疑似危房', '严重损坏房', '一般损坏房', '完好房'] : ['第一类', '第二类', '第三类'] },
                     { key: 'remark', label: '备注', type: 'textarea' }
                 ]
             },
