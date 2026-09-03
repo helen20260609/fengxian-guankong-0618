@@ -1,14 +1,15 @@
 initHouseArchSeed();
-const baseData = (() => {
-    const recs = getAllHouseRecords();
-    return recs.map(r => ({
+// 农村自建房数据（house-arch-data.js，三类口径）
+const ruralRecs = getAllHouseRecords()
+    .filter(r => (r.houseType || '') !== '城镇自建房')
+    .map(r => ({
         no: r.no,
         name: r.name,
         street: r.street,
         community: r.community,
         address: r.address,
         category: r.category,
-        houseType: r.houseType,
+        houseType: '农村自建房',
         year: r.year,
         risk: r.risk,
         governance: r.governance,
@@ -25,7 +26,49 @@ const baseData = (() => {
         measures: r.measures || [],
         eliminationInfo: r.eliminationInfo || { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '尚未提交销号申请' }
     }));
-})();
+
+// 先初始化 baseData 为农村数据，城镇数据异步加载后合并
+let baseData = [...ruralRecs];
+
+// 动态加载城镇自建房数据层（urban-house-arch-data.js，四级口径：疑似危房/严重损坏房/一般损坏房/完好房）
+// 用 fetch + new Function 在隔离作用域内执行，避免与 house-arch-data.js 的全局函数冲突
+fetch('../js/urban-house-arch-data.js')
+    .then(res => res.text())
+    .then(code => {
+        const factory = new Function(code + ';return { initHouseArchSeed: initHouseArchSeed, getAllHouseRecords: getAllHouseRecords };');
+        const urbanAPI = factory();
+        urbanAPI.initHouseArchSeed();
+        const urbanRecs = urbanAPI.getAllHouseRecords();
+        const urbanData = urbanRecs.map(r => ({
+            no: r.no,
+            name: r.name,
+            street: r.street,
+            community: r.community,
+            address: r.address,
+            category: r.category,
+            houseType: '城镇自建房',
+            year: r.year,
+            risk: r.risk,
+            governance: r.governance,
+            elimination: r.eliminationInfo ?
+                (r.closeStatus === '已通过' ? 'done' : r.closeStatus === '审核中' ? 'review' : r.closeStatus === '已驳回' ? 'rejected' : 'pending') :
+                'pending',
+            owner: r.owner,
+            lat: r.lat,
+            lng: r.lng,
+            responsibleDept: r.responsibleDept,
+            responsiblePerson: r.responsiblePerson,
+            progress: r.progress,
+            hazards: r.hazards || [],
+            measures: r.measures || [],
+            eliminationInfo: r.eliminationInfo || { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '尚未提交销号申请' }
+        }));
+        baseData = ruralRecs.concat(urbanData);
+        // 数据加载完成后刷新
+        updateCategoryCounts();
+        applyFilter();
+    })
+    .catch(err => console.error('加载城镇自建房数据失败:', err));
 
 let filteredData = [...baseData];
 let currentCategory = 'all';
@@ -40,13 +83,37 @@ let map, markers = [];
 let footprintPolygons = [];
 let leftChart, streetRankingChart, measurePieChart;
 
-// 新口径：疑似危房/严重损坏房→第三类(红)；一般损坏房→第二类(黄)；完好房(基本完好房)→第一类(蓝)
+// 风险等级颜色配置（内部代码 danger/major/warning/safe → 颜色/形状）
+// 颜色全局统一：danger=红, major=橙, warning=黄, safe=蓝
 const RISK_CONFIG = {
-    danger: { label: '第三类', color: '#d93025', class: 'danger', shape: 'circle' },
-    major: { label: '第三类', color: '#d93025', class: 'major', shape: 'circle' },
-    warning: { label: '第二类', color: '#f9ab00', class: 'warning', shape: 'circle' },
-    safe: { label: '第一类', color: '#1a73e8', class: 'safe', shape: 'circle' }
+    danger: { color: '#d93025', class: 'danger', shape: 'circle' },
+    major: { color: '#e8710a', class: 'major', shape: 'circle' },
+    warning: { color: '#f9ab00', class: 'warning', shape: 'circle' },
+    safe: { color: '#1a73e8', class: 'safe', shape: 'circle' }
 };
+
+// 农村自建房三类口径标签
+const RISK_LABEL_RURAL = {
+    danger: '第三类',
+    major: '第三类',
+    warning: '第二类',
+    safe: '第一类'
+};
+
+// 城镇自建房四级口径标签
+const RISK_LABEL_URBAN = {
+    danger: '疑似危房',
+    major: '严重损坏房',
+    warning: '一般损坏房',
+    safe: '完好房'
+};
+
+// 根据房屋类型获取风险等级标签
+function getRiskLabel(risk, houseType) {
+    const code = RISK_LABEL_MAP_INV && RISK_LABEL_MAP_INV[risk] ? RISK_LABEL_MAP_INV[risk] : risk;
+    const map = (houseType === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
+    return map[code] || map.safe;
+}
 
 const STATUS_CONFIG = {
     pending: { label: '待整治', color: '#9aa0a6', class: 'treat-pending' },
@@ -86,12 +153,27 @@ function matchTimeFilter(item, filter) {
 
 const LAYER_MODES = {
     base: {
-        name: '房屋底图', colorBy: 'risk', shapeBy: 'risk', statusMap: RISK_CONFIG,
-        filters: [
-            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'danger', label: '第三类', icon: 'fa-exclamation-triangle' },
-            { key: 'major', label: '第三类', icon: 'fa-exclamation-circle' }, { key: 'warning', label: '第二类', icon: 'fa-exclamation' },
-            { key: 'safe', label: '第一类', icon: 'fa-check-circle' }
-        ]
+        name: '房屋底图', colorBy: 'risk', shapeBy: 'risk',
+        // statusMap 动态生成：按当前 category 返回农村/城镇口径标签
+        get statusMap() {
+            const labelMap = (currentCategory === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
+            return {
+                danger: { label: labelMap.danger, color: RISK_CONFIG.danger.color, class: 'danger', shape: 'circle' },
+                major: { label: labelMap.major, color: RISK_CONFIG.major.color, class: 'major', shape: 'circle' },
+                warning: { label: labelMap.warning, color: RISK_CONFIG.warning.color, class: 'warning', shape: 'circle' },
+                safe: { label: labelMap.safe, color: RISK_CONFIG.safe.color, class: 'safe', shape: 'circle' }
+            };
+        },
+        get filters() {
+            const labelMap = (currentCategory === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
+            return [
+                { key: 'all', label: '全部', icon: 'fa-home' },
+                { key: 'danger', label: labelMap.danger, icon: 'fa-exclamation-triangle' },
+                { key: 'major', label: labelMap.major, icon: 'fa-exclamation-circle' },
+                { key: 'warning', label: labelMap.warning, icon: 'fa-exclamation' },
+                { key: 'safe', label: labelMap.safe, icon: 'fa-check-circle' }
+            ];
+        }
     },
     governance: {
         name: '治理状态', colorBy: 'governance', shapeBy: 'risk', statusMap: STATUS_CONFIG,
@@ -141,18 +223,23 @@ const fengxianBoundary = [
     [30.993, 121.401], [30.960, 121.370], [30.900, 121.385], [30.850, 121.435], [30.860, 121.580], [30.940, 121.600], [30.990, 121.570], [31.010, 121.480], [30.993, 121.401]
 ];
 
-function getRiskConfig(risk) { return RISK_CONFIG[risk] || RISK_CONFIG[RISK_LABEL_MAP_INV[risk]] || RISK_CONFIG.safe; }
+function getRiskConfig(risk, houseType) {
+    const code = RISK_CONFIG[risk] ? risk : (RISK_LABEL_MAP_INV && RISK_LABEL_MAP_INV[risk] ? RISK_LABEL_MAP_INV[risk] : 'safe');
+    const base = RISK_CONFIG[code] || RISK_CONFIG.safe;
+    const label = getRiskLabel(code, houseType);
+    return { color: base.color, class: base.class, shape: base.shape, label: label };
+}
 function getStatusConfig(governance) { return STATUS_CONFIG[governance] || STATUS_CONFIG.pending; }
 function getEliminationConfig(elimination) { return ELIMINATION_CONFIG[elimination] || ELIMINATION_CONFIG.pending; }
 function getLayerConfig() { return LAYER_MODES[currentLayer]; }
 function getHouseColor(item) {
     const mode = getLayerConfig();
-    if (mode.colorBy === 'risk') return getRiskConfig(item.risk).color;
+    if (mode.colorBy === 'risk') return getRiskConfig(item.risk, item.houseType).color;
     if (mode.colorBy === 'governance') return getStatusConfig(item.governance).color;
     if (mode.colorBy === 'elimination') return getEliminationConfig(item.elimination).color;
     return '#999';
 }
-function getHouseShape(item) { return getRiskConfig(item.risk).shape; }
+function getHouseShape(item) { return getRiskConfig(item.risk, item.houseType).shape; }
 function getCategoryText(cat) { return cat === '砖混' ? '砖混结构' : cat === '砖木' ? '砖木结构' : '框架结构'; }
 function getShapeHtml(shape, color, size) {
     size = size || 10;
@@ -377,7 +464,7 @@ function buildClusterPopup(name, items, level) {
 function drillFromPopup(level, name) { if (level === 'street') drillToStreet(name); else drillToCommunity(name); }
 
 function buildHousePopup(item, idx) {
-    const riskCfg = getRiskConfig(item.risk);
+    const riskCfg = getRiskConfig(item.risk, item.houseType);
     const statusCfg = getStatusConfig(item.governance);
     const measureHtml = item.measures && item.measures.length ? '<ul>' + item.measures.map(m => '<li>' + (m.type === 'management' ? '管理' : '工程') + '措施：' + m.name + '（' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '）</li>').join('') + '</ul>' : '<p style="color:var(--text-secondary);font-size:12px;">暂无整治措施</p>';
     const hazardsHtml = item.hazards && item.hazards.length ? '<ul>' + item.hazards.map(h => '<li>' + h.part + '：' + h.type + '（' + h.level + '）</li>').join('') + '</ul>' : '<p style="color:var(--text-secondary);font-size:12px;">暂无隐患</p>';
@@ -432,7 +519,14 @@ function renderLegend() {
         html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">颜色：状态</div>';
         Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
         html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：风险等级</div>';
-        Object.keys(RISK_CONFIG).forEach(key => { const cfg = RISK_CONFIG[key]; html += '<div class="legend-item"><span class="legend-symbol" style="color:' + cfg.color + '">' + getShapeHtml(cfg.shape, cfg.color, 12) + '</span><span>' + cfg.label + '</span></div>'; });
+        // 风险图例按当前 category 显示对应口径（城镇四级 / 农村三类）
+        const legendLabelMap = (currentCategory === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
+        const legendKeys = (currentCategory === '城镇自建房') ? ['danger', 'major', 'warning', 'safe'] : ['danger', 'warning', 'safe'];
+        legendKeys.forEach(key => {
+            const cfg = RISK_CONFIG[key];
+            const label = legendLabelMap[key];
+            html += '<div class="legend-item"><span class="legend-symbol" style="color:' + cfg.color + '">' + getShapeHtml(cfg.shape, cfg.color, 12) + '</span><span>' + label + '</span></div>';
+        });
         html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">图斑：房屋占地轮廓</div>';
         html += '<div class="legend-item"><span class="legend-dot" style="background:#1a73e8;"></span><span>颜色随状态变化</span></div>';
     }
@@ -598,7 +692,7 @@ function renderList() {
             '<div class="house-address"><i class="fas fa-user"></i> ' + (item.owner || '-') + ' · ' + (item.responsiblePerson || '-') + '</div>' +
             '<div class="house-tags">' +
             '<span class="risk-tag ' + statusCfg.class + '">' + statusCfg.label + '</span>' +
-            '<span class="risk-tag ' + getRiskConfig(item.risk).class + '">' + getRiskConfig(item.risk).label + '</span>' +
+            '<span class="risk-tag ' + getRiskConfig(item.risk, item.houseType).class + '">' + getRiskConfig(item.risk, item.houseType).label + '</span>' +
             '<span class="year-tag" onclick="event.stopPropagation();openArchive(' + idx + ')"><i class="fas fa-folder-open"></i> 档案</span>' +
             '</div></div>';
     }).join('');
@@ -657,7 +751,7 @@ function switchTab(tab) {
     if (tab === 'basic') {
         body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">房屋编号</div><div class="arch-value">' + item.no + '</div></div><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
     } else if (tab === 'hazard') {
-        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">风险等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level).class + '">' + getRiskConfig(h.level).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
+        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">风险等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level, item.houseType).class + '">' + getRiskConfig(h.level, item.houseType).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
     } else if (tab === 'measure') {
         body.innerHTML = '<div class="arch-section">' + (item.measures && item.measures.length ? item.measures.map(m => '<div class="arch-row"><div class="arch-label">' + (m.type === 'management' ? '管理' : '工程') + '措施</div><div class="arch-value">' + m.name + '</div></div><div class="arch-row"><div class="arch-label">当前状态</div><div class="arch-value"><span class="risk-tag ' + (m.status === 'done' ? 'safe' : m.status === 'doing' ? 'doing' : 'pending') + '">' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无整治措施</div></div>') + '</div>';
     } else if (tab === 'progress') {

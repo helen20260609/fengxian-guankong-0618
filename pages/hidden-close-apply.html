@@ -387,6 +387,8 @@
         let allData = [];
         // 当前类别：从 URL 参数读取（?category=xxx），默认农村自建房
         let currentCategory = new URLSearchParams(location.search).get('category') || '农村自建房';
+        // 城镇数据层接口（动态加载 urban-house-arch-data.js 后赋值）
+        let urbanAPI = null;
 
         function init() {
             document.getElementById('batchApplyTime').value = new Date().toISOString().split('T')[0];
@@ -394,6 +396,19 @@
             initCategoryTabs();
             updateCategoryCounts();
             renderTable();
+            // 异步加载城镇自建房数据层（urban-house-arch-data.js，四级口径）
+            fetch('../js/urban-house-arch-data.js')
+                .then(res => res.text())
+                .then(code => {
+                    const factory = new Function(code + ';return { initHouseArchSeed, getAllHouseRecords, getHouseArchStorage, setHouseArchStorage, getCloseApplyStorage, setCloseApplyStorage };');
+                    urbanAPI = factory();
+                    urbanAPI.initHouseArchSeed();
+                    // 重新合并数据
+                    allData = loadAll();
+                    updateCategoryCounts();
+                    renderTable();
+                })
+                .catch(err => console.error('加载城镇自建房数据失败:', err));
         }
 
         function initCategoryTabs() {
@@ -438,58 +453,101 @@
         }
 
         function loadAll() {
+            // 农村数据源
             const arch = getHouseArchStorage();
             const applies = getCloseApplyStorage();
             const map = {};
             applies.forEach(a => { map[a.no] = a; });
-            return Object.values(arch).map(item => {
-                const a = map[item.no] || {};
-                return {
-                    id: a.id || generateId('CLOSE'),
-                    no: item.no,
-                    name: item.name || '—',
-                    street: item.street || '—',
-                    houseType: item.houseType || '农村自建房',
-                    risk: item.risk || 'warning',
-                    riskLevel: item.riskLevel || '—',
-                    governStatus: item.governStatus || '—',
-                    closeStatus: item.closeStatus || '未申请',
-                    applicant: a.applicant || '—',
-                    applyTime: a.applyTime || '',
-                    auditor: a.auditor || '',
-                    auditTime: a.auditTime || '',
-                    auditOpinion: a.auditOpinion || '',
-                    rejectReason: a.rejectReason || '',
-                    files: a.files || '',
-                    isSelectable: (item.closeStatus === '待审核' || item.closeStatus === '审核中')
-                };
-            }).filter(d => d.no);
+            const ruralList = Object.values(arch)
+                .filter(item => (item.houseType || '') !== '城镇自建房')
+                .map(item => {
+                    const a = map[item.no] || {};
+                    return {
+                        id: a.id || generateId('CLOSE'),
+                        no: item.no,
+                        name: item.name || '—',
+                        street: item.street || '—',
+                        houseType: '农村自建房',
+                        risk: item.risk || 'warning',
+                        riskLevel: item.riskLevel || '—',
+                        governStatus: item.governStatus || '—',
+                        closeStatus: item.closeStatus || '未申请',
+                        applicant: a.applicant || '—',
+                        applyTime: a.applyTime || '',
+                        auditor: a.auditor || '',
+                        auditTime: a.auditTime || '',
+                        auditOpinion: a.auditOpinion || '',
+                        rejectReason: a.rejectReason || '',
+                        files: a.files || '',
+                        isSelectable: (item.closeStatus === '待审核' || item.closeStatus === '审核中')
+                    };
+                });
+            // 城镇数据源（若已加载）
+            let urbanList = [];
+            if (urbanAPI) {
+                const uArch = urbanAPI.getHouseArchStorage();
+                const uApplies = urbanAPI.getCloseApplyStorage();
+                const uMap = {};
+                uApplies.forEach(a => { uMap[a.no] = a; });
+                urbanList = Object.values(uArch).map(item => {
+                    const a = uMap[item.no] || {};
+                    return {
+                        id: a.id || generateId('CLOSE'),
+                        no: item.no,
+                        name: item.name || '—',
+                        street: item.street || '—',
+                        houseType: '城镇自建房',
+                        risk: item.risk || 'warning',
+                        riskLevel: item.riskLevel || '—',
+                        governStatus: item.governStatus || '—',
+                        closeStatus: item.closeStatus || '未申请',
+                        applicant: a.applicant || '—',
+                        applyTime: a.applyTime || '',
+                        auditor: a.auditor || '',
+                        auditTime: a.auditTime || '',
+                        auditOpinion: a.auditOpinion || '',
+                        rejectReason: a.rejectReason || '',
+                        files: a.files || '',
+                        isSelectable: (item.closeStatus === '待审核' || item.closeStatus === '审核中')
+                    };
+                });
+            }
+            return ruralList.concat(urbanList).filter(d => d.no);
         }
 
         function saveAll() {
+            // 分别写回农村/城镇数据源
             const arch = getHouseArchStorage();
             const applies = getCloseApplyStorage();
             const applyMap = {};
             applies.forEach(a => { applyMap[a.no] = a; });
+            const uArch = urbanAPI ? urbanAPI.getHouseArchStorage() : {};
+            const uApplies = urbanAPI ? urbanAPI.getCloseApplyStorage() : [];
+            const uApplyMap = {};
+            uApplies.forEach(a => { uApplyMap[a.no] = a; });
             allData.forEach(d => {
-                if (!arch[d.no]) arch[d.no] = { no: d.no };
-                arch[d.no].closeStatus = d.closeStatus;
-                arch[d.no].risk = d.risk;
-                arch[d.no].closeApplyTime = d.applyTime;
-                arch[d.no].closeAuditTime = d.auditTime;
-                arch[d.no].closeAuditor = d.auditor;
-                arch[d.no].closeAuditOpinion = d.auditOpinion;
-                arch[d.no].closeRejectReason = d.rejectReason;
-                arch[d.no].isRemovedFromFocus = d.closeStatus === '已通过';
+                const isUrban = d.houseType === '城镇自建房';
+                const targetArch = isUrban ? uArch : arch;
+                const targetApplyMap = isUrban ? uApplyMap : applyMap;
+                if (!targetArch[d.no]) targetArch[d.no] = { no: d.no };
+                targetArch[d.no].closeStatus = d.closeStatus;
+                targetArch[d.no].risk = d.risk;
+                targetArch[d.no].closeApplyTime = d.applyTime;
+                targetArch[d.no].closeAuditTime = d.auditTime;
+                targetArch[d.no].closeAuditor = d.auditor;
+                targetArch[d.no].closeAuditOpinion = d.auditOpinion;
+                targetArch[d.no].closeRejectReason = d.rejectReason;
+                targetArch[d.no].isRemovedFromFocus = d.closeStatus === '已通过';
                 if (d.closeStatus === '已通过') {
-                    arch[d.no].governStatus = '已治理';
-                    arch[d.no].risk = 'safe';
-                    arch[d.no].riskLevel = '第一类';
+                    targetArch[d.no].governStatus = '已治理';
+                    targetArch[d.no].risk = 'safe';
+                    // 城镇四级口径：完好房；农村三类口径：第一类
+                    targetArch[d.no].riskLevel = isUrban ? '完好房' : '第一类';
                 } else {
-                    arch[d.no].risk = d.risk;
-                    arch[d.no].riskLevel = d.riskLevel;
+                    targetArch[d.no].risk = d.risk;
+                    targetArch[d.no].riskLevel = d.riskLevel;
                 }
-                applyMap[d.no] = {
+                targetApplyMap[d.no] = {
                     id: d.id, no: d.no, name: d.name, street: d.street, riskLevel: d.riskLevel, governStatus: d.governStatus,
                     closeStatus: d.closeStatus, applicant: d.applicant, applyTime: d.applyTime, auditor: d.auditor,
                     auditTime: d.auditTime, auditOpinion: d.auditOpinion, rejectReason: d.rejectReason, files: d.files
@@ -497,6 +555,10 @@
             });
             setHouseArchStorage(arch);
             setCloseApplyStorage(Object.values(applyMap));
+            if (urbanAPI) {
+                urbanAPI.setHouseArchStorage(uArch);
+                urbanAPI.setCloseApplyStorage(Object.values(uApplyMap));
+            }
         }
 
         function getFilter() {
@@ -527,8 +589,11 @@
 
         function getRiskBadgeClass(level) {
             const map = {
+                // 农村三类口径
                 '第三类': 'danger', '第二类': 'warning', '第一类': 'safe',
-                '疑似危房': 'danger', '严重损坏房': 'danger', '一般损坏房': 'warning', '完好房(基本完好房)': 'safe'
+                // 城镇四级口径
+                '疑似危房': 'danger', '严重损坏房': 'major', '一般损坏房': 'warning',
+                '完好房': 'safe', '完好房(基本完好房)': 'safe'
             };
             return map[level] || 'danger';
         }
@@ -708,7 +773,11 @@
                 d.rejectReason = '';
                 d.files = files;
                 d.governStatus = '已治理';
-                d.riskLevel = d.risk === 'safe' ? '第一类' : RISK_LABEL_MAP[d.risk] || d.riskLevel;
+                // 销号申请提交时：按类别设置默认标签
+                const isUrbanApply = d.houseType === '城镇自建房';
+                const safeLabel = isUrbanApply ? '完好房' : '第一类';
+                const labelMap = isUrbanApply ? { danger: '疑似危房', major: '严重损坏房', warning: '一般损坏房', safe: '完好房' } : RISK_LABEL_MAP;
+                d.riskLevel = d.risk === 'safe' ? safeLabel : labelMap[d.risk] || d.riskLevel;
             });
             const applyCount = selectedIds.length;
             saveAll();
@@ -772,12 +841,15 @@
                 d.auditTime = auditTime;
                 d.auditOpinion = opinion;
                 d.rejectReason = conclusion === '驳回' ? rejectReason : '';
+                const isUrbanAudit = d.houseType === '城镇自建房';
+                const safeLabelAudit = isUrbanAudit ? '完好房' : '第一类';
+                const labelMapAudit = isUrbanAudit ? { danger: '疑似危房', major: '严重损坏房', warning: '一般损坏房', safe: '完好房' } : RISK_LABEL_MAP;
                 if (conclusion === '通过') {
                     d.governStatus = '已治理';
-                    d.riskLevel = '第一类';
+                    d.riskLevel = safeLabelAudit;
                     d.risk = 'safe';
                 } else {
-                    d.riskLevel = d.risk === 'safe' ? '第一类' : RISK_LABEL_MAP[d.risk] || d.riskLevel;
+                    d.riskLevel = d.risk === 'safe' ? safeLabelAudit : labelMapAudit[d.risk] || d.riskLevel;
                 }
             });
             const auditCount = auditTargetIds.length;

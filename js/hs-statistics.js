@@ -1,7 +1,8 @@
 
-        const baseData = (() => {
+        // 基础数据：农村房屋档案 + 异步合并城镇房屋档案
+        let baseData = (() => {
             const recs = getAllHouseRecords();
-            return recs.map(r => ({
+            return recs.filter(r => (r.houseType || '') !== '城镇自建房').map(r => ({
                 no: r.no,
                 name: r.name,
                 street: r.street,
@@ -11,7 +12,7 @@
                 risk: r.risk,
                 owner: r.owner,
                 community: r.community,
-                houseType: r.houseType,
+                houseType: '农村自建房',
                 rectDeadline: r.rectDeadline,
                 completeDate: r.completeDate,
                 completeStatus: r.governStatus,
@@ -25,6 +26,45 @@
                 lat: r.lat,
                 lng: r.lng
             }));
+        })();
+
+        // 异步加载城镇自建房数据（隔离加载，避免全局函数名冲突）
+        (function loadUrbanData() {
+            fetch('../js/urban-house-arch-data.js')
+                .then(res => res.text())
+                .then(code => {
+                    const factory = new Function(code + ';return { initHouseArchSeed: initHouseArchSeed, getAllHouseRecords: getAllHouseRecords };');
+                    const urbanAPI = factory();
+                    urbanAPI.initHouseArchSeed();
+                    const urbanRecs = urbanAPI.getAllHouseRecords().map(r => ({
+                        no: r.no,
+                        name: r.name,
+                        street: r.street,
+                        address: r.address,
+                        category: r.category,
+                        year: r.year,
+                        risk: r.risk,
+                        owner: r.owner,
+                        community: r.community,
+                        houseType: '城镇自建房',
+                        rectDeadline: r.rectDeadline,
+                        completeDate: r.completeDate,
+                        completeStatus: r.governStatus,
+                        manageMeasure: r.manageMeasure,
+                        projectMeasure: r.projectMeasure,
+                        totalTask: r.totalTask,
+                        doneTask: r.doneTask,
+                        fundUsed: r.fundUsed,
+                        fundTotal: r.fundTotal,
+                        overdue: r.overdue,
+                        lat: r.lat,
+                        lng: r.lng
+                    }));
+                    baseData = baseData.concat(urbanRecs);
+                    updateCategoryCounts();
+                    updateStats();
+                })
+                .catch(err => console.error('加载城镇自建房数据失败:', err));
         })();
 
         const projectTypeNames = ['结构加固', '屋面修缮', '基础加固', '墙体修复', '排水改造', '电气改造', '消防改造'];
@@ -76,10 +116,30 @@
 
         const riskMap = {
             danger: { label: '第三类', color: '#d93025' },
-            major: { label: '第三类', color: '#d93025' },
+            major: { label: '第三类', color: '#e8710a' },
             warning: { label: '第二类', color: '#f9ab00' },
             safe: { label: '第一类', color: '#1a73e8' }
         };
+        // 按当前 category 动态返回风险标签（城镇四级口径 / 农村三类口径）
+        function getRiskLabel(code, houseType) {
+            const isUrban = houseType === '城镇自建房' || (!houseType && window.hsStatsCategory === '城镇自建房');
+            const urbanMap = { danger: '疑似危房', major: '严重损坏房', warning: '一般损坏房', safe: '完好房' };
+            const ruralMap = { danger: '第三类', major: '第三类', warning: '第二类', safe: '第一类' };
+            return (isUrban ? urbanMap : ruralMap)[code] || code;
+        }
+        // 按当前 category 获取 riskMap 的动态版（用于图表 label 等）
+        function getDynamicRiskMap() {
+            const isUrban = window.hsStatsCategory === '城镇自建房';
+            if (isUrban) {
+                return {
+                    danger: { label: '疑似危房', color: '#d93025' },
+                    major: { label: '严重损坏房', color: '#e8710a' },
+                    warning: { label: '一般损坏房', color: '#f9ab00' },
+                    safe: { label: '完好房', color: '#1a73e8' }
+                };
+            }
+            return riskMap;
+        }
 
         const houseTypeMap = {
             '农村自建房': '农村自建房',
@@ -231,9 +291,57 @@
 
         function updateSummary(data) {
             document.getElementById('totalCount').textContent = data.length;
-            document.getElementById('dangerCount').textContent = data.filter(i => i.risk === 'danger' || i.risk === 'major').length;
-            document.getElementById('warningCount').textContent = data.filter(i => i.risk === 'warning').length;
-            document.getElementById('safeCount').textContent = data.filter(i => i.risk === 'safe').length;
+            const isUrban = window.hsStatsCategory === '城镇自建房';
+            if (isUrban) {
+                // 城镇四级：danger 和 major 分开，第4个卡片显示一般损坏房
+                document.getElementById('dangerCount').textContent = data.filter(i => i.risk === 'danger').length;
+                document.getElementById('warningCount').textContent = data.filter(i => i.risk === 'major').length;
+                document.getElementById('safeCount').textContent = data.filter(i => i.risk === 'warning').length;
+            } else {
+                document.getElementById('dangerCount').textContent = data.filter(i => i.risk === 'danger' || i.risk === 'major').length;
+                document.getElementById('warningCount').textContent = data.filter(i => i.risk === 'warning').length;
+                document.getElementById('safeCount').textContent = data.filter(i => i.risk === 'safe').length;
+            }
+        }
+
+        // 按当前 category 更新 summary 卡片标签和 riskFilter 选项
+        function updateRiskFilterLabels() {
+            const isUrban = window.hsStatsCategory === '城镇自建房';
+            // 更新 summary 卡片标签
+            const summaryLabels = isUrban
+                ? { danger: '疑似危房', warning: '严重损坏房', safe: '一般损坏房' }
+                : { danger: '第三类', warning: '第二类', safe: '第一类' };
+            const dangerLabel = document.querySelector('#dangerCount')?.closest('.summary-card')?.querySelector('.summary-label');
+            const warningLabel = document.querySelector('#warningCount')?.closest('.summary-card')?.querySelector('.summary-label');
+            const safeLabel = document.querySelector('#safeCount')?.closest('.summary-card')?.querySelector('.summary-label');
+            if (dangerLabel) dangerLabel.textContent = summaryLabels.danger;
+            if (warningLabel) warningLabel.textContent = summaryLabels.warning;
+            if (safeLabel) safeLabel.textContent = summaryLabels.safe;
+            // 切换第4个卡片的 icon 颜色和图标（城镇=一般损坏房 黄色警告 / 农村=第一类 蓝色盾牌）
+            const safeIcon = document.querySelector('#safeCount')?.closest('.summary-card')?.querySelector('.summary-icon');
+            if (safeIcon) {
+                const iconEl = safeIcon.querySelector('i');
+                if (isUrban) {
+                    safeIcon.className = 'summary-icon gold';
+                    if (iconEl) iconEl.className = 'fas fa-exclamation';
+                } else {
+                    safeIcon.className = 'summary-icon cyan';
+                    if (iconEl) iconEl.className = 'fas fa-shield-alt';
+                }
+            }
+            // 更新 riskFilter 选项
+            const riskFilter = document.getElementById('riskFilter');
+            if (riskFilter) {
+                const currentVal = riskFilter.value;
+                const options = isUrban
+                    ? [['', '全部等级'], ['danger', '疑似危房'], ['major', '严重损坏房'], ['warning', '一般损坏房'], ['safe', '完好房']]
+                    : [['', '全部等级'], ['danger', '第三类'], ['warning', '第二类'], ['safe', '第一类']];
+                riskFilter.innerHTML = options.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+                // 恢复之前选中的值（如果还存在）
+                if (currentVal && options.some(([v]) => v === currentVal)) {
+                    riskFilter.value = currentVal;
+                }
+            }
         }
 
         function renderStreetChart(data) {
@@ -296,14 +404,23 @@
 
         function renderRiskTable(data) {
             const total = data.length || 1;
-            const order = ['danger', 'warning', 'safe'];
-            const tagMap = { danger: 'tag-danger', warning: 'tag-warning', safe: 'tag-safe' };
-            const labelMap = { danger: '第三类', warning: '第二类', safe: '第一类' };
+            const isUrban = window.hsStatsCategory === '城镇自建房';
+            // 城镇四级：danger/major/warning/safe 分开；农村三类：danger 合并 major
+            const order = isUrban ? ['danger', 'major', 'warning', 'safe'] : ['danger', 'warning', 'safe'];
+            const tagMap = { danger: 'tag-danger', major: 'tag-major', warning: 'tag-warning', safe: 'tag-safe' };
+            const labelMap = isUrban
+                ? { danger: '疑似危房', major: '严重损坏房', warning: '一般损坏房', safe: '完好房' }
+                : { danger: '第三类', major: '第三类', warning: '第二类', safe: '第一类' };
             const tbody = document.querySelector('#riskTable tbody');
             tbody.innerHTML = order.map(risk => {
-                const count = risk === 'danger'
-                    ? data.filter(i => i.risk === 'danger' || i.risk === 'major').length
-                    : data.filter(i => i.risk === risk).length;
+                let count;
+                if (isUrban) {
+                    count = data.filter(i => i.risk === risk).length;
+                } else {
+                    count = risk === 'danger'
+                        ? data.filter(i => i.risk === 'danger' || i.risk === 'major').length
+                        : data.filter(i => i.risk === risk).length;
+                }
                 const pct = ((count / total) * 100).toFixed(2) + '%';
                 const tagClass = tagMap[risk];
                 return `<tr><td><span class="tag ${tagClass}">${labelMap[risk]}</span></td><td>${count}</td><td>${pct}</td></tr>`;
@@ -879,7 +996,7 @@
             if (view === 'measure') {
                 const records = generateMeasureRecords();
                 const headers = ['变更编号', '房屋编号', '街镇', '风险等级', '措施类型', '责任人', '责任单位', '是否完成', '是否有效控制', '效果评估', '变更次数'];
-                const rows = records.map(r => [r.id, r.houseNo, r.street, riskMap[r.risk].label, r.measureType, r.responsiblePerson, r.responsibleDept, r.done ? '是' : '否', r.controlled ? '是' : '否', r.effectEvaluation, r.changeCount]);
+                const rows = records.map(r => [r.id, r.houseNo, r.street, getRiskLabel(r.risk, r.houseType), r.measureType, r.responsiblePerson, r.responsibleDept, r.done ? '是' : '否', r.controlled ? '是' : '否', r.effectEvaluation, r.changeCount]);
                 const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
                 const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
@@ -903,7 +1020,7 @@
             }
             const data = getFilteredData();
             const headers = ['编号', '街镇', '地址', '结构类型', '建成年代', '风险等级', '产权人'];
-            const rows = data.map(i => [i.no, i.street, i.address, categoryMap[i.category], i.year, riskMap[i.risk].label, i.owner]);
+            const rows = data.map(i => [i.no, i.street, i.address, categoryMap[i.category], i.year, getRiskLabel(i.risk, i.houseType), i.owner]);
             const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
             const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
@@ -1103,7 +1220,7 @@
             if (config.metrics.includes('riskDistribution')) {
                 const riskCounts = { danger: 0, major: 0, warning: 0, safe: 0 };
                 rows.forEach(r => { Object.keys(riskCounts).forEach(k => { riskCounts[k] += r.riskDistribution[k] || 0; }); });
-                data = Object.entries(riskCounts).map(([k, v]) => ({ name: riskMap[k].label, value: v }));
+                data = Object.entries(riskCounts).map(([k, v]) => ({ name: getDynamicRiskMap()[k].label, value: v }));
             } else if (config.metrics.includes('totalTask')) {
                 data = rows.map(r => ({ name: r.dimension, value: r.totalTask }));
             } else {
@@ -1332,6 +1449,7 @@ ${bodyRows}
             initFilters();
             initCategoryTabs();
             updateCategoryCounts();
+            updateRiskFilterLabels();
             updateStats();
             window.addEventListener('resize', () => {
                 Object.values(charts).forEach(c => c.resize());
@@ -1357,6 +1475,8 @@ ${bodyRows}
                     document.querySelectorAll('#categoryTabs .category-tab').forEach(t => {
                         t.classList.toggle('active', t.dataset.category === window.hsStatsCategory);
                     });
+                    // 更新风险筛选和汇总卡片标签
+                    updateRiskFilterLabels();
                     // 刷新当前视图
                     const view = document.getElementById('viewFilter').value;
                     if (view === 'house') updateStats();

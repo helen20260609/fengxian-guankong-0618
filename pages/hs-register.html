@@ -196,6 +196,7 @@
             line-height: 1.4;
         }
         .status-tag.danger { background: #fce8e6; color: #d93025; }
+        .status-tag.major { background: #fde7d9; color: #e8710a; }
         .status-tag.warning { background: #fff8e1; color: #f9a825; }
         .status-tag.safe { background: #e8f0fe; color: #1a73e8; }
         .view-btn {
@@ -1833,20 +1834,53 @@
 <script src="../js/house-arch-data.js"></script>
 <script>
         initHouseArchSeed();
-        const baseData = (() => {
+        // 构建农村自建房数据（house-arch-data.js，三类口径：第一类/第二类/第三类）
+        const ruralData = (() => {
             const recs = getAllHouseRecords();
-            return recs.map(r => ({
-                no: r.no,
-                name: r.name,
-                owner: r.owner,
-                street: r.street,
-                address: r.address,
-                category: r.houseType || r.category,
-                status: (typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status])
-                    ? HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status]
-                    : (r.riskLevel || r.status)
-            }));
+            return recs
+                // house-arch-data.js 为农村数据源，仅保留农村自建房记录
+                .filter(r => (r.houseType || r.category) === '农村自建房')
+                .map(r => ({
+                    no: r.no,
+                    name: r.name,
+                    owner: r.owner,
+                    street: r.street,
+                    address: r.address,
+                    category: '农村自建房',
+                    status: (typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status])
+                        ? HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status]
+                        : (r.riskLevel || r.status)
+                }));
         })();
+
+        // 动态加载城镇自建房数据层（urban-house-arch-data.js，四级口径：疑似危房/严重损坏房/一般损坏房/完好房）
+        // 用 fetch + new Function 在隔离作用域内执行，避免与 house-arch-data.js 的全局函数冲突
+        let baseData = [...ruralData];
+        fetch('../js/urban-house-arch-data.js')
+            .then(res => res.text())
+            .then(code => {
+                // 包装为具名导出：在函数作用域内执行后返回需要的接口
+                const factory = new Function(code + ';return { initHouseArchSeed: initHouseArchSeed, getAllHouseRecords: getAllHouseRecords, HAZARD_TO_RISK_LEVEL: (typeof HAZARD_TO_RISK_LEVEL !== "undefined") ? HAZARD_TO_RISK_LEVEL : null };');
+                const urbanAPI = factory();
+                urbanAPI.initHouseArchSeed();
+                const urbanRecs = urbanAPI.getAllHouseRecords();
+                const urbanData = urbanRecs.map(r => ({
+                    no: r.no,
+                    name: r.name,
+                    owner: r.owner,
+                    street: r.street,
+                    address: r.address,
+                    category: '城镇自建房',
+                    status: r.riskLevel || r.status
+                }));
+                baseData = ruralData.concat(urbanData);
+                // 数据加载完成后刷新列表与计数
+                updateTabCounts();
+                filterData();
+            })
+            .catch(err => {
+                console.error('加载城镇自建房数据失败:', err);
+            });
 
         let currentPage = 1;
         let pageSize = 10;
@@ -1857,7 +1891,15 @@
 
         function getRiskBadgeClass(level) {
             const map = {
-                '第一类': 'safe', '第二类': 'warning', '第三类': 'danger'
+                // 农村自建房（三类口径）
+                '第一类': 'safe',
+                '第二类': 'warning',
+                '第三类': 'danger',
+                // 城镇自建房（四级口径）
+                '疑似危房': 'danger',
+                '严重损坏房': 'major',
+                '一般损坏房': 'warning',
+                '完好房': 'safe'
             };
             return map[level] || 'danger';
         }
