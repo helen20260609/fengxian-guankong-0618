@@ -1324,7 +1324,7 @@
 
         const basicSubTabs_RURAL = [
             { key: 'jbxx', title: '基本信息', icon: 'fa-id-card', count: 20 },
-            { key: 'zjd', title: '宅基地信息', icon: 'fa-map', count: 3 },
+            { key: 'zjd', title: '宅基地信息', icon: 'fa-map', count: 3, ruralOnly: true },
             { key: 'jsqk', title: '建设情况', icon: 'fa-hard-hat', count: 7 },
             { key: 'glqk', title: '管理情况', icon: 'fa-file-alt', count: 2 },
             { key: 'designConstruction', title: '设计施工信息', icon: 'fa-hard-hat', count: 11, ruralOnly: true },
@@ -1541,6 +1541,10 @@
         const basicData_URBAN     = JSON.parse(JSON.stringify(basicData_RURAL));
         // 城镇自建房不含农村独有字段（户主联系方式 / 家庭成员信息）
         basicData_URBAN.jbxx = basicData_URBAN.jbxx.filter(function(r) { return !r[2]; });
+        // 城镇自建房不含宅基地相关字段
+        basicData_URBAN.jbxx = basicData_URBAN.jbxx.filter(function(r) { return r[0] !== '土地性质' && r[0] !== '集体土地'; });
+        basicData_URBAN.zjd = [];
+        basicData_URBAN.glqk = basicData_URBAN.glqk.filter(function(r) { return r[0] !== '已取得的行政许可'; });
         const tableData_URBAN     = JSON.parse(JSON.stringify(tableData_RURAL));
         const measureSubTabs_URBAN= JSON.parse(JSON.stringify(measureSubTabs_RURAL));
         const measureData_URBAN   = JSON.parse(JSON.stringify(measureData_RURAL));
@@ -1923,6 +1927,10 @@
         function renderBasicContent() {
             const s = currentHouseArch;
             const basicSubTabs = getBasicSubTabs();
+            // 城镇自建房兜底：若当前子 tab 不在可见列表（如宅基地），回落到基本信息
+            if (!basicSubTabs.some(function(t) { return t.key === currentSubTab; })) {
+                currentSubTab = 'jbxx';
+            }
             const tabsHtml = basicSubTabs.map(tab => {
                 const active = tab.key === currentSubTab ? 'active' : '';
                 const ruralCls = tab.ruralOnly ? ' rural-only-tab' : '';
@@ -1992,6 +2000,12 @@
                 return [r[0], r[1], true];
             });
             const dynamicBasic = { jbxx, zjd, jsqk, glqk, jgxx, syxx };
+            // 城镇自建房：剔除宅基地相关字段
+            if (isUrbanHouse()) {
+                dynamicBasic.zjd = [];
+                dynamicBasic.jbxx = dynamicBasic.jbxx.filter(function(r) { return r[0] !== '土地性质' && r[0] !== '集体土地'; });
+                dynamicBasic.glqk = dynamicBasic.glqk.filter(function(r) { return r[0] !== '已取得的行政许可'; });
+            }
 
             // 设计施工信息：记录列表 + 详情（参考 rural-house-detail）
             let designConstructionHtml = '';
