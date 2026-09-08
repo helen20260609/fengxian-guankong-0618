@@ -183,6 +183,51 @@ function handleApi(req, res, urlPath) {
         return true;
     }
 
+    // GET /api/farm-monitor-records -> 读取 农房常态化监测 排查记录
+    if (req.method === 'GET' && urlPath === '/api/farm-monitor-records') {
+        var farmFile = path.join(dataDir, 'farm-monitor-records.json');
+        fs.readFile(farmFile, 'utf8', function(err, data) {
+            if (err) {
+                if (err.code === 'ENOENT') {
+                    sendJson(res, 200, []);
+                } else {
+                    sendJson(res, 500, { error: '读取失败' });
+                }
+                return;
+            }
+            try {
+                var list = JSON.parse(data);
+                sendJson(res, 200, Array.isArray(list) ? list : []);
+            } catch (e) {
+                sendJson(res, 500, { error: '数据格式错误' });
+            }
+        });
+        return true;
+    }
+
+    // POST /api/farm-monitor-records -> 保存 农房常态化监测 排查记录（全量覆盖）
+    if (req.method === 'POST' && urlPath === '/api/farm-monitor-records') {
+        readJsonBody(req, function(err, list) {
+            if (err) {
+                sendJson(res, 400, { error: '请求体格式错误' });
+                return;
+            }
+            if (!Array.isArray(list)) {
+                sendJson(res, 400, { error: '数据必须是数组' });
+                return;
+            }
+            var farmFile = path.join(dataDir, 'farm-monitor-records.json');
+            fs.writeFile(farmFile, JSON.stringify(list, null, 2), 'utf8', function(err2) {
+                if (err2) {
+                    sendJson(res, 500, { error: '保存失败' });
+                    return;
+                }
+                sendJson(res, 200, { success: true, count: list.length });
+            });
+        });
+        return true;
+    }
+
     return false;
 }
 

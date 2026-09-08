@@ -1018,6 +1018,144 @@ function syncTaskToHouseRecords(task) {
     setHouseArchStorage(all);
 }
 
+// ============================================================
+// 排查记录库 → 农房档案 同步（2026回头看 / 农房常态化监测 共用）
+// 规则：
+//  - 只向 inspectionRecords 追加记录（按 sourceTag+recordId 去重），不修改房屋风险等级/整治状态
+//  - 结论为隐患时，同步把 rectify 的鉴定与整治信息写入档案 riskIdentification / manageRecords
+// ============================================================
+
+// 隐患判定：结论出现这些关键词视为存在隐患
+const INSPECT_DANGER_RE = /隐患|危险|C级|D级|需要整改|存在/;
+
+// 把一条排查记录库记录同步到农房档案（inspectionRecords 追加一条）
+// record: 排查记录库中的记录（含 houseNo/town/village/answers/submitTime 等）
+// sourceTag: 来源标识，如 '2026回头看' 或 '农房常态化监测'
+// 返回 { appended: bool, insId: string|null }
+function syncInspectRecordToHouse(record, sourceTag) {
+    if (!record || !record.houseNo) return { appended: false, insId: null };
+    var srcKey = (sourceTag || '') + '|' + (record.id || record.houseNo);
+    var now = new Date();
+    var dateStr = (record.submitTime || '').slice(0, 10) ||
+        now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+    var timeStr = record.submitTime || (dateStr + ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes()));
+    var ans = record.answers || {};
+    var conclusion = ans.conclusion || ans.result || '';
+    var isDanger = INSPECT_DANGER_RE.test(conclusion);
+    var checker = ans.inspectorSignature || ans.inspector || record.inspector || record.person || '';
+    var photos = [];
+    if (record.photos) {
+        Object.keys(record.photos).forEach(function (k) {
+            var v = record.photos[k];
+            if (Array.isArray(v)) photos = photos.concat(v);
+        });
+    }
+    var result = { appended: false, insId: null };
+    patchHouseRecord(record.houseNo, function (rec) {
+        if (!Array.isArray(rec.inspectionRecords)) rec.inspectionRecords = [];
+        // 去重：同一来源同一记录只追加一次
+        var dup = rec.inspectionRecords.some(function (r) { return r.srcKey === srcKey; });
+        if (dup) { result.appended = false; return; }
+        var insId = 'INS-' + record.houseNo + '-' + String(rec.inspectionRecords.length + 1).padStart(3, '0');
+        rec.inspectionRecords.push({
+            id: insId,
+            checkDate: dateStr,
+            checker: checker,
+            checkerPhone: ans.inspectorPhone || '',
+            structureStatus: ans.structureType || rec.riskLevel || '第二类',
+            damagePart: ans.damagePart || '',
+            overload: ans.overload || '否',
+            otherRisk: isDanger ? conclusion : '暂无',
+            preliminaryJudge: conclusion,
+            location: ans.address || record.address || '',
+            dutyPerson: ans.dutyPerson || '',
+            dutyPhone: ans.dutyPhone || '',
+            photos: photos.join(','),
+            preAppraisal: (record.rectify && record.rectify.appraisal && record.rectify.appraisal.done) || '否',
+            noAppraisalReason: '',
+            proofFiles: '',
+            remark: '由' + (sourceTag || '排查') + '同步生成',
+            reporter: checker,
+            reportTime: timeStr,
+            sourceType: sourceTag || '排查',
+            town: record.town || rec.street || '',
+            village: record.village || rec.community || '',
+            srcKey: srcKey,
+            srcRecordId: record.id || '',
+            taskId: record.id || '',
+            taskNo: record.id || '',
+            taskName: (sourceTag || '排查') + '·' + (record.town || '') + (record.village || '')
+        });
+        result.appended = true;
+        result.insId = insId;
+    });
+    return result;
+}
+
+// 把一条记录的整治信息（rectify）同步到农房档案
+// 写入 riskIdentification（鉴定结论）与 manageRecords（整治措施），均按 srcKey 去重
+function syncRectifyRecordToHouse(record, sourceTag) {
+    if (!record || !record.houseNo || !record.rectify) return { appraisal: false, measure: false };
+    var srcKey = (sourceTag || '') + '|' + (record.id || record.houseNo);
+    var appr = record.rectify.appraisal || {};
+    var meas = record.rectify.measures || {};
+    var now = new Date();
+    var dateStr = (record.rectify.updateTime || '').slice(0, 10) ||
+        now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+    var res = { appraisal: false, measure: false };
+    patchHouseRecord(record.houseNo, function (rec) {
+        // 鉴定报告
+        if (appr.done === '是' || appr.conclusion) {
+            if (!Array.isArray(rec.riskIdentification)) rec.riskIdentification = [];
+            var dupA = rec.riskIdentification.some(function (r) { return r.srcKey === srcKey; });
+            if (!dupA) {
+                rec.riskIdentification.push({
+                    id: 'APPR-' + record.houseNo + '-' + String(rec.riskIdentification.length + 1).padStart(3, '0'),
+                    identifyDate: appr.date || dateStr,
+                    orgName: appr.orgName || '',
+                    orgCode: appr.orgCode || '',
+                    conclusion: appr.conclusion || '',
+                    srcKey: srcKey,
+                    sourceType: sourceTag || '整治',
+                    remark: '由' + (sourceTag || '整治') + '同步生成'
+                });
+                res.appraisal = true;
+            }
+        }
+        // 整治措施
+        var hasMeasure = (meas.controlDone === '是') || (meas.engineeringDone === '是') ||
+            (Array.isArray(meas.controlTypes) && meas.controlTypes.length) ||
+            (Array.isArray(meas.engineeringTypes) && meas.engineeringTypes.length);
+        if (hasMeasure) {
+            if (!Array.isArray(rec.manageRecords)) rec.manageRecords = [];
+            var dupM = rec.manageRecords.some(function (r) { return r.srcKey === srcKey; });
+            if (!dupM) {
+                var types = [];
+                if (Array.isArray(meas.controlTypes)) types = types.concat(meas.controlTypes);
+                if (Array.isArray(meas.engineeringTypes)) types = types.concat(meas.engineeringTypes);
+                rec.manageRecords.push({
+                    id: 'M-' + record.houseNo + '-' + String(rec.manageRecords.length + 1).padStart(3, '0'),
+                    measureType: types.join('、') || '整治',
+                    implementPart: '整栋房屋',
+                    startTime: meas.ownerDate || dateStr,
+                    planEndTime: '',
+                    actualEndTime: meas.districtDate || meas.townDate || dateStr,
+                    controlTypes: meas.controlTypes || [],
+                    engineeringTypes: meas.engineeringTypes || [],
+                    ownerSign: meas.ownerSign || '',
+                    townSign: meas.townSign || '',
+                    districtSign: meas.districtSign || '',
+                    srcKey: srcKey,
+                    sourceType: sourceTag || '整治',
+                    remark: '由' + (sourceTag || '整治') + '同步生成'
+                });
+                res.measure = true;
+            }
+        }
+    });
+    return res;
+}
+
 // 根据房屋状态生成销号申请记录
 function generateCloseApplyForRecord(record) {
     if (record.closeStatus === '未申请') return null;

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>存量排查记录迁移 → 农房档案</title>
+<style>
+  body{font-family:"Microsoft YaHei",sans-serif;padding:24px;background:#f5f7fa;color:#333}
+  h2{margin-top:0}
+  #btn{padding:10px 22px;background:#2563eb;color:#fff;border:0;border-radius:6px;cursor:pointer;font-size:15px}
+  #btn:disabled{background:#94a3b8;cursor:not-allowed}
+  #log{margin-top:18px;background:#0f172a;color:#7dd3fc;padding:16px;border-radius:8px;font-family:Consolas,monospace;font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:70vh;overflow:auto}
+  .ok{color:#4ade80}.warn{color:#fbbf24}.err{color:#f87171}
+</style>
+</head>
+<body>
+<h2>存量「2026回头看」排查记录 → 农房档案 迁移</h2>
+<p>把 <code>data/review-2026-records.json</code> 的存量记录同步写入农房档案（inspectionRecords / riskIdentification / manageRecords），按 srcKey 去重，可重复执行。</p>
+<button id="btn" onclick="run()">开始迁移</button>
+<div id="log">等待执行…</div>
+
+<script src="../js/house-arch-data.js"></script>
+<script>
+var el = document.getElementById('log');
+function log(msg, cls){
+  var line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  el.appendChild(line);
+}
+async function run(){
+  var btn = document.getElementById('btn');
+  btn.disabled = true;
+  el.innerHTML = '';
+  log('读取服务端排查记录…');
+  var list = [];
+  try {
+    var r = await fetch('/api/review-2026-records');
+    list = await r.json();
+  } catch(e){ log('读取失败：'+e.message, 'err'); btn.disabled=false; return; }
+  if (!Array.isArray(list)) list = [];
+  log('共 '+list.length+' 条存量记录，开始同步…');
+
+  var stats = { ins:0, insSkip:0, appr:0, meas:0, err:0 };
+  list.forEach(function(rec){
+    if (!rec || rec.status !== 'submitted') { log('跳过(未提交): '+(rec&&rec.houseNo), 'warn'); return; }
+    try {
+      var a = syncInspectRecordToHouse(rec, '2026回头看');
+      if (a.appended){ stats.ins++; log('✓ 排查记录 → '+rec.houseNo+'  ('+(rec.answers&&rec.answers.conclusion||'')+')', 'ok'); }
+      else { stats.insSkip++; log('· 已存在跳过: '+rec.houseNo, 'warn'); }
+      if (rec.rectify){
+        var b = syncRectifyRecordToHouse(rec, '2026回头看');
+        if (b.appraisal){ stats.appr++; log('   ✓ 鉴定记录 → '+rec.houseNo, 'ok'); }
+        if (b.measure){ stats.meas++; log('   ✓ 整治措施 → '+rec.houseNo, 'ok'); }
+      }
+    } catch(e){ stats.err++; log('✗ '+rec.houseNo+' 同步出错: '+e.message, 'err'); }
+  });
+
+  log('');
+  log('===== 迁移完成 =====', 'ok');
+  log('新增排查记录: '+stats.ins+' 条');
+  log('已存在跳过: '+stats.insSkip+' 条');
+  log('新增鉴定记录: '+stats.appr+' 条');
+  log('新增整治措施: '+stats.meas+' 条');
+  if (stats.err) log('出错: '+stats.err+' 条', 'err');
+  btn.disabled = false;
+  btn.textContent = '重新迁移（去重安全）';
+}
+</script>
+</body>
+</html>

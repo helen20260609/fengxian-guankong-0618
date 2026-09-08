@@ -3615,6 +3615,23 @@ async function confirmImport() {
             body: JSON.stringify(serverList)
         });
         if (!post.ok) throw new Error('写回失败 HTTP ' + post.status);
+
+        // 同步到农房档案：排查导入写 inspectionRecords；整治导入写鉴定/整治记录（均按 srcKey 去重）
+        try {
+            if (typeof syncInspectRecordToHouse === 'function') {
+                validRows.forEach(function (r) {
+                    var idx = indexByNo[r.data.houseNo];
+                    if (idx === undefined) return;
+                    var rec = serverList[idx];
+                    if (isRectify) {
+                        if (typeof syncRectifyRecordToHouse === 'function') syncRectifyRecordToHouse(rec, '2026回头看');
+                    } else {
+                        syncInspectRecordToHouse(rec, '2026回头看');
+                    }
+                });
+            }
+        } catch (e) { console.warn('[导入] 档案同步失败', e); }
+
         showToast('导入完成：成功 ' + validRows.length + ' 条', 'success');
         closeImportModal();
         // 刷新任务卡（review2026LoadAndMerge 内部 GET 后自聚合 + renderAllTabs）
