@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>农房回头看 · 排查记录编辑</title>
+<link rel="stylesheet" href="./all.min.css">
+<style>
+:root {
+  --primary: #1a73e8; --primary-light: #e8f0fe;
+  --success: #1e8e3e; --danger: #d93025; --warning: #e65100;
+  --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+  --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+}
+:root[data-theme="dark"] {
+  --primary: #1e6fdb; --primary-light: #e8f1fd;
+  --success: #10b981; --danger: #ef4444; --warning: #f59e0b;
+  --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+  --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Microsoft YaHei','PingFang SC',-apple-system,sans-serif; background: var(--bg-dark); color: var(--text-primary); padding: 20px; min-height: 100vh; }
+
+/* 头部 */
+.sticky-wrapper { position: sticky; top: 0; z-index: 100; background: var(--bg-dark); padding-bottom: 16px; }
+.breadcrumb { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+.breadcrumb a { color: var(--primary); text-decoration: none; cursor: pointer; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb-sep { color: var(--text-secondary); opacity: .5; }
+.page-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.page-title i { color: var(--primary); }
+.page-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+
+/* 主布局 */
+.main-layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+
+/* 卡片 */
+.card { background: var(--bg-card); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; overflow: hidden; }
+.card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.card-header .ch-title { font-size: 15px; font-weight: 700; }
+.card-header .ch-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.card-body { padding: 18px 20px; }
+
+/* 表单 */
+.form-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 18px; margin-bottom: 14px; }
+.form-row.single { grid-template-columns: 1fr; }
+.form-item { display: flex; flex-direction: column; gap: 5px; }
+.fi-label { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; }
+.fi-label .req { color: var(--danger); font-weight: 700; }
+.fi-label .edited-mark { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #fff4e5; color: var(--warning); font-weight: 600; margin-left: 4px; }
+.fi-input, .fi-select, .fi-textarea { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-card); color: var(--text-primary); font-family: inherit; transition: border-color .15s; }
+.fi-input:focus, .fi-select:focus, .fi-textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.fi-textarea { min-height: 72px; resize: vertical; }
+.fi-input[data-filled="true"] { border-left: 3px solid var(--warning); background: #fffbf5; }
+
+/* 单选/多选 */
+.option-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt-pill { padding: 6px 14px; border: 1px solid var(--border); border-radius: 16px; font-size: 13px; cursor: pointer; user-select: none; background: var(--bg-card); transition: all .15s; }
+.opt-pill:hover { border-color: var(--primary); color: var(--primary); }
+.opt-pill.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.opt-pill.danger.active { background: var(--danger); border-color: var(--danger); }
+.opt-pill.safe.active { background: var(--success); border-color: var(--success); }
+.opt-pill.warning.active { background: var(--warning); border-color: var(--warning); }
+.opt-pill .check-mark { margin-right: 4px; opacity: 0; transition: opacity .15s; }
+.opt-pill.active .check-mark { opacity: 1; }
+
+/* 分区标题 */
+.sec-divider { display: flex; align-items: center; gap: 10px; margin: 22px 0 14px; padding-top: 18px; border-top: 1px solid var(--border); }
+.sec-divider:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+.sec-divider .sd-num { width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.sec-divider .sd-title { font-size: 14px; font-weight: 700; }
+
+/* 右侧照片面板 */
+.photo-panel { position: sticky; top: 130px; }
+.photo-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.photo-item { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); aspect-ratio: 4/3; background: var(--bg-hover); cursor: zoom-in; }
+.photo-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pi-tag { position: absolute; bottom: 4px; left: 4px; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+.photo-cat-label { font-size: 12px; color: var(--text-secondary); margin: 10px 0 6px; font-weight: 600; }
+.photo-cat-label:first-child { margin-top: 0; }
+
+/* 底部操作 */
+.action-bar { position: sticky; bottom: 0; background: var(--bg-card); border-top: 1px solid var(--border); padding: 14px 20px; display: flex; gap: 12px; align-items: center; border-radius: 12px 12px 0 0; box-shadow: 0 -2px 8px rgba(0,0,0,.04); }
+.btn { padding: 9px 20px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 13px; cursor: pointer; font-family: inherit; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { background: var(--bg-hover); }
+.btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn.primary:hover { background: #1565c0; }
+.btn.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.action-bar .status-hint { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
+
+/* 空态 */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+.empty-state i { font-size: 48px; margin-bottom: 12px; opacity: .3; }
+
+/* lightbox */
+.lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 9999; align-items: center; justify-content: center; cursor: zoom-out; }
+.lightbox.show { display: flex; }
+.lightbox img { max-width: 92vw; max-height: 90vh; border-radius: 8px; }
+
+/* 响应式 */
+@media (max-width: 1024px) {
+  .main-layout { grid-template-columns: 1fr; }
+  .photo-panel { position: static; }
+  .form-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="sticky-wrapper">
+  <div class="breadcrumb">
+    <a href="patrol-task-management.html"><i class="fas fa-list"></i> 巡查任务管理</a>
+    <span class="breadcrumb-sep">/</span>
+    <a id="backToDetail" href="#"><i class="fas fa-eye"></i> 排查记录详情</a>
+    <span class="breadcrumb-sep">/</span>
+    <span>编辑补充</span>
+  </div>
+  <div class="page-title"><i class="fas fa-pen-to-square"></i> <span id="pageTitle">编辑排查记录</span></div>
+  <div class="page-subtitle" id="pageSubtitle"></div>
+</div>
+
+<div class="main-layout" id="mainLayout" style="display:none;">
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="ch-title"><i class="fas fa-house"></i> 基本信息</span>
+        <span class="ch-badge" id="editedBadge" style="display:none;">已补充编辑</span>
+      </div>
+      <div class="card-body" id="formBasic"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="ch-title"><i class="fas fa-hammer"></i> 建设与审批</span></div>
+      <div class="card-body" id="formConstruction"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="ch-title"><i class="fas fa-shield-halved"></i> 安全隐患与签字</span></div>
+      <div class="card-body" id="formSafety"></div>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn" onclick="cancelEdit()"><i class="fas fa-xmark"></i> 取消</button>
+      <button class="btn primary" onclick="saveEdit()"><i class="fas fa-check"></i> 保存修改</button>
+      <span class="status-hint" id="statusHint"></span>
+    </div>
+  </div>
+
+  <div class="photo-panel">
+    <div class="card">
+      <div class="card-header"><span class="ch-title"><i class="fas fa-camera"></i> 现场照片</span></div>
+      <div class="card-body" id="photoPanel"></div>
+    </div>
+    <div class="card" id="checkinCard" style="display:none;">
+      <div class="card-header"><span class="ch-title"><i class="fas fa-location-dot"></i> 打卡信息</span></div>
+      <div class="card-body" id="checkinPanel"></div>
+    </div>
+  </div>
+</div>
+
+<div id="emptyState" style="display:none;"></div>
+
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('show')"><img id="lightboxImg" alt="照片预览"></div>
+
+<script>
+// ================= 字段定义（含选项） =================
+var FIELD_SCHEMAS = {
+  basic: [
+    { key: 'address', label: '地址', type: 'text' },
+    { key: 'houseType', label: '农房类型', type: 'radio', options: ['独立住宅','集合住宅','非住宅','辅助用房'] },
+    { key: 'communityName', label: '小区名称', type: 'text' },
+    { key: 'buildingName', label: '建筑名称', type: 'text' },
+    { key: 'apartmentCount', label: '住宅套数', type: 'number' },
+    { key: 'ownerName', label: '户主姓名/机构名称', type: 'text' },
+    { key: 'ownerId', label: '身份证号/机构代码', type: 'text' },
+    { key: 'ownerType', label: '户主类型', type: 'text', placeholder: '如：房屋产权人 / 房屋使用人' },
+    { key: 'buildingFloors', label: '建筑层数(层)', type: 'number' },
+    { key: 'buildingHeight', label: '建筑高度(m)', type: 'number', step: '0.01' },
+    { key: 'buildingArea', label: '建筑面积(m²)', type: 'number', step: '0.01' },
+    { key: 'buildEra', label: '建造年代', type: 'radio', options: ['1980年及以前','1981-1990年','1991-2000年','2001-2010年','2011-2015年','2016年及以后'] },
+    { key: 'buildYear', label: '建造时间', type: 'number', placeholder: '如：1985' },
+    { key: 'forBusiness', label: '建筑用途', type: 'radio', options: [{value:'是',label:'用于生产经营'},{value:'否',label:'非生产经营'}] },
+    { key: 'businessUse', label: '生产经营用途', type: 'checkbox', options: ['教育设施','医疗卫生','行政办公','文化设施','养老服务','批发零售','餐饮服务','住宿宾馆','休闲娱乐','宗教场所','农贸市场','生产加工','仓储物流','其他'] },
+    { key: 'businessUseOther', label: '其他生产经营用途', type: 'text' },
+    { key: 'businessUseEdu', label: '教育设施细分', type: 'checkbox', options: ['中小学幼儿园教学用房及学生宿舍、食堂','其他教育设施'] },
+    { key: 'businessUseMedical', label: '医疗卫生细分', type: 'checkbox', options: ['有外科手术室或急诊科的乡镇卫生院用房','其它医疗卫生设施'] },
+    { key: 'landNature', label: '土地性质', type: 'radio', options: ['国有土地','集体土地'] },
+    { key: 'stateLandType', label: '国有土地类型', type: 'radio', options: ['居住用地','商住用地','商业用地','国有非建设用地','其他'] },
+    { key: 'stateLandTypeOther', label: '其他国有土地类型', type: 'text' },
+    { key: 'collectiveLandType', label: '集体土地类型', type: 'radio', options: ['宅基地','集体建设用地','集体非建设用地','其他'] },
+    { key: 'collectiveLandTypeOther', label: '其他集体土地类型', type: 'text' },
+    { key: 'propertyRight', label: '产权性质', type: 'radio', options: ['私有产权','国有产权','集体产权','混合所有制产权','其他'] },
+    { key: 'propertyRightOther', label: '其他产权性质', type: 'text' },
+    { key: 'crowdPlaceNearby', label: '人员聚集场所周边', type: 'radio', options: ['是','否'] },
+    { key: 'crowdPlaceType', label: '周边人员聚集场所类型', type: 'checkbox', options: ['学校','医院','商贸市场','其他'] },
+    { key: 'occupantsOver10', label: '常住或使用人数超过10人', type: 'radio', options: ['是','否'] }
+  ],
+  construction: [
+    { key: 'approval', label: '建房审批手续', type: 'radio', options: ['有','无'] },
+    { key: 'professionalDesign', label: '是否专业设计建造', type: 'radio', options: ['是','否'] },
+    { key: 'constructionMethod', label: '建造方式', type: 'radio', options: ['有资质的施工队伍建造','建筑工匠建造','自行建造','其他'] },
+    { key: 'structureType', label: '结构类型', type: 'radio', options: ['砌体结构','木（竹）结构','土木/石木结构','混杂结构','窑洞','钢筋混凝土结构','钢结构','其他'] },
+    { key: 'masonryType', label: '砌体结构类型', type: 'radio', options: ['底部框架-抗震墙结构','其他'] },
+    { key: 'floorRoofType', label: '楼屋盖类型', type: 'radio', options: ['预制板','现浇板','木楼（屋）盖','轻钢楼（屋）盖'] },
+    { key: 'renovation', label: '是否改扩建', type: 'radio', options: ['是','否'] },
+    { key: 'renovationCount', label: '改扩建次数', type: 'number' },
+    { key: 'renovationContent', label: '改扩建内容', type: 'checkbox', options: ['加层','加夹层','加隔墙','减柱','减隔墙','建筑外扩','破墙开洞','其他'] },
+    { key: 'renovationContentOther', label: '其他改扩建内容', type: 'text' },
+    { key: 'violations', label: '是否存在违规行为', type: 'checkbox', options: [{value:'拆改承重结构',cls:'danger'},{value:'大幅增加使用荷载',cls:'danger'},{value:'开挖地下空间',cls:'danger'},{value:'其他',cls:''},{value:'无',cls:'safe'}] },
+    { key: 'violationsOther', label: '其他违规行为', type: 'text' }
+  ],
+  safety: [
+    { key: 'damageCondition', label: '房屋损伤情况', type: 'checkbox', options: ['明显墙体裂缝','屋面塌陷','墙柱倾斜','地基沉降','其他'] },
+    { key: 'overload', label: '增加堆载（二层及以上堆放大量重物）', type: 'radio', options: ['是','否','其他'] },
+    { key: 'overloadOther', label: '其他增加堆载情况', type: 'text' },
+    { key: 'surfaceDamage', label: '房屋表观损坏程度初判', type: 'radio', options: [{value:'完好或基本完好房',cls:'safe'},{value:'一般损坏房',cls:'warning'},{value:'严重损坏房',cls:'danger'}] },
+    { key: 'structuralSafety', label: '房屋结构安全隐患初判', type: 'radio', options: [{value:'未见明显安全隐患',cls:'safe'},{value:'存在一般安全隐患',cls:'warning'},{value:'存在严重安全隐患',cls:'danger',label:'存在严重安全隐患（需进一步检查或检测鉴定）'}] },
+    { key: 'structuralSafetyRemark', label: '结构安全隐患备注', type: 'textarea' },
+    { key: 'ownerSignature', label: '产权人签名', type: 'text' },
+    { key: 'ownerPhone', label: '产权人联系方式', type: 'text' },
+    { key: 'ownerDate', label: '产权人日期', type: 'text', placeholder: 'YYYY-MM-DD' },
+    { key: 'userSignature', label: '使用人签名', type: 'text' },
+    { key: 'userPhone', label: '使用人联系方式', type: 'text' },
+    { key: 'userDate', label: '使用人日期', type: 'text', placeholder: 'YYYY-MM-DD' },
+    { key: 'inspectorSignature', label: '排查人签名', type: 'text' },
+    { key: 'inspectorOrg', label: '排查单位', type: 'text' },
+    { key: 'inspectorPhone', label: '排查人联系方式', type: 'text' },
+    { key: 'inspectorDate', label: '排查人日期', type: 'text', placeholder: 'YYYY-MM-DD' }
+  ]
+};
+
+var PHOTO_CATS = [
+  { key: 'doorPlate', label: '门牌号' },
+  { key: 'facade', label: '房屋外立面', facadeLabels: ['东', '南', '西', '北'] },
+  { key: 'structure', label: '内部梁柱结构' },
+  { key: 'damage', label: '损坏点位特写' },
+  { key: 'currentStatus', label: '房屋现状照片' },
+  { key: 'damagePhoto', label: '房屋损伤照片' }
+];
+
+// 决定字段存到哪里（顶层 or answers）
+var TEXT_FIELDS = ['address','communityName','buildingName','apartmentCount','ownerName','ownerId',
+  'buildingFloors','buildingHeight','buildingArea','buildYear','structuralSafetyRemark',
+  'ownerSignature','ownerPhone','ownerDate','userSignature','userPhone','userDate',
+  'inspectorSignature','inspectorOrg','inspectorPhone','inspectorDate',
+  'renovationCount','businessUseOther','stateLandTypeOther','collectiveLandTypeOther',
+  'propertyRightOther','renovationContentOther','violationsOther','overloadOther','ownerType'];
+
+var currentRecord = null;
+var currentRecordIndex = -1;
+var allRecords = [];
+
+// ================= 工具函数 =================
+function getQuery(k) { return new URLSearchParams(location.search).get(k) || ''; }
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function getFieldValue(record, key) {
+  if (TEXT_FIELDS.indexOf(key) > -1) return record[key] || '';
+  if (record.answers && record.answers[key] !== undefined) return record.answers[key];
+  return '';
+}
+function setFieldValue(record, key, value) {
+  if (TEXT_FIELDS.indexOf(key) > -1) {
+    record[key] = value;
+  } else {
+    if (!record.answers) record.answers = {};
+    record.answers[key] = value;
+  }
+}
+
+// ================= 渲染字段 =================
+function renderFieldInput(schema, record) {
+  var wrap = document.createElement('div');
+  wrap.className = 'form-item';
+  var value = getFieldValue(record, schema.key);
+
+  var labelEl = document.createElement('div');
+  labelEl.className = 'fi-label';
+  labelEl.innerHTML = escHtml(schema.label);
+  wrap.appendChild(labelEl);
+
+  if (schema.type === 'text' || schema.type === 'number') {
+    var input = document.createElement('input');
+    input.type = schema.type === 'number' ? 'number' : 'text';
+    if (schema.step) input.step = schema.step;
+    if (schema.placeholder) input.placeholder = schema.placeholder;
+    input.className = 'fi-input';
+    input.value = value;
+    input.dataset.fieldKey = schema.key;
+    input.dataset.fieldType = schema.type;
+    if (value) input.dataset.filled = 'true';
+    wrap.appendChild(input);
+  } else if (schema.type === 'textarea') {
+    var ta = document.createElement('textarea');
+    ta.className = 'fi-textarea';
+    ta.value = value;
+    ta.dataset.fieldKey = schema.key;
+    ta.dataset.fieldType = 'textarea';
+    if (value) ta.dataset.filled = 'true';
+    wrap.appendChild(ta);
+  } else if (schema.type === 'radio' || schema.type === 'checkbox') {
+    var group = document.createElement('div');
+    group.className = 'option-group';
+    group.dataset.fieldKey = schema.key;
+    group.dataset.fieldType = schema.type;
+    var options = schema.options || [];
+    options.forEach(function(opt) {
+      var optValue = typeof opt === 'string' ? opt : opt.value;
+      var optLabel = typeof opt === 'string' ? opt : (opt.label || opt.value);
+      var optCls = typeof opt === 'object' && opt.cls ? opt.cls : '';
+      var pill = document.createElement('div');
+      pill.className = 'opt-pill' + (optCls ? ' ' + optCls : '');
+      pill.dataset.value = optValue;
+      pill.innerHTML = '<span class="check-mark"><i class="fas fa-check"></i></span>' + escHtml(optLabel);
+      var isSelected = schema.type === 'checkbox'
+        ? (Array.isArray(value) && value.indexOf(optValue) > -1)
+        : (value === optValue);
+      if (isSelected) pill.classList.add('active');
+      pill.addEventListener('click', function() {
+        if (schema.type === 'radio') {
+          group.querySelectorAll('.opt-pill').forEach(function(p) { p.classList.remove('active'); });
+          pill.classList.add('active');
+        } else {
+          // checkbox - "无"互斥处理
+          if (optValue === '无') {
+            group.querySelectorAll('.opt-pill').forEach(function(p) { p.classList.remove('active'); });
+            pill.classList.add('active');
+          } else {
+            group.querySelectorAll('.opt-pill[data-value="无"]').forEach(function(p) { p.classList.remove('active'); });
+            pill.classList.toggle('active');
+          }
+        }
+      });
+      group.appendChild(pill);
+    });
+    wrap.appendChild(group);
+  }
+  return wrap;
+}
+
+function renderFormSection(containerId, schemas, record, secNum, secTitle) {
+  var container = document.getElementById(containerId);
+  container.innerHTML = '';
+  var divider = document.createElement('div');
+  divider.className = 'sec-divider';
+  divider.innerHTML = '<div class="sd-num">' + secNum + '</div><div class="sd-title">' + escHtml(secTitle) + '</div>';
+  container.appendChild(divider);
+
+  var row = document.createElement('div');
+  row.className = 'form-row';
+  schemas.forEach(function(schema) {
+    var field = renderFieldInput(schema, record);
+    // 宽字段占整行
+    if (schema.type === 'textarea' || schema.type === 'checkbox' || (schema.options && schema.options.length > 4)) {
+      if (row.children.length > 0) { container.appendChild(row); row = document.createElement('div'); row.className = 'form-row'; }
+      var singleRow = document.createElement('div');
+      singleRow.className = 'form-row single';
+      singleRow.appendChild(field);
+      container.appendChild(singleRow);
+    } else {
+      row.appendChild(field);
+      if (row.children.length >= 2) { container.appendChild(row); row = document.createElement('div'); row.className = 'form-row'; }
+    }
+  });
+  if (row.children.length > 0) container.appendChild(row);
+}
+
+// ================= 收集表单数据 =================
+function collectForm() {
+  var data = { topLevel: {}, answers: {} };
+  document.querySelectorAll('[data-field-key]').forEach(function(el) {
+    var key = el.dataset.fieldKey;
+    var type = el.dataset.fieldType;
+    var value;
+    if (type === 'text' || type === 'number' || type === 'textarea') {
+      value = el.value.trim();
+    } else if (type === 'radio') {
+      var active = el.querySelector('.opt-pill.active');
+      value = active ? active.dataset.value : '';
+    } else if (type === 'checkbox') {
+      value = [...el.querySelectorAll('.opt-pill.active')].map(function(p) { return p.dataset.value; });
+    }
+    if (TEXT_FIELDS.indexOf(key) > -1) data.topLevel[key] = value;
+    else data.answers[key] = value;
+  });
+  return data;
+}
+
+// ================= 渲染照片面板 =================
+function renderPhotoPanel(record) {
+  var panel = document.getElementById('photoPanel');
+  panel.innerHTML = '';
+  var photos = record.photos || {};
+  var hasAny = false;
+  PHOTO_CATS.forEach(function(cat) {
+    var catPhotos = photos[cat.key] || [];
+    if (!catPhotos.length) return;
+    hasAny = true;
+    var catLabel = document.createElement('div');
+    catLabel.className = 'photo-cat-label';
+    catLabel.textContent = cat.label + '（' + catPhotos.length + '张）';
+    panel.appendChild(catLabel);
+    var grid = document.createElement('div');
+    grid.className = 'photo-grid';
+    catPhotos.forEach(function(p, idx) {
+      var item = document.createElement('div');
+      item.className = 'photo-item';
+      var img = document.createElement('img');
+      img.src = (p && (p.dataUrl || p.url)) || (typeof p === 'string' ? p : '');
+      img.alt = cat.label;
+      img.onerror = function() { item.style.display = 'none'; };
+      item.appendChild(img);
+      if (cat.facadeLabels && idx < cat.facadeLabels.length) {
+        var tag = document.createElement('div');
+        tag.className = 'pi-tag';
+        tag.textContent = cat.facadeLabels[idx] + '面';
+        item.appendChild(tag);
+      }
+      (function(src) {
+        item.addEventListener('click', function() {
+          document.getElementById('lightboxImg').src = src;
+          document.getElementById('lightbox').classList.add('show');
+        });
+      })(img.src);
+      grid.appendChild(item);
+    });
+    panel.appendChild(grid);
+  });
+  if (!hasAny) {
+    panel.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:20px 0;"><i class="fas fa-camera" style="font-size:32px;opacity:.3;display:block;margin-bottom:8px;"></i>暂无照片</div>';
+  }
+}
+
+// ================= 渲染打卡面板 =================
+function renderCheckinPanel(record) {
+  var ck = record.checkin;
+  if (!ck || !ck.lat) return;
+  document.getElementById('checkinCard').style.display = '';
+  var panel = document.getElementById('checkinPanel');
+  var rows = [
+    ['打卡时间', (ck.time || '').replace('T', ' ').slice(0, 16)],
+    ['打卡坐标', ck.lat.toFixed(6) + ', ' + ck.lng.toFixed(6)],
+    ['打卡方式', ck.source || ck.method || '—'],
+    ['打卡人', ck.operator || '—']
+  ];
+  if (record.zoneName) rows.push(['所属片区', record.zoneName]);
+  panel.innerHTML = rows.map(function(r) {
+    return '<div style="display:flex;font-size:12px;margin-bottom:6px;"><div style="width:80px;color:var(--text-secondary);">' + escHtml(r[0]) + '</div><div style="flex:1;">' + escHtml(r[1]) + '</div></div>';
+  }).join('');
+}
+
+// ================= 加载记录 =================
+function loadRecord() {
+  var houseNo = getQuery('houseNo');
+  if (!houseNo) {
+    showEmpty('缺少 houseNo 参数');
+    return;
+  }
+  fetch('/api/farm-review-records')
+    .then(function(r) { return r.ok ? r.json() : []; })
+    .then(function(records) {
+      if (!Array.isArray(records)) records = [];
+      allRecords = records;
+      currentRecordIndex = records.findIndex(function(r) { return r && r.houseNo === houseNo && r.status === 'submitted'; });
+      if (currentRecordIndex < 0) {
+        showEmpty('未找到 houseNo=' + houseNo + ' 的已提交排查记录');
+        return;
+      }
+      currentRecord = records[currentRecordIndex];
+
+      // 设置页面标题和返回链接
+      var town = currentRecord.town || '';
+      var village = currentRecord.village || '';
+      document.getElementById('pageTitle').textContent = (town + village) + ' · ' + houseNo;
+      document.getElementById('pageSubtitle').textContent = '排查人：' + (currentRecord.inspectorSignature || '—') + ' · 提交时间：' + (currentRecord.submitTime || '').replace('T', ' ').slice(0, 16);
+      document.getElementById('backToDetail').href = 'farm-review-detail.html?town=' + encodeURIComponent(town) + '&village=' + encodeURIComponent(village) + '&houseNo=' + encodeURIComponent(houseNo);
+      if (currentRecord.editedByPC) {
+        document.getElementById('editedBadge').style.display = '';
+      }
+
+      // 渲染表单
+      renderFormSection('formBasic', FIELD_SCHEMAS.basic, currentRecord, 1, '基本信息');
+      renderFormSection('formConstruction', FIELD_SCHEMAS.construction, currentRecord, 2, '建设与审批');
+      renderFormSection('formSafety', FIELD_SCHEMAS.safety, currentRecord, 3, '安全隐患与签字');
+
+      // 右侧：照片 + 打卡
+      renderPhotoPanel(currentRecord);
+      renderCheckinPanel(currentRecord);
+
+      document.getElementById('mainLayout').style.display = '';
+    })
+    .catch(function(e) {
+      showEmpty('服务端数据拉取失败：' + e.message);
+    });
+}
+
+function showEmpty(msg) {
+  var el = document.getElementById('emptyState');
+  el.style.display = '';
+  el.className = 'empty-state';
+  el.innerHTML = '<i class="fas fa-exclamation-circle"></i><div>' + escHtml(msg) + '</div>';
+}
+
+// ================= 保存 =================
+function saveEdit() {
+  if (currentRecordIndex < 0) return;
+  var form = collectForm();
+
+  // 合并到当前记录
+  Object.keys(form.topLevel).forEach(function(k) { currentRecord[k] = form.topLevel[k]; });
+  if (!currentRecord.answers) currentRecord.answers = {};
+  Object.keys(form.answers).forEach(function(k) { currentRecord.answers[k] = form.answers[k]; });
+
+  // 标记补充编辑
+  currentRecord.editedByPC = true;
+  currentRecord.editedTime = new Date().toISOString();
+
+  // 写回数组并POST
+  allRecords[currentRecordIndex] = currentRecord;
+
+  var hint = document.getElementById('statusHint');
+  hint.textContent = '保存中…';
+  fetch('/api/farm-review-records', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(allRecords)
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      hint.textContent = '已保存';
+      hint.style.color = 'var(--success)';
+      document.getElementById('editedBadge').style.display = '';
+      setTimeout(function() {
+        cancelEdit();
+      }, 800);
+    })
+    .catch(function(e) {
+      hint.textContent = '保存失败：' + e.message;
+      hint.style.color = 'var(--danger)';
+    });
+}
+
+function cancelEdit() {
+  var backUrl = document.getElementById('backToDetail').href;
+  if (backUrl && backUrl !== '#') window.location.href = backUrl;
+  else history.back();
+}
+
+loadRecord();
+</script>
+</body>
+</html>

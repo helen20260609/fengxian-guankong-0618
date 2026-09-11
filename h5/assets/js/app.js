@@ -58,6 +58,7 @@
         { id: 'region', icon: 'fa-map-location-dot', label: '管辖区域', href: 'pages/region-management.html' },
         { id: 'risk', icon: 'fa-book-open', label: '风险清单', href: 'pages/risk-list.html' },
         { id: 'review-2026', icon: 'fa-rotate-left', label: '2026回头看', href: 'pages/review-2026.html' },
+        { id: 'farm-review', icon: 'fa-clipboard-check', label: '农房回头看', href: 'pages/farm-review.html' },
         { id: 'farm-monitor', icon: 'fa-house-circle-check', label: '农房常态化监测', href: 'pages/farm-monitor.html' },
         { id: 'key-guarantee', icon: 'fa-shield-halved', label: '重点保障区域', href: 'pages/h5-key-guarantee-list.html' },
         { id: 'danger-report', icon: 'fa-triangle-exclamation', label: '隐患上报', href: 'pages/hidden-danger-manage.html' },
@@ -77,7 +78,7 @@
         { id: 'assessment', icon: 'fa-chart-pie', label: '评估分析', href: 'pages/assessment.html' },
         { id: 'gas-monitor-list', icon: 'fa-tower-broadcast', label: '风险隐患监测', href: 'pages/gas-monitor-list.html' }
     ];
-    var INSPECTOR_HOME_DEFAULT = ['todo', 'danger-report', 'warning', 'region', 'risk', 'review-2026', 'farm-monitor'];
+    var INSPECTOR_HOME_DEFAULT = ['todo', 'danger-report', 'warning', 'region', 'risk', 'review-2026', 'farm-monitor', 'farm-review'];
 
     // 企业人员首页常用功能预定义池
     var ENTERPRISE_APP_POOL = [
@@ -358,6 +359,11 @@
                 if (ids.indexOf('farm-monitor') === -1) {
                     var reviewIdx = ids.indexOf('review-2026');
                     ids.splice(reviewIdx === -1 ? ids.length : reviewIdx + 1, 0, 'farm-monitor');
+                }
+                // 兼容旧缓存：确保 farm-review 存在且位于 farm-monitor 右侧
+                if (ids.indexOf('farm-review') === -1) {
+                    var farmMonitorIdx = ids.indexOf('farm-monitor');
+                    ids.splice(farmMonitorIdx === -1 ? ids.length : farmMonitorIdx + 1, 0, 'farm-review');
                 }
                 return ids;
             } catch (e) {}

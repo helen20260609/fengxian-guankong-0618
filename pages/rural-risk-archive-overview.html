@@ -4,6 +4,7 @@
 <title>农村自建房 - 风险档案总览</title>
 <link rel="stylesheet" href="./all.min.css">
 <script src="../js/house-arch-data.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <style>
 /* ===== Theme Variables ===== */
 :root {
@@ -751,6 +752,53 @@ body {
 .detail-embed-overlay { display: none; position: fixed; inset: 0; background: var(--bg-dark); z-index: 2000; flex-direction: column; }
 .detail-embed-overlay.active { display: flex; }
 .detail-embed-frame { flex: 1; border: none; width: 100%; background: var(--bg-card); }
+
+/* ===== 导入向导 ===== */
+.import-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:3000; align-items:center; justify-content:center; padding:24px; }
+.import-overlay.active { display:flex; }
+.import-modal { background:var(--bg-card); border-radius:10px; width:100%; max-width:960px; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 8px 30px rgba(0,0,0,0.25); overflow:hidden; }
+.import-modal-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.import-modal-header .imp-title { font-size:16px; font-weight:600; color:var(--text-primary); display:flex; align-items:center; gap:8px; }
+.import-close { background:none; border:none; font-size:20px; color:var(--text-secondary); cursor:pointer; line-height:1; padding:4px; }
+.import-steps { display:flex; padding:14px 20px 0; gap:4px; }
+.imp-step { flex:1; text-align:center; padding:8px 4px; font-size:13px; color:var(--text-secondary); border-bottom:2px solid var(--border); display:flex; align-items:center; justify-content:center; gap:6px; }
+.imp-step .num { width:20px; height:20px; border-radius:50%; background:var(--border); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:11px; }
+.imp-step.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
+.imp-step.active .num { background:var(--primary); }
+.imp-step.done { color:var(--safe); border-bottom-color:var(--safe); }
+.imp-step.done .num { background:var(--safe); }
+.import-body { flex:1; overflow:auto; padding:20px; min-height:300px; }
+.import-footer { padding:14px 20px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.imp-pane { display:none; }
+.imp-pane.active { display:block; }
+.imp-hint { background:var(--primary-light); border:1px solid var(--primary); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--text-primary); line-height:1.7; margin-bottom:16px; }
+.imp-hint b { color:var(--primary); }
+.imp-upload-zone { border:2px dashed var(--border); border-radius:10px; padding:40px 20px; text-align:center; color:var(--text-secondary); cursor:pointer; transition:all .2s; }
+.imp-upload-zone:hover, .imp-upload-zone.drag { border-color:var(--primary); background:var(--primary-light); color:var(--primary); }
+.imp-upload-zone i { font-size:40px; margin-bottom:12px; display:block; }
+.imp-file-name { margin-top:12px; font-size:13px; color:var(--safe); font-weight:600; }
+.imp-table { width:100%; border-collapse:collapse; font-size:12px; }
+.imp-table th, .imp-table td { border:1px solid var(--border); padding:6px 8px; text-align:left; white-space:nowrap; }
+.imp-table th { background:var(--bg-dark); position:sticky; top:0; font-weight:600; }
+.imp-table td input, .imp-table td select { width:100%; border:1px solid transparent; background:transparent; padding:3px 4px; font-size:12px; font-family:inherit; border-radius:4px; color:var(--text-primary); }
+.imp-table td input:focus, .imp-table td select:focus { outline:none; border-color:var(--primary); background:var(--input-bg); }
+.imp-table tr.row-error td { background:rgba(217,48,37,0.08); }
+.imp-table tr.row-error td.cell-error input, .imp-table tr.row-error td.cell-error select { border-color:var(--danger); background:#fff; color:var(--danger); font-weight:600; }
+.imp-err-tag { color:var(--danger); font-size:11px; display:block; }
+.imp-summary { display:flex; gap:16px; font-size:13px; margin-bottom:12px; flex-wrap:wrap; }
+.imp-summary .ok { color:var(--safe); font-weight:600; }
+.imp-summary .bad { color:var(--danger); font-weight:600; }
+.imp-summary .warn { color:var(--warning); font-weight:600; }
+.imp-map-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+.imp-map-item { display:flex; flex-direction:column; gap:4px; }
+.imp-map-item label { font-size:12px; color:var(--text-secondary); }
+.imp-map-item label .req { color:var(--danger); }
+.imp-map-item select { padding:6px 8px; border:1px solid var(--input-border); border-radius:6px; background:var(--input-bg); color:var(--text-primary); font-size:12px; }
+.imp-progress { text-align:center; padding:40px 20px; }
+.imp-progress i { font-size:44px; color:var(--primary); display:block; margin-bottom:14px; }
+.imp-progress .fa-circle-check { color:var(--safe); }
+.imp-progress .fa-circle-xmark { color:var(--danger); }
+.imp-result-list { max-height:220px; overflow:auto; margin-top:14px; text-align:left; }
 </style>
 </head>
 <body>
@@ -758,6 +806,67 @@ body {
 <!-- 档案详情嵌入层 -->
 <div class="detail-embed-overlay" id="detailEmbedOverlay">
     <iframe class="detail-embed-frame" id="detailEmbedFrame" src=""></iframe>
+</div>
+
+<!-- ===== 导入向导弹窗 ===== -->
+<div class="import-overlay" id="importOverlay">
+    <div class="import-modal">
+        <div class="import-modal-header">
+            <div class="imp-title"><i class="fa-solid fa-file-import" style="color:var(--primary)"></i> 农村自建房档案导入</div>
+            <button class="import-close" onclick="closeImportWizard()" title="关闭">&times;</button>
+        </div>
+        <div class="import-steps">
+            <div class="imp-step active" data-step="1"><span class="num">1</span> 上传文件</div>
+            <div class="imp-step" data-step="2"><span class="num">2</span> 字段映射</div>
+            <div class="imp-step" data-step="3"><span class="num">3</span> 校验预览</div>
+            <div class="imp-step" data-step="4"><span class="num">4</span> 导入完成</div>
+        </div>
+        <div class="import-body">
+            <!-- 步骤1：上传 -->
+            <div class="imp-pane active" id="impPane1">
+                <div class="imp-hint">
+                    <b>导入说明</b><br>
+                    1. 建议先 <a href="javascript:void(0)" onclick="downloadImportTemplate()" style="color:var(--primary);font-weight:600">下载标准模板</a>，模板按 <b>基本信息 / 宅基地 / 建设情况 / 管理情况 / 结构信息 / 使用信息 / 设计施工记录 / 风险信息</b> 分 8 个 Sheet；其中“设计施工记录”一房多记录，同一房屋编号填多行即可；<br>
+                    2. 也可直接上传您自己的台账表（支持 .xlsx / .xls / .csv），下一步会把您的列名智能匹配到档案字段，未匹配的可手动指定；<br>
+                    3. <b>只有"基本信息"Sheet 必填</b>（至少含 房屋编号、产权人），其余 Sheet 按需填写、以"房屋编号"关联合并；<br>
+                    4. 导入的数据进入<b>草稿区</b>，需在列表点"同步"才正式发布到房屋建筑档案。
+                </div>
+                <div class="imp-upload-zone" id="impUploadZone" onclick="document.getElementById('importFileInput').click()">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    点击选择文件，或把 Excel 文件拖到此处
+                    <div style="font-size:12px;margin-top:8px">支持 .xlsx / .xls / .csv，单次不超过 10MB</div>
+                    <div class="imp-file-name" id="impFileName"></div>
+                </div>
+            </div>
+            <!-- 步骤2：字段映射 -->
+            <div class="imp-pane" id="impPane2">
+                <div class="imp-hint">系统已自动匹配列名（<span style="color:var(--safe)">绿色=已匹配</span>）。带 <span style="color:var(--danger)">*</span> 为必填字段，请确认识别正确；识别错误的可在右侧下拉手动更换。</div>
+                <div style="font-size:13px;font-weight:600;margin-bottom:8px">当前映射 Sheet：<span id="impMapSheetName" style="color:var(--primary)"></span></div>
+                <div class="imp-map-grid" id="impMapGrid"></div>
+            </div>
+            <!-- 步骤3：校验预览 -->
+            <div class="imp-pane" id="impPane3">
+                <div class="imp-summary" id="impSummary"></div>
+                <div style="overflow:auto;max-height:46vh;border:1px solid var(--border);border-radius:6px">
+                    <table class="imp-table" id="impPreviewTable"></table>
+                </div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:8px"><i class="fa-solid fa-circle-info"></i> 红色为校验不通过的单元格，可直接在表格里修改后再导入；只有全部行通过校验才能导入。</div>
+            </div>
+            <!-- 步骤4：结果 -->
+            <div class="imp-pane" id="impPane4">
+                <div class="imp-progress" id="impResultBox"></div>
+            </div>
+        </div>
+        <div class="import-footer">
+            <div style="font-size:12px;color:var(--text-secondary)" id="impFootTip"></div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-outline" id="impBtnPrev" onclick="importGoStep(-1)" style="display:none"><i class="fa-solid fa-chevron-left"></i> 上一步</button>
+                <button class="btn btn-primary" id="impBtnNext" onclick="importGoStep(1)" disabled>下一步 <i class="fa-solid fa-chevron-right"></i></button>
+                <button class="btn btn-primary" id="impBtnDoImport" onclick="doImport()" style="display:none"><i class="fa-solid fa-file-import"></i> 确认导入</button>
+                <button class="btn btn-outline" id="impBtnFinish" onclick="closeImportWizard(true)" style="display:none">完成</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- KPI Dashboard: 2 Cards -->
@@ -1223,8 +1332,12 @@ body {
             <div class="table-card">
                 <div class="table-header">
                     <div class="table-title"><i class="fa-solid fa-house-chimney" style="color:var(--primary)"></i> 农村自建房风险档案列表</div>
-                    <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;color:var(--safe);border-color:var(--safe);" onclick="syncAllRecords()" title="把所有未同步草稿一次性推送到房屋建筑档案"><i class="fa-solid fa-cloud-upload-alt"></i> 全部同步到档案</button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;color:var(--primary);border-color:var(--primary);" onclick="openImportWizard()" title="从 Excel 批量导入农村自建房档案"><i class="fa-solid fa-file-import"></i> 导入</button>
+                        <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;color:var(--safe);border-color:var(--safe);" onclick="syncAllRecords()" title="把所有未同步草稿一次性推送到房屋建筑档案"><i class="fa-solid fa-cloud-upload-alt"></i> 全部同步到档案</button>
+                    </div>
                 </div>
+                <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display:none">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -2048,6 +2161,607 @@ document.addEventListener('DOMContentLoaded', function() {
     bindRuralPagination('general');
     bindRuralPagination('low');
 });
+
+/* =====================================================================
+ * 导入向导（分 Sheet 多表 + 智能列映射 + 校验预览 + 草稿入库）
+ * =================================================================== */
+
+// ---- 导入字段配置：列名与"房屋概况"详情页完全一致，path 对应 house-arch 数据结构 ----
+// label=模板列名（与详情页原文一致）；path=写入路径；req=是否必填；type=校验类型；def=默认值；alias=智能匹配别名
+const IMPORT_SHEETS = [
+    {
+        key: 'basic', sheetName: '基本信息', required: true,
+        fields: [
+            { label: '房屋编号', path: 'no', req: true, alias: ['编号', '房屋编号', '档案编号', 'houseNo'] },
+            { label: '房屋性质', path: 'overview.houseType', def: '住宅', alias: ['房屋性质', 'houseType'] },
+            { label: '所在区域', path: 'street', type: 'street', alias: ['所在区域', '镇', '街道', '乡镇', '所属镇', 'street'] },
+            { label: '路号信息', path: 'address', alias: ['路号信息', '地址', '坐落', '门牌号', '路号', '详细地址', 'address'] },
+            { label: '不需要排查原因', path: 'overview.otherCrowdAround', alias: ['不需要排查原因', '不排查原因'] },
+            { label: '产权人 / 使用人信息', path: 'owner', alias: ['产权人 / 使用人信息', '产权人', '使用人', '业主', '户主', '姓名', 'owner'] },
+            { label: '身份证号码', path: 'overview.idCard', alias: ['身份证号码', '身份证', '证件号', 'idCard'] },
+            { label: '房屋类型', path: 'overview.usage', def: '仅自住', alias: ['房屋类型', '仅自住', 'usage'] },
+            { label: '房屋类型二级分类', path: 'overview.houseName', def: '独立住宅', alias: ['房屋类型二级分类', '二级分类', '独立住宅'] },
+            { label: '房屋用途', path: 'usage.usageType', type: 'usage', def: '自住', alias: ['房屋用途', '用途', '使用用途', 'usageType'] },
+            { label: '是否同时自住', path: 'overview.isSelfLive', type: 'yesno', def: '是', alias: ['是否同时自住', '是否自住', 'isSelfLive'] },
+            { label: '具体用途', path: 'usage.specificUsage', alias: ['具体用途', '经营业态', 'specificUsage'] },
+            { label: '人员聚集场所周边', path: 'usage.crowdAround', type: 'yesno', def: '否', alias: ['人员聚集场所周边', '周边人员密集', 'crowdAround'] },
+            { label: '其他人员密集场所周边', path: 'usage.otherCrowdAround', type: 'yesno', def: '否', alias: ['其他人员密集场所周边', 'otherCrowdAround'] },
+            { label: '土地性质', path: 'homestead.landNature', def: '集体土地', alias: ['土地性质', '用地性质', 'landNature'] },
+            { label: '集体土地', path: 'overview.landNature', def: '宅基地', alias: ['集体土地', '宅基地'] },
+            { label: '所在区域（区域类型）', path: 'overview.belongTo', def: '建制镇', alias: ['所在区域（区域类型）', '区域类型', '建制镇', 'belongTo'] },
+            { label: '建筑层数', path: 'structure.floors', type: 'int', alias: ['建筑层数', '层数', '房屋层数', 'floors'] },
+            { label: '建筑面积 (m²)', path: 'structure.buildingArea', type: 'number', alias: ['建筑面积 (m²)', '建筑面积', '面积', 'buildingArea'] },
+            { label: '建成时间', path: 'year', type: 'year', alias: ['建成时间', '建成年份', '建造年代', '建筑年代', '年份', 'year'] },
+            { label: '户主联系方式', path: 'overview.phone', alias: ['户主联系方式', '电话', '手机', '联系方式', 'phone'] },
+            { label: '家庭成员信息', path: 'familyMembers', alias: ['家庭成员信息', '家庭成员', 'familyMembers'] },
+            { label: '村/居委', path: 'community', type: 'community', alias: ['村/居委', '村', '居委', '社区', '村委会', '所属村', 'community', 'village'] },
+            { label: '结构类型', path: 'category', type: 'struct', def: '砖混', alias: ['结构类型', '结构', '房屋结构', '结构形式', 'category'] },
+            { label: '风险等级', path: 'riskLevel', type: 'risk', def: '第一类', alias: ['风险等级', '隐患等级', '等级', 'riskLevel'] },
+            { label: '治理状态', path: 'governStatus', type: 'gov', def: '待整治', alias: ['治理状态', '整治状态', 'governStatus'] }
+        ]
+    },
+    {
+        key: 'homestead', sheetName: '宅基地',
+        fields: [
+            { label: '房屋编号', path: 'no', req: true, alias: ['编号', '房屋编号'] },
+            { label: '宅基地面积', path: 'homestead.area', type: 'number', alias: ['宅基地面积', '批准面积', 'area'] },
+            { label: '审批情况', path: 'homestead.approvalStatus', alias: ['审批情况', '审批状态', 'approvalStatus'] },
+            { label: '权属证明', path: 'homestead.certNo', alias: ['权属证明', '宅基地证号', '证号', 'certNo'] },
+            { label: '宗地号', path: 'homestead.plotNo', alias: ['宗地号', 'plotNo'] },
+            { label: '审批部门', path: 'homestead.approvalDept', alias: ['审批部门', 'approvalDept'] },
+            { label: '审批日期', path: 'homestead.approvalDate', type: 'date', alias: ['审批日期', 'approvalDate'] }
+        ]
+    },
+    {
+        key: 'build', sheetName: '建设情况',
+        fields: [
+            { label: '房屋编号', path: 'no', req: true, alias: ['编号', '房屋编号'] },
+            { label: '常住或使用人数超过 10 人', path: 'usage.over10People', type: 'yesno', alias: ['常住或使用人数超过 10 人', '10人以上', '是否10人以上', '超10人使用', 'over10People'] },
+            { label: '设计方式', path: 'designConstruction.designMode', def: '有专业设计', alias: ['设计方式', 'designMode'] },
+            { label: '建造方式', path: 'designConstruction.buildMode', def: '有资质施工队伍', alias: ['建造方式', '施工方式', 'buildMode'] },
+            { label: '结构类型', path: 'category', type: 'struct', alias: ['结构类型', '结构', 'category'] },
+            { label: '楼屋盖', path: 'structure.roofType', alias: ['楼屋盖', '屋面类型', '屋盖类型', 'roofType'] },
+            { label: '是否改扩建', path: 'structure.expansionStatus', alias: ['是否改扩建', '改扩建', '改扩建情况', 'expansionStatus'] },
+            { label: '是否装修', path: 'structure.decorationStatus', alias: ['是否装修', '装修', '装修情况', 'decorationStatus'] },
+            { label: '设计单位', path: 'designConstruction.designUnit', alias: ['设计单位', 'designUnit'] },
+            { label: '施工单位', path: 'designConstruction.constructionUnit', alias: ['施工单位', 'constructionUnit'] },
+            { label: '监理单位', path: 'designConstruction.supervisionUnit', alias: ['监理单位', 'supervisionUnit'] }
+        ]
+    },
+    {
+        key: 'manage', sheetName: '管理情况',
+        fields: [
+            { label: '房屋编号', path: 'no', req: true, alias: ['编号', '房屋编号'] },
+            { label: '已取得的行政许可', path: 'overview.permit', alias: ['已取得的行政许可', '行政许可', 'permit'] },
+            { label: '违法建设和违法审批', path: 'overview.illegalBuild', type: 'yesno', alias: ['违法建设和违法审批', '违法建设', 'illegalBuild'] }
+        ]
+    },
+    {
+        key: 'structure', sheetName: '结构信息',
+        fields: [
+            { label: '房屋编号', path: 'no', req: true, alias: ['编号', '房屋编号'] },
+            { label: '墙体材料', path: 'structure.wallMaterial', alias: ['墙体材料', 'wallMaterial'] },
+            { label: '基础形式', path: 'structure.foundationType', alias: ['基础形式', '基础类型', '地基类型', 'foundationType'] },
+            { label: '最大跨度', path: 'structure.maxSpan', alias: ['最大跨度', 'maxSpan'] },
+            { label: '装修情况', path: 'structure.decorationStatus', alias: ['装修情况', '装修', 'decorationStatus'] },
+            { label: '建筑层数', path: 'structure.floors', type: 'int', alias: ['建筑层数', '层数', 'floors'] },
+            { label: '屋盖类型', path: 'structure.roofType', alias: ['屋盖类型', 'roofType'] },
+            { label: '楼盖材料', path: 'structure.floorMaterial', alias: ['楼盖材料', '楼板材料', 'floorMaterial'] },
+            { label: '抗震信息', path: 'structure.seismicInfo', alias: ['抗震信息', 'seismicInfo'] },
+            { label: '改扩建情况', path: 'structure.expansionStatus', alias: ['改扩建情况', '改扩建', 'expansionStatus'] },
+            { label: '备注', path: 'structure.remark', alias: ['备注', '结构备注', 'remark'] }
+        ]
+    },
+    {
+        key: 'usage', sheetName: '使用信息',
+        fields: [
+            { label: '房屋编号', path: 'no', req: true, alias: ['编号', '房屋编号'] },
+            { label: '使用用途', path: 'usage.usageType', type: 'usage', alias: ['使用用途', 'usageType'] },
+            { label: '具体用途', path: 'usage.specificUsage', alias: ['具体用途', 'specificUsage'] },
+            { label: '人员聚集场所周边', path: 'usage.crowdAround', type: 'yesno', alias: ['人员聚集场所周边', 'crowdAround'] },
+            { label: '超10人使用', path: 'usage.over10People', type: 'yesno', alias: ['超10人使用', '是否10人以上', 'over10People'] },
+            { label: '变更日期', path: 'usage.changeDate', type: 'date', alias: ['变更日期', 'changeDate'] },
+            { label: '变更内容', path: 'usage.changeContent', alias: ['变更内容', 'changeContent'] },
+            { label: '备注', path: 'usage.remark', alias: ['备注', 'remark'] },
+            { label: '是否自住', path: 'usage.isSelfLive', type: 'yesno', alias: ['是否自住', '自住', 'isSelfLive'] },
+            { label: '居住人数', path: 'usage.occupancy', type: 'int', alias: ['居住人数', '实际居住人数', 'occupancy'] },
+            { label: '其他人员密集场所周边', path: 'usage.otherCrowdAround', type: 'yesno', alias: ['其他人员密集场所周边', 'otherCrowdAround'] },
+            { label: '使用变更历史', path: 'usage.changeHistory', alias: ['使用变更历史', 'changeHistory'] },
+            { label: '变更类型', path: 'usage.changeType', alias: ['变更类型', 'changeType'] },
+            { label: '审批情况', path: 'usage.approvalStatus', alias: ['审批情况', '已审批', 'approvalStatus'] }
+        ]
+    },
+    {
+        key: 'designConstruction', sheetName: '设计施工记录', multi: true,
+        fields: [
+            { label: '房屋编号', path: 'no', req: true, alias: ['编号', '房屋编号'] },
+            { label: '设计日期', path: 'designDate', type: 'date', alias: ['设计日期', 'designDate'] },
+            { label: '施工单位', path: 'constructionUnit', alias: ['施工单位', 'constructionUnit'] },
+            { label: '是否正规设计', path: 'hasProfessionalDesign', type: 'bool', alias: ['是否正规设计', 'hasProfessionalDesign'] },
+            { label: '是否正规施工', path: 'hasQualificationTeam', type: 'bool', alias: ['是否正规施工', 'hasQualificationTeam'] },
+            { label: '设计单位', path: 'designUnit', alias: ['设计单位', 'designUnit'] },
+            { label: '建造工匠', path: 'builder', alias: ['建造工匠', 'builder'] },
+            { label: '建造年份', path: 'buildYear', alias: ['建造年份', 'buildYear'] },
+            { label: '改建扩建记录', path: 'expansionRecord', alias: ['改建扩建记录', '改扩建记录', 'expansionRecord'] },
+            { label: '设计方式', path: 'designMode', alias: ['设计方式', 'designMode'] },
+            { label: '建造方式', path: 'buildMode', alias: ['建造方式', 'buildMode'] },
+            { label: '填报人', path: 'reporter', alias: ['填报人', 'reporter'] },
+            { label: '备注', path: 'remark', alias: ['备注', 'remark'] }
+        ]
+    },
+    {
+        key: 'risk', sheetName: '风险信息',
+        fields: [
+            { label: '房屋编号', path: 'no', req: true, alias: ['编号', '房屋编号'] },
+            { label: '隐患部位', path: 'riskInfo.riskPart', alias: ['隐患部位', '风险部位', 'riskPart'] },
+            { label: '隐患类型', path: 'riskInfo.riskType', alias: ['隐患类型', '风险类型', 'riskType'] },
+            { label: '发现方式', path: 'riskInfo.discoveryMethod', type: 'disc', alias: ['发现方式', '排查方式', 'discoveryMethod'] },
+            { label: '发现时间', path: 'riskInfo.discoveryTime', type: 'date', alias: ['发现时间', '排查时间', 'discoveryTime'] },
+            { label: '风险描述', path: 'riskInfo.riskDesc', alias: ['风险描述', '隐患描述', '问题描述', 'riskDesc'] }
+        ]
+    }
+];
+
+// ---- 导入向导状态 ----
+const IMP = {
+    step: 1,
+    workbook: null,          // 原始 workbook
+    sheetData: {},           // { sheetKey: { headers:[], rows:[[]], map:{fieldPath:colIndex} } }
+    validated: [],           // 校验后的记录（按基本信息行合并）
+    validCount: 0,
+    errorCount: 0
+};
+
+// 枚举值集合（来自数据层）
+const IMP_STREETS = (typeof FENGXIAN_TOWN_VILLAGES !== 'undefined') ? Object.keys(FENGXIAN_TOWN_VILLAGES) : [];
+const IMP_STRUCTS = ['砖混', '砖木', '框架', '钢结构', '木结构', '混杂结构', '石结构', '土木结构', '其他'];
+const IMP_USAGE = ['自住', '自住兼经营', '出租', '空置', '经营', '其他'];
+const IMP_RISK = ['第一类', '第二类', '第三类'];
+const IMP_GOV = ['待整治', '整治中', '已治理', '逾期未整治'];
+const IMP_DISC = ['日常巡查', '专项巡查', '临时巡查', '复查任务'];
+
+// ============ 打开/关闭向导 ============
+function openImportWizard() {
+    if (typeof XLSX === 'undefined') { alert('Excel 解析库未加载，请检查网络后刷新重试'); return; }
+    resetImportState();
+    document.getElementById('importOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setImportStep(1);
+}
+function closeImportWizard(refresh) {
+    document.getElementById('importOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+    if (refresh && typeof renderRuralArchiveRows === 'function') renderRuralArchiveRows();
+}
+function resetImportState() {
+    IMP.step = 1; IMP.workbook = null; IMP.sheetData = {}; IMP.validated = []; IMP.validCount = 0; IMP.errorCount = 0;
+    document.getElementById('impFileName').textContent = '';
+    document.getElementById('importFileInput').value = '';
+    document.getElementById('impFootTip').textContent = '';
+}
+
+// ============ 步骤切换 ============
+function setImportStep(n) {
+    IMP.step = n;
+    document.querySelectorAll('.imp-step').forEach(function(el) {
+        const s = parseInt(el.dataset.step, 10);
+        el.classList.toggle('active', s === n);
+        el.classList.toggle('done', s < n);
+    });
+    document.querySelectorAll('.imp-pane').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('impPane' + n).classList.add('active');
+
+    document.getElementById('impBtnPrev').style.display = (n > 1 && n < 4) ? '' : 'none';
+    document.getElementById('impBtnNext').style.display = (n < 3) ? '' : 'none';
+    document.getElementById('impBtnDoImport').style.display = (n === 3) ? '' : 'none';
+    document.getElementById('impBtnFinish').style.display = (n === 4) ? '' : 'none';
+
+    if (n === 1) document.getElementById('impBtnNext').disabled = !IMP.workbook;
+    if (n === 2) document.getElementById('impBtnNext').disabled = false;
+}
+function importGoStep(delta) {
+    const next = IMP.step + delta;
+    if (next === 2 && IMP.step === 1) { buildSheetMappingUI(); }
+    if (next === 3 && IMP.step === 2) { if (!runValidation()) return; }
+    if (next >= 1 && next <= 4) setImportStep(next);
+}
+
+// ============ 模板下载（分 Sheet） ============
+function downloadImportTemplate() {
+    if (typeof XLSX === 'undefined') { alert('Excel 库未加载'); return; }
+    const wb = XLSX.utils.book_new();
+    // 说明 Sheet
+    const guide = [['农村自建房档案导入模板 - 填写说明'],
+        ['1. 共 8 个 Sheet：基本信息(必填)、宅基地、建设情况、管理情况、结构信息、使用信息、设计施工记录、风险信息。'],
+        ['2. 每个 Sheet 第一行是列标题，请勿修改；从第二行开始填数据。'],
+        ['3. "房屋编号"是各 Sheet 关联的主键，同一套房的各 Sheet 编号必须一致；不填则系统自动生成。'],
+        ['4. "设计施工记录"是记录型 Sheet：同一房屋编号填多行 = 该房多条设计施工记录。'],
+        ['5. 带 * 的列为必填。是否类列填 是/否；风险等级：第一类/第二类/第三类。'],
+        ['6. 填好后保存为 .xlsx 再上传导入。'], []];
+    const gws = XLSX.utils.aoa_to_sheet(guide); gws['!cols'] = [{ wch: 90 }];
+    XLSX.utils.book_append_sheet(wb, gws, '填写说明');
+    IMPORT_SHEETS.forEach(function(sc) {
+        const header = sc.fields.map(f => (f.req ? f.label + '*' : f.label));
+        const sample = sc.fields.map(function(f) {
+            if (f.label === '房屋编号') return 'NF-2025-00001';
+            if (f.label === '产权人/使用人') return '张三';
+            if (f.label === '镇/街道') return '南桥镇';
+            if (f.label === '村/居委') return '张翁庙村';
+            if (f.label === '详细地址') return '上海市奉贤区南桥镇张翁庙村3组12号';
+            if (f.label === '建筑年代') return '1995';
+            if (f.label === '结构类型') return '砖混';
+            if (f.label === '房屋用途') return '自住';
+            if (f.label === '风险等级') return '第一类';
+            if (f.label === '治理状态') return '待整治';
+            // 设计施工记录示例
+            if (f.label === '设计日期') return '1994-03-01';
+            if (f.label === '施工单位') return '奉贤城建公司';
+            if (f.label === '是否正规设计') return '是';
+            if (f.label === '是否正规施工') return '是';
+            if (f.label === '设计单位') return '奉贤区建筑设计院';
+            if (f.label === '建造年份') return '1995年';
+            if (f.label === '设计方式') return '有专业设计';
+            if (f.label === '建造方式') return '有资质施工队伍';
+            return f.def !== undefined ? f.def : '';
+        });
+        const rows = [header, sample];
+        // 记录型 Sheet：再补一行示例体现“一房多记录”
+        if (sc.multi) {
+            rows.push(sc.fields.map(function(f, i) {
+                if (f.label === '房屋编号') return 'NF-2025-00001';
+                if (f.label === '设计日期') return '2005-06-01';
+                if (f.label === '施工单位') return '宏基建设';
+                if (f.label === '改建扩建记录') return '加层';
+                if (f.label === '建造年份') return '2005年';
+                return '';
+            }));
+        }
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = header.map(() => ({ wch: 16 }));
+        XLSX.utils.book_append_sheet(wb, ws, sc.sheetName);
+    });
+    XLSX.writeFile(wb, '农村自建房档案导入模板.xlsx');
+}
+
+// ============ 文件读取 ============
+document.getElementById('importFileInput').addEventListener('change', function() {
+    if (this.files && this.files[0]) handleImportFile(this.files[0]);
+});
+const impZone = document.getElementById('impUploadZone');
+['dragover', 'dragenter'].forEach(ev => impZone.addEventListener(ev, e => { e.preventDefault(); impZone.classList.add('drag'); }));
+['dragleave', 'drop'].forEach(ev => impZone.addEventListener(ev, e => { e.preventDefault(); impZone.classList.remove('drag'); }));
+impZone.addEventListener('drop', e => { if (e.dataTransfer.files && e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]); });
+
+function handleImportFile(file) {
+    if (file.size > 10 * 1024 * 1024) { alert('文件超过 10MB，请拆分后再导入'); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+            IMP.workbook = wb;
+            parseWorkbookSheets();
+            document.getElementById('impFileName').innerHTML = '<i class="fa-solid fa-file-excel"></i> 已选择：' + file.name;
+            document.getElementById('impBtnNext').disabled = false;
+            document.getElementById('impFootTip').textContent = '已读取 ' + Object.keys(IMP.sheetData).length + ' 个有效 Sheet';
+        } catch (err) {
+            alert('文件解析失败：' + err.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// 把 workbook 里各 sheet 解析成行数据，并匹配到配置的 Sheet
+function parseWorkbookSheets() {
+    IMP.sheetData = {};
+    const sheetNames = IMP.workbook.SheetNames;
+    IMPORT_SHEETS.forEach(function(sc) {
+        // 按 sheetName 模糊匹配用户 sheet；找不到则取第一个未消费的 sheet（仅基本信息兜底）
+        let matchedName = sheetNames.find(n => n.replace(/\s/g, '').indexOf(sc.sheetName.replace(/\s/g, '')) > -1);
+        if (!matchedName && sc.key === 'basic') matchedName = sheetNames[0];
+        if (!matchedName) return;
+        const ws = IMP.workbook.Sheets[matchedName];
+        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+        if (!aoa.length) return;
+        // 第一行作表头
+        const headers = aoa[0].map(h => String(h).replace(/[\s\*＊]/g, '').trim());
+        const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim() !== ''));
+        IMP.sheetData[sc.key] = { headers: headers, rows: rows, map: {}, sheetName: matchedName };
+        autoMapColumns(sc.key, sc.fields, headers);
+    });
+    if (!IMP.sheetData.basic) {
+        alert('未识别到"基本信息"数据表，请检查文件');
+        IMP.workbook = null;
+        document.getElementById('impBtnNext').disabled = true;
+    }
+}
+
+// 智能列映射：按 label / alias 模糊匹配表头
+function autoMapColumns(sheetKey, fields, headers) {
+    const map = IMP.sheetData[sheetKey].map;
+    fields.forEach(function(f) {
+        const candidates = [f.label].concat(f.alias || []).map(s => s.replace(/\s/g, '').toLowerCase());
+        let idx = -1;
+        for (let i = 0; i < headers.length; i++) {
+            const h = String(headers[i]).toLowerCase();
+            if (candidates.some(c => h === c || h.indexOf(c) > -1 || c.indexOf(h) > -1)) { idx = i; break; }
+        }
+        map[f.path] = idx; // -1 = 未匹配
+    });
+}
+
+// ============ 步骤2：字段映射 UI（针对基本信息 Sheet） ============
+function buildSheetMappingUI() {
+    const basic = IMP.sheetData.basic;
+    if (!basic) return;
+    const sc = IMPORT_SHEETS.find(s => s.key === 'basic');
+    document.getElementById('impMapSheetName').textContent = basic.sheetName;
+    const grid = document.getElementById('impMapGrid');
+    grid.innerHTML = '';
+    sc.fields.forEach(function(f) {
+        const curIdx = basic.map[f.path];
+        const item = document.createElement('div');
+        item.className = 'imp-map-item';
+        const opts = ['<option value="-1">（不导入）</option>'].concat(
+            basic.headers.map((h, i) => '<option value="' + i + '"' + (i === curIdx ? ' selected' : '') + '>' + (h || '第' + (i + 1) + '列') + '</option>')
+        ).join('');
+        item.innerHTML = '<label>' + (f.req ? '<span class="req">*</span> ' : '') + f.label +
+            (curIdx > -1 ? ' <i class="fa-solid fa-circle-check" style="color:var(--safe)"></i>' : '') + '</label>' +
+            '<select data-path="' + f.path + '">' + opts + '</select>';
+        grid.appendChild(item);
+    });
+    grid.querySelectorAll('select').forEach(function(sel) {
+        sel.addEventListener('change', function() { basic.map[this.dataset.path] = parseInt(this.value, 10); });
+    });
+}
+
+// ============ 步骤3：校验 ============
+function cellOf(sheetKey, row, path) {
+    const sd = IMP.sheetData[sheetKey];
+    if (!sd) return '';
+    const idx = sd.map[path];
+    if (idx === undefined || idx < 0) return '';
+    return String(row[idx] === undefined ? '' : row[idx]).trim();
+}
+
+// 归一化枚举（容错匹配）
+function normEnum(val, list) {
+    if (!val) return '';
+    const v = val.replace(/\s/g, '');
+    const hit = list.find(o => v === o || v.indexOf(o) > -1 || o.indexOf(v) > -1);
+    return hit || '';
+}
+
+function validateField(f, val, rec) {
+    const v = (val === undefined || val === null) ? '' : String(val).trim();
+    if (f.req && !v && !(f.def !== undefined)) return { ok: false, msg: '必填' };
+    if (!v) return { ok: true, val: f.def !== undefined ? f.def : '' };
+    switch (f.type) {
+        case 'street': {
+            const s = IMP_STREETS.length ? normEnum(v, IMP_STREETS) : v;
+            if (IMP_STREETS.length && !s) return { ok: false, msg: '镇/街道无效' };
+            return { ok: true, val: s || v };
+        }
+        case 'community': {
+            const st = rec.street; const villages = (FENGXIAN_TOWN_VILLAGES && FENGXIAN_TOWN_VILLAGES[st]) || null;
+            if (villages && villages.length) {
+                const c = normEnum(v, villages);
+                if (!c) return { ok: false, msg: '村/居委不属于' + st };
+                return { ok: true, val: c };
+            }
+            return { ok: true, val: v };
+        }
+        case 'year': {
+            const m = v.match(/\d{4}/);
+            if (!m) return { ok: false, msg: '年代格式错' };
+            const y = parseInt(m[0], 10);
+            if (y < 1900 || y > 2026) return { ok: false, msg: '年代超出范围' };
+            return { ok: true, val: y };
+        }
+        case 'struct': { const s = normEnum(v, IMP_STRUCTS); if (!s) return { ok: false, msg: '结构类型无效' }; return { ok: true, val: s }; }
+        case 'usage': { const s = normEnum(v, IMP_USAGE); if (!s) return { ok: false, msg: '用途无效' }; return { ok: true, val: s }; }
+        case 'risk': {
+            const legacy = { '疑似危房': '第三类', '严重损坏房': '第三类', '一般损坏房': '第二类', '完好房': '第一类', '完好房(基本完好房)': '第一类', '安全': '第一类', '无风险': '第一类' };
+            const lv = legacy[v] || normEnum(v, IMP_RISK);
+            if (!lv) return { ok: false, msg: '风险等级无效' };
+            return { ok: true, val: lv };
+        }
+        case 'gov': { const g = normEnum(v, IMP_GOV); if (!g) return { ok: false, msg: '治理状态无效' }; return { ok: true, val: g }; }
+        case 'yesno': { const y = v === '是' || v === 'Y' || v === 'y' || v === '1' ? '是' : (v === '否' || v === 'N' || v === 'n' || v === '0' ? '否' : ''); if (!y) return { ok: false, msg: '应填是/否' }; return { ok: true, val: y }; }
+        case 'bool': {
+            if (v === '是' || v === 'Y' || v === 'y' || v === '1' || v === 'true') return { ok: true, val: true };
+            if (v === '否' || v === 'N' || v === 'n' || v === '0' || v === 'false') return { ok: true, val: false };
+            return { ok: false, msg: '应填是/否' };
+        }
+        case 'disc': { const d = normEnum(v, IMP_DISC); if (!d) return { ok: false, msg: '发现方式无效' }; return { ok: true, val: d }; }
+        case 'int': { if (!/^\d+$/.test(v)) return { ok: false, msg: '应为整数' }; return { ok: true, val: parseInt(v, 10) }; }
+        case 'number': { if (isNaN(parseFloat(v))) return { ok: false, msg: '应为数字' }; return { ok: true, val: parseFloat(v) }; }
+        case 'date': { const t = v.replace(/[.\/年月]/g, '-').replace(/日/g, ''); if (!/^\d{4}-\d{1,2}-\d{1,2}/.test(t) && v) return { ok: true, val: v }; return { ok: true, val: t || v }; }
+        default: return { ok: true, val: v };
+    }
+}
+
+function setDeep(obj, path, val) {
+    const keys = path.split('.'); let o = obj;
+    for (let i = 0; i < keys.length - 1; i++) { if (!o[keys[i]] || typeof o[keys[i]] !== 'object') o[keys[i]] = {}; o = o[keys[i]]; }
+    o[keys[keys.length - 1]] = val;
+}
+
+function runValidation() {
+    const basic = IMP.sheetData.basic;
+    if (!basic || !basic.rows.length) { alert('基本信息表没有数据行'); return false; }
+    const seen = {}; const records = []; let errCount = 0;
+    const bsc = IMPORT_SHEETS.find(s => s.key === 'basic');
+
+    basic.rows.forEach(function(row, rIdx) {
+        const rec = { __rowIdx: rIdx, __errors: {}, __valid: true };
+        // 第一遍：基本信息
+        bsc.fields.forEach(function(f) {
+            const raw = cellOf('basic', row, f.path);
+            const r = validateField(f, raw, rec);
+            if (!r.ok) { rec.__errors[f.path] = r.msg; rec.__valid = false; }
+            setDeep(rec, f.path, r.val);
+        });
+        // 编号唯一 & 自动生成
+        if (!rec.no) { rec.no = genImportNo(rIdx); }
+        if (seen[rec.no]) { rec.__errors['no'] = '编号重复'; rec.__valid = false; }
+        seen[rec.no] = true;
+        records.push(rec);
+        if (!rec.__valid) errCount++;
+    });
+
+    // 第二遍：合并其他 Sheet（按房屋编号关联）
+    ['homestead', 'build', 'manage', 'structure', 'usage', 'risk'].forEach(function(sk) {
+        const sd = IMP.sheetData[sk]; if (!sd) return;
+        const sc = IMPORT_SHEETS.find(s => s.key === sk);
+        const noIdx = sd.map['no'];
+        sd.rows.forEach(function(row) {
+            const no = noIdx >= 0 ? String(row[noIdx]).trim() : '';
+            const target = records.find(r => r.no === no);
+            if (!target) return;
+            sc.fields.forEach(function(f) {
+                if (f.path === 'no') return;
+                const raw = cellOf(sk, row, f.path);
+                const r = validateField(f, raw, target);
+                setDeep(target, f.path, r.val);
+            });
+        });
+    });
+
+    // 第三遍：记录列表型 Sheet（一房多记录，同一房屋编号多行 → 聚合成数组）
+    ['designConstruction'].forEach(function(sk) {
+        const sd = IMP.sheetData[sk]; if (!sd) return;
+        const sc = IMPORT_SHEETS.find(s => s.key === sk);
+        const noIdx = sd.map['no'];
+        sd.rows.forEach(function(row) {
+            const no = noIdx >= 0 ? String(row[noIdx]).trim() : '';
+            const target = records.find(r => r.no === no);
+            if (!target) return;
+            const rec = {};
+            let hasValue = false;
+            sc.fields.forEach(function(f) {
+                if (f.path === 'no') return;
+                const raw = cellOf(sk, row, f.path);
+                const r = validateField(f, raw, target);
+                rec[f.path] = r.val;
+                if (r.val !== '' && r.val !== undefined && r.val !== null) hasValue = true;
+            });
+            if (hasValue) {
+                if (!Array.isArray(target.designConstructionRecords)) target.designConstructionRecords = [];
+                target.designConstructionRecords.push(rec);
+            }
+        });
+    });
+
+    IMP.validated = records;
+    IMP.errorCount = errCount;
+    IMP.validCount = records.length - errCount;
+    buildPreviewTable();
+    document.getElementById('impBtnDoImport').disabled = errCount > 0;
+    return true;
+}
+
+let __importSeq = 0;
+function genImportNo(i) {
+    __importSeq++;
+    return 'NF-IMP-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5) + String(i + 1).padStart(2, '0');
+}
+
+// 预览表格（基本信息列 + 错误定位，可在线改）
+function buildPreviewTable() {
+    const table = document.getElementById('impPreviewTable');
+    const sc = IMPORT_SHEETS.find(s => s.key === 'basic');
+    const cols = [{ label: '行号', path: '__row' }].concat(sc.fields);
+    let thead = '<thead><tr>' + cols.map(c => '<th>' + c.label + '</th>').join('') + '<th>校验</th></tr></thead>';
+    const rowsHtml = IMP.validated.map(function(rec, ri) {
+        const tds = cols.map(function(c) {
+            if (c.path === '__row') return '<td>' + (ri + 2) + '</td>';
+            const f = sc.fields.find(x => x.path === c.path); if (!f) return '<td></td>';
+            const err = rec.__errors[f.path];
+            const val = getDeep(rec, f.path);
+            return '<td class="' + (err ? 'cell-error' : '') + '" title="' + (err || '') + '">' +
+                '<input data-ri="' + ri + '" data-path="' + f.path + '" value="' + (val === undefined ? '' : String(val).replace(/"/g, '&quot;')) + '">' +
+                (err ? '<span class="imp-err-tag">' + err + '</span>' : '') + '</td>';
+        }).join('');
+        const badge = rec.__valid ? '<span style="color:var(--safe)">✔</span>' : '<span style="color:var(--danger)">✘</span>';
+        return '<tr class="' + (rec.__valid ? '' : 'row-error') + '">' + tds + '<td>' + badge + '</td></tr>';
+    }).join('');
+    table.innerHTML = thead + '<tbody>' + rowsHtml + '</tbody>';
+    document.getElementById('impSummary').innerHTML =
+        '<span>共 <b>' + IMP.validated.length + '</b> 行</span>' +
+        '<span class="ok">✔ 通过 ' + IMP.validCount + ' 行</span>' +
+        (IMP.errorCount ? '<span class="bad">✘ 待修正 ' + IMP.errorCount + ' 行</span>' : '<span class="ok">全部通过，可导入</span>');
+    // 在线改值后重校验
+    table.querySelectorAll('input').forEach(function(inp) {
+        inp.addEventListener('change', function() {
+            const ri = parseInt(this.dataset.ri, 10); const path = this.dataset.path;
+            setDeep(IMP.validated[ri], path, this.value.trim());
+            revalidateRow(ri);
+            buildPreviewTable();
+        });
+    });
+}
+function getDeep(obj, path) { return path.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : ''), obj); }
+function revalidateRow(ri) {
+    const rec = IMP.validated[ri]; const sc = IMPORT_SHEETS.find(s => s.key === 'basic');
+    rec.__errors = {}; rec.__valid = true;
+    sc.fields.forEach(function(f) {
+        const r = validateField(f, getDeep(rec, f.path), rec);
+        if (!r.ok) { rec.__errors[f.path] = r.msg; rec.__valid = false; }
+        else setDeep(rec, f.path, r.val);
+    });
+    IMP.errorCount = IMP.validated.filter(r => !r.__valid).length;
+    IMP.validCount = IMP.validated.length - IMP.errorCount;
+    document.getElementById('impBtnDoImport').disabled = IMP.errorCount > 0;
+}
+
+// ============ 步骤4：导入到草稿区 ============
+function doImport() {
+    if (IMP.errorCount > 0) { alert('仍有 ' + IMP.errorCount + ' 行未通过校验，请修正后再导入'); return; }
+    const okList = [], failList = [];
+    IMP.validated.forEach(function(rec) {
+        try {
+            const record = buildHouseRecord(rec);
+            setDraftRecord(record.no, record); // 写入草稿区（同步状态=未同步）
+            okList.push(record.no);
+        } catch (e) { failList.push(rec.no || '(无编号)'); }
+    });
+    setImportStep(4);
+    const box = document.getElementById('impResultBox');
+    if (!failList.length) {
+        box.innerHTML = '<i class="fa-solid fa-circle-check"></i><div style="font-size:16px;font-weight:600;color:var(--safe)">导入成功</div>' +
+            '<div style="color:var(--text-secondary);margin-top:6px">共导入 ' + okList.length + ' 条，已写入草稿区（未同步），请在列表点"同步"发布到房屋建筑档案。</div>';
+    } else {
+        box.innerHTML = '<i class="fa-solid fa-circle-xmark"></i><div style="font-size:16px;font-weight:600;color:var(--warning)">部分导入</div>' +
+            '<div style="color:var(--text-secondary);margin-top:6px">成功 ' + okList.length + ' 条，失败 ' + failList.length + ' 条</div>' +
+            '<div class="imp-result-list"><table class="imp-table"><tbody>' + failList.map(n => '<tr class="row-error"><td>' + n + '</td></tr>').join('') + '</tbody></table></div>';
+    }
+}
+
+// 把校验后的扁平记录组装成完整 house 档案结构
+function buildHouseRecord(rec) {
+    const base = (typeof DEFAULT_HOUSE_STATUS !== 'undefined') ? JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS)) : {};
+    base.no = rec.no;
+    base.owner = rec.owner || '';
+    base.street = rec.street || '';
+    base.community = rec.community || '';
+    base.address = rec.address || '';
+    base.year = rec.year !== undefined && rec.year !== '' ? rec.year : 1990;
+    base.category = rec.category || '砖混';
+    base.houseType = '农村自建房';
+    base.riskLevel = rec.riskLevel || '第一类';
+    base.governStatus = rec.governStatus || '待整治';
+    if (rec.familyMembers) base.familyMembers = rec.familyMembers;
+    // 记录列表型：设计施工记录数组
+    if (Array.isArray(rec.designConstructionRecords) && rec.designConstructionRecords.length) {
+        base.designConstructionRecords = rec.designConstructionRecords;
+    }
+    // 深合并扩展子对象
+    ['overview', 'homestead', 'designConstruction', 'structure', 'usage', 'riskInfo'].forEach(function(k) {
+        if (rec[k]) { base[k] = Object.assign({}, base[k] || {}, rec[k]); }
+    });
+    if (base.riskInfo) { base.riskInfo.riskLevel = base.riskInfo.riskLevel || base.riskLevel; base.riskInfo.relatedHouse = base.no; base.riskInfo.relatedOwner = base.owner; }
+    return base;
+}
 </script>
 
 
