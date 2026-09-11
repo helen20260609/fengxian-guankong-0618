@@ -25,6 +25,20 @@
 .search-btn { position: absolute; right: 4px; top: 4px; height: 32px; padding: 0 14px; border: none; border-radius: 16px; background: var(--primary); color: #fff; font-size: 13px; cursor: pointer; }
 .search-btn:active { opacity: .85; }
 
+/* 模糊搜索下拉 */
+.suggest-panel { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.12); max-height: 320px; overflow-y: auto; z-index: 50; display: none; }
+.suggest-panel.show { display: block; }
+.suggest-item { padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:active { background: var(--bg); }
+.suggest-item .s-no { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.suggest-item .s-addr { font-size: 12px; color: var(--text2); line-height: 1.4; }
+.suggest-item .s-meta { font-size: 11px; color: var(--text2); margin-top: 3px; display: flex; gap: 8px; }
+.suggest-item .s-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; background: rgba(26,115,232,.1); color: var(--primary); }
+.suggest-item .s-tag.done { background: rgba(52,168,83,.1); color: #34a853; }
+.suggest-empty { padding: 20px; text-align: center; color: var(--text2); font-size: 13px; }
+.suggest-item .hl { color: var(--primary); font-weight: 600; }
+
 /* 区域联动筛选 */
 .filter-section { padding: 8px 14px 10px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
 .filter-section .filter-label { font-size: 12px; color: var(--text2); flex-shrink: 0; }
@@ -59,7 +73,6 @@
 .info-card .ic-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
 .info-card .ic-close { color: var(--text2); font-size: 16px; padding: 2px 6px; cursor: pointer; }
 .info-card .ic-row { display: flex; font-size: 12px; margin-top: 6px; }
-.info-card .ic-label { width: 72px; flex-shrink: 0; color: var(--text2); }
 .info-card .ic-value { flex: 1; color: var(--text-primary); }
 .info-card .ic-badges { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .info-card .ic-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; font-weight: 600; }
@@ -111,8 +124,9 @@
         <div class="search-section">
             <div class="search-input-wrapper">
                 <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                <input type="text" id="houseNoInput" placeholder="输入唯一标识" autocomplete="off">
+                <input type="text" id="houseNoInput" placeholder="输入唯一标识 / 地址" autocomplete="off">
                 <button class="search-btn" id="searchBtn">定位</button>
+                <div class="suggest-panel" id="suggestPanel"></div>
             </div>
         </div>
 
@@ -129,7 +143,6 @@
                 </select>
             </div>
             <button class="filter-reset" id="filterReset">重置</button>
-            <span class="filter-count" id="filterCount"></span>
         </div>
 
         <div class="map-wrap">
@@ -146,8 +159,8 @@
                     <div class="ic-title" id="icNo">—</div>
                     <div class="ic-close tap" id="icClose"><i class="fa-solid fa-xmark"></i></div>
                 </div>
-                <div class="ic-row"><div class="ic-label">初步判定</div><div class="ic-value" id="icPreJudge">—</div></div>
-                <div class="ic-row"><div class="ic-label">详细地址</div><div class="ic-value" id="icAddr">—</div></div>
+                <div class="ic-row"><div class="ic-value" id="icPreJudge">—</div></div>
+                <div class="ic-row"><div class="ic-value" id="icAddr">—</div></div>
                 <button class="ic-btn" id="icEnter"><i class="fa-solid fa-clipboard-check"></i> 进入现场排查</button>
             </div>
         </div>
@@ -169,6 +182,23 @@
     // 数据源：localStorage['farm-review-pending']（先同步加载，fetch 异步刷新）
     var FENGXIAN_CENTER = [30.92, 121.47];
 
+    // 奉贤区各镇/街道中心坐标
+    var TOWN_CENTERS = {
+        '南桥镇':   [30.9200, 121.4700],
+        '奉城镇':   [30.9100, 121.6500],
+        '庄行镇':   [30.8900, 121.3800],
+        '金汇镇':   [30.9500, 121.5300],
+        '四团镇':   [30.9400, 121.7200],
+        '青村镇':   [30.8900, 121.5700],
+        '柘林镇':   [30.8300, 121.4200],
+        '西渡街道': [30.9800, 121.4500],
+        '头桥街道': [30.9600, 121.6800],
+        '奉浦街道': [30.9400, 121.4600],
+        '金海街道': [30.9100, 121.5000],
+        '海湾镇':   [30.8100, 121.5300],
+        '海湾旅游区': [30.8000, 121.5500]
+    };
+
     // 基于字符串 hash 的伪随机数，保证同一 houseNo 每次得到相同坐标
     function hashCode(str) {
         var h = 0;
@@ -178,13 +208,14 @@
         }
         return Math.abs(h);
     }
-    // 围绕奉贤中心 ±0.06 度散布
-    function pseudoLatLng(no) {
+    // 在所属镇中心 ±0.012 度（约 2km）内散布；未识别镇回退到奉贤中心
+    function pseudoLatLng(no, town) {
+        var center = TOWN_CENTERS[town] || FENGXIAN_CENTER;
         var h1 = hashCode(no + ':lat');
         var h2 = hashCode(no + ':lng');
         return {
-            lat: FENGXIAN_CENTER[0] + ((h1 % 500) - 250) / 10000,
-            lng: FENGXIAN_CENTER[1] + ((h2 % 500) - 250) / 10000
+            lat: center[0] + ((h1 % 240) - 120) / 10000,
+            lng: center[1] + ((h2 % 240) - 120) / 10000
         };
     }
 
@@ -192,7 +223,7 @@
     // done=true 表示该房屋已完成排查（来源 farm-review-records）
     function buildHouseFromReview(rec, done) {
         var arch = (typeof getHouseRecord === 'function') ? getHouseRecord(rec.houseNo) : null;
-        var ll = (arch && arch.lat && arch.lng) ? { lat: arch.lat, lng: arch.lng } : pseudoLatLng(rec.houseNo);
+        var ll = (arch && arch.lat && arch.lng) ? { lat: arch.lat, lng: arch.lng } : pseudoLatLng(rec.houseNo, rec.town);
         var level = rec.hazardLevel === '严重' ? '第三类' : (rec.hazardLevel === '一般' ? '第二类' : '第一类');
         return {
             no: rec.houseNo,
@@ -206,7 +237,7 @@
             lng: ll.lng,
             riskLevel: level,
             risk: rec.hazardLevel === '严重' ? 'danger' : (rec.hazardLevel === '一般' ? 'warning' : 'safe'),
-            preliminaryJudge: rec.checkRemark || (arch && arch.preliminaryJudge) || '',
+            preliminaryJudge: rec.initialJudgment || rec.inspectResult || rec.checkRemark || (arch && arch.preliminaryJudge) || '',
             done: !!done
         };
     }
@@ -246,30 +277,61 @@
     var allHouses = built.all;
     var houseList = built.list;
 
-    // 异步从服务端拉取最新数据（pending + records），刷新地图与下拉
-    Promise.all([
-        fetch('/api/farm-review-pending').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; }),
-        fetch('/api/farm-review-records').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; })
-    ]).then(function(results) {
-        var pendingServer = Array.isArray(results[0]) ? results[0] : [];
-        var doneServer = Array.isArray(results[1]) ? results[1] : [];
-        // 与本地合并去重（服务端优先）
-        var pendingMap = {}, doneMap = {};
-        localData.pending.forEach(function(r) { if (r && r.houseNo) pendingMap[r.houseNo] = r; });
-        pendingServer.forEach(function(r) { if (r && r.houseNo) pendingMap[r.houseNo] = r; });
-        localData.done.forEach(function(r) { if (r && r.houseNo) doneMap[r.houseNo] = r; });
-        doneServer.forEach(function(r) { if (r && r.houseNo) doneMap[r.houseNo] = r; });
-        var merged = {
-            pending: Object.keys(pendingMap).map(function(k) { return pendingMap[k]; }),
-            done: Object.keys(doneMap).map(function(k) { return doneMap[k]; })
-        };
-        try { localStorage.setItem('farm-review-pending', JSON.stringify(merged.pending)); } catch (e) {}
-        try { localStorage.setItem('farm-review-records', JSON.stringify(merged.done)); } catch (e) {}
-        var rebuilt = buildHouses(merged);
-        allHouses = rebuilt.all;
-        houseList = rebuilt.list;
-        refreshMapAndFilters();
-    });
+    // 从服务端拉取最新数据（pending + records），合并到 localStorage 并刷新地图与下拉
+    var mapSyncSig = '';
+    function syncFromServer(isPoll) {
+        return Promise.all([
+            fetch('/api/farm-review-pending').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; }),
+            fetch('/api/farm-review-records').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; })
+        ]).then(function(results) {
+            var pendingServer = Array.isArray(results[0]) ? results[0] : [];
+            var doneServer = Array.isArray(results[1]) ? results[1] : [];
+            var cur = loadLocalData();
+            // 与本地合并去重（服务端优先）
+            var pendingMap = {}, doneMap = {};
+            cur.pending.forEach(function(r) { if (r && r.houseNo) pendingMap[r.houseNo] = r; });
+            pendingServer.forEach(function(r) { if (r && r.houseNo) pendingMap[r.houseNo] = r; });
+            cur.done.forEach(function(r) { if (r && r.houseNo) doneMap[r.houseNo] = r; });
+            doneServer.forEach(function(r) { if (r && r.houseNo) doneMap[r.houseNo] = r; });
+            var merged = {
+                pending: Object.keys(pendingMap).map(function(k) { return pendingMap[k]; }),
+                done: Object.keys(doneMap).map(function(k) { return doneMap[k]; })
+            };
+            try { localStorage.setItem('farm-review-pending', JSON.stringify(merged.pending)); } catch (e) {}
+            try { localStorage.setItem('farm-review-records', JSON.stringify(merged.done)); } catch (e) {}
+            // 数据签名判断是否有变化，避免无谓重绘
+            var sig = JSON.stringify([merged.pending.length, merged.done.map(function(r) { return [r.houseNo, r.submitTime, r.updateTime, r.pushedTime]; })]);
+            if (sig === mapSyncSig) return;
+            var hadOld = mapSyncSig !== '';
+            mapSyncSig = sig;
+            var rebuilt = buildHouses(merged);
+            allHouses = rebuilt.all;
+            houseList = rebuilt.list;
+            refreshMapAndFilters();
+            if (isPoll && hadOld) showMapSyncToast('PC端补填数据已同步');
+        }).catch(function() { /* 静默失败，使用本地缓存 */ });
+    }
+
+    // 轻提示
+    var mapSyncToastTimer = null;
+    function showMapSyncToast(text) {
+        var el = document.getElementById('mapSyncToast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'mapSyncToast';
+            el.style.cssText = 'position:fixed;left:50%;bottom:calc(40px + var(--safe-bottom));transform:translateX(-50%);background:rgba(32,33,36,.92);color:#fff;font-size:12px;padding:8px 16px;border-radius:20px;z-index:3000;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;';
+            document.body.appendChild(el);
+        }
+        el.textContent = text;
+        el.style.opacity = '1';
+        clearTimeout(mapSyncToastTimer);
+        mapSyncToastTimer = setTimeout(function() { el.style.opacity = '0'; }, 2400);
+    }
+
+    // 首次同步
+    syncFromServer(false);
+    // 停留期间每 30 秒轮询，PC 补充数据自动推送
+    setInterval(function() { syncFromServer(true); }, 30000);
 
     // ---------- 地图 ----------
     var map = L.map('reviewMap', { zoomControl: false, attributionControl: false }).setView(FENGXIAN_CENTER, 12);
@@ -292,6 +354,51 @@
         return 'blue';
     }
 
+    // 风险色 hex（用于图斑填充/描边）
+    var RISK_HEX = { red: '#d93025', yellow: '#f9ab00', blue: '#1a73e8' };
+
+    // 基于种子生成伪房屋图斑（多边形轮廓），与 PC 大屏 gis-logic.js 同源
+    function generateHouseFootprintByRisk(lat, lng, risk, seed, scale) {
+        scale = scale || 0.0002;
+        function seededRandom(s) { var x = Math.sin(s) * 10000; return x - Math.floor(x); }
+        var rand = function(n) { return seededRandom(seed + n); };
+        var riskFactor = risk === 'danger' ? 1.6 : risk === 'major' ? 1.3 : risk === 'warning' ? 1.0 : 0.8;
+        var w = scale * (0.8 + rand(1) * 1.0) * riskFactor;
+        var hh = scale * (0.8 + rand(2) * 1.0) * riskFactor;
+        var angle = rand(3) * Math.PI;
+        var corners = [[-w/2, -hh/2], [w/2, -hh/2], [w/2, hh/2], [-w/2, hh/2]];
+        var jitter = function(n, mag) { return (rand(n) - 0.5) * mag; };
+        return corners.map(function(pt, i) {
+            var x = pt[0] + jitter(i * 10 + 1, scale * 0.12);
+            var y = pt[1] + jitter(i * 10 + 2, scale * 0.12);
+            var rx = x * Math.cos(angle) - y * Math.sin(angle);
+            var ry = x * Math.sin(angle) + y * Math.cos(angle);
+            return [lat + ry, lng + rx];
+        });
+    }
+
+    // 将 riskLevel 文本映射到 gis-logic 的风险键
+    function riskKey(h) {
+        var lv = normalizeRisk(h);
+        if (lv === '第三类') return 'danger';
+        if (lv === '第二类') return 'major';
+        return 'safe';
+    }
+
+    // 图斑样式：普通 / 高亮
+    function footprintStyle(h, highlight) {
+        var color = RISK_HEX[riskColor(h)];
+        return {
+            color: color,
+            weight: highlight ? 2.5 : 1.5,
+            fillColor: color,
+            fillOpacity: highlight ? 0.5 : (h.done ? 0.36 : 0.22),
+            opacity: highlight ? 1 : 0.8,
+            dashArray: h.done ? null : '4,3'
+        };
+    }
+
+    // 点位标记（水滴图标，保留原始点位）
     function createIcon(h, highlight) {
         var doneBadge = h.done ? '<div class="spot-done"><i class="fa-solid fa-check"></i></div>' : '';
         return L.divIcon({
@@ -302,20 +409,28 @@
         });
     }
 
+    // 每栋房：{ marker, polygon }
     var markers = [];
     var markerByNo = {};
 
     function renderMarkers() {
-        // 清除旧 marker
-        markers.forEach(function(m) { if (map.hasLayer(m)) map.removeLayer(m); });
+        // 清除旧图层（图斑 + 点位）
+        markers.forEach(function(m) {
+            if (map.hasLayer(m.polygon)) map.removeLayer(m.polygon);
+            if (map.hasLayer(m.marker)) map.removeLayer(m.marker);
+        });
         markers = [];
         markerByNo = {};
-        houseList.forEach(function(h) {
+        houseList.forEach(function(h, idx) {
+            var seed = (h.no || '').split('').reduce(function(s, c) { return s + c.charCodeAt(0); }, 0) + idx;
+            var latlngs = generateHouseFootprintByRisk(h.lat, h.lng, riskKey(h), seed, 0.0003);
+            var polygon = L.polygon(latlngs, footprintStyle(h, false)).addTo(map);
             var marker = L.marker([h.lat, h.lng], { icon: createIcon(h, false) }).addTo(map);
-            marker.on('click', function() { showHouse(h, false); });
-            marker.houseNo = h.no;
-            markers.push(marker);
-            markerByNo[h.no] = marker;
+            polygon.on('click', function() { showHouse(h, true); });
+            marker.on('click', function() { showHouse(h, true); });
+            var entry = { polygon: polygon, marker: marker, houseNo: h.no };
+            markers.push(entry);
+            markerByNo[h.no] = entry;
         });
     }
     renderMarkers();
@@ -323,34 +438,39 @@
     // ---------- 区域联动筛选 ----------
     var townSelect = document.getElementById('townSelect');
     var villageSelect = document.getElementById('villageSelect');
-    var filterCount = document.getElementById('filterCount');
     var currentTown = '';
     var currentVillage = '';
 
-    // 从房屋数据提取镇/街道 → 村/居委 映射
-    var townVillageMap = {};
-    function renderTownVillageOptions() {
-        townVillageMap = {};
-        houseList.forEach(function(h) {
-            var town = h.street || '';
-            var village = h.community || h.village || '';
-            if (!town) return;
-            if (!townVillageMap[town]) townVillageMap[town] = [];
-            if (village && townVillageMap[town].indexOf(village) === -1) {
-                townVillageMap[town].push(village);
-            }
-        });
+    // 上海市奉贤区真实行政区划：街镇 → 村/居委 映射
+    var FENGXIAN_TOWN_VILLAGE = {
+        '南桥镇': ['光明村','杨王村','沈陆村','江海村','张弄村','吴塘村','五星村','八字村','南桥源社区','贝港社区','中街社区','育秀社区','阳光社区','正阳社区','解放社区','古华社区','运河社区'],
+        '奉城镇': ['高桥村','陈桥村','路口村','觉民村','爱民村','永益村','共耕村','胜利村','城东村','西门村','北门村','南门村','洪庙村','洪南村','洪西村','洪东村','协新村','朱新村','塘外村','卫季村','灯民村','幸福村','蔡建村','八字村','城东居委','南街居委','西街居委','北街居委','洪庙居委','塘外居委'],
+        '庄行镇': ['吕桥村','庄行村','汇安村','新叶村','渔沥村','长堤村','潘垫村','西校村','新华村','张塘村','存古村','杨溇村','长浜村','姚新村','芦泾村','东风村','庄行居委'],
+        '金汇镇': ['金汇村','东星村','金星村','新强村','白沙村','行前村','江苑居委','泰日居委','齐贤居委'],
+        '青村镇': ['青村社区','钱桥社区','南星村','北唐村','石海村','陶宅村','和中村','西吴村','岳和村','姚家村','朱店村','钟家村','新张村','元通村','方夏村','申隆一村','申隆二村','工农村','解放村','湾张村','花角村','吴房村','桃园村','沿钱村','李窑村','光明村'],
+        '柘林镇': ['柘林居委','新寺居委','胡桥居委','营房村','海湾村','华亭村','东海村','冯桥村','夹路村','新塘村','三桥村','农家村','南胜村','兴园村','临海村','下坊村','目华村'],
+        '四团镇': ['四团居委','平安居委','邵厂居委','三坎村','镇西村','大桥村','长堰村','平南村','平乐村','渔洋村','向阳村','龙尖村','前董村','新建村','民福村','中桥村','夏家村','红庄村','拾村村','五四村','小荡村','三团港村','横桥村','杨家宅村','平海村','天鹏村'],
+        '海湾镇': ['海兴社区','海棠社区','海农新村居委','星火居委','燎原居委','五四社区','新港村','海棠村','星火村','燎原村'],
+        '西渡街道': ['西渡居委','新南居委','文怡居委','水岸居委','浦江居委','北新居委','鸿宝居委','香榭居委','金港居委','灯塔村','刘港村','大同村','五宅村','益民村','金港村','南渡村','发展村','蒋桥村','关港村','北新村'],
+        '奉浦街道': ['奉浦居委','奉浦第二居委','国顺路居委','秋月居委','肖塘居委','高远居委','君望居委','陈湾村','公谊村','韩村村','九华村','吴塘村','八字桥村'],
+        '金海街道': ['金水苑社区','金水新苑社区','恒盛社区','恒贤社区','龙潭社区','少湖社区','文杏社区','韩树村','陈家村','屠家村','三长村','丁家村','齐贤村','石家村','欢河村'],
+        '海湾旅游区': ['海棠社区','海尚社区','新港村','海湾村','五四村'],
+        '头桥街道': ['头桥居委','幸福村','红旗村','冯家村','东新市村','南宋村','蔡家桥村','奉字村','联工村','陆家桥村','二桥村','蔡建村','戴家村','新北村','四平村','夏家村','石角村','陶家村']
+    };
 
-        // 填充镇/街道下拉（保留当前选中值）
+    // 基于真实行政区划渲染街镇下拉（按拼音排序）
+    function renderTownVillageOptions() {
         var prevTown = townSelect.value;
         townSelect.innerHTML = '<option value="">全部镇/街道</option>';
-        Object.keys(townVillageMap).sort().forEach(function(town) {
+        Object.keys(FENGXIAN_TOWN_VILLAGE).sort(function(a, b) {
+            return a.localeCompare(b, 'zh-CN');
+        }).forEach(function(town) {
             var opt = document.createElement('option');
             opt.value = town;
             opt.textContent = town;
             townSelect.appendChild(opt);
         });
-        if (prevTown && townVillageMap[prevTown]) {
+        if (prevTown && FENGXIAN_TOWN_VILLAGE[prevTown]) {
             townSelect.value = prevTown;
             updateVillageOptions(prevTown);
         }
@@ -370,7 +490,7 @@
             villageSelect.disabled = true;
             return;
         }
-        var villages = (townVillageMap[town] || []).sort();
+        var villages = (FENGXIAN_TOWN_VILLAGE[town] || []).slice();
         villages.forEach(function(v) {
             var opt = document.createElement('option');
             opt.value = v;
@@ -397,23 +517,22 @@
         markers.forEach(function(m) {
             var no = m.houseNo;
             if (visibleNos[no]) {
-                if (!map.hasLayer(m)) m.addTo(map);
+                if (!map.hasLayer(m.polygon)) m.polygon.addTo(map);
+                if (!map.hasLayer(m.marker)) m.marker.addTo(map);
             } else {
-                if (map.hasLayer(m)) map.removeLayer(m);
+                if (map.hasLayer(m.polygon)) map.removeLayer(m.polygon);
+                if (map.hasLayer(m.marker)) map.removeLayer(m.marker);
             }
         });
-
-        // 更新计数
-        if (currentTown || currentVillage) {
-            filterCount.textContent = filtered.length + ' 处';
-        } else {
-            filterCount.textContent = '';
-        }
 
         // 自动缩放视野
         if (filtered.length > 0 && (currentTown || currentVillage)) {
             var bounds = L.latLngBounds(filtered.map(function(h) { return [h.lat, h.lng]; }));
             map.fitBounds(bounds.pad(0.3), { animate: true, duration: .6 });
+        } else if (!currentTown && !currentVillage && filtered.length > 0) {
+            // 未筛选时，视野适配所有可见点（覆盖 9 个镇）
+            var allBounds = L.latLngBounds(filtered.map(function(h) { return [h.lat, h.lng]; }));
+            map.fitBounds(allBounds.pad(0.15), { animate: true, duration: .6 });
         } else if (!currentTown && !currentVillage) {
             map.setView(FENGXIAN_CENTER, 12, { animate: true, duration: .4 });
         }
@@ -452,7 +571,14 @@
         document.getElementById('icNo').textContent = h.no || '—';
         document.getElementById('icAddr').textContent = h.address || '—';
         var pj = document.getElementById('icPreJudge');
-        if (pj) pj.textContent = h.preliminaryJudge || '—';
+        if (pj) {
+            var pjText = h.preliminaryJudge || '—';
+            // 只对明确的隐患判定套色：含"严重"→红，含"安全隐患"→黄，其余（备注/—）不套色
+            var cls = '';
+            if (pjText.indexOf('严重') > -1) cls = 'badge-red';
+            else if (pjText.indexOf('安全隐患') > -1) cls = 'badge-yellow';
+            pj.innerHTML = cls ? '<span class="ic-badge ' + cls + '">' + pjText + '</span>' : pjText;
+        }
 
         // 根据是否已排查，切换按钮文案与跳转目标
         var enterBtn = document.getElementById('icEnter');
@@ -472,7 +598,14 @@
     }
 
     function highlightMarker(no) {
-        markers.forEach(function(m) { m.setIcon(createIcon(allHouses[m.houseNo], m.houseNo === no)); });
+        markers.forEach(function(m) {
+            var h = allHouses[m.houseNo];
+            var isHl = m.houseNo === no;
+            if (h) {
+                m.marker.setIcon(createIcon(h, isHl));
+                m.polygon.setStyle(footprintStyle(h, isHl));
+            }
+        });
     }
 
     document.getElementById('icClose').onclick = function() {
@@ -519,6 +652,93 @@
     };
     document.getElementById('houseNoInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') locateHouse(this.value);
+    });
+
+    // ---------- 地址模糊搜索 ----------
+    var suggestPanel = document.getElementById('suggestPanel');
+    var inputEl = document.getElementById('houseNoInput');
+    var suggestTimer = null;
+
+    function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function highlight(text, kw) {
+        var t = String(text || '');
+        if (!kw) return escHtml(t);
+        var idx = t.toLowerCase().indexOf(kw.toLowerCase());
+        if (idx < 0) return escHtml(t);
+        return escHtml(t.slice(0, idx)) + '<span class="hl">' + escHtml(t.slice(idx, idx + kw.length)) + '</span>' + escHtml(t.slice(idx + kw.length));
+    }
+
+    function searchHouses(kw) {
+        kw = (kw || '').trim();
+        if (!kw) return [];
+        var lower = kw.toLowerCase();
+        var hits = [];
+        Object.keys(allHouses).forEach(function(no) {
+            var h = allHouses[no];
+            var noMatch = String(h.no || '').toLowerCase().indexOf(lower) >= 0;
+            var addrMatch = String(h.address || '').toLowerCase().indexOf(lower) >= 0;
+            var nameMatch = String(h.name || '').toLowerCase().indexOf(lower) >= 0;
+            var villageMatch = String(h.village || h.community || '').toLowerCase().indexOf(lower) >= 0;
+            if (noMatch || addrMatch || nameMatch || villageMatch) {
+                // 打分：编号完全匹配 > 编号前缀 > 地址匹配 > 其他
+                var score = 0;
+                if (String(h.no) === kw) score += 100;
+                else if (noMatch) score += 50;
+                if (addrMatch) score += 20;
+                if (nameMatch) score += 10;
+                if (villageMatch) score += 5;
+                hits.push({ h: h, score: score });
+            }
+        });
+        hits.sort(function(a, b) { return b.score - a.score; });
+        return hits.slice(0, 15).map(function(x) { return x.h; });
+    }
+
+    function renderSuggest(list, kw) {
+        if (!kw) { suggestPanel.classList.remove('show'); return; }
+        if (!list.length) {
+            suggestPanel.innerHTML = '<div class="suggest-empty">未找到匹配的房屋</div>';
+            suggestPanel.classList.add('show');
+            return;
+        }
+        suggestPanel.innerHTML = list.map(function(h) {
+            var doneTag = h.done ? '<span class="s-tag done">已排查</span>' : '<span class="s-tag">待排查</span>';
+            var townVillage = [h.street, h.village].filter(Boolean).join(' / ');
+            return '<div class="suggest-item" data-no="' + escHtml(h.no) + '">' +
+                '<div class="s-no">' + highlight(h.no, kw) + '</div>' +
+                '<div class="s-addr">' + highlight(h.address || '—', kw) + '</div>' +
+                '<div class="s-meta">' + doneTag + (townVillage ? '<span>' + escHtml(townVillage) + '</span>' : '') + '</div>' +
+            '</div>';
+        }).join('');
+        suggestPanel.classList.add('show');
+        suggestPanel.querySelectorAll('.suggest-item').forEach(function(el) {
+            el.addEventListener('click', function() {
+                var no = this.dataset.no;
+                inputEl.value = no;
+                suggestPanel.classList.remove('show');
+                locateHouse(no);
+            });
+        });
+    }
+
+    inputEl.addEventListener('input', function() {
+        var kw = this.value.trim();
+        if (suggestTimer) clearTimeout(suggestTimer);
+        if (!kw) { suggestPanel.classList.remove('show'); return; }
+        suggestTimer = setTimeout(function() {
+            var hits = searchHouses(kw);
+            renderSuggest(hits, kw);
+        }, 180);
+    });
+    inputEl.addEventListener('focus', function() {
+        var kw = this.value.trim();
+        if (kw) renderSuggest(searchHouses(kw), kw);
+    });
+    // 点击外部关闭下拉
+    document.addEventListener('click', function(e) {
+        if (!suggestPanel.contains(e.target) && e.target !== inputEl) {
+            suggestPanel.classList.remove('show');
+        }
     });
 
     // URL 带 no 参数直接定位

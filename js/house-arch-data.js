@@ -114,8 +114,48 @@ function __getHouseArchStorage() {
         return parsed && typeof parsed === 'object' ? parsed : {};
     } catch (e) { return {}; }
 }
+
+// 服务端同步开关：避免 init / merge 过程中递归写回
+let __syncToServerEnabled = true;
+function __postToServer(all) {
+    if (!__syncToServerEnabled) return;
+    if (typeof fetch !== 'function') return;
+    try {
+        fetch('/api/house-arch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(all)
+        }).catch(function() { /* 离线场景静默失败 */ });
+    } catch (e) { /* ignore */ }
+}
+
 function __setHouseArchStorage(all) {
     localStorage.setItem(HOUSE_ARCH_KEY, JSON.stringify(all));
+    __postToServer(all);
+}
+
+// 从服务端拉取档案并合并到本地（服务端数据优先，本地独有保留）
+// 返回 Promise；调用方可不等待
+function syncHouseArchFromServer() {
+    if (typeof fetch !== 'function') return Promise.resolve(false);
+    return fetch('/api/house-arch').then(function(r) {
+        if (!r.ok) return false;
+        return r.json();
+    }).then(function(serverData) {
+        if (!serverData || typeof serverData !== 'object' || Array.isArray(serverData)) return false;
+        var serverCount = Object.keys(serverData).length;
+        if (serverCount === 0) return false;
+        var local = __getHouseArchStorage();
+        // 服务端优先合并：服务端有的覆盖，本地独有的保留
+        var merged = Object.assign({}, local, serverData);
+        __syncToServerEnabled = false; // 合并写回本地时不要再回写服务端
+        try {
+            localStorage.setItem(HOUSE_ARCH_KEY, JSON.stringify(merged));
+        } finally {
+            __syncToServerEnabled = true;
+        }
+        return true;
+    }).catch(function() { return false; });
 }
 function __getCloseApplyStorage() {
     try { const raw = localStorage.getItem(CLOSE_APPLY_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
@@ -1488,6 +1528,16 @@ function generateHouseSeed() {
 
 // 初始化种子Storage 为空则写入 85 条数据；否则规范化已有数据
 function initHouseArchSeed() {
+    // 异步从服务端拉取最新档案合并（服务端数据优先）
+    // 合并后触发一次 hashchange/自定义事件，让使用方刷新
+    if (typeof syncHouseArchFromServer === 'function') {
+        syncHouseArchFromServer().then(function(merged) {
+            if (merged) {
+                try { document.dispatchEvent(new CustomEvent('house-arch-synced')); } catch (e) {}
+            }
+        });
+    }
+
     const all = getHouseArchStorage();
     if (Object.keys(all).length === 0) {
         const seed = generateHouseSeed();

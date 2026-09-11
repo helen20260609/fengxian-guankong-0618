@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>农房回头看 - 排查管理</title>
+<link rel="stylesheet" href="./all.min.css">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="../js/house-arch-data.js"></script>
+<style>
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+    background: var(--bg-dark); color: var(--text-primary);
+    padding: 20px; min-height: 100vh;
+}
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+.page-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.page-title i { color: var(--primary); }
+.page-title .sub { font-size: 12px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg-card); color: var(--text-primary);
+    font-size: 13px; cursor: pointer; transition: all 0.2s; text-decoration: none;
+}
+.btn:hover { background: var(--bg-hover); border-color: var(--primary); color: var(--primary); }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: var(--primary-dark); color: #fff; }
+.btn-success { background: var(--success); color: #fff; border-color: var(--success); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-push { background: var(--primary); color: #fff; border-color: var(--primary); margin-left: 6px; }
+.btn-push:hover { background: var(--primary-dark); color: #fff; }
+.btn-push.pushing { opacity: .6; pointer-events: none; }
+.btn-push.pushed { background: var(--success); border-color: var(--success); }
+.btn-arch { background: var(--secondary); color: #fff; border-color: var(--secondary); margin-left: 6px; }
+.btn-arch:hover { background: #007a87; color: #fff; }
+.btn-arch.arching { opacity: .6; pointer-events: none; }
+.btn-arch.arched { background: var(--success); border-color: var(--success); }
+
+.filter-bar {
+    background: var(--bg-card); border-radius: 8px; padding: 14px 16px;
+    margin-bottom: 16px; box-shadow: 0 1px 3px var(--shadow);
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+}
+.filter-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.filter-item label { color: var(--text-secondary); white-space: nowrap; }
+.filter-item select, .filter-item input {
+    padding: 6px 10px; border: 1px solid var(--input-border); border-radius: 4px;
+    background: var(--input-bg); color: var(--text-primary); font-size: 13px;
+    outline: none; transition: border 0.2s; min-width: 120px;
+}
+.filter-item select:focus, .filter-item input:focus { border-color: var(--primary); }
+.filter-item input[type="date"] { min-width: 140px; }
+
+.table-card {
+    background: var(--bg-card); border-radius: 8px;
+    box-shadow: 0 1px 3px var(--shadow); overflow: hidden;
+}
+.table-wrap { overflow-x: auto; }
+table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.grid th {
+    background: var(--bg-hover); padding: 12px 10px; text-align: left;
+    font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+}
+table.grid td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.grid tbody tr:hover { background: var(--bg-hover); }
+
+.col-no { font-family: 'Consolas', monospace; font-size: 12px; }
+.col-addr { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.tag-success { background: #e6f4ea; color: var(--success); }
+.tag-warning { background: #fef7e0; color: var(--warning); }
+.tag-danger { background: #fce8e6; color: var(--danger); }
+.tag-info { background: #e8f0fe; color: var(--primary); }
+.tag-secondary { background: var(--bg-hover); color: var(--text-secondary); }
+
+.pagination {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--text-secondary); flex-wrap: wrap; gap: 12px;
+}
+.pager-btns { display: flex; gap: 4px; align-items: center; }
+.pager-btn {
+    min-width: 30px; height: 30px; padding: 0 6px;
+    border: 1px solid var(--border); background: var(--bg-card);
+    color: var(--text-primary); border-radius: 4px; cursor: pointer;
+    font-size: 13px; transition: all 0.2s;
+}
+.pager-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.pager-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pager-jump { display: flex; align-items: center; gap: 6px; }
+.pager-jump input {
+    width: 50px; padding: 4px 8px; border: 1px solid var(--input-border);
+    border-radius: 4px; text-align: center; font-size: 13px;
+}
+
+.form-section { margin-bottom: 20px; }
+.form-section-title {
+    font-size: 13px; font-weight: 600; color: var(--primary);
+    margin-bottom: 10px; padding-left: 8px; border-left: 3px solid var(--primary);
+}
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid .full { grid-column: 1 / -1; }
+.form-item label {
+    display: block; font-size: 12px; color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+.form-item input, .form-item select, .form-item textarea {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--input-border);
+    border-radius: 4px; background: var(--input-bg); color: var(--text-primary);
+    font-size: 13px; font-family: inherit; outline: none;
+}
+.form-item input:focus, .form-item select:focus, .form-item textarea:focus {
+    border-color: var(--primary);
+}
+.form-item textarea { resize: vertical; min-height: 60px; }
+.form-item input[readonly], .form-item textarea[readonly] { background: var(--bg-hover); cursor: not-allowed; }
+
+/* 抽屉内单选/多选 pill（对齐 H5 端交互） */
+.radio-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.radio-pill {
+    padding: 6px 14px; border-radius: 16px; border: 1px solid var(--input-border);
+    font-size: 12px; color: var(--text-secondary); background: var(--input-bg);
+    cursor: pointer; user-select: none; display: inline-flex; align-items: center; min-height: 30px;
+}
+.radio-pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.radio-pill.active.danger { background: #d93025; border-color: #d93025; color: #fff; }
+.radio-pill.active.warning { background: #f9ab00; border-color: #f9ab00; color: #fff; }
+.checkbox-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.checkbox-pill {
+    padding: 6px 14px; border-radius: 16px; border: 1px solid var(--input-border);
+    font-size: 12px; color: var(--text-secondary); background: var(--input-bg);
+    cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; min-height: 30px;
+}
+.checkbox-pill::before { content: '\f0c8'; font-family: 'Font Awesome 6 Free'; font-weight: 400; font-size: 11px; }
+.checkbox-pill.active { background: rgba(26,115,232,.1); color: var(--primary); border-color: var(--primary); }
+.checkbox-pill.active::before { content: '\f14a'; font-weight: 900; }
+.other-input { display: none; margin-top: 8px; }
+
+.modal-mask {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 200; display: none; align-items: center; justify-content: center;
+}
+.modal-mask.open { display: flex; }
+.modal {
+    background: var(--bg-card); border-radius: 8px; width: 780px; max-width: 95vw;
+    max-height: 90vh; display: flex; flex-direction: column;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+}
+.modal-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title { font-size: 15px; font-weight: 600; }
+.modal-body { flex: 1; overflow-y: auto; padding: 20px; }
+.modal-footer {
+    padding: 12px 20px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 10px;
+}
+
+.import-step { display: none; }
+.import-step.active { display: block; }
+.step-indicator { display: flex; gap: 4px; margin-bottom: 20px; font-size: 12px; }
+.step-indicator .step {
+    flex: 1; text-align: center; padding: 8px;
+    border-bottom: 2px solid var(--border); color: var(--text-secondary);
+}
+.step-indicator .step.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+.upload-zone {
+    border: 2px dashed var(--border); border-radius: 8px;
+    padding: 40px; text-align: center; cursor: pointer;
+    transition: all 0.2s; color: var(--text-secondary);
+}
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: var(--primary-light); }
+.upload-zone i { font-size: 42px; color: var(--primary); margin-bottom: 12px; display: block; }
+
+.mapping-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+.mapping-table th, .mapping-table td { padding: 8px; border: 1px solid var(--border); text-align: left; }
+.mapping-table th { background: var(--bg-hover); font-weight: 600; font-size: 12px; }
+.mapping-table select { width: 100%; padding: 4px 8px; border: 1px solid var(--input-border); border-radius: 4px; font-size: 12px; background: var(--input-bg); color: var(--text-primary); }
+.mapping-table .preview { color: var(--text-secondary); font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.import-mode { display: flex; gap: 16px; margin: 16px 0; }
+.import-mode label {
+    flex: 1; display: flex; align-items: flex-start; gap: 8px;
+    padding: 12px; border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; font-size: 13px;
+}
+.import-mode label:hover { border-color: var(--primary); background: var(--primary-light); }
+.import-mode input[type="radio"] { margin-top: 3px; }
+.import-mode .mode-title { font-weight: 600; display: block; margin-bottom: 2px; }
+.import-mode .mode-desc { font-size: 11px; color: var(--text-secondary); }
+
+.progress-bar {
+    width: 100%; height: 8px; background: var(--bg-hover);
+    border-radius: 4px; overflow: hidden; margin: 12px 0;
+}
+.progress-fill { height: 100%; background: var(--primary); transition: width 0.3s; }
+
+.import-result { padding: 12px; background: var(--bg-hover); border-radius: 6px; font-size: 13px; }
+.import-result .stat { display: flex; gap: 24px; margin-top: 8px; }
+.import-result .stat-item { text-align: center; }
+.import-result .stat-num { font-size: 22px; font-weight: 700; }
+.import-result .stat-num.success { color: var(--success); }
+.import-result .stat-num.skip { color: var(--warning); }
+.import-result .stat-num.fail { color: var(--danger); }
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+.empty-state i { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+
+.loading {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--border); border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast {
+    position: fixed; top: 20px; right: 20px; z-index: 999;
+    padding: 10px 16px; background: rgba(32,33,36,0.92); color: #fff;
+    border-radius: 6px; font-size: 13px; opacity: 0;
+    transform: translateY(-10px); transition: all 0.25s;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+
+/* Tab 切换 */
+.tab-bar {
+    display: flex; gap: 4px; margin-bottom: 16px;
+    background: var(--bg-card); border-radius: 8px;
+    padding: 4px; box-shadow: 0 1px 3px var(--shadow);
+    width: fit-content;
+}
+.tab-btn {
+    padding: 8px 20px; border: none; background: transparent;
+    color: var(--text-secondary); font-size: 13px; cursor: pointer;
+    border-radius: 6px; transition: all 0.2s; font-family: inherit;
+    display: flex; align-items: center; gap: 6px; font-weight: 500;
+}
+.tab-btn:hover { color: var(--primary); }
+.tab-btn.active { background: var(--primary); color: #fff; }
+.tab-btn .badge {
+    display: inline-block; padding: 1px 7px; border-radius: 10px;
+    background: var(--bg-hover); color: var(--text-secondary);
+    font-size: 11px; font-weight: 600;
+}
+.tab-btn.active .badge { background: rgba(255,255,255,0.25); color: #fff; }
+.tab-btn .badge.warn { background: var(--warning); color: #fff; }
+.tab-btn.active .badge.warn { background: rgba(255,255,255,0.9); color: var(--warning); }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+    <div class="page-title">
+        <i class="fa-solid fa-clipboard-check"></i>
+        农房回头看 · 排查管理
+        <span class="sub">奉贤区农村自建房排查回头看</span>
+    </div>
+    <div class="header-actions">
+        <button class="btn" id="btnDownloadTpl"><i class="fa-solid fa-file-arrow-down"></i> 下载模板</button>
+        <button class="btn btn-success" id="btnImportPending"><i class="fa-solid fa-file-import"></i> 导入待排查</button>
+        <button class="btn btn-success" id="btnImportRecords"><i class="fa-solid fa-file-import"></i> 导入排查结果</button>
+        <button class="btn btn-primary" id="btnExport"><i class="fa-solid fa-file-excel"></i> 导出</button>
+        <button class="btn" id="btnBatchPush" style="background:var(--primary);color:#fff;border-color:var(--primary);"><i class="fa-solid fa-paper-plane"></i> 批量推送</button>
+        <button class="btn" id="btnBatchArch" style="background:var(--secondary);color:#fff;border-color:var(--secondary);"><i class="fa-solid fa-box-archive"></i> 批量入档</button>
+    </div>
+</div>
+
+<div class="tab-bar">
+    <button class="tab-btn active" data-tab="records">
+        <i class="fa-solid fa-clipboard-check"></i>
+        排查结果
+    </button>
+    <button class="tab-btn" data-tab="pending">
+        <i class="fa-solid fa-list-check"></i>
+        待排查任务
+    </button>
+</div>
+
+<div class="filter-bar">
+    <div class="filter-item" data-only="records">
+        <label>状态</label>
+        <select id="filterStatus">
+            <option value="">全部</option>
+            <option value="submitted">已提交</option>
+            <option value="draft">草稿</option>
+        </select>
+    </div>
+    <div class="filter-item">
+        <label>镇/街道</label>
+        <select id="filterTown"><option value="">全部</option></select>
+    </div>
+    <div class="filter-item">
+        <label>村/居委</label>
+        <select id="filterVillage"><option value="">全部</option></select>
+    </div>
+    <div class="filter-item">
+        <label>隐患等级</label>
+        <select id="filterHazard">
+            <option value="">全部</option>
+            <option value="一般">一般</option>
+            <option value="严重">严重</option>
+        </select>
+    </div>
+    <div class="filter-item" data-only="records">
+        <label>排查日期</label>
+        <input type="date" id="filterDateFrom"> 至 <input type="date" id="filterDateTo">
+    </div>
+    <div class="filter-item" style="flex: 1; min-width: 220px;">
+        <input type="text" id="filterQ" placeholder="搜索：唯一标识 / 地址" style="width: 100%;">
+    </div>
+    <button class="btn btn-primary" id="btnSearch"><i class="fa-solid fa-magnifying-glass"></i> 查询</button>
+    <button class="btn" id="btnReset"><i class="fa-solid fa-rotate-left"></i> 重置</button>
+</div>
+
+<div class="table-card">
+    <div class="table-wrap">
+        <table class="grid">
+            <thead>
+                <tr id="theadRow"></tr>
+            </thead>
+            <tbody id="tbodyMain">
+                <tr><td colspan="10" style="text-align: center; padding: 30px;"><span class="loading"></span> 加载中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination">
+        <div>共 <b id="totalCount">0</b> 条</div>
+        <div class="pager-btns" id="pagerBtns"></div>
+        <div class="pager-jump">
+            跳至 <input type="number" id="jumpPage" min="1"> 页
+            <button class="btn btn-sm" id="btnJump">确定</button>
+        </div>
+    </div>
+</div>
+
+<!-- 导入弹层 -->
+<div class="modal-mask" id="importMask">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="importTitle">批量导入</div>
+            <button class="drawer-close" id="importClose"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="step-indicator">
+                <div class="step" data-step="1">1. 上传文件</div>
+                <div class="step" data-step="2">2. 字段映射</div>
+                <div class="step" data-step="3">3. 导入设置</div>
+                <div class="step" data-step="4">4. 完成</div>
+            </div>
+
+            <div class="import-step active" data-step="1">
+                <div class="upload-zone" id="uploadZone">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">点击选择或拖拽 Excel 文件</div>
+                    <div style="font-size: 12px;">支持 .xlsx / .xls / .csv</div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                </div>
+                <div id="fileInfo" style="margin-top: 12px; font-size: 13px; color: var(--text-secondary);"></div>
+            </div>
+
+            <div class="import-step" data-step="2">
+                <div style="font-size: 13px; margin-bottom: 8px; color: var(--text-secondary);">
+                    系统自动识别了以下列名，请确认或调整映射关系（<span style="color: var(--danger);">*</span> 为必填）：
+                </div>
+                <div id="requiredWarn" style="display:none; font-size: 12px; margin-bottom: 8px; padding: 6px 10px; border-radius: 4px; background: #fce8e6; color: var(--danger); border: 1px solid #f5c6c0;"></div>
+                <div style="max-height: 380px; overflow-y: auto;">
+                    <table class="mapping-table" id="mappingTable">
+                        <thead><tr><th style="width: 180px;">Excel 列名</th><th style="width: 200px;">映射到字段</th><th>数据预览</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="import-step" data-step="3">
+                <div style="font-size: 13px; margin-bottom: 8px; font-weight: 600;">重复数据处理方式：</div>
+                <div class="import-mode">
+                    <label><input type="radio" name="importMode" value="append"><div><span class="mode-title">仅新增</span><span class="mode-desc">已存在的 houseNo 跳过</span></div></label>
+                    <label><input type="radio" name="importMode" value="merge" checked><div><span class="mode-title">合并</span><span class="mode-desc">新数据优先，空字段保留旧值（推荐）</span></div></label>
+                    <label><input type="radio" name="importMode" value="overwrite"><div><span class="mode-title">覆盖</span><span class="mode-desc">已存在的整行替换为新数据</span></div></label>
+                </div>
+                <div id="importSummary" style="font-size: 13px; color: var(--text-secondary); margin-top: 12px;"></div>
+                <div class="progress-bar" id="importProgress" style="display: none;"><div class="progress-fill" id="progressFill" style="width: 0%;"></div></div>
+                <div id="importStatus" style="font-size: 12px; color: var(--text-secondary); text-align: center;"></div>
+            </div>
+
+            <div class="import-step" data-step="4">
+                <div class="import-result">
+                    <div style="font-weight: 600; font-size: 14px;" id="resultTitle">导入完成</div>
+                    <div class="stat">
+                        <div class="stat-item"><div class="stat-num success" id="statAdded">0</div><div>新增</div></div>
+                        <div class="stat-item"><div class="stat-num" id="statUpdated" style="color: var(--primary);">0</div><div>更新</div></div>
+                        <div class="stat-item"><div class="stat-num skip" id="statSkipped">0</div><div>跳过</div></div>
+                        <div class="stat-item"><div class="stat-num fail" id="statFail">0</div><div>失败</div></div>
+                    </div>
+                </div>
+                <div id="failList" style="margin-top: 12px; max-height: 240px; overflow-y: auto;"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" id="btnImportPrev" style="display: none;">上一步</button>
+            <button class="btn" id="btnImportCancel">取消</button>
+            <button class="btn btn-primary" id="btnImportNext" disabled>下一步</button>
+            <button class="btn btn-primary" id="btnImportRun" style="display: none;"><i class="fa-solid fa-play"></i> 开始导入</button>
+            <button class="btn btn-primary" id="btnImportDone" style="display: none;">完成</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+    'use strict';
+
+    function $(id) { return document.getElementById(id); }
+    function toast(msg, type) {
+        var t = $('toast');
+        t.textContent = msg;
+        t.className = 'toast show' + (type ? ' ' + type : '');
+        setTimeout(function() { t.classList.remove('show'); }, 2200);
+    }
+    function esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/[&<>"']/g, function(c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    // 当前 Tab：'records' = 排查结果 / 'pending' = 待排查任务
+    var currentTab = 'records';
+    var states = {
+        records: { page: 1, size: 10, total: 0, rows: [] },
+        pending: { page: 1, size: 10, total: 0, rows: [] }
+    };
+    function cur() { return states[currentTab]; }
+    function apiBase() { return currentTab === 'pending' ? '/api/farm-review-pending' : '/api/farm-review-records'; }
+
+    function getFilters() {
+        return {
+            town: $('filterTown').value,
+            village: $('filterVillage').value,
+            status: $('filterStatus').value,
+            hazard: $('filterHazard').value,
+            q: $('filterQ').value.trim(),
+            dateFrom: $('filterDateFrom').value,
+            dateTo: $('filterDateTo').value
+        };
+    }
+
+    function buildQuery() {
+        var f = getFilters();
+        var s = cur();
+        var params = new URLSearchParams();
+        params.set('page', s.page);
+        params.set('size', s.size);
+        if (f.town) params.set('town', f.town);
+        if (f.village) params.set('village', f.village);
+        if (f.hazard) params.set('hazard', f.hazard);
+        if (f.q) params.set('q', f.q);
+        if (currentTab === 'records') {
+            if (f.status) params.set('status', f.status);
+            if (f.dateFrom) params.set('dateFrom', f.dateFrom);
+            if (f.dateTo) params.set('dateTo', f.dateTo);
+        }
+        return params.toString();
+    }
+
+    function loadList() {
+        var s = cur();
+        var colspan = 8;
+        $('tbodyMain').innerHTML = '<tr><td colspan="' + colspan + '" style="text-align: center; padding: 30px;"><span class="loading"></span> 加载中...</td></tr>';
+        fetch(apiBase() + '/page?' + buildQuery())
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                s.rows = res.rows || [];
+                s.total = res.total || 0;
+                if (res.townVillages) TOWN_VILLAGES = res.townVillages;
+                renderTableHead();
+                renderTable();
+                renderPager();
+                renderTownFilter(res.towns || []);
+                renderVillageFilter();
+            })
+            .catch(function() {
+                $('tbodyMain').innerHTML = '<tr><td colspan="' + colspan + '" class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><div>加载失败</div></td></tr>';
+                toast('加载失败', 'error');
+            });
+    }
+
+    function renderTableHead() {
+        var thead = $('theadRow');
+        if (currentTab === 'pending') {
+            thead.innerHTML =
+                '<th style="width: 36px;"><input type="checkbox" id="chkAll"></th>' +
+                '<th>唯一标识</th><th>地址</th><th>镇/村</th>' +
+                '<th>隐患等级</th><th>初步判定</th><th>导入时间</th><th>操作</th>';
+        } else {
+            thead.innerHTML =
+                '<th style="width: 36px;"><input type="checkbox" id="chkAll"></th>' +
+                '<th>唯一标识</th><th>地址</th><th>镇/村</th>' +
+                '<th>隐患等级</th><th>状态</th><th>排查时间</th><th>操作</th>';
+        }
+        var chkAll = $('chkAll');
+        if (chkAll) {
+            chkAll.addEventListener('change', function() {
+                var checked = this.checked;
+                document.querySelectorAll('.row-chk').forEach(function(c) { c.checked = checked; });
+            });
+        }
+    }
+
+    // 缓存服务端返回的 town→villages 映射，供村/居委联动
+    var TOWN_VILLAGES = {};
+
+    function renderTownFilter(towns) {
+        var sel = $('filterTown');
+        var cur = sel.value;
+        var existing = {};
+        for (var i = 1; i < sel.options.length; i++) existing[sel.options[i].value] = 1;
+        towns.forEach(function(t) {
+            if (!existing[t]) {
+                var opt = document.createElement('option');
+                opt.value = t; opt.textContent = t;
+                sel.appendChild(opt);
+            }
+        });
+        sel.value = cur;
+    }
+
+    // 根据当前选中的镇，重建村/居委下拉（联动）
+    function renderVillageFilter() {
+        var town = $('filterTown').value;
+        var sel = $('filterVillage');
+        var curVal = sel.value;
+        var villages = (town && TOWN_VILLAGES[town]) ? TOWN_VILLAGES[town] : [];
+        sel.innerHTML = '<option value="">全部</option>';
+        villages.forEach(function(v) {
+            var opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            sel.appendChild(opt);
+        });
+        // 若之前选中的村仍在新列表中则保留，否则清空
+        sel.value = (curVal && villages.indexOf(curVal) >= 0) ? curVal : '';
+    }
+
+    function renderTable() {
+        var s = cur();
+        var tbody = $('tbodyMain');
+        var colspan = currentTab === 'pending' ? 8 : 8;
+        if (!s.rows.length) {
+            tbody.innerHTML = '<tr><td colspan="' + colspan + '" class="empty-state"><i class="fa-solid fa-inbox"></i><div>暂无数据</div></td></tr>';
+            return;
+        }
+        tbody.innerHTML = s.rows.map(function(r) {
+            var hazardCls = r.hazardLevel === '严重' ? 'tag-danger' : (r.hazardLevel === '一般' ? 'tag-warning' : 'tag-secondary');
+            var statusCls = r.status === 'submitted' ? 'tag-success' : (r.status === 'draft' ? 'tag-info' : 'tag-secondary');
+            var statusText = r.status === 'submitted' ? '已提交' : (r.status === 'draft' ? '草稿' : (r.status || '—'));
+            var time = r.inspectTime || (r.submitTime ? String(r.submitTime).slice(0, 16).replace('T', ' ') : '—');
+            var importTime = r.importTime ? String(r.importTime).slice(0, 16).replace('T', ' ') : '—';
+            var cols =
+                '<td><input type="checkbox" class="row-chk" data-no="' + esc(r.houseNo) + '"></td>' +
+                '<td class="col-no">' + esc(r.houseNo) + '</td>' +
+                '<td class="col-addr" title="' + esc(r.houseAddress || '') + '">' + esc(r.houseAddress || '—') + '</td>' +
+                '<td>' + esc((r.town || '—') + (r.village ? ' / ' + r.village : '')) + '</td>' +
+                '<td><span class="tag ' + hazardCls + '">' + esc(r.hazardLevel || '—') + '</span></td>';
+            if (currentTab === 'pending') {
+                cols += '<td>' + esc(r.initialJudgment || '—') + '</td>' +
+                        '<td>' + esc(importTime) + '</td>';
+            } else {
+                cols += '<td><span class="tag ' + statusCls + '">' + esc(statusText) + '</span></td>' +
+                        '<td>' + esc(time) + '</td>';
+            }
+            cols += '<td><button class="btn btn-sm" onclick="window.__openDetail(\'' + esc(r.houseNo) + '\')"><i class="fa-solid fa-pen-to-square"></i> 详情</button>';
+            if (currentTab === 'records') {
+                cols += '<button class="btn btn-sm btn-push" onclick="window.__pushToMini(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-paper-plane"></i> 推送</button>' +
+                        '<button class="btn btn-sm btn-arch" onclick="window.__syncToArchive(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-box-archive"></i> 入档</button>';
+            }
+            cols += '</td>';
+            return '<tr>' + cols + '</tr>';
+        }).join('');
+    }
+
+    function renderPager() {
+        var s = cur();
+        $('totalCount').textContent = s.total;
+        var totalPages = Math.max(1, Math.ceil(s.total / s.size));
+        var btns = $('pagerBtns');
+        var curPage = s.page;
+        var html = '';
+        html += '<button class="pager-btn" data-p="1" ' + (curPage <= 1 ? 'disabled' : '') + '><i class="fa-solid fa-angles-left"></i></button>';
+        html += '<button class="pager-btn" data-p="' + (curPage - 1) + '" ' + (curPage <= 1 ? 'disabled' : '') + '><i class="fa-solid fa-angle-left"></i></button>';
+        var start = Math.max(1, curPage - 2);
+        var end = Math.min(totalPages, curPage + 2);
+        if (start > 1) { html += '<button class="pager-btn" data-p="1">1</button>'; if (start > 2) html += '<span style="padding: 0 4px;">…</span>'; }
+        for (var p = start; p <= end; p++) {
+            html += '<button class="pager-btn' + (p === curPage ? ' active' : '') + '" data-p="' + p + '">' + p + '</button>';
+        }
+        if (end < totalPages) { if (end < totalPages - 1) html += '<span style="padding: 0 4px;">…</span>'; html += '<button class="pager-btn" data-p="' + totalPages + '">' + totalPages + '</button>'; }
+        html += '<button class="pager-btn" data-p="' + (curPage + 1) + '" ' + (curPage >= totalPages ? 'disabled' : '') + '><i class="fa-solid fa-angle-right"></i></button>';
+        html += '<button class="pager-btn" data-p="' + totalPages + '" ' + (curPage >= totalPages ? 'disabled' : '') + '><i class="fa-solid fa-angles-right"></i></button>';
+        btns.innerHTML = html;
+        btns.querySelectorAll('.pager-btn[data-p]').forEach(function(b) {
+            b.addEventListener('click', function() {
+                var p = parseInt(b.dataset.p, 10);
+                if (p >= 1 && p <= totalPages && p !== cur().page) {
+                    cur().page = p;
+                    loadList();
+                }
+            });
+        });
+    }
+
+    // ================= 详情抽屉 =================
+    var currentRecord = null;
+
+    // 按唯一标识查找当前行数据
+    function findRow(houseNo) {
+        var s = cur();
+        for (var i = 0; i < s.rows.length; i++) {
+            if (s.rows[i].houseNo === houseNo) return s.rows[i];
+        }
+        return null;
+    }
+
+    // 单条推送核心逻辑（返回 Promise），刷新推送时间戳，小程序端据此检测到变化
+    function pushOne(r) {
+        var payload = JSON.parse(JSON.stringify(r));
+        payload.pushedTime = new Date().toLocaleString('sv-SE').slice(0, 16);
+        return fetch('/api/farm-review-records/' + encodeURIComponent(r.houseNo), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(resp) { return resp.json(); })
+          .then(function(res) { return !!(res && res.success); });
+    }
+
+    // 单条入档核心逻辑（同步，失败抛错），写入农村自建房风险档案
+    function archiveOne(r) {
+        var houseNo = r.houseNo;
+        // 隐患等级 → 风险等级映射
+        var riskLevel = r.hazardLevel === '严重' ? '第三类' : (r.hazardLevel === '一般' ? '第二类' : '第一类');
+        patchHouseRecord(houseNo, function(rec) {
+            rec.no = houseNo;
+            rec.name = r.owner || rec.name || houseNo;
+            rec.owner = r.owner || rec.owner || '';
+            rec.address = r.houseAddress || rec.address || '';
+            rec.street = r.town || rec.street || '';
+            rec.community = r.village || rec.community || '';
+            rec.village = r.village || rec.village || '';
+            rec.houseType = '农村自建房';
+            rec.riskLevel = riskLevel;
+            rec.risk = (typeof RISK_LABEL_MAP_INV !== 'undefined' && RISK_LABEL_MAP_INV[riskLevel]) || rec.risk;
+            // 风险信息
+            rec.riskInfo = rec.riskInfo || {};
+            rec.riskInfo.riskLevel = riskLevel;
+            rec.riskInfo.riskNo = rec.riskInfo.riskNo || ('RSK-' + houseNo);
+            rec.riskInfo.riskName = rec.riskInfo.riskName || ((r.owner || houseNo) + ' ' + riskLevel + '风险');
+            rec.riskInfo.discoveryTime = r.inspectTime || r.submitTime || rec.riskInfo.discoveryTime || '';
+            rec.riskInfo.discoverer = r.inspector || rec.riskInfo.discoverer || '';
+            rec.riskInfo.riskDesc = r.checkRemark || rec.riskInfo.riskDesc || '';
+            rec.riskInfo.discoveryMethod = rec.riskInfo.discoveryMethod || '农房回头看排查';
+            // 基础信息
+            rec.overview = rec.overview || {};
+            rec.overview.houseNo = houseNo;
+            rec.overview.owner = r.owner || rec.overview.owner || '';
+            rec.overview.address = r.houseAddress || rec.overview.address || '';
+            rec.overview.belongTo = ((r.town || '') + (r.village ? ' ' + r.village : '')) || rec.overview.belongTo || '';
+            // 排查来源标记
+            rec.reviewSource = '农房回头看';
+            rec.reviewTime = r.inspectTime || r.submitTime || '';
+            rec.reviewInspector = r.inspector || '';
+        });
+    }
+
+    // 按钮成功反馈：变绿 ✓，2 秒后恢复
+    function flashBtn(btn, cls, iconOk, iconBack) {
+        if (!btn) return;
+        btn.classList.add(cls);
+        var icon = btn.querySelector('i');
+        if (icon) icon.className = iconOk;
+        setTimeout(function() {
+            btn.classList.remove(cls);
+            if (icon) icon.className = iconBack;
+        }, 2000);
+    }
+
+    // 手动推送单条排查结果到服务端（行内按钮入口）
+    window.__pushToMini = function(houseNo, btn) {
+        var r = findRow(houseNo);
+        if (!r) { toast('记录不存在', 'error'); return; }
+        if (btn) btn.classList.add('pushing');
+        pushOne(r)
+        .then(function(ok) {
+            if (btn) btn.classList.remove('pushing');
+            if (ok) {
+                flashBtn(btn, 'pushed', 'fa-solid fa-check', 'fa-solid fa-paper-plane');
+                toast('已推送，小程序端将自动同步', 'success');
+            } else {
+                toast('推送失败', 'error');
+            }
+        })
+        .catch(function() {
+            if (btn) btn.classList.remove('pushing');
+            toast('网络异常，推送失败', 'error');
+        });
+    };
+
+    // 手动同步单条排查结果到农村自建房风险档案（行内按钮入口）
+    window.__syncToArchive = function(houseNo, btn) {
+        var r = findRow(houseNo);
+        if (!r) { toast('记录不存在', 'error'); return; }
+        if (typeof patchHouseRecord !== 'function') { toast('档案数据层未加载', 'error'); return; }
+        if (btn) btn.classList.add('arching');
+        try {
+            archiveOne(r);
+            if (btn) btn.classList.remove('arching');
+            flashBtn(btn, 'arched', 'fa-solid fa-check', 'fa-solid fa-box-archive');
+            toast('已同步到风险档案', 'success');
+        } catch (e) {
+            if (btn) btn.classList.remove('arching');
+            toast('同步失败：' + e.message, 'error');
+        }
+    };
+
+    // 获取当前勾选的行数据
+    function getSelectedRows() {
+        var s = cur();
+        var nos = {};
+        document.querySelectorAll('.row-chk:checked').forEach(function(c) {
+            if (c.dataset.no) nos[c.dataset.no] = true;
+        });
+        return s.rows.filter(function(r) { return nos[r.houseNo]; });
+    }
+
+    // 批量推送到小程序端
+    function batchPush() {
+        var rows = getSelectedRows();
+        if (!rows.length) { toast('请先勾选要推送的记录', 'error'); return; }
+        var btn = $('btnBatchPush');
+        if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+        var done = 0, fail = 0;
+        Promise.all(rows.map(function(r) {
+            return pushOne(r).then(function(ok) { ok ? done++ : fail++; })
+                            .catch(function() { fail++; });
+        })).then(function() {
+            if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+            if (fail === 0) toast('已批量推送 ' + done + ' 条，小程序端将自动同步', 'success');
+            else toast('推送完成：成功 ' + done + ' 条，失败 ' + fail + ' 条', fail ? 'error' : 'success');
+        });
+    }
+
+    // 批量入档到风险档案
+    function batchArchive() {
+        if (typeof patchHouseRecord !== 'function') { toast('档案数据层未加载', 'error'); return; }
+        var rows = getSelectedRows();
+        if (!rows.length) { toast('请先勾选要入档的记录', 'error'); return; }
+        var done = 0, fail = 0;
+        rows.forEach(function(r) {
+            try { archiveOne(r); done++; } catch (e) { fail++; }
+        });
+        if (fail === 0) toast('已批量入档 ' + done + ' 条到风险档案', 'success');
+        else toast('入档完成：成功 ' + done + ' 条，失败 ' + fail + ' 条', fail ? 'error' : 'success');
+    }
+
+    window.__openDetail = function(houseNo) {
+        // 跳转到独立详情页（抽屉逻辑已迁移到 farm-review-detail.html）
+        var url = './farm-review-detail.html?no=' + encodeURIComponent(houseNo);
+        if (currentTab === 'pending') url += '&tab=pending';
+        location.href = url;
+    };
+
+    // ================= 筛选事件 =================
+    $('btnSearch').addEventListener('click', function() { cur().page = 1; loadList(); });
+    $('btnReset').addEventListener('click', function() {
+        $('filterStatus').value = ''; $('filterTown').value = '';
+        renderVillageFilter();
+        $('filterHazard').value = ''; $('filterQ').value = '';
+        $('filterDateFrom').value = ''; $('filterDateTo').value = '';
+        cur().page = 1; loadList();
+    });
+    // 镇/街道变化 → 联动重建村/居委，并重新查询
+    $('filterTown').addEventListener('change', function() {
+        renderVillageFilter();
+        cur().page = 1; loadList();
+    });
+    // 村/居委变化 → 重新查询
+    $('filterVillage').addEventListener('change', function() {
+        cur().page = 1; loadList();
+    });
+    $('filterQ').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { cur().page = 1; loadList(); }
+    });
+    $('btnJump').addEventListener('click', function() {
+        var p = parseInt($('jumpPage').value, 10);
+        var s = cur();
+        var totalPages = Math.max(1, Math.ceil(s.total / s.size));
+        if (p >= 1 && p <= totalPages) { s.page = p; loadList(); }
+    });
+
+    $('btnExport').addEventListener('click', function() {
+        var f = getFilters();
+        var params = new URLSearchParams();
+        if (f.town) params.set('town', f.town);
+        if (f.village) params.set('village', f.village);
+        if (f.hazard) params.set('hazard', f.hazard);
+        if (currentTab === 'records' && f.status) params.set('status', f.status);
+        window.open(apiBase() + '/export.csv?' + params.toString(), '_blank');
+    });
+
+    // ================= 批量推送 / 批量入档 =================
+    $('btnBatchPush').addEventListener('click', batchPush);
+    $('btnBatchArch').addEventListener('click', batchArchive);
+
+    // ================= Tab 切换 =================
+    function switchTab(tab) {
+        if (tab === currentTab) return;
+        currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.tab === tab);
+        });
+        // 筛选条字段显隐
+        document.querySelectorAll('.filter-item[data-only]').forEach(function(el) {
+            el.style.display = (el.dataset.only === tab) ? '' : 'none';
+        });
+        // 批量推送/入档仅对排查结果有效
+        var showBatch = (tab === 'records');
+        var bp = $('btnBatchPush'), ba = $('btnBatchArch');
+        if (bp) bp.style.display = showBatch ? '' : 'none';
+        if (ba) ba.style.display = showBatch ? '' : 'none';
+        loadList();
+    }
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+        b.addEventListener('click', function() { switchTab(b.dataset.tab); });
+    });
+
+    // ================= 批量导入 =================
+    var importState = {
+        target: 'pending', step: 1, file: null,
+        rows: [], headers: [], mapping: {}, failures: [], validRows: []
+    };
+
+    var FIELD_DEFS = [
+        { key: 'houseNo', label: '唯一标识', required: true, aliases: ['唯一标识', '房屋编号', '编号', 'id', 'houseNo'] },
+        { key: 'town', label: '镇/街道', aliases: ['镇', '镇/街道', '街镇', '所属镇', '街道', '所在镇', 'town'] },
+        { key: 'village', label: '行政村', aliases: ['村', '行政村', '所属村', '所在村', 'village'] },
+        { key: 'houseAddress', label: '详细地址', aliases: ['地址', '房屋地址', '详细地址', '宅基地位置', '坐落地址', 'houseAddress'] },
+        { key: 'owner', label: '房屋产权人', aliases: ['产权人', '户主', '房屋产权人', '业主', 'owner'] },
+        { key: 'phone', label: '联系电话', aliases: ['联系电话', '电话', '手机', 'phone'] },
+        { key: 'houseUsage', label: '房屋用途', aliases: ['房屋用途', '用途', 'houseUsage'] },
+        { key: 'specificUsage', label: '具体用途', aliases: ['具体用途', 'specificUsage'] },
+        { key: 'floors', label: '房屋层数', aliases: ['层数', '房屋层数', '建筑层数', 'floors'] },
+        { key: 'area', label: '建筑面积', aliases: ['建筑面积', '面积', 'area'] },
+        { key: 'buildYear', label: '建成年份', aliases: ['建成年份', '建造年份', '建成时间', 'buildYear'] },
+        { key: 'initialJudgment', label: '初步判定', aliases: ['初步判定', '判定结果', 'initialJudgment'] },
+        { key: 'hazardLevel', label: '隐患等级', aliases: ['隐患等级', '风险等级', '等级', 'hazardLevel'] },
+        { key: 'status', label: '状态', aliases: ['状态', 'status'] },
+        { key: 'inspector', label: '排查人', aliases: ['排查人', '排查人员', 'inspector'] },
+        { key: 'inspectTime', label: '排查时间', aliases: ['排查时间', '排查日期', 'inspectTime'] },
+        { key: 'inspectResult', label: '排查结果', aliases: ['排查结果', 'inspectResult'] },
+        { key: 'checkRemark', label: '详细描述', aliases: ['详细描述', '问题描述', 'checkRemark'] },
+        { key: 'tempControl', label: '临时管控', aliases: ['临时管控', '临时管控措施', 'tempControl'] },
+        { key: 'rectification', label: '整改措施', aliases: ['整改措施', 'rectification'] },
+        { key: 'deadline', label: '整改期限', aliases: ['整改期限', '计划整改期限', 'deadline'] },
+        { key: 'remark', label: '备注', aliases: ['备注', 'remark'] }
+    ];
+
+    function openImport(target) {
+        importState.target = target;
+        importState.step = 1;
+        importState.file = null;
+        importState.rows = [];
+        importState.headers = [];
+        importState.mapping = {};
+        importState.failures = [];
+        importState.validRows = [];
+
+        $('importTitle').textContent = target === 'pending' ? '批量导入 · 待排查任务' : '批量导入 · 排查结果';
+        $('fileInfo').textContent = '';
+        $('fileInput').value = '';
+        $('btnImportNext').disabled = true;
+        setImportStep(1);
+        $('importMask').classList.add('open');
+    }
+
+    function closeImport() { $('importMask').classList.remove('open'); }
+
+    function setImportStep(n) {
+        importState.step = n;
+        document.querySelectorAll('.import-step').forEach(function(el) {
+            el.classList.toggle('active', parseInt(el.dataset.step, 10) === n);
+        });
+        document.querySelectorAll('.step-indicator .step').forEach(function(el) {
+            el.classList.toggle('active', parseInt(el.dataset.step, 10) <= n);
+        });
+        $('btnImportPrev').style.display = (n > 1 && n < 4) ? '' : 'none';
+        $('btnImportNext').style.display = (n >= 1 && n < 3) ? '' : 'none';
+        $('btnImportRun').style.display = (n === 3) ? '' : 'none';
+        $('btnImportDone').style.display = (n === 4) ? '' : 'none';
+        $('btnImportCancel').style.display = (n < 4) ? '' : 'none';
+    }
+
+    $('btnImportPending').addEventListener('click', function() { openImport('pending'); });
+    $('btnImportRecords').addEventListener('click', function() { openImport('records'); });
+    $('importClose').addEventListener('click', closeImport);
+    $('btnImportCancel').addEventListener('click', closeImport);
+    $('btnImportDone').addEventListener('click', function() {
+        var importedTo = importState.target;
+        closeImport();
+        // 若导入目标 ≠ 当前 tab，切换过去；否则只刷新当前
+        if (importedTo !== currentTab) {
+            switchTab(importedTo);
+        } else {
+            loadList();
+        }
+    });
+
+    $('uploadZone').addEventListener('click', function() { $('fileInput').click(); });
+    $('uploadZone').addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('dragover'); });
+    $('uploadZone').addEventListener('dragleave', function() { this.classList.remove('dragover'); });
+    $('uploadZone').addEventListener('drop', function(e) {
+        e.preventDefault(); this.classList.remove('dragover');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    $('fileInput').addEventListener('change', function() {
+        if (this.files.length) handleFile(this.files[0]);
+    });
+
+    function handleFile(file) {
+        importState.file = file;
+        $('fileInfo').innerHTML = '<i class="fa-solid fa-file-excel"></i> ' + esc(file.name) + ' (' + (file.size / 1024).toFixed(1) + ' KB) <span class="loading"></span> 解析中...';
+
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                var wb = XLSX.read(e.target.result, { type: 'array' });
+                var ws = wb.Sheets[wb.SheetNames[0]];
+                var json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+                if (!json.length) {
+                    $('fileInfo').innerHTML = '<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> 文件为空或无数据</span>';
+                    return;
+                }
+                importState.rows = json;
+                importState.headers = Object.keys(json[0]);
+                autoMapFields();
+                $('fileInfo').innerHTML = '<i class="fa-solid fa-file-excel" style="color: var(--success);"></i> ' + esc(file.name) + ' · <b style="color: var(--success);">' + json.length + '</b> 行数据，' + importState.headers.length + ' 列';
+                $('btnImportNext').disabled = false;
+            } catch (err) {
+                console.error(err);
+                $('fileInfo').innerHTML = '<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> 解析失败: ' + esc(err.message) + '</span>';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function autoMapFields() {
+        importState.mapping = {};
+        importState.headers.forEach(function(h) {
+            var hNorm = String(h).trim().toLowerCase();
+            var matched = null;
+            for (var i = 0; i < FIELD_DEFS.length; i++) {
+                var f = FIELD_DEFS[i];
+                for (var j = 0; j < f.aliases.length; j++) {
+                    if (f.aliases[j].toLowerCase() === hNorm) { matched = f.key; break; }
+                }
+                if (matched) break;
+            }
+            if (matched) importState.mapping[h] = matched;
+        });
+    }
+
+    function refreshRequiredWarn() {
+        var warn = $('requiredWarn');
+        if (!warn) return;
+        var mappedFields = {};
+        for (var h in importState.mapping) mappedFields[importState.mapping[h]] = true;
+        var missing = FIELD_DEFS.filter(function(f) { return f.required && !mappedFields[f.key]; });
+        if (missing.length) {
+            warn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 缺少必填字段映射：<b>' +
+                missing.map(function(f) { return esc(f.label); }).join('、') + '</b>，请在下拉框中选择对应 Excel 列';
+            warn.style.display = '';
+        } else {
+            warn.style.display = 'none';
+        }
+    }
+
+    function renderMappingTable() {
+        var tbody = $('mappingTable').querySelector('tbody');
+        tbody.innerHTML = importState.headers.map(function(h) {
+            var previewVals = importState.rows.slice(0, 3).map(function(r) { return String(r[h] || ''); }).filter(Boolean);
+            var preview = previewVals.join(', ') || '(空)';
+            var selOptions = '<option value="">— 忽略 —</option>' + FIELD_DEFS.map(function(f) {
+                var sel = (importState.mapping[h] === f.key) ? ' selected' : '';
+                return '<option value="' + f.key + '"' + sel + '>' + f.label + (f.required ? ' *' : '') + '</option>';
+            }).join('');
+            return '<tr><td><b>' + esc(h) + '</b></td>' +
+                '<td><select data-header="' + esc(h) + '">' + selOptions + '</select></td>' +
+                '<td class="preview" title="' + esc(preview) + '">' + esc(preview) + '</td></tr>';
+        }).join('');
+        tbody.querySelectorAll('select').forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                var h = this.dataset.header;
+                if (this.value) importState.mapping[h] = this.value;
+                else delete importState.mapping[h];
+                refreshRequiredWarn();
+            });
+        });
+        refreshRequiredWarn();
+    }
+
+    function validateMapping() {
+        var mappedFields = {};
+        for (var h in importState.mapping) {
+            var f = importState.mapping[h];
+            if (mappedFields[f]) {
+                toast('字段 "' + f + '" 被重复映射', 'error');
+                return false;
+            }
+            mappedFields[f] = h;
+        }
+        if (!mappedFields.houseNo) {
+            toast('请映射必填字段：唯一标识 (houseNo)', 'error');
+            return false;
+        }
+        return true;
+    }
+
+    function transformRows() {
+        var result = [];
+        var errs = [];
+        importState.rows.forEach(function(row, idx) {
+            var rec = {};
+            var rowNum = idx + 2;
+            for (var h in importState.mapping) {
+                var field = importState.mapping[h];
+                var v = row[h];
+                if (v !== undefined && v !== null && v !== '') rec[field] = String(v).trim();
+            }
+            if (!rec.houseNo) {
+                errs.push({ row: rowNum, reason: '唯一标识为空' });
+                return;
+            }
+            if (rec.hazardLevel && rec.hazardLevel !== '一般' && rec.hazardLevel !== '严重') {
+                errs.push({ row: rowNum, houseNo: rec.houseNo, reason: '隐患等级必须是"一般"或"严重"，当前: ' + rec.hazardLevel });
+                return;
+            }
+            if (rec.status && rec.status !== 'draft' && rec.status !== 'submitted') {
+                if (rec.status === '草稿') rec.status = 'draft';
+                else if (rec.status === '已提交') rec.status = 'submitted';
+                else rec.status = importState.target === 'records' ? 'submitted' : 'draft';
+            } else if (!rec.status) {
+                rec.status = importState.target === 'records' ? 'submitted' : 'draft';
+            }
+            rec.source = 'batch-import';
+            result.push(rec);
+        });
+        return { rows: result, errors: errs };
+    }
+
+    $('btnImportNext').addEventListener('click', function() {
+        if (importState.step === 1) {
+            if (!importState.rows.length) { toast('请先上传文件', 'error'); return; }
+            renderMappingTable();
+            setImportStep(2);
+        } else if (importState.step === 2) {
+            if (!validateMapping()) return;
+            var result = transformRows();
+            $('importSummary').innerHTML =
+                '共解析 <b>' + importState.rows.length + '</b> 行，' +
+                '其中 <b style="color: var(--success);">' + result.rows.length + '</b> 行有效，' +
+                '<b style="color: var(--danger);">' + result.errors.length + '</b> 行有问题';
+            importState.failures = result.errors;
+            importState.validRows = result.rows;
+            setImportStep(3);
+        }
+    });
+
+    $('btnImportPrev').addEventListener('click', function() {
+        if (importState.step > 1) setImportStep(importState.step - 1);
+    });
+
+    $('btnImportRun').addEventListener('click', function() {
+        var mode = document.querySelector('input[name="importMode"]:checked').value;
+        var rows = importState.validRows || [];
+        if (!rows.length) { toast('没有可导入的数据', 'error'); return; }
+
+        $('btnImportRun').disabled = true;
+        $('importProgress').style.display = '';
+        var endpoint = importState.target === 'pending' ? '/api/farm-review-pending/import' : '/api/farm-review-records/import';
+
+        var BATCH = 500;
+        var totalAdded = 0, totalUpdated = 0, totalSkipped = 0;
+        var failList = (importState.failures || []).slice();
+        var i = 0;
+
+        function runNext() {
+            if (i >= rows.length) {
+                $('statAdded').textContent = totalAdded;
+                $('statUpdated').textContent = totalUpdated;
+                $('statSkipped').textContent = totalSkipped;
+                $('statFail').textContent = failList.length;
+
+                var fl = $('failList');
+                if (failList.length) {
+                    fl.innerHTML = '<div style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">失败明细（前 20 条）：</div>' +
+                        '<table class="mapping-table"><thead><tr><th>行号</th><th>唯一标识</th><th>原因</th></tr></thead><tbody>' +
+                        failList.slice(0, 20).map(function(f) {
+                            return '<tr><td>' + f.row + '</td><td>' + esc(f.houseNo || '—') + '</td><td>' + esc(f.reason) + '</td></tr>';
+                        }).join('') + '</tbody></table>';
+                } else {
+                    fl.innerHTML = '';
+                }
+
+                $('btnImportRun').disabled = false;
+                setImportStep(4);
+                return;
+            }
+
+            var chunk = rows.slice(i, i + BATCH);
+            var pct = Math.min(100, Math.round((i + chunk.length) / rows.length * 100));
+            $('progressFill').style.width = pct + '%';
+            $('importStatus').textContent = '正在导入 ' + (i + chunk.length) + ' / ' + rows.length + '...';
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: mode, rows: chunk })
+            }).then(function(r) { return r.json(); }).then(function(j) {
+                if (j && j.success) {
+                    totalAdded += j.added || 0;
+                    totalUpdated += j.updated || 0;
+                    totalSkipped += j.skipped || 0;
+                } else {
+                    chunk.forEach(function(row, k) {
+                        failList.push({ row: i + k + 2, houseNo: row.houseNo, reason: j && j.error || '服务端错误' });
+                    });
+                }
+                i += BATCH;
+                runNext();
+            }).catch(function() {
+                chunk.forEach(function(row, k) {
+                    failList.push({ row: i + k + 2, houseNo: row.houseNo, reason: '网络错误' });
+                });
+                i += BATCH;
+                runNext();
+            });
+        }
+        runNext();
+    });
+
+    // ================= 模板下载 =================
+    $('btnDownloadTpl').addEventListener('click', function() {
+        var headers = FIELD_DEFS.map(function(f) { return f.label + (f.required ? ' *' : ''); });
+        var sampleRow = ['9234933136788227', '南桥镇', '杨王村', '奉贤区南桥镇杨王村宁富路295号', '张三', '13800000000',
+            '自住', '', '2', '120.5', '2000', '初步安全', '一般', 'submitted', '李四', '2026-09-11 10:00',
+            '存在一定安全隐患', '屋顶局部渗水', '围挡封控', '修缮加固', '2026-12-31', '示例数据'];
+        var ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '农房回头看');
+        XLSX.writeFile(wb, '农房回头看-导入模板.xlsx');
+    });
+
+    // 初始根据当前 tab 设置批量按钮显隐（推送/入档仅排查结果有效）
+    (function() {
+        var showBatch = (currentTab === 'records');
+        var bp = $('btnBatchPush'), ba = $('btnBatchArch');
+        if (bp) bp.style.display = showBatch ? '' : 'none';
+        if (ba) ba.style.display = showBatch ? '' : 'none';
+    })();
+
+    loadList();
+})();
+</script>
+</body>
+</html>

@@ -51,12 +51,10 @@
 .search-bar .clear-btn { display: none; color: var(--text2); font-size: 14px; cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
 .search-bar .clear-btn.show { display: block; }
 
-.sync-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; box-shadow: var(--shadow); }
-.sync-info { flex: 1; min-width: 0; }
-.sync-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.sync-desc { font-size: 11px; color: var(--text2); margin-top: 2px; }
-.btn-sync { flex-shrink: 0; height: 34px; padding: 0 12px; border: none; border-radius: 8px; background: var(--primary); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-.btn-sync:disabled { opacity: .6; cursor: not-allowed; }
+/* 同步轻提示 */
+.sync-toast { position: fixed; left: 50%; bottom: calc(40px + var(--safe-bottom)); transform: translateX(-50%) translateY(20px); background: rgba(32,33,36,.92); color: #fff; font-size: 12px; padding: 8px 16px; border-radius: 20px; z-index: 3000; opacity: 0; transition: all .3s; pointer-events: none; white-space: nowrap; }
+.sync-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.sync-toast i { margin-right: 6px; color: #81c995; }
 </style>
 </head>
 <body>
@@ -86,26 +84,17 @@
         <div class="tab-bar">
             <div class="tab-item active" data-tab="draft">
                 草稿箱
-                <span class="badge" id="draftBadge" style="display:none">0</span>
             </div>
             <div class="tab-item" data-tab="submitted">
                 已提交
-                <span class="badge" id="submittedBadge" style="display:none">0</span>
             </div>
         </div>
         <div class="search-bar">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input type="text" id="searchInput" placeholder="搜索唯一标识" autocomplete="off">
+            <input type="text" id="searchInput" placeholder="搜索唯一标识 / 地址" autocomplete="off">
             <i class="fa-solid fa-circle-xmark clear-btn" id="searchClear"></i>
         </div>
 
-        <div class="sync-bar" id="syncBar" style="display:none">
-            <div class="sync-info">
-                <div class="sync-title">数据同步</div>
-                <div class="sync-desc" id="syncDesc">可同步PC端补充修改</div>
-            </div>
-            <button class="btn-sync" id="btnSync"><i class="fa-solid fa-rotate"></i> 同步</button>
-        </div>
         <div id="ticketList"></div>
     </div>
 
@@ -162,30 +151,16 @@
         var list = currentTab === 'draft' ? tickets.drafts : tickets.submitted;
         var container = document.getElementById('ticketList');
 
-        // 搜索过滤
+        // 搜索过滤（唯一标识 / 地址 模糊匹配）
         if (searchKeyword) {
-            var kw = searchKeyword.toUpperCase();
+            var kw = searchKeyword.toLowerCase();
             list = list.filter(function(t) {
-                return (t.houseNo || '').toUpperCase().indexOf(kw) !== -1;
+                return (t.houseNo || '').toLowerCase().indexOf(kw) !== -1 ||
+                       (t.houseAddress || '').toLowerCase().indexOf(kw) !== -1;
             });
         }
 
-        // 更新角标
-        var draftBadge = document.getElementById('draftBadge');
-        var submittedBadge = document.getElementById('submittedBadge');
-        if (tickets.drafts.length > 0) {
-            draftBadge.textContent = tickets.drafts.length;
-            draftBadge.style.display = 'block';
-        } else {
-            draftBadge.style.display = 'none';
-        }
-        if (tickets.submitted.length > 0) {
-            submittedBadge.textContent = tickets.submitted.length;
-            submittedBadge.style.display = 'block';
-        } else {
-            submittedBadge.style.display = 'none';
-        }
-
+        // 更新角标（已移除数字统计，跳过）
         if (list.length === 0) {
             var emptyText = searchKeyword ? '未找到匹配 "' + searchKeyword + '" 的工单' : (currentTab === 'draft' ? '暂无草稿工单' : '暂无已提交工单');
             container.innerHTML = '<div class="empty-state">' +
@@ -217,16 +192,10 @@
             html += '</div>';
 
             if (t.houseAddress) {
-                html += '<div class="tc-row"><div class="tc-label">地址</div><div class="tc-value">' + t.houseAddress + '</div></div>';
-            }
-            if (t.owner) {
-                html += '<div class="tc-row"><div class="tc-label">户主</div><div class="tc-value">' + t.owner + '</div></div>';
+                html += '<div class="tc-row"><div class="tc-value">' + t.houseAddress + '</div></div>';
             }
             if (conclusionText) {
                 html += '<div class="tc-row"><div class="tc-label">排查结论</div><div class="tc-value">' + conclusionText + '</div></div>';
-            }
-            if (t.checkin && t.checkin.time) {
-                html += '<div class="tc-row"><div class="tc-label">打卡时间</div><div class="tc-value">' + t.checkin.time + '</div></div>';
             }
 
             html += '<div class="tc-foot">';
@@ -275,21 +244,14 @@
     }
 
     // ---------- Tab 切换 ----------
-    var syncBar = document.getElementById('syncBar');
-    function updateSyncBarVisibility() {
-        if (syncBar) syncBar.style.display = currentTab === 'submitted' ? '' : 'none';
-    }
-
     document.querySelectorAll('.tab-item').forEach(function(tab) {
         tab.addEventListener('click', function() {
             document.querySelectorAll('.tab-item').forEach(function(t) { t.classList.remove('active'); });
             this.classList.add('active');
             currentTab = this.getAttribute('data-tab');
-            updateSyncBarVisibility();
             renderList();
         });
     });
-    updateSyncBarVisibility();
 
     // ---------- 搜索 ----------
     var searchInput = document.getElementById('searchInput');
@@ -309,14 +271,7 @@
     });
 
     // ---------- 服务端同步 ----------
-    var btnSync = document.getElementById('btnSync');
-    var syncDesc = document.getElementById('syncDesc');
-
-    function setSyncState(text, disabled) {
-        if (syncDesc) syncDesc.textContent = text;
-        if (btnSync) btnSync.disabled = !!disabled;
-    }
-
+    // 进入页面时静默拉取服务端最新记录，合并到 localStorage，让 PC 端补填自动回流
     function mergeRecords(localList, remoteList) {
         var map = {};
         (localList || []).forEach(function(r) {
@@ -328,39 +283,52 @@
         return Object.keys(map).map(function(k) { return map[k]; });
     }
 
-    function syncFromServer(silent) {
-        if (!btnSync) return;
-        setSyncState('同步中…', true);
-        fetch('/api/farm-review-records')
+    // 轻提示：PC 补填数据已同步
+    var syncToastTimer = null;
+    function showSyncToast(text) {
+        var el = document.getElementById('syncToast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'syncToast';
+            el.className = 'sync-toast';
+            document.body.appendChild(el);
+        }
+        el.innerHTML = '<i class="fa-solid fa-rotate"></i>' + text;
+        el.classList.add('show');
+        clearTimeout(syncToastTimer);
+        syncToastTimer = setTimeout(function() { el.classList.remove('show'); }, 2400);
+    }
+
+    var lastSyncSig = ''; // 上次同步的数据签名，用于判断是否有变化
+
+    function syncFromServer(isPoll) {
+        return fetch('/api/farm-review-records')
             .then(function(r) { return r.ok ? r.json() : []; })
             .then(function(remote) {
                 if (!Array.isArray(remote)) remote = [];
                 var local = [];
                 try { local = JSON.parse(localStorage.getItem('farm-review-records') || '[]'); } catch(e) {}
                 var merged = mergeRecords(local, remote);
+                // 数据签名：houseNo + 关键字段序列化，判断是否真有变化
+                var sig = JSON.stringify(merged.map(function(r) { return [r.houseNo, r.submitTime, r.updateTime, r.pushedTime, r.village, r.houseAddress, r.conclusion]; }));
                 localStorage.setItem('farm-review-records', JSON.stringify(merged));
-                var pcEdited = remote.filter(function(r) { return r && r.editedByPC; }).length;
-                setSyncState('已同步 ' + merged.length + ' 条' + (pcEdited ? '，含PC补充 ' + pcEdited + ' 条' : ''), false);
-                if (!silent) App.showToast('同步完成');
-                renderList();
+                if (sig !== lastSyncSig) {
+                    var hadOld = lastSyncSig !== '';
+                    lastSyncSig = sig;
+                    renderList();
+                    if (isPoll && hadOld) showSyncToast('PC端补填数据已同步');
+                }
             })
-            .catch(function(e) {
-                setSyncState(silent ? '自动同步失败，可手动重试' : ('同步失败：' + e.message), false);
-                if (!silent) App.showToast('同步失败');
-            });
-    }
-
-    if (btnSync) {
-        btnSync.addEventListener('click', function(e) {
-            e.stopPropagation();
-            syncFromServer(false);
-        });
+            .catch(function() { /* 静默失败，使用本地缓存 */ });
     }
 
     renderList();
 
     // 打开页面自动同步一次（静默），让 PC 端补填及时回传到小程序
-    syncFromServer(true);
+    syncFromServer(false);
+
+    // 停留期间每 30 秒轮询一次，PC 补充数据自动推送过来
+    setInterval(function() { syncFromServer(true); }, 30000);
 })();
 </script>
 </body>

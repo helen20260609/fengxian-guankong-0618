@@ -698,28 +698,23 @@ async function saveRectify() {
   currentRecord.editedTime = new Date().toISOString();
 
   try {
-    var res = await fetch('/api/farm-review-records');
-    var all = await res.json();
-    var idx = all.findIndex(function(r) { return r.houseNo === currentRecord.houseNo; });
-    if (idx >= 0) {
-      all[idx] = currentRecord;
-      var postRes = await fetch('/api/farm-review-records', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(all)
-      });
-      if (postRes.ok) {
-        // 同步整治信息到农房档案（鉴定/整治记录，按 srcKey 去重）
-        try {
-          if (typeof syncRectifyRecordToHouse === 'function') {
-            syncRectifyRecordToHouse(currentRecord, '农房回头看');
-          }
-        } catch (e) { console.warn('[rectify] 档案同步失败', e); }
-        document.getElementById('statusHint').textContent = '保存成功';
-        setTimeout(function() { enterReadonlyMode(); }, 800);
-      } else {
-        document.getElementById('statusHint').textContent = '保存失败';
-      }
+    // 单条 upsert：只提交本条记录，避免全量覆盖抹掉他人并发新增
+    var postRes = await fetch('/api/farm-review-records/' + encodeURIComponent(currentRecord.houseNo), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentRecord)
+    });
+    if (postRes.ok) {
+      // 同步整治信息到农房档案（鉴定/整治记录，按 srcKey 去重）
+      try {
+        if (typeof syncRectifyRecordToHouse === 'function') {
+          syncRectifyRecordToHouse(currentRecord, '农房回头看');
+        }
+      } catch (e) { console.warn('[rectify] 档案同步失败', e); }
+      document.getElementById('statusHint').textContent = '保存成功';
+      setTimeout(function() { enterReadonlyMode(); }, 800);
+    } else {
+      document.getElementById('statusHint').textContent = '保存失败';
     }
   } catch (e) {
     document.getElementById('statusHint').textContent = '保存失败：' + e.message;
