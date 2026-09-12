@@ -12,10 +12,30 @@
 <style>
 .review-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .page-hero { padding-bottom: 58px; }
-.page-hero .ph-sub { position: absolute; left: 50%; top: calc(34px + 16px + 36px); transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; z-index: 2; }
+.page-hero .ph-sub { position: absolute; left: 50%; top: calc(34px + 16px + 36px); transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; z-index: 2; cursor: pointer; padding: 2px 8px; border-radius: 10px; transition: background .2s; }
+.page-hero .ph-sub:active { background: rgba(255,255,255,.15); }
+.page-hero .ph-sub .identity-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,.2); font-size: 10px; font-weight: 600; }
+.page-hero .ph-sub .identity-tag i { font-size: 8px; }
 .page-hero .ph-ticket { position: absolute; right: 14px; top: calc(34px + 16px); width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; cursor: pointer; z-index: 2; }
 .page-hero .ph-ticket:active { background: rgba(255,255,255,.3); }
 .page-hero .ph-ticket-badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #d93025; color: #fff; font-size: 10px; line-height: 16px; text-align: center; font-weight: 600; border: 1.5px solid #fff; }
+
+/* 身份选择底部弹层 */
+.identity-sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 2000; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.identity-sheet-mask.show { opacity: 1; pointer-events: auto; }
+.identity-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-radius: 16px 16px 0 0; z-index: 2001; transform: translateY(100%); transition: transform .28s cubic-bezier(.32,.72,.35,1); max-height: 70vh; display: flex; flex-direction: column; }
+.identity-sheet.show { transform: translateY(0); }
+.identity-sheet .is-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.identity-sheet .is-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.identity-sheet .is-close { color: var(--text2); font-size: 18px; padding: 4px 8px; cursor: pointer; }
+.identity-sheet .is-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+.identity-sheet .is-item { padding: 13px 20px; font-size: 14px; color: var(--text-primary); cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+.identity-sheet .is-item:last-child { border-bottom: none; }
+.identity-sheet .is-item:active { background: var(--bg); }
+.identity-sheet .is-item.active { color: var(--primary); font-weight: 600; }
+.identity-sheet .is-item .is-check { color: var(--primary); font-size: 14px; opacity: 0; }
+.identity-sheet .is-item.active .is-check { opacity: 1; }
+.identity-sheet .is-item .is-desc { font-size: 11px; color: var(--text2); margin-top: 2px; }
 
 .search-section { padding: 12px 14px 6px; background: var(--card); border-bottom: 1px solid var(--border); }
 .search-section .search-input-wrapper { position: relative; }
@@ -113,11 +133,24 @@
     <div class="page-hero">
         <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
         <div class="ph-title">农房回头看</div>
-        <div class="ph-sub">奉贤区农村自建房排查</div>
+        <div class="ph-sub" id="identitySwitcher">
+            奉贤区农村自建房排查
+            <span class="identity-tag"><span id="identityLabel">全部</span><i class="fa-solid fa-chevron-down"></i></span>
+        </div>
         <div class="ph-ticket tap" onclick="App.go('pages/farm-review-list.html')">
             <i class="fa-solid fa-clipboard-list"></i>
             <span class="ph-ticket-badge" id="ticketBadge" style="display:none">0</span>
         </div>
+    </div>
+
+    <!-- 身份选择底部弹层 -->
+    <div class="identity-sheet-mask" id="identityMask"></div>
+    <div class="identity-sheet" id="identitySheet">
+        <div class="is-header">
+            <div class="is-title">选择街镇身份</div>
+            <div class="is-close tap" id="identityClose"><i class="fa-solid fa-xmark"></i></div>
+        </div>
+        <div class="is-list" id="identityList"></div>
     </div>
 
     <div class="review-body">
@@ -236,8 +269,18 @@
             lat: ll.lat,
             lng: ll.lng,
             riskLevel: level,
-            risk: rec.hazardLevel === '严重' ? 'danger' : (rec.hazardLevel === '一般' ? 'warning' : 'safe'),
+            risk: rec.hazardLevel === '严重' ? 'danger' : (rec.hazardLevel === '一般' ? 'major' : 'safe'),
             preliminaryJudge: rec.initialJudgment || rec.inspectResult || rec.checkRemark || (arch && arch.preliminaryJudge) || '',
+            appraisalConclusion: rec.appraisalResult || (arch && arch.appraisalConclusion) || '',
+            // 基本信息（来自 PC 导入的待排查数据，供详情页只读展示）
+            overview: {
+                usage: rec.houseUsage || '',
+                specificUsage: rec.specificUsage || '',
+                otherUsage: rec.otherUsage || '',
+                floors: rec.floors || '',
+                buildingArea: rec.area || '',
+                builtYear: rec.buildYear || ''
+            },
             done: !!done
         };
     }
@@ -259,12 +302,16 @@
         var doneMap = {};
         // 已排查优先（同 houseNo 覆盖待排查）
         (data.done || []).forEach(function(rec) {
+            // 身份过滤：非管理员只看本街镇
+            if (currentIdentity && (rec.town || '') !== currentIdentity) return;
             var h = buildHouseFromReview(rec, true);
             all[h.no] = h;
             doneMap[h.no] = true;
         });
         (data.pending || []).forEach(function(rec) {
             if (doneMap[rec.houseNo]) return;
+            // 身份过滤：非管理员只看本街镇
+            if (currentIdentity && (rec.town || '') !== currentIdentity) return;
             var h = buildHouseFromReview(rec, false);
             all[h.no] = h;
         });
@@ -276,6 +323,62 @@
     var built = buildHouses(localData);
     var allHouses = built.all;
     var houseList = built.list;
+
+    // ---------- 街镇身份 ----------
+    // '' = 全部（管理员视角），否则为具体街镇名（如 '青村镇'）
+    var currentIdentity = '';
+    try { currentIdentity = localStorage.getItem('farm-review-identity') || ''; } catch (e) {}
+
+    function setIdentity(town, silent) {
+        currentIdentity = town || '';
+        try { localStorage.setItem('farm-review-identity', currentIdentity); } catch (e) {}
+        document.getElementById('identityLabel').textContent = currentIdentity || '全部';
+        // 重建房屋列表（按身份过滤）
+        var data = loadLocalData();
+        var rebuilt = buildHouses(data);
+        allHouses = rebuilt.all;
+        houseList = rebuilt.list;
+        refreshMapAndFilters();
+        if (!silent) {
+            showMapSyncToast(currentIdentity ? ('已切换到 ' + currentIdentity) : '已切换到全部（管理员）');
+        }
+    }
+
+    // 渲染身份选择列表
+    function renderIdentityList() {
+        var list = document.getElementById('identityList');
+        var towns = Object.keys(FENGXIAN_TOWN_VILLAGE).sort(function(a, b) { return a.localeCompare(b, 'zh-CN'); });
+        var html = '<div class="is-item' + (currentIdentity === '' ? ' active' : '') + '" data-town="">' +
+            '<div><div>全部（管理员）</div><div class="is-desc">可见所有街镇任务</div></div>' +
+            '<i class="fa-solid fa-check is-check"></i></div>';
+        towns.forEach(function(t) {
+            html += '<div class="is-item' + (currentIdentity === t ? ' active' : '') + '" data-town="' + t + '">' +
+                '<div><div>' + t + '</div><div class="is-desc">仅见本街镇任务</div></div>' +
+                '<i class="fa-solid fa-check is-check"></i></div>';
+        });
+        list.innerHTML = html;
+        list.querySelectorAll('.is-item').forEach(function(item) {
+            item.addEventListener('click', function() {
+                setIdentity(item.dataset.town);
+                closeIdentitySheet();
+            });
+        });
+    }
+
+    function openIdentitySheet() {
+        renderIdentityList();
+        document.getElementById('identityMask').classList.add('show');
+        document.getElementById('identitySheet').classList.add('show');
+    }
+    function closeIdentitySheet() {
+        document.getElementById('identityMask').classList.remove('show');
+        document.getElementById('identitySheet').classList.remove('show');
+    }
+    document.getElementById('identitySwitcher').addEventListener('click', openIdentitySheet);
+    document.getElementById('identityClose').addEventListener('click', closeIdentitySheet);
+    document.getElementById('identityMask').addEventListener('click', closeIdentitySheet);
+    // 初始化身份标签
+    document.getElementById('identityLabel').textContent = currentIdentity || '全部';
 
     // 从服务端拉取最新数据（pending + records），合并到 localStorage 并刷新地图与下拉
     var mapSyncSig = '';

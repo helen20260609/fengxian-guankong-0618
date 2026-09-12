@@ -270,6 +270,30 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
 .tab-btn.active .badge { background: rgba(255,255,255,0.25); color: #fff; }
 .tab-btn .badge.warn { background: var(--warning); color: #fff; }
 .tab-btn.active .badge.warn { background: rgba(255,255,255,0.9); color: var(--warning); }
+
+/* 下载模板下拉菜单 */
+.tpl-dropdown { position: relative; display: inline-block; }
+.tpl-menu {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+    min-width: 380px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); overflow: hidden;
+}
+.tpl-dropdown.open .tpl-menu { display: block; }
+.tpl-item {
+    display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
+    cursor: pointer; transition: background 0.15s;
+}
+.tpl-item:hover { background: var(--primary-light); }
+.tpl-item + .tpl-item { border-top: 1px solid var(--border); }
+.tpl-item > i { font-size: 18px; color: var(--primary); margin-top: 2px; }
+.tpl-item-text { flex: 1; min-width: 0; }
+.tpl-item-title { font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
+.tpl-item-desc { font-size: 11px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; }
+.tpl-badge {
+    display: none; padding: 1px 6px; border-radius: 8px;
+    background: var(--primary); color: #fff; font-size: 10px; font-weight: 600;
+}
+.tpl-badge.show { display: inline-block; }
 </style>
 </head>
 <body>
@@ -281,7 +305,25 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         <span class="sub">奉贤区农村自建房排查回头看</span>
     </div>
     <div class="header-actions">
-        <button class="btn" id="btnDownloadTpl"><i class="fa-solid fa-file-arrow-down"></i> 下载模板</button>
+        <div class="tpl-dropdown" id="tplDropdown">
+            <button class="btn" id="btnDownloadTpl"><i class="fa-solid fa-file-arrow-down"></i> 下载模板 <i class="fa-solid fa-caret-down" style="margin-left: 4px; font-size: 11px;"></i></button>
+            <div class="tpl-menu" id="tplMenu">
+                <div class="tpl-item" data-tpl="pending">
+                    <i class="fa-solid fa-list-check"></i>
+                    <div class="tpl-item-text">
+                        <div class="tpl-item-title">待排查任务模板 <span class="tpl-badge" data-tab-hl="pending">当前</span></div>
+                        <div class="tpl-item-desc">仅摸底字段：标识/镇村/地址/产权人/用途/层数/面积/年份/初步判定/隐患等级</div>
+                    </div>
+                </div>
+                <div class="tpl-item" data-tpl="records">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <div class="tpl-item-text">
+                        <div class="tpl-item-title">排查结果模板 <span class="tpl-badge" data-tab-hl="records">当前</span></div>
+                        <div class="tpl-item-desc">全字段：含状态/排查人/排查时间/排查结果/详细描述/临时管控/整改措施/整改期限</div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <button class="btn btn-success" id="btnImportPending"><i class="fa-solid fa-file-import"></i> 导入待排查</button>
         <button class="btn btn-success" id="btnImportRecords"><i class="fa-solid fa-file-import"></i> 导入排查结果</button>
         <button class="btn btn-primary" id="btnExport"><i class="fa-solid fa-file-excel"></i> 导出</button>
@@ -812,6 +854,14 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
     $('filterVillage').addEventListener('change', function() {
         cur().page = 1; loadList();
     });
+    // 隐患等级变化 → 重新查询
+    $('filterHazard').addEventListener('change', function() {
+        cur().page = 1; loadList();
+    });
+    // 状态变化 → 重新查询
+    $('filterStatus').addEventListener('change', function() {
+        cur().page = 1; loadList();
+    });
     $('filterQ').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') { cur().page = 1; loadList(); }
     });
@@ -867,16 +917,18 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
     var FIELD_DEFS = [
         { key: 'houseNo', label: '唯一标识', required: true, aliases: ['唯一标识', '房屋编号', '编号', 'id', 'houseNo'] },
         { key: 'town', label: '镇/街道', aliases: ['镇', '镇/街道', '街镇', '所属镇', '街道', '所在镇', 'town'] },
-        { key: 'village', label: '行政村', aliases: ['村', '行政村', '所属村', '所在村', 'village'] },
+        { key: 'village', label: '行政村', aliases: ['村', '行政村', '所属村', '所在村', '村居委', '村/居委', 'village'] },
         { key: 'houseAddress', label: '详细地址', aliases: ['地址', '房屋地址', '详细地址', '宅基地位置', '坐落地址', 'houseAddress'] },
         { key: 'owner', label: '房屋产权人', aliases: ['产权人', '户主', '房屋产权人', '业主', 'owner'] },
         { key: 'phone', label: '联系电话', aliases: ['联系电话', '电话', '手机', 'phone'] },
         { key: 'houseUsage', label: '房屋用途', aliases: ['房屋用途', '用途', 'houseUsage'] },
         { key: 'specificUsage', label: '具体用途', aliases: ['具体用途', 'specificUsage'] },
+        { key: 'otherUsage', label: '其他具体用途', aliases: ['其他具体用途', 'otherUsage'] },
         { key: 'floors', label: '房屋层数', aliases: ['层数', '房屋层数', '建筑层数', 'floors'] },
         { key: 'area', label: '建筑面积', aliases: ['建筑面积', '面积', 'area'] },
         { key: 'buildYear', label: '建成年份', aliases: ['建成年份', '建造年份', '建成时间', 'buildYear'] },
         { key: 'initialJudgment', label: '初步判定', aliases: ['初步判定', '判定结果', 'initialJudgment'] },
+        { key: 'appraisalResult', label: '鉴定结论', aliases: ['鉴定结论', '鉴定结果', 'appraisalResult'] },
         { key: 'hazardLevel', label: '隐患等级', aliases: ['隐患等级', '风险等级', '等级', 'hazardLevel'] },
         { key: 'status', label: '状态', aliases: ['状态', 'status'] },
         { key: 'inspector', label: '排查人', aliases: ['排查人', '排查人员', 'inspector'] },
@@ -958,23 +1010,72 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         reader.onload = function(e) {
             try {
                 var wb = XLSX.read(e.target.result, { type: 'array' });
-                var ws = wb.Sheets[wb.SheetNames[0]];
-                var json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
-                if (!json.length) {
-                    $('fileInfo').innerHTML = '<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> 文件为空或无数据</span>';
-                    return;
+                importState.workbook = wb; // 保存 workbook 供后续选择 sheet
+
+                // 如果有多个 sheet，显示选择器
+                if (wb.SheetNames.length > 1) {
+                    var sheetOptions = wb.SheetNames.map(function(name, idx) {
+                        return '<option value="' + idx + '">' + esc(name) + '</option>';
+                    }).join('');
+                    $('fileInfo').innerHTML = '<i class="fa-solid fa-file-excel" style="color: var(--success);"></i> ' + esc(file.name) +
+                        ' <select id="sheetSelector" style="margin-left: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;">' +
+                        sheetOptions + '</select> <span class="loading"></span> 解析中...';
+                    $('sheetSelector').onchange = function() {
+                        parseSheet(parseInt(this.value));
+                    };
+                    parseSheet(0); // 默认解析第一个 sheet
+                } else {
+                    parseSheet(0);
                 }
-                importState.rows = json;
-                importState.headers = Object.keys(json[0]);
-                autoMapFields();
-                $('fileInfo').innerHTML = '<i class="fa-solid fa-file-excel" style="color: var(--success);"></i> ' + esc(file.name) + ' · <b style="color: var(--success);">' + json.length + '</b> 行数据，' + importState.headers.length + ' 列';
-                $('btnImportNext').disabled = false;
             } catch (err) {
                 console.error(err);
-                $('fileInfo').innerHTML = '<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> 解析失败: ' + esc(err.message) + '</span>';
+                $('fileInfo').innerHTML = '<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> 解析失败：' + esc(err.message) + '</span>';
             }
         };
         reader.readAsArrayBuffer(file);
+    }
+
+    function parseSheet(sheetIndex) {
+        var wb = importState.workbook;
+        var ws = wb.Sheets[wb.SheetNames[sheetIndex]];
+
+        // 自动检测并跳过标题行：如果第一行只有 1 个非空单元格，而第二行有多个，则跳过第一行
+        var range = XLSX.utils.decode_range(ws['!ref']);
+        var firstRowCells = 0;
+        for (var C = range.s.c; C <= range.e.c; C++) {
+            var cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
+            if (cell && cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== '') firstRowCells++;
+        }
+        var secondRowCells = 0;
+        for (var C = range.s.c; C <= range.e.c; C++) {
+            var cell = ws[XLSX.utils.encode_cell({ r: 1, c: C })];
+            if (cell && cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== '') secondRowCells++;
+        }
+        var skipRows = (firstRowCells === 1 && secondRowCells > 1) ? 1 : 0;
+
+        var json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, range: skipRows });
+        if (!json.length) {
+            $('fileInfo').innerHTML = '<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> 文件为空或无数据</span>';
+            return;
+        }
+        importState.rows = json;
+        importState.headers = Object.keys(json[0]);
+        autoMapFields();
+
+        var sheetInfo = wb.SheetNames.length > 1 ? ' <select id="sheetSelector" style="margin-left: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;">' +
+            wb.SheetNames.map(function(name, idx) {
+                return '<option value="' + idx + '"' + (idx === sheetIndex ? ' selected' : '') + '>' + esc(name) + '</option>';
+            }).join('') + '</select>' : '';
+
+        $('fileInfo').innerHTML = '<i class="fa-solid fa-file-excel" style="color: var(--success);"></i> ' + esc(importState.file.name) +
+            sheetInfo + ' · <b style="color: var(--success);">' + json.length + '</b> 行数据，' + importState.headers.length + ' 列' + (skipRows ? '（已跳过标题行）' : '');
+
+        if (wb.SheetNames.length > 1) {
+            $('sheetSelector').onchange = function() {
+                parseSheet(parseInt(this.value));
+            };
+        }
+        $('btnImportNext').disabled = false;
     }
 
     function autoMapFields() {
@@ -1068,6 +1169,29 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
                 errs.push({ row: rowNum, houseNo: rec.houseNo, reason: '隐患等级必须是"一般"或"严重"，当前: ' + rec.hazardLevel });
                 return;
             }
+
+            // 地址组合：如果存在拆分字段（所在区/街镇/村居委/组/路/号栋），组合成详细地址
+            var addrParts = [];
+            var partKeys = ['所在区', '街镇', '村居委', '组', '路', '号栋'];
+            var hasParts = false;
+            partKeys.forEach(function(pk) {
+                // 在原始 row 里查找（不区分大小写、去空格）
+                for (var h in row) {
+                    var hNorm = String(h).trim().toLowerCase();
+                    if (hNorm === pk.toLowerCase()) {
+                        var v = String(row[h] || '').trim();
+                        if (v) {
+                            addrParts.push(v);
+                            hasParts = true;
+                        }
+                        break;
+                    }
+                }
+            });
+            if (hasParts) {
+                rec.houseAddress = addrParts.join(' ');
+            }
+
             if (rec.status && rec.status !== 'draft' && rec.status !== 'submitted') {
                 if (rec.status === '草稿') rec.status = 'draft';
                 else if (rec.status === '已提交') rec.status = 'submitted';
@@ -1172,16 +1296,66 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         runNext();
     });
 
-    // ================= 模板下载 =================
-    $('btnDownloadTpl').addEventListener('click', function() {
-        var headers = FIELD_DEFS.map(function(f) { return f.label + (f.required ? ' *' : ''); });
-        var sampleRow = ['9234933136788227', '南桥镇', '杨王村', '奉贤区南桥镇杨王村宁富路295号', '张三', '13800000000',
-            '自住', '', '2', '120.5', '2000', '初步安全', '一般', 'submitted', '李四', '2026-09-11 10:00',
-            '存在一定安全隐患', '屋顶局部渗水', '围挡封控', '修缮加固', '2026-12-31', '示例数据'];
-        var ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
+    // ================= 模板下载（按当前 tab 推荐对应模板） =================
+    // 待排查模板：仅摸底字段（去掉排查执行类字段）
+    var PENDING_TPL_KEYS = ['houseNo', 'town', 'village', 'houseAddress', 'owner', 'phone',
+        'houseUsage', 'specificUsage', 'floors', 'area', 'buildYear', 'initialJudgment', 'hazardLevel', 'remark'];
+    // 排查结果模板：全字段
+    var RECORDS_TPL_KEYS = FIELD_DEFS.map(function(f) { return f.key; });
+
+    var TPL_SAMPLES = {
+        pending: ['10322290307554676', '青村镇', '湾张村', '奉贤区青村镇湾张村村委会3326号', '张三', '13800000000',
+            '自住', '', '2', '120.5', '2000', '存在一定安全隐患', '一般', '示例数据'],
+        records: ['9234933136788227', '南桥镇', '杨王村', '奉贤区南桥镇杨王村宁富路295号', '李四', '13900000000',
+            '自住', '', '2', '120.5', '2000', '存在一定安全隐患', '一般', 'submitted', '王五', '2026-09-11 10:00',
+            '存在一定安全隐患', '屋顶局部渗水', '围挡封控', '修缮加固', '2026-12-31', '示例数据']
+    };
+
+    function refreshTplBadge() {
+        document.querySelectorAll('.tpl-badge').forEach(function(b) {
+            b.classList.toggle('show', b.dataset.tabHl === currentTab);
+        });
+    }
+
+    function downloadTemplate(kind) {
+        var keys = kind === 'pending' ? PENDING_TPL_KEYS : RECORDS_TPL_KEYS;
+        var headers = keys.map(function(k) {
+            var f = null;
+            for (var i = 0; i < FIELD_DEFS.length; i++) if (FIELD_DEFS[i].key === k) { f = FIELD_DEFS[i]; break; }
+            return (f ? f.label : k) + (f && f.required ? ' *' : '');
+        });
+        var sample = TPL_SAMPLES[kind];
+        var ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+        // 列宽自适应（按表头字数）
+        ws['!cols'] = headers.map(function(h) { return { wch: Math.max(10, String(h).length * 2 + 2) }; });
         var wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, '农房回头看');
-        XLSX.writeFile(wb, '农房回头看-导入模板.xlsx');
+        XLSX.utils.book_append_sheet(wb, ws, kind === 'pending' ? '待排查任务' : '排查结果');
+        XLSX.writeFile(wb, kind === 'pending' ? '农房回头看-待排查任务模板.xlsx' : '农房回头看-排查结果模板.xlsx');
+        toast(kind === 'pending' ? '已下载待排查任务模板' : '已下载排查结果模板', 'success');
+    }
+
+    // 主按钮：直接下载当前 tab 对应模板
+    $('btnDownloadTpl').addEventListener('click', function(e) {
+        e.stopPropagation();
+        $('tplDropdown').classList.toggle('open');
+        refreshTplBadge();
+    });
+    // 菜单项：下载指定模板
+    document.querySelectorAll('.tpl-item').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            downloadTemplate(item.dataset.tpl);
+            $('tplDropdown').classList.remove('open');
+        });
+    });
+    // 点击外部关闭
+    document.addEventListener('click', function(e) {
+        var dd = $('tplDropdown');
+        if (dd && !dd.contains(e.target)) dd.classList.remove('open');
+    });
+    // Tab 切换时刷新"当前"徽标
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+        b.addEventListener('click', refreshTplBadge);
     });
 
     // 初始根据当前 tab 设置批量按钮显隐（推送/入档仅排查结果有效）

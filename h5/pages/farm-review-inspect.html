@@ -431,6 +431,71 @@ input[type="hidden"].sign-image-field { display: none; }
         house = getHouseRecord(houseNo);
     }
 
+    // 页面打开时主动从服务端同步待排查/排查记录（处理 PC 新导入后直接打开详情的情况）
+    (function syncReviewData() {
+        Promise.all([
+            fetch('/api/farm-review-pending').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; }),
+            fetch('/api/farm-review-records').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; })
+        ]).then(function(results) {
+            var pend = Array.isArray(results[0]) ? results[0] : [];
+            var recs = Array.isArray(results[1]) ? results[1] : [];
+            try { localStorage.setItem('farm-review-pending', JSON.stringify(pend)); } catch (e) {}
+            try { localStorage.setItem('farm-review-records', JSON.stringify(recs)); } catch (e) {}
+            // 同步后若还没拿到房屋数据，触发一次重载
+            if (!house) {
+                var inPend = pend.some(function(r) { return (r.houseNo || '').toUpperCase() === houseNo; });
+                var inRecs = recs.some(function(r) { return (r.houseNo || '').toUpperCase() === houseNo; });
+                if (inPend || inRecs) {
+                    var reloadKey = '__inspectSyncReload_' + houseNo;
+                    if (!sessionStorage.getItem(reloadKey)) {
+                        try { sessionStorage.setItem(reloadKey, '1'); } catch (e) {}
+                        location.reload();
+                    }
+                }
+            }
+        });
+    })();
+
+    // 档案中找不到时，回退到待排查/排查记录数据（PC 导入的任务直接下发，未入档）
+    if (!house && houseNo) {
+        var fromReview = null;
+        try {
+            var pendList = JSON.parse(localStorage.getItem('farm-review-pending') || '[]');
+            for (var pi = 0; pi < pendList.length; pi++) {
+                if ((pendList[pi].houseNo || '').toUpperCase() === houseNo) { fromReview = pendList[pi]; break; }
+            }
+        } catch (e) {}
+        if (!fromReview) {
+            try {
+                var recList = JSON.parse(localStorage.getItem('farm-review-records') || '[]');
+                for (var ri = 0; ri < recList.length; ri++) {
+                    if ((recList[ri].houseNo || '').toUpperCase() === houseNo) { fromReview = recList[ri]; break; }
+                }
+            } catch (e) {}
+        }
+        if (fromReview) {
+            house = {
+                no: fromReview.houseNo,
+                name: fromReview.houseName || fromReview.houseNo,
+                owner: fromReview.owner || fromReview.houseOwner || '',
+                address: fromReview.houseAddress || fromReview.address || '',
+                street: fromReview.town || '',
+                community: fromReview.village || '',
+                village: fromReview.village || '',
+                preliminaryJudge: fromReview.initialJudgment || '',
+                appraisalConclusion: fromReview.appraisalResult || '',
+                overview: {
+                    usage: fromReview.houseUsage || '',
+                    specificUsage: fromReview.specificUsage || '',
+                    otherUsage: fromReview.otherUsage || '',
+                    floors: fromReview.floors || '',
+                    buildingArea: fromReview.area || '',
+                    builtYear: fromReview.buildYear || ''
+                }
+            };
+        }
+    }
+
     // 若当前没找到档案，监听服务端同步事件，拿到数据后重载一次（仅一次）
     if (!house && houseNo) {
         var reloadedKey = '__inspectReloaded_' + houseNo;
@@ -1359,6 +1424,9 @@ input[type="hidden"].sign-image-field { display: none; }
 
     // ---------- 提交 ----------
     function collectData() {
+        // 读取当前街镇身份（H5 地图页选择），非管理员时自动填入排查人
+        var currentIdentity = '';
+        try { currentIdentity = localStorage.getItem('farm-review-identity') || ''; } catch (e) {}
         var result = {
             houseNo: houseNo,
             houseName: house ? (house.name || house.no) : houseNo,
@@ -1371,10 +1439,17 @@ input[type="hidden"].sign-image-field { display: none; }
             zoneId: null,
             zoneName: '',
             checkin: checkinData,
+            // 顶层冗余一份房屋坐标（优先打卡点），供 PC 端图斑/地图定位使用
+            lat: checkinData ? checkinData.lat : (house && house.lat ? house.lat : undefined),
+            lng: checkinData ? checkinData.lng : (house && house.lng ? house.lng : undefined),
             photos: photos,
             photoCount: Object.keys(photos).reduce(function(s, k) { return s + photos[k].length; }, 0),
             submitTime: new Date().toISOString()
         };
+        // 身份非管理员时，自动把街镇名写入排查人字段（若表单未填）
+        if (currentIdentity) {
+            result.assignedTown = currentIdentity;
+        }
         // 兼容旧字段：把所有隐患部位+描述拼成一段，供老版本 PC 详情兜底展示
         result.structuralProblems = hazards.map(function(h, i) {
             var parts = [];
@@ -1393,10 +1468,14 @@ input[type="hidden"].sign-image-field { display: none; }
         ['address','communityName','buildingName','apartmentCount','ownerName','ownerId',
          'buildingFloors','buildingHeight','buildingArea','buildYear','structuralSafetyRemark',
          'ownerSignature','ownerPhone','ownerDate','userSignature','userPhone','userDate',
-         'inspectorSignature','inspectorOrg','inspectorPhone','inspectorDate'].forEach(function(k){
+         'inspectorName','inspectorSignature','inspectorOrg','inspectorPhone','inspectorDate'].forEach(function(k){
             var el = document.querySelector('[data-field="' + k + '"]');
             result[k] = el ? el.value.trim() : '';
         });
+        // 排查人姓名兜底：表单未填且身份非管理员时，用街镇名
+        if (!result.inspectorName && currentIdentity) {
+            result.inspectorName = currentIdentity;
+        }
         // 手写签名图片
         ['ownerSignatureImage','userSignatureImage','inspectorSignatureImage'].forEach(function(k){
             var el = document.querySelector('input.sign-image-field[data-field="' + k + '"]');
