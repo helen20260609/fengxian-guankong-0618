@@ -57,15 +57,18 @@ function sendJson(res, statusCode, data) {
 }
 
 // 读取奉贤区真实镇村字典；不存在时返回 null，由调用方回退到动态提取
-function readFengxianTownVillages() {
+// 性能优化：启动时加载一次到内存，后续直接返回缓存（文件极少变动，重启服务即刷新）
+var _fengxianTownVillagesCache = (function() {
     var fp = path.join(dataDir, 'fengxian-town-villages.json');
     if (!fs.existsSync(fp)) return null;
     try {
-        var raw = fs.readFileSync(fp, 'utf8');
-        return JSON.parse(raw);
+        return JSON.parse(fs.readFileSync(fp, 'utf8'));
     } catch(e) {
         return null;
     }
+})();
+function readFengxianTownVillages() {
+    return _fengxianTownVillagesCache;
 }
 
 function handleApi(req, res, urlPath) {
@@ -332,26 +335,42 @@ function handleApi(req, res, urlPath) {
 
     // ============ 农房回头看 高级接口 ============
 
-    // 工具：读取数组 json 文件（容错 UTF-8 BOM）
+    // 工具：读取数组 json 文件（容错 UTF-8 BOM；带 mtime 内存缓存：文件未变更则直接返回缓存，避免每次全量读盘+JSON.parse）
+    var _listFileCache = {}; // fileName -> { mtimeMs, list }
     function readListFile(fileName, cb) {
         var fp = path.join(dataDir, fileName);
-        fs.readFile(fp, 'utf8', function(err, data) {
-            if (err) {
-                if (err.code === 'ENOENT') return cb(null, []);
-                return cb(err);
+        fs.stat(fp, function(statErr, st) {
+            if (statErr) {
+                if (statErr.code === 'ENOENT') return cb(null, []);
+                return cb(statErr);
             }
-            try {
-                if (data && data.charCodeAt(0) === 0xFEFF) data = data.slice(1);
-                var list = JSON.parse(data);
-                cb(null, Array.isArray(list) ? list : []);
-            } catch (e) { cb(e); }
+            var cached = _listFileCache[fileName];
+            if (cached && cached.mtimeMs === st.mtimeMs) {
+                return cb(null, cached.list);
+            }
+            fs.readFile(fp, 'utf8', function(err, data) {
+                if (err) {
+                    if (err.code === 'ENOENT') return cb(null, []);
+                    return cb(err);
+                }
+                try {
+                    if (data && data.charCodeAt(0) === 0xFEFF) data = data.slice(1);
+                    var list = JSON.parse(data);
+                    var arr = Array.isArray(list) ? list : [];
+                    _listFileCache[fileName] = { mtimeMs: st.mtimeMs, list: arr };
+                    cb(null, arr);
+                } catch (e) { cb(e); }
+            });
         });
     }
 
-    // 工具：写数组 json 文件
+    // 工具：写数组 json 文件（写后立即失效缓存，保证下次读取拿到最新内容）
     function writeListFile(fileName, list, cb) {
         var fp = path.join(dataDir, fileName);
-        fs.writeFile(fp, JSON.stringify(list, null, 2), 'utf8', cb);
+        fs.writeFile(fp, JSON.stringify(list, null, 2), 'utf8', function(err) {
+            delete _listFileCache[fileName];
+            cb(err);
+        });
     }
 
     // GET /api/farm-review-records/page?page=1&size=50&town=xx&status=xx&hazard=xx&q=xx&dateFrom=&dateTo=
@@ -581,6 +600,39 @@ function handleApi(req, res, urlPath) {
         return true;
     }
 
+    // GET /api/farm-review-records/:houseNo -> 单条查询（详情页用，避免拉取全表）
+    if (req.method === 'GET' && urlPath.indexOf('/api/farm-review-records/') === 0 &&
+        urlPath !== '/api/farm-review-records/page' && urlPath !== '/api/farm-review-records/export.csv') {
+        var gHouseNo = decodeURIComponent(urlPath.substring('/api/farm-review-records/'.length));
+        readListFile('farm-review-records.json', function(err, list) {
+            if (err) { sendJson(res, 500, { error: '读取失败' }); return; }
+            var found = null;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i] && list[i].houseNo === gHouseNo) { found = list[i]; break; }
+            }
+            if (found) sendJson(res, 200, found);
+            else sendJson(res, 404, { error: 'not found' });
+        });
+        return true;
+    }
+
+    // GET /api/farm-review-pending/:houseNo -> 单条查询（详情页用，避免拉取全表）
+    if (req.method === 'GET' && urlPath.indexOf('/api/farm-review-pending/') === 0 &&
+        urlPath !== '/api/farm-review-pending/page' && urlPath !== '/api/farm-review-pending/export.csv' &&
+        urlPath !== '/api/farm-review-pending/dispatch') {
+        var gpHouseNo = decodeURIComponent(urlPath.substring('/api/farm-review-pending/'.length));
+        readListFile('farm-review-pending.json', function(err, list) {
+            if (err) { sendJson(res, 500, { error: '读取失败' }); return; }
+            var found = null;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i] && list[i].houseNo === gpHouseNo) { found = list[i]; break; }
+            }
+            if (found) sendJson(res, 200, found);
+            else sendJson(res, 404, { error: 'not found' });
+        });
+        return true;
+    }
+
     // POST /api/farm-review-records/:houseNo -> 单条更新
     if (req.method === 'POST' && urlPath.indexOf('/api/farm-review-records/') === 0 && urlPath !== '/api/farm-review-records/import') {
         var houseNo = decodeURIComponent(urlPath.substring('/api/farm-review-records/'.length));
@@ -627,6 +679,7 @@ function handleApi(req, res, urlPath) {
         var pVillage = (pUrlObj.searchParams.get('village') || '').trim();
         var pHazard = (pUrlObj.searchParams.get('hazard') || '').trim();
         var pQ = (pUrlObj.searchParams.get('q') || '').trim().toLowerCase();
+        var pDispatched = (pUrlObj.searchParams.get('dispatched') || '').trim();
 
         readListFile('farm-review-pending.json', function(err, list) {
             if (err) { sendJson(res, 500, { error: '读取失败' }); return; }
@@ -643,6 +696,11 @@ function handleApi(req, res, urlPath) {
                 if (pTown && (r.town || '') !== pTown) return false;
                 if (pVillage && (r.village || '') !== pVillage) return false;
                 if (pHazard && (r.hazardLevel || '') !== pHazard) return false;
+                if (pDispatched) {
+                    var isDisp = r.dispatched === true || r.dispatched === 'true';
+                    if (pDispatched === 'yes' && !isDisp) return false;
+                    if (pDispatched === 'no' && isDisp) return false;
+                }
                 if (pQ) {
                     var hay = ((r.houseNo || '') + '|' + (r.houseAddress || '')).toLowerCase();
                     if (hay.indexOf(pQ) < 0) return false;
@@ -741,8 +799,45 @@ function handleApi(req, res, urlPath) {
         return true;
     }
 
+    // POST /api/farm-review-pending/dispatch -> 批量设置下发标记（原子读-改-写，避免并发全量覆盖）
+    // 请求体: { houseNos: [...], dispatched: true|false }
+    if (req.method === 'POST' && urlPath === '/api/farm-review-pending/dispatch') {
+        readJsonBody(req, function(err, payload) {
+            if (err || !payload || !Array.isArray(payload.houseNos)) {
+                sendJson(res, 400, { error: '请求体格式错误，需 { houseNos: [], dispatched: bool }' });
+                return;
+            }
+            var flag = payload.dispatched === true || payload.dispatched === 'true';
+            var timeStr = flag ? new Date().toLocaleString('sv-SE').slice(0, 16) : '';
+            var dispatchedToMap = (payload.dispatchedToMap && typeof payload.dispatchedToMap === 'object') ? payload.dispatchedToMap : null;
+            var want = {};
+            payload.houseNos.forEach(function(n) { if (n) want[n] = true; });
+            readListFile('farm-review-pending.json', function(err2, list) {
+                if (err2) { sendJson(res, 500, { error: '读取失败' }); return; }
+                var updated = 0;
+                (list || []).forEach(function(r) {
+                    if (r && r.houseNo && want[r.houseNo]) {
+                        r.dispatched = flag;
+                        r.dispatchedTime = timeStr;
+                        if (dispatchedToMap && flag) {
+                            r.dispatchedTo = dispatchedToMap[r.houseNo] || '';
+                        } else if (!flag) {
+                            r.dispatchedTo = '';
+                        }
+                        updated++;
+                    }
+                });
+                writeListFile('farm-review-pending.json', list, function(err3) {
+                    if (err3) { sendJson(res, 500, { error: '保存失败' }); return; }
+                    sendJson(res, 200, { success: true, updated: updated });
+                });
+            });
+        });
+        return true;
+    }
+
     // POST /api/farm-review-pending/:houseNo -> 单条更新待排查
-    if (req.method === 'POST' && urlPath.indexOf('/api/farm-review-pending/') === 0 && urlPath !== '/api/farm-review-pending/import') {
+    if (req.method === 'POST' && urlPath.indexOf('/api/farm-review-pending/') === 0 && urlPath !== '/api/farm-review-pending/import' && urlPath !== '/api/farm-review-pending/dispatch') {
         var pHouseNo = decodeURIComponent(urlPath.substring('/api/farm-review-pending/'.length));
         readJsonBody(req, function(err, payload) {
             if (err || !payload) {

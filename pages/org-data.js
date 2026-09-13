@@ -96,6 +96,23 @@ const orgData = [
             { id: 'dept73', name: '财务科', parentId: 'dept61', children: [] },
             { id: 'dept74', name: '建材管理科', parentId: 'dept61', children: [] }
         ]
+    },
+    {
+        id: 'dept100', name: '各街镇', parentId: null, children: [
+            { id: 'town-nq', name: '南桥镇', parentId: 'dept100', children: [] },
+            { id: 'town-fc', name: '奉城镇', parentId: 'dept100', children: [] },
+            { id: 'town-zh', name: '庄行镇', parentId: 'dept100', children: [] },
+            { id: 'town-jh', name: '金汇镇', parentId: 'dept100', children: [] },
+            { id: 'town-qc', name: '青村镇', parentId: 'dept100', children: [] },
+            { id: 'town-zl', name: '柘林镇', parentId: 'dept100', children: [] },
+            { id: 'town-st', name: '四团镇', parentId: 'dept100', children: [] },
+            { id: 'town-hw', name: '海湾镇', parentId: 'dept100', children: [] },
+            { id: 'town-xd', name: '西渡街道', parentId: 'dept100', children: [] },
+            { id: 'town-fp', name: '奉浦街道', parentId: 'dept100', children: [] },
+            { id: 'town-jhj', name: '金海街道', parentId: 'dept100', children: [] },
+            { id: 'town-tq', name: '头桥街道', parentId: 'dept100', children: [] },
+            { id: 'town-hwly', name: '海湾旅游区', parentId: 'dept100', children: [] }
+        ]
     }
 ];
 

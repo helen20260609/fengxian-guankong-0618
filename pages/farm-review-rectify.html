@@ -390,15 +390,21 @@ async function loadRecord() {
   if (!houseNo) { showEmpty('缺少 houseNo 参数'); return; }
 
   try {
-    var res = await fetch('/api/farm-review-records');
-    var all = await res.json();
-    currentRecord = all.find(function(r) { return r.houseNo === houseNo && r.status === 'submitted'; });
+    var res = await fetch('/api/farm-review-records/' + encodeURIComponent(houseNo));
+    if (!res.ok) { showEmpty('未找到房屋编号为 ' + houseNo + ' 的已提交记录'); return; }
+    var rec = await res.json();
+    currentRecord = (rec && rec.houseNo && (rec.status === 'submitted' || rec.status === 'rectified')) ? rec : null;
 
     if (!currentRecord) { showEmpty('未找到房屋编号为 ' + houseNo + ' 的已提交记录'); return; }
 
+    // 判定是否需整改：隐患等级为 一般/严重（兼容顶层与 answers 两种存储位置）
+    var hz = currentRecord.hazardLevel || (currentRecord.answers && currentRecord.answers.hazardLevel) || '';
+    var needRectify = (hz === '严重' || hz === '一般');
+    // 兼容旧逻辑：若已填问卷结论且明确"无需整改"类，则不进入
     var conclusion = (currentRecord.answers && currentRecord.answers.conclusion) || '';
-    if (conclusion !== '存在隐患，需要整改') {
-      showEmpty('该记录结论为「' + (conclusion || '未知') + '」，无需隐患整治');
+    if (conclusion === '存在隐患，需要整改') needRectify = true;
+    if (!needRectify) {
+      showEmpty('该记录隐患等级为「' + (hz || '未见隐患') + '」，无需隐患整治');
       return;
     }
 
@@ -696,6 +702,9 @@ async function saveRectify() {
   currentRecord.rectify = rectifyData;
   currentRecord.editedByPC = true;
   currentRecord.editedTime = new Date().toISOString();
+  // 整改完成后状态流转：标记为已整改
+  currentRecord.status = 'rectified';
+  currentRecord.rectifyTime = new Date().toISOString();
 
   try {
     // 单条 upsert：只提交本条记录，避免全量覆盖抹掉他人并发新增

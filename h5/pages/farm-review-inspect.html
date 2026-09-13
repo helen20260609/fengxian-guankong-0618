@@ -249,16 +249,22 @@ input[type="hidden"].sign-image-field { display: none; }
 
         <!-- 快速导航 -->
         <div class="quick-nav" id="quickNav">
-            <div class="qn-item" data-target="section-basic"><span>1.</span>基本信息</div>
+            <div class="qn-item" data-target="section-basic"><span>1.</span>房屋底数</div>
             <div class="qn-item" data-target="section-construction"><span>2.</span>排查问题清单</div>
             <div class="qn-item" data-target="section-safety"><span>3.</span>现场照片</div>
         </div>
 
-        <!-- 基本信息 -->
+        <!-- 房屋底数 -->
         <div class="section nav-section" id="section-basic">
-            <div class="sec-title"><span class="section-num">1.</span>基本信息</div>
+            <div class="sec-title"><span class="section-num">1.</span>房屋底数</div>
 
             <div class="check-item" id="basicInfoList">
+                <div class="bi-row"><span class="bi-label">所在区</span><span class="bi-value" id="biDistrict">—</span></div>
+                <div class="bi-row"><span class="bi-label">街镇</span><span class="bi-value" id="biTown">—</span></div>
+                <div class="bi-row"><span class="bi-label">村居委</span><span class="bi-value" id="biVillage">—</span></div>
+                <div class="bi-row"><span class="bi-label">组</span><span class="bi-value" id="biGroupName">—</span></div>
+                <div class="bi-row"><span class="bi-label">路</span><span class="bi-value" id="biRoadName">—</span></div>
+                <div class="bi-row"><span class="bi-label">号栋</span><span class="bi-value" id="biBuildingNo">—</span></div>
                 <div class="bi-row"><span class="bi-label">房屋用途</span><span class="bi-value" id="biUsageType">—</span></div>
                 <div class="bi-row"><span class="bi-label">具体用途</span><span class="bi-value" id="biSpecificUsage">—</span></div>
                 <div class="bi-row"><span class="bi-label">其他具体用途</span><span class="bi-value" id="biOtherUsage">—</span></div>
@@ -425,6 +431,14 @@ input[type="hidden"].sign-image-field { display: none; }
 (function() {
     var houseNo = (App.getQuery('no') || '').trim().toUpperCase();
     var house = null;
+
+    // ---------- 待删除重试队列（DELETE pending 失败时记录，地图页/列表页同步时补删） ----------
+    function markPendingDeleteRetry(hn) {
+        try {
+            var q = JSON.parse(localStorage.getItem('farm-review-pending-delete') || '[]');
+            if (q.indexOf(hn) === -1) { q.push(hn); localStorage.setItem('farm-review-pending-delete', JSON.stringify(q)); }
+        } catch (e) {}
+    }
 
     initHouseArchSeed();
     if (houseNo) {
@@ -750,6 +764,42 @@ input[type="hidden"].sign-image-field { display: none; }
         // 填充基本信息只读展示（字段值后续由表格导入，这里优先取档案已有数据）
         var ov = house.overview || {};
         function setBi(id, val) { var el = document.getElementById(id); if (el) el.textContent = (val !== undefined && val !== null && val !== '') ? val : '—'; }
+        // 所在区：优先取 house.district，兑底从地址中解析「XX区」
+        var districtVal = house.district || '';
+        if (!districtVal) {
+            var mAddr = (house.address || '').match(/[一-龥]{1,6}区/);
+            districtVal = mAddr ? mAddr[0] : '';
+        }
+        setBi('biDistrict', districtVal);
+        // 街镇 / 村居委 / 组 / 路 / 号栋：优先独立字段，兑底从地址拆解
+        var addrStr = house.address || '';
+        var townVal = house.street || house.town || '';
+        if (!townVal) {
+            var mTown = addrStr.match(/[一-龥]{1,8}(?:镇|街道)/);
+            townVal = mTown ? mTown[0] : '';
+        }
+        setBi('biTown', townVal);
+        var villageVal = house.village || house.community || '';
+        if (!villageVal) {
+            var mVil = addrStr.match(/[一-龥]{1,8}(?:村|社区|居委会)/);
+            villageVal = mVil ? mVil[0] : '';
+        }
+        setBi('biVillage', villageVal);
+        // 组 / 路 / 号栋：使用独立字段，否则从地址空间拆分后倒数几段猜测
+        var addrParts = addrStr.split(/\s+/).filter(function(s){return s;});
+        var groupVal = house.groupName || '';
+        var roadVal = house.roadName || '';
+        var buildingVal = house.buildingNo || '';
+        if ((!groupVal || !roadVal || !buildingVal) && addrParts.length >= 3) {
+            // 例：「奉贤区 庄行镇 浦秀村村委会 耀东8 耀东8 801号」倒数 3/2/1
+            var tail = addrParts.slice(-3);
+            if (!groupVal) groupVal = tail[0] || '';
+            if (!roadVal) roadVal = tail[1] || '';
+            if (!buildingVal) buildingVal = tail[2] || '';
+        }
+        setBi('biGroupName', groupVal);
+        setBi('biRoadName', roadVal);
+        setBi('biBuildingNo', buildingVal);
         setBi('biUsageType', ov.usage || house.usageType);
         setBi('biSpecificUsage', ov.specificUsage);
         setBi('biOtherUsage', ov.otherUsage);
@@ -1468,9 +1518,13 @@ input[type="hidden"].sign-image-field { display: none; }
         ['address','communityName','buildingName','apartmentCount','ownerName','ownerId',
          'buildingFloors','buildingHeight','buildingArea','buildYear','structuralSafetyRemark',
          'ownerSignature','ownerPhone','ownerDate','userSignature','userPhone','userDate',
-         'inspectorName','inspectorSignature','inspectorOrg','inspectorPhone','inspectorDate'].forEach(function(k){
+         'inspectorName','inspectorSignature','inspectorOrg','inspectorPhone','inspectorDate',
+         'village','homesteadLocation','uniqueId','houseOwner','contactPhone','houseFloors','houseType'].forEach(function(k){
             var el = document.querySelector('[data-field="' + k + '"]');
-            result[k] = el ? el.value.trim() : '';
+            var v = el ? el.value.trim() : '';
+            // village / uniqueId 若用户未填，保留顶部从 house 读到的兜底值
+            if (v) { result[k] = v; }
+            else if (result[k] === undefined) { result[k] = ''; }
         });
         // 排查人姓名兜底：表单未填且身份非管理员时，用街镇名
         if (!result.inspectorName && currentIdentity) {
@@ -1532,9 +1586,12 @@ input[type="hidden"].sign-image-field { display: none; }
                 var pendingList = JSON.parse(localStorage.getItem('farm-review-pending') || '[]');
                 var newPending = pendingList.filter(function(r) { return r && r.houseNo !== data.houseNo; });
                 localStorage.setItem('farm-review-pending', JSON.stringify(newPending));
+                // 服务端原子删除；失败则记录待删标记，地图页/列表页同步时补删
                 fetch('/api/farm-review-pending/' + encodeURIComponent(data.houseNo), {
                     method: 'DELETE'
-                }).catch(function() {});
+                }).then(function(dr) {
+                    if (!dr.ok) markPendingDeleteRetry(data.houseNo);
+                }).catch(function() { markPendingDeleteRetry(data.houseNo); });
             } catch (e) { console.warn('[farm-review] 待排查同步失败', e); }
             App.showToast('排查结果已提交', 1500);
             setTimeout(function() { App.back(); }, 1600);
@@ -1599,7 +1656,8 @@ input[type="hidden"].sign-image-field { display: none; }
             ['address','communityName','buildingName','apartmentCount','ownerName','ownerId',
              'buildingFloors','buildingHeight','buildingArea','buildYear','structuralSafetyRemark',
              'ownerSignature','ownerPhone','ownerDate','userSignature','userPhone','userDate',
-             'inspectorSignature','inspectorOrg','inspectorPhone','inspectorDate'].forEach(function(k){
+             'inspectorSignature','inspectorOrg','inspectorPhone','inspectorDate',
+             'village','homesteadLocation','uniqueId','houseOwner','contactPhone','houseFloors','houseType'].forEach(function(k){
                 var el = document.querySelector('[data-field="' + k + '"]');
                 if (el && draft[k] !== undefined) el.value = draft[k];
             });
