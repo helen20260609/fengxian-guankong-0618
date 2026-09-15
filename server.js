@@ -593,6 +593,13 @@ function handleApi(req, res, urlPath) {
             var STATUS_LABEL = { draft: '草稿', submitted: '已提交', rectified: '已整改' };
             function arrText(v) { return Array.isArray(v) ? v.join('、') : (v || ''); }
             function fmtT(s) { return s ? String(s).slice(0, 16).replace('T', ' ') : ''; }
+            function fmtFindTime(s) {
+                if (!s) return '';
+                s = String(s).trim();
+                var m = s.match(/^(\d{4})[-\/年](\d{1,2})/);
+                if (m) return m[1] + '年' + parseInt(m[2], 10) + '月';
+                return s;
+            }
 
             var headers = ['唯一标识','街镇','村居委','地址','房屋产权人','联系电话','房屋用途','具体用途','房屋层数','建筑面积','建成年份','房屋类型','隐患等级','状态','现场排查人员','排查时间','排查发现时间','结构安全问题','临时管控措施','整改措施','计划整改完成时限','备注'];
             var lines = ['\ufeff' + headers.join(',')]; // BOM for Excel
@@ -608,7 +615,7 @@ function handleApi(req, res, urlPath) {
                     escCsv(r.specificUsage), escCsv(r.houseFloors || r.floors), escCsv(r.area), escCsv(r.buildYear),
                     escCsv(r.houseType), escCsv(r.hazardLevel), escCsv(STATUS_LABEL[r.status] || r.status),
                     escCsv(r.inspector || r.inspectorName), escCsv(fmtT(r.submitTime || r.saveTime || r.inspectTime)),
-                    escCsv(r.checkFindTime), escCsv(hazardsText),
+                    escCsv(fmtFindTime(r.checkFindTime)), escCsv(hazardsText),
                     escCsv(arrText(r.tempControlMeasures)), escCsv(arrText(rectifyTypes)),
                     escCsv(rectifyDate), escCsv(r.checkRemark)
                 ].join(','));
@@ -616,7 +623,7 @@ function handleApi(req, res, urlPath) {
 
             res.writeHead(200, {
                 'Content-Type': 'text/csv; charset=utf-8',
-                'Content-Disposition': 'attachment; filename="farm-review-records.csv"',
+                'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent('排查记录.csv'),
                 'Access-Control-Allow-Origin': '*'
             });
             res.end(lines.join('\r\n'));
@@ -946,7 +953,7 @@ function handleApi(req, res, urlPath) {
                 return s;
             }
 
-            var headers = ['唯一标识','街镇','村居委','组','路','号栋','地址','房屋产权人','房屋用途','具体用途','房屋层数','建筑面积','建成年份','隐患等级','初步判定','鉴定结论','导入时间'];
+            var headers = ['唯一标识','街镇','村居委','组','路','号栋','地址','房屋产权人','房屋用途','具体用途','房屋层数','建筑面积','建成年份','隐患等级','初步判定','鉴定结论'];
             var lines = ['\ufeff' + headers.join(',')];
             filtered.forEach(function(r) {
                 lines.push([
@@ -954,14 +961,13 @@ function handleApi(req, res, urlPath) {
                     escCsvP(r.roadName), escCsvP(r.buildingNo), escCsvP(r.houseAddress),
                     escCsvP(r.houseOwner || r.owner), escCsvP(r.houseUsage), escCsvP(r.specificUsage),
                     escCsvP(r.floors || r.houseFloors), escCsvP(r.area), escCsvP(r.buildYear),
-                    escCsvP(r.hazardLevel), escCsvP(r.initialJudgment), escCsvP(r.appraisalResult),
-                    escCsvP(r.importTime)
+                    escCsvP(r.hazardLevel), escCsvP(r.initialJudgment), escCsvP(r.appraisalResult)
                 ].join(','));
             });
 
             res.writeHead(200, {
                 'Content-Type': 'text/csv; charset=utf-8',
-                'Content-Disposition': 'attachment; filename="farm-review-pending.csv"',
+                'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent('待排查列表.csv'),
                 'Access-Control-Allow-Origin': '*'
             });
             res.end(lines.join('\r\n'));
