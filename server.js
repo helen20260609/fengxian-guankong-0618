@@ -71,6 +71,54 @@ function readFengxianTownVillages() {
     return _fengxianTownVillagesCache;
 }
 
+// ============ 列表文件读写工具（含 mtime 缓存 + 自动备份） ============
+var _listFileCache = {}; // fileName -> { mtimeMs, list }
+function readListFile(fileName, cb) {
+    var fp = path.join(dataDir, fileName);
+    fs.stat(fp, function(statErr, st) {
+        if (statErr) {
+            if (statErr.code === 'ENOENT') return cb(null, []);
+            return cb(statErr);
+        }
+        var cached = _listFileCache[fileName];
+        if (cached && cached.mtimeMs === st.mtimeMs) {
+            return cb(null, cached.list);
+        }
+        fs.readFile(fp, 'utf8', function(err, data) {
+            if (err) {
+                if (err.code === 'ENOENT') return cb(null, []);
+                return cb(err);
+            }
+            try {
+                if (data && data.charCodeAt(0) === 0xFEFF) data = data.slice(1);
+                var list = JSON.parse(data);
+                var arr = Array.isArray(list) ? list : [];
+                _listFileCache[fileName] = { mtimeMs: st.mtimeMs, list: arr };
+                cb(null, arr);
+            } catch (e) { cb(e); }
+        });
+    });
+}
+
+// 写数组 json 文件（写后立即失效缓存；全量覆盖前自动备份到 data/.bak/）
+function writeListFile(fileName, list, cb) {
+    var fp = path.join(dataDir, fileName);
+    var bakDir = path.join(dataDir, '.bak');
+    // 备份旧文件（存在才备份；异步，不阻塞主流程）
+    fs.stat(fp, function(statErr) {
+        if (!statErr) {
+            fs.mkdir(bakDir, { recursive: true }, function() {
+                var bakName = fileName.replace(/\.json$/, '') + '.' + Date.now() + '.json';
+                fs.copyFile(fp, path.join(bakDir, bakName), function() { /* 备份失败静默 */ });
+            });
+        }
+    });
+    fs.writeFile(fp, JSON.stringify(list, null, 2), 'utf8', function(err) {
+        delete _listFileCache[fileName];
+        cb(err);
+    });
+}
+
 function handleApi(req, res, urlPath) {
     // GET /api/dispatch-tasks -> 读取调度记录
     if (req.method === 'GET' && urlPath === '/api/dispatch-tasks') {
@@ -220,7 +268,7 @@ function handleApi(req, res, urlPath) {
         return true;
     }
 
-    // POST /api/farm-review-records -> 保存 农房回头看 排查记录（全量覆盖）
+    // POST /api/farm-review-records -> 保存 农房回头看 排查记录（全量覆盖，自动备份）
     if (req.method === 'POST' && urlPath === '/api/farm-review-records') {
         readJsonBody(req, function(err, list) {
             if (err) {
@@ -231,8 +279,7 @@ function handleApi(req, res, urlPath) {
                 sendJson(res, 400, { error: '数据必须是数组' });
                 return;
             }
-            var farmReviewFile = path.join(dataDir, 'farm-review-records.json');
-            fs.writeFile(farmReviewFile, JSON.stringify(list, null, 2), 'utf8', function(err2) {
+            writeListFile('farm-review-records.json', list, function(err2) {
                 if (err2) {
                     sendJson(res, 500, { error: '保存失败' });
                     return;
@@ -243,24 +290,21 @@ function handleApi(req, res, urlPath) {
         return true;
     }
 
-    // GET /api/farm-review-pending -> 读取 农房回头看 待排查任务
+    // GET /api/farm-review-pending -> 读取 农房回头看 待排查任务（排除已有排查记录的房屋）
     if (req.method === 'GET' && urlPath === '/api/farm-review-pending') {
-        var pendingFile = path.join(dataDir, 'farm-review-pending.json');
-        fs.readFile(pendingFile, 'utf8', function(err, data) {
-            if (err) {
-                if (err.code === 'ENOENT') {
-                    sendJson(res, 200, []);
-                } else {
-                    sendJson(res, 500, { error: '读取失败' });
-                }
-                return;
-            }
-            try {
-                var list = JSON.parse(data);
-                sendJson(res, 200, Array.isArray(list) ? list : []);
-            } catch (e) {
-                sendJson(res, 500, { error: '数据格式错误' });
-            }
+        readListFile('farm-review-pending.json', function(err, list) {
+            if (err) { sendJson(res, 500, { error: '读取失败' }); return; }
+            // 闭环：扣除已完成排查的房屋（records 里状态为 submitted/rectified 的 houseNo），避免"已排查又出现待办"
+            // 注意：draft（草稿）不视为已完成，仍保留在待排查中
+            readListFile('farm-review-records.json', function(errR, records) {
+                if (errR) records = [];
+                var doneSet = {};
+                (records || []).forEach(function(x) {
+                    if (x && x.houseNo && (x.status === 'submitted' || x.status === 'rectified')) doneSet[x.houseNo] = true;
+                });
+                var filtered = (list || []).filter(function(r) { return r && r.houseNo && !doneSet[r.houseNo]; });
+                sendJson(res, 200, filtered);
+            });
         });
         return true;
     }
@@ -276,8 +320,7 @@ function handleApi(req, res, urlPath) {
                 sendJson(res, 400, { error: '数据必须是数组' });
                 return;
             }
-            var pendingFile = path.join(dataDir, 'farm-review-pending.json');
-            fs.writeFile(pendingFile, JSON.stringify(list, null, 2), 'utf8', function(err2) {
+            writeListFile('farm-review-pending.json', list, function(err2) {
                 if (err2) {
                     sendJson(res, 500, { error: '保存失败' });
                     return;
@@ -334,44 +377,7 @@ function handleApi(req, res, urlPath) {
     }
 
     // ============ 农房回头看 高级接口 ============
-
-    // 工具：读取数组 json 文件（容错 UTF-8 BOM；带 mtime 内存缓存：文件未变更则直接返回缓存，避免每次全量读盘+JSON.parse）
-    var _listFileCache = {}; // fileName -> { mtimeMs, list }
-    function readListFile(fileName, cb) {
-        var fp = path.join(dataDir, fileName);
-        fs.stat(fp, function(statErr, st) {
-            if (statErr) {
-                if (statErr.code === 'ENOENT') return cb(null, []);
-                return cb(statErr);
-            }
-            var cached = _listFileCache[fileName];
-            if (cached && cached.mtimeMs === st.mtimeMs) {
-                return cb(null, cached.list);
-            }
-            fs.readFile(fp, 'utf8', function(err, data) {
-                if (err) {
-                    if (err.code === 'ENOENT') return cb(null, []);
-                    return cb(err);
-                }
-                try {
-                    if (data && data.charCodeAt(0) === 0xFEFF) data = data.slice(1);
-                    var list = JSON.parse(data);
-                    var arr = Array.isArray(list) ? list : [];
-                    _listFileCache[fileName] = { mtimeMs: st.mtimeMs, list: arr };
-                    cb(null, arr);
-                } catch (e) { cb(e); }
-            });
-        });
-    }
-
-    // 工具：写数组 json 文件（写后立即失效缓存，保证下次读取拿到最新内容）
-    function writeListFile(fileName, list, cb) {
-        var fp = path.join(dataDir, fileName);
-        fs.writeFile(fp, JSON.stringify(list, null, 2), 'utf8', function(err) {
-            delete _listFileCache[fileName];
-            cb(err);
-        });
-    }
+    // readListFile / writeListFile 已提升到 handleApi 外（顶部），此处直接用
 
     // GET /api/farm-review-records/page?page=1&size=50&town=xx&status=xx&hazard=xx&q=xx&dateFrom=&dateTo=
     if (req.method === 'GET' && urlPath === '/api/farm-review-records/page') {
@@ -382,6 +388,9 @@ function handleApi(req, res, urlPath) {
         var village = (urlObj.searchParams.get('village') || '').trim();
         var status = (urlObj.searchParams.get('status') || '').trim();
         var hazard = (urlObj.searchParams.get('hazard') || '').trim();
+        var houseUsage = (urlObj.searchParams.get('houseUsage') || '').trim();
+        var houseType = (urlObj.searchParams.get('houseType') || '').trim();
+        var specificUsage = (urlObj.searchParams.get('specificUsage') || '').trim();
         var q = (urlObj.searchParams.get('q') || '').trim().toLowerCase();
         var dateFrom = (urlObj.searchParams.get('dateFrom') || '').trim();
         var dateTo = (urlObj.searchParams.get('dateTo') || '').trim();
@@ -395,6 +404,15 @@ function handleApi(req, res, urlPath) {
                 if (village && (r.village || '') !== village) return false;
                 if (status && (r.status || '') !== status) return false;
                 if (hazard && (r.hazardLevel || '') !== hazard) return false;
+                if (houseUsage && (r.houseUsage || '') !== houseUsage) return false;
+                if (houseType && (r.houseType || '') !== houseType) return false;
+                if (specificUsage) {
+                    var suArr = specificUsage.split(/[,,]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    var recSu = (r.specificUsage || '');
+                    var recSuArr = recSu.split(/[,,、]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    var hit = suArr.some(function(s) { return recSuArr.indexOf(s) > -1; });
+                    if (!hit) return false;
+                }
                 if (dateFrom && (r.inspectTime || r.submitTime || '') < dateFrom) return false;
                 if (dateTo && (r.inspectTime || r.submitTime || '') > dateTo + ' 23:59') return false;
                 if (q) {
@@ -467,16 +485,27 @@ function handleApi(req, res, urlPath) {
                 return s;
             }
 
-            var headers = ['唯一标识','镇','村','地址','产权人','联系电话','房屋用途','层数','建筑面积','建成年份','隐患等级','状态','排查人','排查时间','初步判定','详细描述','临时管控','整改措施','计划整改期限','备注'];
+            var STATUS_LABEL = { draft: '草稿', submitted: '已提交', rectified: '已整改' };
+            function arrText(v) { return Array.isArray(v) ? v.join('、') : (v || ''); }
+            function fmtT(s) { return s ? String(s).slice(0, 16).replace('T', ' ') : ''; }
+
+            var headers = ['唯一标识','街镇','村居委','地址','房屋产权人','联系电话','房屋用途','具体用途','房屋层数','建筑面积','建成年份','房屋类型','隐患等级','状态','现场排查人员','排查时间','排查发现时间','结构安全问题','临时管控措施','整改措施','计划整改完成时限','备注'];
             var lines = ['\ufeff' + headers.join(',')]; // BOM for Excel
             filtered.forEach(function(r) {
+                var rectifyTypes = (r.rectify && r.rectify.measures && r.rectify.measures.controlTypes) || r.rectifyTypes || '';
+                var rectifyDate = (r.rectify && r.rectify.measures && r.rectify.measures.ownerDate) || r.ownerDate || '';
+                var hazardsText = Array.isArray(r.hazards) ? r.hazards.map(function(h, i) {
+                    return (i + 1) + '. 【' + (h.part || '') + '】' + (h.description || '');
+                }).join('；') : (r.structuralProblems || '');
                 lines.push([
-                    escCsv(r.houseNo), escCsv(r.town), escCsv(r.village), escCsv(r.houseAddress),
-                    escCsv(r.owner), escCsv(r.phone), escCsv(r.houseUsage), escCsv(r.floors),
-                    escCsv(r.area), escCsv(r.buildYear), escCsv(r.hazardLevel), escCsv(r.status),
-                    escCsv(r.inspector), escCsv(r.inspectTime), escCsv(r.inspectResult),
-                    escCsv(r.checkRemark), escCsv(r.tempControl), escCsv(r.rectification),
-                    escCsv(r.deadline), escCsv(r.remark)
+                    escCsv(r.houseNo), escCsv(r.town), escCsv(r.village || r.villageName), escCsv(r.houseAddress),
+                    escCsv(r.houseOwner || r.owner), escCsv(r.contactPhone || r.phone), escCsv(r.houseUsage),
+                    escCsv(r.specificUsage), escCsv(r.houseFloors || r.floors), escCsv(r.area), escCsv(r.buildYear),
+                    escCsv(r.houseType), escCsv(r.hazardLevel), escCsv(STATUS_LABEL[r.status] || r.status),
+                    escCsv(r.inspector || r.inspectorName), escCsv(fmtT(r.submitTime || r.saveTime || r.inspectTime)),
+                    escCsv(r.checkFindTime), escCsv(hazardsText),
+                    escCsv(arrText(r.tempControlMeasures)), escCsv(arrText(rectifyTypes)),
+                    escCsv(rectifyDate), escCsv(r.checkRemark)
                 ].join(','));
             });
 
@@ -650,12 +679,19 @@ function handleApi(req, res, urlPath) {
                 if (idx < 0) {
                     // 不存在则新建
                     payload.houseNo = houseNo;
+                    // 首次推送计数
+                    if (payload.pushedTime) payload.pushCount = 1;
                     list.unshift(payload);
                 } else {
                     // 合并更新
                     var old = list[idx];
+                    // 推送时间戳变化 → 累加推送次数（用于前端显示"已推送×N"）
+                    var pushTimeChanged = payload.pushedTime && payload.pushedTime !== old.pushedTime;
                     for (var k in payload) {
                         if (payload.hasOwnProperty(k)) old[k] = payload[k];
+                    }
+                    if (pushTimeChanged) {
+                        old.pushCount = (parseInt(old.pushCount, 10) || 0) + 1;
                     }
                     old.houseNo = houseNo;
                 }
@@ -678,6 +714,9 @@ function handleApi(req, res, urlPath) {
         var pTown = (pUrlObj.searchParams.get('town') || '').trim();
         var pVillage = (pUrlObj.searchParams.get('village') || '').trim();
         var pHazard = (pUrlObj.searchParams.get('hazard') || '').trim();
+        var pHouseUsage = (pUrlObj.searchParams.get('houseUsage') || '').trim();
+        var pHouseType = (pUrlObj.searchParams.get('houseType') || '').trim();
+        var pSpecificUsage = (pUrlObj.searchParams.get('specificUsage') || '').trim();
         var pQ = (pUrlObj.searchParams.get('q') || '').trim().toLowerCase();
         var pDispatched = (pUrlObj.searchParams.get('dispatched') || '').trim();
 
@@ -685,10 +724,13 @@ function handleApi(req, res, urlPath) {
             if (err) { sendJson(res, 500, { error: '读取失败' }); return; }
 
             // 闭环：待排查列表需扣除已完成排查的房屋（records 里的 houseNo），避免"已排查又出现待办"
+            // 注意：只排除已提交/已整改，草稿（draft）不算完成，仍保留在待排查中
             readListFile('farm-review-records.json', function(errR, records) {
                 if (errR) records = [];
                 var doneSet = {};
-                (records || []).forEach(function(x) { if (x && x.houseNo) doneSet[x.houseNo] = true; });
+                (records || []).forEach(function(x) {
+                    if (x && x.houseNo && (x.status === 'submitted' || x.status === 'rectified')) doneSet[x.houseNo] = true;
+                });
                 list = (list || []).filter(function(r) { return r && r.houseNo && !doneSet[r.houseNo]; });
 
             var filtered = list.filter(function(r) {
@@ -696,6 +738,15 @@ function handleApi(req, res, urlPath) {
                 if (pTown && (r.town || '') !== pTown) return false;
                 if (pVillage && (r.village || '') !== pVillage) return false;
                 if (pHazard && (r.hazardLevel || '') !== pHazard) return false;
+                if (pHouseUsage && (r.houseUsage || '') !== pHouseUsage) return false;
+                if (pHouseType && (r.houseType || '') !== pHouseType) return false;
+                if (pSpecificUsage) {
+                    var pSuArr = pSpecificUsage.split(/[,,]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    var pRecSu = (r.specificUsage || '');
+                    var pRecSuArr = pRecSu.split(/[,,、]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    var pHit = pSuArr.some(function(s) { return pRecSuArr.indexOf(s) > -1; });
+                    if (!pHit) return false;
+                }
                 if (pDispatched) {
                     var isDisp = r.dispatched === true || r.dispatched === 'true';
                     if (pDispatched === 'yes' && !isDisp) return false;
@@ -753,11 +804,13 @@ function handleApi(req, res, urlPath) {
         readListFile('farm-review-pending.json', function(err, list) {
             if (err) { sendJson(res, 500, { error: '读取失败' }); return; }
 
-            // 闭环：导出待排查同样扣除已完成排查的房屋
+            // 闭环：导出待排查同样扣除已完成排查的房屋（草稿不算完成）
             readListFile('farm-review-records.json', function(errR, records) {
                 if (errR) records = [];
                 var doneSet = {};
-                (records || []).forEach(function(x) { if (x && x.houseNo) doneSet[x.houseNo] = true; });
+                (records || []).forEach(function(x) {
+                    if (x && x.houseNo && (x.status === 'submitted' || x.status === 'rectified')) doneSet[x.houseNo] = true;
+                });
                 list = (list || []).filter(function(r) { return r && r.houseNo && !doneSet[r.houseNo]; });
 
             var filtered = list.filter(function(r) {
@@ -777,14 +830,16 @@ function handleApi(req, res, urlPath) {
                 return s;
             }
 
-            var headers = ['唯一标识','镇','村','地址','产权人','房屋用途','具体用途','层数','建筑面积','建成年份','隐患等级','初步判定','详细描述','导入时间'];
+            var headers = ['唯一标识','街镇','村居委','组','路','号栋','地址','房屋产权人','房屋用途','具体用途','房屋层数','建筑面积','建成年份','隐患等级','初步判定','鉴定结论','导入时间'];
             var lines = ['﻿' + headers.join(',')];
             filtered.forEach(function(r) {
                 lines.push([
-                    escCsvP(r.houseNo), escCsvP(r.town), escCsvP(r.village), escCsvP(r.houseAddress),
-                    escCsvP(r.owner), escCsvP(r.houseUsage), escCsvP(r.specificUsage), escCsvP(r.floors),
-                    escCsvP(r.area), escCsvP(r.buildYear), escCsvP(r.hazardLevel), escCsvP(r.initialJudgment),
-                    escCsvP(r.checkRemark), escCsvP(r.importTime)
+                    escCsvP(r.houseNo), escCsvP(r.town), escCsvP(r.villageName || r.village), escCsvP(r.groupName),
+                    escCsvP(r.roadName), escCsvP(r.buildingNo), escCsvP(r.houseAddress),
+                    escCsvP(r.houseOwner || r.owner), escCsvP(r.houseUsage), escCsvP(r.specificUsage),
+                    escCsvP(r.floors || r.houseFloors), escCsvP(r.area), escCsvP(r.buildYear),
+                    escCsvP(r.hazardLevel), escCsvP(r.initialJudgment), escCsvP(r.appraisalResult),
+                    escCsvP(r.importTime)
                 ].join(','));
             });
 

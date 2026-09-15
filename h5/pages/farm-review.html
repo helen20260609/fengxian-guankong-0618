@@ -19,7 +19,7 @@
 
 
 
-.search-section { padding: 12px 14px 6px; background: var(--card); border-bottom: 1px solid var(--border); }
+.search-section { padding: 12px 14px 6px; background: var(--card); border-bottom: 1px solid var(--border); position: relative; z-index: 1500; }
 .search-section .search-input-wrapper { position: relative; }
 .search-section input { width: 100%; height: 40px; border: 1px solid var(--border); border-radius: 20px; padding: 0 96px 0 36px; font-size: 14px; background: var(--bg); color: var(--text-primary); outline: none; box-sizing: border-box; }
 .search-section input:focus { border-color: var(--primary); }
@@ -28,7 +28,7 @@
 .search-btn:active { opacity: .85; }
 
 /* 模糊搜索下拉 */
-.suggest-panel { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.12); max-height: 320px; overflow-y: auto; z-index: 50; display: none; }
+.suggest-panel { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.12); max-height: 320px; overflow-y: auto; z-index: 2000; display: none; }
 .suggest-panel.show { display: block; }
 .suggest-item { padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
 .suggest-item:last-child { border-bottom: none; }
@@ -38,7 +38,12 @@
 .suggest-item .s-meta { font-size: 11px; color: var(--text2); margin-top: 3px; display: flex; gap: 8px; }
 .suggest-item .s-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; background: rgba(26,115,232,.1); color: var(--primary); }
 .suggest-item .s-tag.done { background: rgba(52,168,83,.1); color: #34a853; }
-.suggest-empty { padding: 20px; text-align: center; color: var(--text2); font-size: 13px; }
+.suggest-empty {
+    padding: 14px 16px; text-align: center; font-size: 13px;
+    color: #c62828; background: #ffebee;
+    border: 1px solid #ffcdd2; border-radius: 8px; margin: 8px;
+    font-weight: 600; line-height: 1.5;
+}
 .suggest-item .hl { color: var(--primary); font-weight: 600; }
 
 /* 区域联动筛选 */
@@ -86,9 +91,18 @@
 .info-card .ic-btn { margin-top: 12px; width: 100%; height: 38px; border: none; border-radius: 10px; background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .info-card .ic-btn:active { opacity: .85; }
 
-.map-empty { position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%); text-align: center; color: var(--text2); z-index: 500; pointer-events: none; }
-.map-empty i { font-size: 40px; opacity: .4; display: block; margin-bottom: 10px; }
-.map-empty p { font-size: 13px; }
+.map-empty {
+    position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%);
+    text-align: center; z-index: 500; pointer-events: none;
+    background: #c62828;
+    border-radius: 10px;
+    padding: 14px 22px;
+    box-shadow: 0 6px 20px rgba(198, 40, 40, .45);
+    color: #fff;
+    min-width: 200px;
+}
+.map-empty i { font-size: 28px; display: block; margin-bottom: 6px; color: #fff; }
+.map-empty p { font-size: 14px; font-weight: 600; line-height: 1.5; color: #fff; margin: 0; }
 
 .map-fab { position: absolute; right: 12px; bottom: calc(12px + var(--safe-bottom)); z-index: 1000; }
 .map-fab .mf-btn { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--card); box-shadow: 0 4px 14px rgba(0,0,0,.2); color: var(--primary); font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -138,12 +152,12 @@
         <div class="filter-section">
             <div class="filter-select">
                 <select id="townSelect">
-                    <option value="">全部镇/街道</option>
+                    <option value="">全部街镇</option>
                 </select>
             </div>
             <div class="filter-select">
                 <select id="villageSelect" disabled>
-                    <option value="">全部村/居委</option>
+                    <option value="">全部村居委</option>
                 </select>
             </div>
             <button class="filter-reset" id="filterReset">重置</button>
@@ -323,6 +337,8 @@
             try { localStorage.setItem('farm-review-records', JSON.stringify(merged.done)); } catch (e) {}
             // 补偿：inspect 提交后 DELETE pending 失败的记录，趁同步时补删
             flushPendingDeleteQueue();
+            // 补偿：inspect 提交后 POST records 失败的记录，趁同步时补推
+            flushRecordSaveQueue();
             // 数据签名判断是否有变化，避免无谓重绘（含下发标记，下发/收回需触发重绘）
             var sig = JSON.stringify([
                 merged.pending.map(function(r) { return [r.houseNo, r.dispatched ? 1 : 0, r.dispatchedTime]; }),
@@ -376,6 +392,36 @@
         });
         chain.then(function() {
             try { localStorage.setItem('farm-review-pending-delete', JSON.stringify(remain)); } catch (e) {}
+        });
+    }
+
+    // ---------- records 保存重试队列（inspect 提交后 POST records 失败的补偿） ----------
+    function flushRecordSaveQueue() {
+        var q = {};
+        try { q = JSON.parse(localStorage.getItem('farm-review-record-save') || '{}'); } catch (e) {}
+        var keys = Object.keys(q);
+        if (!keys.length) return;
+        var remain = {};
+        var chain = Promise.resolve();
+        keys.forEach(function(hn) {
+            chain = chain.then(function() {
+                return fetch('/api/farm-review-records/' + encodeURIComponent(hn), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(q[hn])
+                }).then(function(r) {
+                    if (!r.ok) remain[hn] = q[hn];
+                }).catch(function() { remain[hn] = q[hn]; });
+            });
+        });
+        chain.then(function() {
+            try {
+                if (Object.keys(remain).length) {
+                    localStorage.setItem('farm-review-record-save', JSON.stringify(remain));
+                } else {
+                    localStorage.removeItem('farm-review-record-save');
+                }
+            } catch (e) {}
         });
     }
 
@@ -507,7 +553,7 @@
     // 基于真实行政区划渲染街镇下拉（按拼音排序）
     function renderTownVillageOptions() {
         var prevTown = townSelect.value;
-        townSelect.innerHTML = '<option value="">全部镇/街道</option>';
+        townSelect.innerHTML = '<option value="">全部街镇</option>';
         Object.keys(FENGXIAN_TOWN_VILLAGE).sort(function(a, b) {
             return a.localeCompare(b, 'zh-CN');
         }).forEach(function(town) {
@@ -531,7 +577,7 @@
     }
 
     function updateVillageOptions(town) {
-        villageSelect.innerHTML = '<option value="">全部村/居委</option>';
+        villageSelect.innerHTML = '<option value="">全部村居委</option>';
         if (!town) {
             villageSelect.disabled = true;
             return;
@@ -603,7 +649,7 @@
 
     document.getElementById('filterReset').addEventListener('click', function() {
         townSelect.value = '';
-        villageSelect.innerHTML = '<option value="">全部村/居委</option>';
+        villageSelect.innerHTML = '<option value="">全部村居委</option>';
         villageSelect.disabled = true;
         applyFilter();
     });
@@ -743,7 +789,7 @@
     function renderSuggest(list, kw) {
         if (!kw) { suggestPanel.classList.remove('show'); return; }
         if (!list.length) {
-            suggestPanel.innerHTML = '<div class="suggest-empty">未找到匹配的房屋</div>';
+            suggestPanel.innerHTML = '<div class="suggest-empty">⚠️ 未找到匹配的房屋<br><span style="font-size:11px;font-weight:400;opacity:.85;">请检查唯一标识后重新输入</span></div>';
             suggestPanel.classList.add('show');
             return;
         }

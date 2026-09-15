@@ -285,8 +285,8 @@ input[type="hidden"].sign-image-field { display: none; }
                 <input type="month" class="form-input" data-field="checkFindTime" id="checkFindTimeInput">
             </div>
             <div class="check-item">
-                <div class="ci-label">行政村</div>
-                <input type="text" class="form-input" data-field="village" placeholder="请输入行政村">
+                <div class="ci-label">村居委</div>
+                <input type="text" class="form-input" data-field="village" placeholder="请输入村居委">
             </div>
             <div class="check-item">
                 <div class="ci-label">宅基地位置门牌号</div>
@@ -314,7 +314,15 @@ input[type="hidden"].sign-image-field { display: none; }
             </div>
             <div class="check-item">
                 <div class="ci-label">房屋类型</div>
-                <input type="text" class="form-input" data-field="houseType" placeholder="请输入房屋类型">
+                <select class="form-input" data-field="houseType">
+                    <option value="">— 请选择 —</option>
+                    <option value="农村经营性自建房">农村经营性自建房</option>
+                    <option value="农村辅房(含居住功能的出租房)">农村辅房(含居住功能的出租房)</option>
+                    <option value="前两轮专项排查认定的三类房屋">前两轮专项排查认定的三类房屋</option>
+                    <option value="经鉴定明确的C级、D级危房">经鉴定明确的C级、D级危房</option>
+                    <option value="前两轮专项排查认定的二类房屋">前两轮专项排查认定的二类房屋</option>
+                    <option value="其他宅基地自建房">其他宅基地自建房</option>
+                </select>
             </div>
             <div class="check-item">
                 <div class="ci-label">排查发现具体结构安全问题（按隐患部位分项填写）</div>
@@ -324,6 +332,7 @@ input[type="hidden"].sign-image-field { display: none; }
             <div class="check-item">
                 <div class="ci-label">隐患等级（整户取最高等级）</div>
                 <div class="radio-row" data-field="hazardLevel">
+                    <div class="radio-pill" data-value="未发现">未发现</div>
                     <div class="radio-pill" data-value="一般">一般</div>
                     <div class="radio-pill" data-value="严重">严重</div>
                 </div>
@@ -437,6 +446,15 @@ input[type="hidden"].sign-image-field { display: none; }
         try {
             var q = JSON.parse(localStorage.getItem('farm-review-pending-delete') || '[]');
             if (q.indexOf(hn) === -1) { q.push(hn); localStorage.setItem('farm-review-pending-delete', JSON.stringify(q)); }
+        } catch (e) {}
+    }
+
+    // ---------- records 保存重试队列（POST records 失败时记录，地图页同步时补推） ----------
+    function markRecordSaveRetry(hn, recordData) {
+        try {
+            var q = JSON.parse(localStorage.getItem('farm-review-record-save') || '{}');
+            q[hn] = recordData;
+            localStorage.setItem('farm-review-record-save', JSON.stringify(q));
         } catch (e) {}
     }
 
@@ -916,6 +934,7 @@ input[type="hidden"].sign-image-field { display: none; }
                 if (field === 'hazardLevel') {
                     if (val === '严重') this.classList.add('danger');
                     else if (val === '一般') this.classList.add('warning');
+                    else if (val === '未发现') this.classList.add('safe');
                 }
                 else if (/第三类|严重损坏房|存在严重安全隐患|停止使用|拆改|大幅增加|开挖/.test(val)) this.classList.add('danger');
                 else if (/第二类|一般损坏房|存在一般安全隐患|观察使用|处理使用|明显墙体裂缝|屋面塌陷|墙柱倾斜|地基沉降/.test(val)) this.classList.add('warning');
@@ -1033,8 +1052,9 @@ input[type="hidden"].sign-image-field { display: none; }
     }
     var RISK_HEX = { danger: '#d93025', major: '#f9ab00', safe: '#1a73e8' };
     function generateHouseFootprintByRisk(lat, lng, risk, seed, scale) {
+        // scale: 默认 0.0003 度 ≈ 30 米（房屋尺度），不要太大以免铺满视野
         scale = scale || 0.0003;
-        var riskFactor = { danger: 1.6, major: 1.3, warning: 1.0, safe: 0.8 }[risk] || 1.0;
+        var riskFactor = { danger: 1.2, major: 1.1, warning: 1.0, safe: 0.9 }[risk] || 1.0;
         var rand = seededRandom(seed);
         var w = scale * riskFactor * (0.8 + rand() * 0.4);
         var h = scale * riskFactor * (0.6 + rand() * 0.5);
@@ -1078,7 +1098,7 @@ input[type="hidden"].sign-image-field { display: none; }
             var rk = riskKey(house);
             var color = RISK_HEX[rk] || '#1a73e8';
             var seed = (house.no || '').split('').reduce(function(s, c) { return s + c.charCodeAt(0); }, 0);
-            var latlngs = generateHouseFootprintByRisk(hl.lat, hl.lng, rk, seed, 0.002);
+            var latlngs = generateHouseFootprintByRisk(hl.lat, hl.lng, rk, seed, 0.0003);
             ckMapLayers.push(L.polygon(latlngs, {
                 color: color, weight: 1.5, fillColor: color, fillOpacity: 0.3, opacity: 0.85
             }).addTo(map));
@@ -1093,9 +1113,9 @@ input[type="hidden"].sign-image-field { display: none; }
         if (points.length === 0) {
             map.setView([30.92, 121.47], 12);
         } else if (points.length === 1) {
-            map.setView(points[0], 14);
+            map.setView(points[0], 17);
         } else {
-            map.fitBounds(L.latLngBounds(points).pad(0.5));
+            map.fitBounds(L.latLngBounds(points).pad(0.3), { maxZoom: 17 });
         }
     }
 
@@ -1210,21 +1230,20 @@ input[type="hidden"].sign-image-field { display: none; }
         });
     });
 
-    // ---------- 照片采集（内联：房屋现状/损伤） ----------
+    // ---------- 照片采集（内联：现场照片，单类，数量不限制） ----------
+    // 旧数据若含 damagePhoto，恢复草稿时会并入 currentStatus（不再单独分类）
     var PHOTO_CATS = {
-        currentStatus: { name: '现场照片', max: 9, required: true, inline: true },
-        damagePhoto: { name: '房屋损伤照片', max: 2, required: true, inline: true }
+        currentStatus: { name: '现场照片', max: Infinity, required: true, inline: true }
     };
     // photos[cat] = [{ id, cat, dataUrl, w, h, size, time }]
-    var photos = { currentStatus: [], damagePhoto: [] };
+    var photos = { currentStatus: [] };
     var photoSeq = 0;
     var pendingCapture = null; // { cat, facade? }
     var fileInput = document.getElementById('photoFileInput');
 
-    // 压缩至 maxWidth 1280，JPEG 质量 0.72（保证裂缝/构件可识别）
+    // 压缩至 maxWidth 1280，智能 JPEG 质量（按原图兆像素自适应，目标单张 ~200KB 且保证裂缝/构件可识别）
     function compressImage(file, maxWidth, quality) {
         maxWidth = maxWidth || 1280;
-        quality = quality || 0.72;
         return new Promise(function(resolve, reject) {
             var reader = new FileReader();
             reader.onload = function(e) {
@@ -1232,10 +1251,22 @@ input[type="hidden"].sign-image-field { display: none; }
                 img.onload = function() {
                     var w = img.width, h = img.height;
                     if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+
+                    // 智能质量：原图越大，压得越多；小图保留高质量避免模糊
+                    // 若调用方显式传了 quality，则优先使用（兼容旧调用）
+                    var q = quality;
+                    if (!q) {
+                        var srcMP = (img.width * img.height) / 1000000; // 原图兆像素
+                        if (srcMP > 12)      q = 0.62;  // 12MP+（旗舰手机）→ 狠压
+                        else if (srcMP > 8)  q = 0.68;  // 8-12MP（主流手机）
+                        else if (srcMP > 4)  q = 0.72;  // 4-8MP（中端机/微信转发）
+                        else                 q = 0.78;  // <4MP（小图）→ 保留高质量
+                    }
+
                     var canvas = document.createElement('canvas');
                     canvas.width = w; canvas.height = h;
                     canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                    var dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    var dataUrl = canvas.toDataURL('image/jpeg', q);
                     resolve({ dataUrl: dataUrl, width: w, height: h, size: Math.round(dataUrl.length * 0.75) });
                 };
                 img.onerror = reject;
@@ -1280,12 +1311,8 @@ input[type="hidden"].sign-image-field { display: none; }
         if (!files || !files.length || !pendingCapture) return;
         var cap = pendingCapture;
         pendingCapture = null;
-        var cfg = PHOTO_CATS[cap.cat];
-        var remain = cfg.max - photos[cap.cat].length;
-        if (remain <= 0) { App.showToast(cfg.name + ' 最多 ' + cfg.max + ' 张'); return; }
-        var list = Array.prototype.slice.call(files, 0, remain);
-        if (files.length > remain) App.showToast('超出上限，已取前 ' + remain + ' 张');
-        var done = 0;
+        // 数量不限制，全部处理
+        var list = Array.prototype.slice.call(files);
         Promise.all(list.map(function(f) { return compressImage(f); })).then(function(results) {
             results.forEach(function(r) { addPhoto(cap.cat, r.dataUrl, r.width, r.height, r.size); });
             App.showToast('已添加 ' + results.length + ' 张照片');
@@ -1296,11 +1323,6 @@ input[type="hidden"].sign-image-field { display: none; }
     albumInput.addEventListener('change', function() { handlePickedFiles(this.files); });
 
     function addPhoto(cat, dataUrl, w, h, size) {
-        var cfg = PHOTO_CATS[cat];
-        if (photos[cat].length >= cfg.max) {
-            App.showToast(cfg.name + ' 最多 ' + cfg.max + ' 张');
-            return;
-        }
         var photo = {
             id: 'PH-' + (++photoSeq) + '-' + Date.now(),
             cat: cat,
@@ -1328,9 +1350,8 @@ input[type="hidden"].sign-image-field { display: none; }
                 '<div class="ps-tag">照片' + (i + 1) + '</div>' +
                 '</div>';
         }).join('');
-        if (photos[cat].length < cfg.max) {
-            html += '<div class="photo-slot" data-add><i class="fa-solid fa-camera"></i><span>添加</span></div>';
-        }
+        // 数量不限制，添加按钮永远显示
+        html += '<div class="photo-slot" data-add><i class="fa-solid fa-camera"></i><span>添加</span></div>';
         row.innerHTML = html;
         var addBtn = row.querySelector('[data-add]');
         if (addBtn) addBtn.onclick = function() { triggerCapture(cat); };
@@ -1470,7 +1491,6 @@ input[type="hidden"].sign-image-field { display: none; }
     });
     // 初始化内联照片
     renderInlinePhotos('currentStatus');
-    renderInlinePhotos('damagePhoto');
 
     // ---------- 提交 ----------
     function collectData() {
@@ -1514,6 +1534,9 @@ input[type="hidden"].sign-image-field { display: none; }
         });
         var rc = document.querySelector('input[data-field="renovationCount"]');
         result.renovationCount = rc ? rc.value : '';
+        // specificUsage 字段：H5 不再多选录入，提交时保留原有值（由 PC 详情/导入维护）
+        var existSpecificUsage = (house && house.overview && house.overview.specificUsage) || '';
+        result.specificUsage = existSpecificUsage;
         // 收集基本信息文本输入项
         ['address','communityName','buildingName','apartmentCount','ownerName','ownerId',
          'buildingFloors','buildingHeight','buildingArea','buildYear','structuralSafetyRemark',
@@ -1530,6 +1553,8 @@ input[type="hidden"].sign-image-field { display: none; }
         if (!result.inspectorName && currentIdentity) {
             result.inspectorName = currentIdentity;
         }
+        // 排查发现时间：默认取提交时间年月（覆盖手填，确保与提交时间一致）
+        result.checkFindTime = result.submitTime ? String(result.submitTime).slice(0, 7) : '';
         // 手写签名图片
         ['ownerSignatureImage','userSignatureImage','inspectorSignatureImage'].forEach(function(k){
             var el = document.querySelector('input.sign-image-field[data-field="' + k + '"]');
@@ -1550,7 +1575,22 @@ input[type="hidden"].sign-image-field { display: none; }
         delete data.submitTime;
         var key = 'farm-review-draft-' + houseNo;
         localStorage.setItem(key, JSON.stringify(data));
-        App.showToast('草稿已保存');
+        // 同步草稿到服务端（PC 端"排查结果"列表可见，状态=draft）
+        fetch('/api/farm-review-records/' + encodeURIComponent(data.houseNo), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        }).then(function(r) {
+            if (r.ok) {
+                App.showToast('草稿已保存并同步');
+            } else {
+                console.warn('[farm-review] 草稿同步服务端失败');
+                App.showToast('草稿已保存（同步失败，仅存本地）', 2000);
+            }
+        }).catch(function() {
+            console.warn('[farm-review] 草稿同步服务端不可用');
+            App.showToast('草稿已保存（离线，仅存本地）', 2000);
+        });
     });
 
     document.getElementById('btnSubmit').addEventListener('click', function() {
@@ -1580,13 +1620,19 @@ input[type="hidden"].sign-image-field { display: none; }
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         }).then(function(r) {
-            if (!r.ok) console.warn('[farm-review] 服务端保存失败，已保留本地副本');
-            // 提交后从待排查任务中移除该房屋（本地缓存 + 服务端原子删除）
+            if (!r.ok) {
+                // records 写入失败：标记重试，暂不删 pending（避免数据丢失）
+                console.warn('[farm-review] 服务端保存失败，已保留本地副本');
+                markRecordSaveRetry(data.houseNo, data);
+                App.showToast('服务端保存失败，已保留本地副本，请稍后重试', 2500);
+                setTimeout(function() { App.back(); }, 2600);
+                return;
+            }
+            // records 成功后才删除 pending（本地缓存 + 服务端原子删除）
             try {
                 var pendingList = JSON.parse(localStorage.getItem('farm-review-pending') || '[]');
                 var newPending = pendingList.filter(function(r) { return r && r.houseNo !== data.houseNo; });
                 localStorage.setItem('farm-review-pending', JSON.stringify(newPending));
-                // 服务端原子删除；失败则记录待删标记，地图页/列表页同步时补删
                 fetch('/api/farm-review-pending/' + encodeURIComponent(data.houseNo), {
                     method: 'DELETE'
                 }).then(function(dr) {
@@ -1597,6 +1643,7 @@ input[type="hidden"].sign-image-field { display: none; }
             setTimeout(function() { App.back(); }, 1600);
         }).catch(function() {
             console.warn('[farm-review] 服务端不可用，已保留本地副本');
+            markRecordSaveRetry(data.houseNo, data);
             App.showToast('排查结果已提交（离线）', 1500);
             setTimeout(function() { App.back(); }, 1600);
         });
@@ -1675,11 +1722,11 @@ input[type="hidden"].sign-image-field { display: none; }
                 updateCheckinUI(checkinData);
             }
             if (draft.photos) {
-                Object.keys(draft.photos).forEach(function(cat) {
-                    if (photos[cat]) photos[cat] = draft.photos[cat];
-                });
+                // 恢复 currentStatus；若旧草稿含 damagePhoto，并入 currentStatus（不再单独分类）
+                var oldCur = Array.isArray(draft.photos.currentStatus) ? draft.photos.currentStatus : [];
+                var oldDmg = Array.isArray(draft.photos.damagePhoto) ? draft.photos.damagePhoto : [];
+                photos.currentStatus = oldCur.concat(oldDmg);
                 renderInlinePhotos('currentStatus');
-                renderInlinePhotos('damagePhoto');
             }
         }
     } catch(e) {}

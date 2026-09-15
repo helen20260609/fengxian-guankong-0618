@@ -38,6 +38,7 @@
 .pill.active.danger { background: rgba(217,48,37,.12); color: #d93025; border-color: #d93025; }
 .pill.active.warning { background: rgba(249,171,0,.15); color: #c68400; border-color: #f9ab00; }
 .pill.active.safe { background: rgba(24,128,56,.12); color: #188038; border-color: #188038; }
+.pill.active.info { background: rgba(26,115,232,.1); color: #1a73e8; border-color: #1a73e8; }
 
 .photo-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .photo-item { width: 78px; height: 78px; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid var(--border); background: var(--bg); }
@@ -280,7 +281,7 @@
         // 排查问题清单（与排查页 tab2 的 17 项一致）
         construction: [
             { key: 'checkFindTime', label: '排查发现时间' },
-            { key: 'village', label: '行政村' },
+            { key: 'village', label: '村居委' },
             { key: 'homesteadLocation', label: '宅基地位置门牌号' },
             { key: 'uniqueId', label: '唯一标识' },
             { key: 'houseOwner', label: '房屋产权人' },
@@ -305,8 +306,17 @@
         { key: 'currentStatus', label: '现场照片' }
     ];
 
+    // 兼容旧数据：若 record.photos 还含 damagePhoto（旧分类），显示时并入 currentStatus
+    function normalizePhotos(photos) {
+        photos = photos || {};
+        var cur = Array.isArray(photos.currentStatus) ? photos.currentStatus.slice() : [];
+        var dmg = Array.isArray(photos.damagePhoto) ? photos.damagePhoto : [];
+        if (dmg.length) cur = cur.concat(dmg);
+        return { currentStatus: cur };
+    }
+
     // ---------- 渲染字段 ----------
-    function renderField(def, value, inline) {
+    function renderField(def, value, inline, data) {
         var div = document.createElement('div');
         div.className = 'field-item' + (inline ? ' inline' : '');
         var label = document.createElement('div');
@@ -333,6 +343,46 @@
                 pillGroup.appendChild(pill);
             });
             valueEl.appendChild(pillGroup);
+        } else if (def.key === 'structuralProblems') {
+            // 排查发现具体结构安全问题：优先按 hazards 数组逐行渲染；否则按 \n 拆分
+            var lines = [];
+            if (Array.isArray(data && data.hazards) && data.hazards.length) {
+                lines = data.hazards.map(function(h, i) {
+                    var parts = [];
+                    if (h.part) parts.push('【' + h.part + '】');
+                    if (h.description) parts.push(h.description);
+                    return (i + 1) + '. ' + parts.join(' ');
+                });
+            } else {
+                lines = String(value).split(/\r?\n/).map(function(s) { return s.trim(); }).filter(Boolean);
+                // 按行首数字编号排序（兼容 "1." "2." "10." 等前缀）
+                lines.sort(function(a, b) {
+                    var ma = a.match(/^(\d+)\s*[.、]/);
+                    var mb = b.match(/^(\d+)\s*[.、]/);
+                    var na = ma ? parseInt(ma[1], 10) : 0;
+                    var nb = mb ? parseInt(mb[1], 10) : 0;
+                    return na - nb;
+                });
+            }
+            lines.forEach(function(line) {
+                var row = document.createElement('div');
+                row.style.marginBottom = '4px';
+                row.textContent = line;
+                valueEl.appendChild(row);
+            });
+        } else if (def.key === 'hazardLevel') {
+            // 隐患等级：单值以 pill 徽标样式展示
+            var hv = String(value);
+            var pillGroup = document.createElement('div');
+            pillGroup.className = 'pill-group';
+            var pill = document.createElement('span');
+            pill.className = 'pill active';
+            if (/严重|危险/.test(hv)) pill.classList.add('danger');
+            else if (/一般/.test(hv)) pill.classList.add('warning');
+            else pill.classList.add('info');
+            pill.textContent = hv;
+            pillGroup.appendChild(pill);
+            valueEl.appendChild(pillGroup);
         } else {
             var text = String(value);
             if (def.key === 'forBusiness') text = value === '是' ? '用于生产经营' : '非生产经营';
@@ -352,7 +402,7 @@
             if (data.answers && data.answers[def.key] !== undefined) {
                 value = data.answers[def.key];
             }
-            container.appendChild(renderField(def, value, inline));
+            container.appendChild(renderField(def, value, inline, data));
         });
     }
 
@@ -420,10 +470,6 @@
 
             var catDiv = document.createElement('div');
             catDiv.className = 'field-item';
-            var label = document.createElement('div');
-            label.className = 'fi-label';
-            label.textContent = cat.label + ' (' + catPhotos.length + '张)';
-            catDiv.appendChild(label);
 
             var grid = document.createElement('div');
             grid.className = 'photo-grid';
@@ -615,7 +661,7 @@
         }
         if (needPatch) constructionData = Object.assign({}, record, patch);
         renderFields('constructionFields', FIELD_DEFS.construction, constructionData);
-        renderPhotos('photoFields', record.photos || {});
+        renderPhotos('photoFields', normalizePhotos(record.photos));
     }
 
     loadRecord();
