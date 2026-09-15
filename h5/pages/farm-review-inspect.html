@@ -1132,7 +1132,7 @@ input[type="hidden"].sign-image-field { display: none; }
     function saveHouseCheckin(rec) {
         // 以房屋维度单独存一份，便于列表/地图页展示
         var key = 'farm-review-checkin-' + houseNo;
-        localStorage.setItem(key, JSON.stringify(rec));
+        try { localStorage.setItem(key, JSON.stringify(rec)); } catch (e) {}
     }
 
     function loadHouseCheckin() {
@@ -1478,17 +1478,7 @@ input[type="hidden"].sign-image-field { display: none; }
     renderHazards();
     bindHazardEvents();
 
-    // 内联照片行点击
-    document.querySelectorAll('.photo-row[data-cat]').forEach(function(row) {
-        var cat = row.getAttribute('data-cat');
-        var cfg = PHOTO_CATS[cat];
-        if (cfg && cfg.inline) {
-            row.addEventListener('click', function(ev) {
-                var addBtn = ev.target.closest('[data-add]');
-                if (addBtn) triggerCapture(cat);
-            });
-        }
-    });
+    // 内联照片行点击：仅委托一次（renderInlinePhotos 内已为 [data-add] 绑定 onclick，这里不再重复绑定，避免双重触发）
     // 初始化内联照片
     renderInlinePhotos('currentStatus');
 
@@ -1514,7 +1504,8 @@ input[type="hidden"].sign-image-field { display: none; }
             lng: checkinData ? checkinData.lng : (house && house.lng ? house.lng : undefined),
             photos: photos,
             photoCount: Object.keys(photos).reduce(function(s, k) { return s + photos[k].length; }, 0),
-            submitTime: new Date().toISOString()
+            // 与 PC 端口径一致：本地时间 'YYYY-MM-DD HH:mm'（原 UTC ISO 会导致 PC 显示差 8 小时）
+            submitTime: fmtNow()
         };
         // 身份非管理员时，自动把街镇名写入排查人字段（若表单未填）
         if (currentIdentity) {
@@ -1542,7 +1533,8 @@ input[type="hidden"].sign-image-field { display: none; }
          'buildingFloors','buildingHeight','buildingArea','buildYear','structuralSafetyRemark',
          'ownerSignature','ownerPhone','ownerDate','userSignature','userPhone','userDate',
          'inspectorName','inspectorSignature','inspectorOrg','inspectorPhone','inspectorDate',
-         'village','homesteadLocation','uniqueId','houseOwner','contactPhone','houseFloors','houseType'].forEach(function(k){
+         'village','homesteadLocation','uniqueId','houseOwner','contactPhone','houseFloors','houseType',
+         'checkRemark','rectifyDeadline'].forEach(function(k){
             var el = document.querySelector('[data-field="' + k + '"]');
             var v = el ? el.value.trim() : '';
             // village / uniqueId 若用户未填，保留顶部从 house 读到的兜底值
@@ -1553,8 +1545,22 @@ input[type="hidden"].sign-image-field { display: none; }
         if (!result.inspectorName && currentIdentity) {
             result.inspectorName = currentIdentity;
         }
-        // 排查发现时间：默认取提交时间年月（覆盖手填，确保与提交时间一致）
-        result.checkFindTime = result.submitTime ? String(result.submitTime).slice(0, 7) : '';
+        // 排查发现时间：用户手填优先；未填时才兜底为提交时间年月
+        if (!result.checkFindTime) {
+            var cftEl = document.querySelector('[data-field="checkFindTime"]');
+            var cftVal = cftEl ? cftEl.value : '';
+            result.checkFindTime = cftVal || (result.submitTime ? String(result.submitTime).slice(0, 7) : '');
+        }
+        // 与 PC 端结构对齐：整改措施/计划时限写入 rectify.measures.controlTypes / ownerDate
+        var rectifyTypes = Array.isArray(answers.ownerRectifyMeasures) ? answers.ownerRectifyMeasures.filter(function(v) { return v && v !== '其他'; }) : [];
+        var rectifyOther = result.ownerRectifyMeasuresOther || '';
+        if (rectifyTypes.length || rectifyOther || result.rectifyDeadline) {
+            result.rectify = result.rectify || {};
+            result.rectify.measures = result.rectify.measures || {};
+            if (rectifyTypes.length) result.rectify.measures.controlTypes = rectifyTypes;
+            if (rectifyOther) result.rectify.measures.controlTypesOther = rectifyOther;
+            if (result.rectifyDeadline) result.rectify.measures.ownerDate = result.rectifyDeadline;
+        }
         // 手写签名图片
         ['ownerSignatureImage','userSignatureImage','inspectorSignatureImage'].forEach(function(k){
             var el = document.querySelector('input.sign-image-field[data-field="' + k + '"]');
@@ -1574,7 +1580,11 @@ input[type="hidden"].sign-image-field { display: none; }
         data.saveTime = data.submitTime;
         delete data.submitTime;
         var key = 'farm-review-draft-' + houseNo;
-        localStorage.setItem(key, JSON.stringify(data));
+        try {
+            localStorage.setItem(key, JSON.stringify(data));
+        } catch (e) {
+            App.showToast('本地存储空间不足（可能照片过大），草稿仅存服务端', 2500);
+        }
         // 同步草稿到服务端（PC 端"排查结果"列表可见，状态=draft）
         fetch('/api/farm-review-records/' + encodeURIComponent(data.houseNo), {
             method: 'POST',
@@ -1632,7 +1642,7 @@ input[type="hidden"].sign-image-field { display: none; }
             try {
                 var pendingList = JSON.parse(localStorage.getItem('farm-review-pending') || '[]');
                 var newPending = pendingList.filter(function(r) { return r && r.houseNo !== data.houseNo; });
-                localStorage.setItem('farm-review-pending', JSON.stringify(newPending));
+                try { localStorage.setItem('farm-review-pending', JSON.stringify(newPending)); } catch (e2) {}
                 fetch('/api/farm-review-pending/' + encodeURIComponent(data.houseNo), {
                     method: 'DELETE'
                 }).then(function(dr) {

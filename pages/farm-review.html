@@ -880,13 +880,16 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         return params.toString();
     }
 
+    var _loadSeq = 0; // 请求序号：防止旧响应覆盖新结果（竞态防护）
     function loadList() {
         var s = cur();
         var colspan = currentTab === 'pending' ? 9 : 8;
+        var seq = ++_loadSeq;
         $('tbodyMain').innerHTML = '<tr><td colspan="' + colspan + '" style="text-align: center; padding: 30px;"><span class="loading"></span> 加载中...</td></tr>';
         fetch(apiBase() + '/page?' + buildQuery())
             .then(function(r) { return r.json(); })
             .then(function(res) {
+                if (seq !== _loadSeq) return; // 已有更新请求发出，丢弃本次旧响应
                 s.rows = res.rows || [];
                 s.total = res.total || 0;
                 if (res.townVillages) TOWN_VILLAGES = res.townVillages;
@@ -898,6 +901,7 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
                 loadCatCounts();
             })
             .catch(function() {
+                if (seq !== _loadSeq) return;
                 $('tbodyMain').innerHTML = '<tr><td colspan="' + colspan + '" class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><div>加载失败</div></td></tr>';
                 toast('加载失败', 'error');
             });
@@ -1546,7 +1550,19 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         if (f.town) params.set('town', f.town);
         if (f.village) params.set('village', f.village);
         if (f.hazard) params.set('hazard', f.hazard);
-        if (currentTab === 'records' && f.status) params.set('status', f.status);
+        if (f.houseUsage) params.set('houseUsage', f.houseUsage);
+        if (f.specificUsage.length) params.set('specificUsage', f.specificUsage.join(','));
+        if (f.q) params.set('q', f.q);
+        if (currentTab === 'records') {
+            if (f.houseType) params.set('houseType', f.houseType);
+            if (f.status) params.set('status', f.status);
+            if (f.dateFrom) params.set('dateFrom', f.dateFrom);
+            if (f.dateTo) params.set('dateTo', f.dateTo);
+        }
+        if (currentTab === 'pending') {
+            var dv = $('filterDispatched') ? $('filterDispatched').value : '';
+            if (dv) params.set('dispatched', dv);
+        }
         window.open(apiBase() + '/export.csv?' + params.toString(), '_blank');
     });
 

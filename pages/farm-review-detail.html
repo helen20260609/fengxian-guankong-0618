@@ -862,7 +862,10 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
     function pvStep(d) { pvIndex += d; renderViewer(); }
     function closePhotoViewer() { $('photoViewerMask').classList.remove('show'); }
 
+    var _viewerBound = false;
     function bindViewerOnce() {
+        if (_viewerBound) return; // 防重复绑定：render() 每次都会调用本函数，keydown 叠加会导致翻页跳格
+        _viewerBound = true;
         $('pvClose').addEventListener('click', function(e) { e.stopPropagation(); closePhotoViewer(); });
         $('pvPrev').addEventListener('click', function(e) { e.stopPropagation(); pvStep(-1); });
         $('pvNext').addEventListener('click', function(e) { e.stopPropagation(); pvStep(1); });
@@ -1102,9 +1105,13 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
         // 刷新推送时间戳：H5 地图轮询据此检测 PC 端修改并自动刷新
         payload.updateTime = new Date().toLocaleString('sv-SE').slice(0, 16);
         payload.pushedTime = payload.updateTime;
-        // 状态联动：PC 改 rectified 时自动补 rectifyTime；改回其他状态时清掉
-        if (payload.status === 'rectified' && !payload.rectifyTime) {
+        // 状态联动：仅当本次编辑把状态「改为」rectified 时才补 rectifyTime；
+        // 编辑已是 rectified 的记录时保留原 rectifyTime，避免整改完成时间被误重置
+        var wasRectified = record && record.status === 'rectified';
+        if (payload.status === 'rectified' && !wasRectified && !payload.rectifyTime) {
             payload.rectifyTime = new Date().toISOString();
+        } else if (payload.status === 'rectified' && wasRectified) {
+            payload.rectifyTime = record.rectifyTime || payload.rectifyTime || new Date().toISOString();
         } else if (payload.status && payload.status !== 'rectified') {
             payload.rectifyTime = '';
         }
@@ -1162,6 +1169,7 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
                 // 本地合并，保证重置回到最新已保存态
                 record = Object.assign({}, record, data);
                 pruneAnswers(record, data);
+                setMode('readonly'); // 保存成功后才切回只读，避免失败时表单被锁
             } else {
                 toast('保存失败: ' + (res && res.error || ''), 'error');
             }
@@ -1212,14 +1220,16 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
         document.body.classList.toggle('mode-readonly', mode === 'readonly');
         document.body.classList.toggle('mode-edit', mode === 'edit');
         var isDraft = record && record.status === 'draft';
-        // 草稿仅手机端可编辑，PC 只读：不显示编辑按钮
-        $('btnEdit').style.display    = (mode === 'readonly' && !isDraft) ? '' : 'none';
+        var isRectified = record && record.status === 'rectified';
+        // 草稿仅手机端可编辑；已整改为终态不可再编辑：均不显示编辑按钮
+        $('btnEdit').style.display    = (mode === 'readonly' && !isDraft && !isRectified) ? '' : 'none';
         $('btnCancel').style.display  = (mode === 'edit') ? '' : 'none';
         $('btnReset').style.display   = (mode === 'edit') ? '' : 'none';
         $('btnSave').style.display    = (mode === 'edit') ? '' : 'none';
     }
     $('btnEdit').addEventListener('click', function() {
         if (record && record.status === 'draft') { toast('草稿仅手机端可编辑，请在手机端完成排查后提交', 'error'); return; }
+        if (record && record.status === 'rectified') { toast('该记录已整改完成，不可再编辑', 'error'); return; }
         setMode('edit');
     });
     $('btnCancel').addEventListener('click', function() {
@@ -1227,9 +1237,7 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
     });
 
     $('btnSave').addEventListener('click', function() {
-        save();
-        // 保存成功后回到只读（save 内部异步，但状态提前切换避免误点）
-        setMode('readonly');
+        save(); // setMode('readonly') 移至 save 成功回调内，避免异步未完结就锁表单
     });
     $('btnReset').addEventListener('click', function() {
         if (confirm('放弃当前修改并恢复为已保存的内容？')) render();

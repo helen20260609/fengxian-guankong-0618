@@ -228,7 +228,7 @@
     }
 
     // ---------- 加载记录 ----------
-    function loadRecord() {
+    function loadRecord(onDone) {
         var list = [];
         try { list = JSON.parse(localStorage.getItem('farm-review-records') || '[]'); } catch(e) {}
         // 优先按索引取
@@ -241,10 +241,36 @@
                 record = filtered[0];
             }
         }
-        if (!record) {
-            App.showToast('未找到排查记录');
-            setTimeout(function() { App.back(); }, 1500);
+        if (record) { onDone && onDone(); return; }
+        // 本地未命中：回源服务端单条接口（直接分享链接/清缓存后打开的场景）
+        if (houseNo) {
+            fetch('/api/farm-review-records/' + encodeURIComponent(houseNo))
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(rec) {
+                    if (rec && rec.houseNo) {
+                        record = rec;
+                        // 顺手写回本地缓存，下次秒开
+                        try {
+                            var l2 = JSON.parse(localStorage.getItem('farm-review-records') || '[]');
+                            if (!Array.isArray(l2)) l2 = [];
+                            l2 = l2.filter(function(x) { return x && x.houseNo !== rec.houseNo; });
+                            l2.unshift(rec);
+                            localStorage.setItem('farm-review-records', JSON.stringify(l2));
+                        } catch (e) {}
+                        onDone && onDone();
+                    } else {
+                        App.showToast('未找到排查记录');
+                        setTimeout(function() { App.back(); }, 1500);
+                    }
+                })
+                .catch(function() {
+                    App.showToast('未找到排查记录');
+                    setTimeout(function() { App.back(); }, 1500);
+                });
+            return;
         }
+        App.showToast('未找到排查记录');
+        setTimeout(function() { App.back(); }, 1500);
     }
 
     function fmtTime(isoStr) {
@@ -664,10 +690,7 @@
         renderPhotos('photoFields', normalizePhotos(record.photos));
     }
 
-    loadRecord();
-    if (record) {
-        render();
-    }
+    loadRecord(function() { if (record) render(); });
 
     // ---------- 返回顶部 ----------
     (function() {

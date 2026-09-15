@@ -73,6 +73,75 @@ function readFengxianTownVillages() {
 
 // ============ 列表文件读写工具（含 mtime 缓存 + 自动备份） ============
 var _listFileCache = {}; // fileName -> { mtimeMs, list }
+var _fileLocks = {}; // fileName -> true/false
+var _fileLockQueue = {}; // fileName -> [callback]
+
+function _acquireLock(fileName, cb) {
+    if (!_fileLocks[fileName]) {
+        _fileLocks[fileName] = true;
+        cb();
+    } else {
+        if (!_fileLockQueue[fileName]) _fileLockQueue[fileName] = [];
+        _fileLockQueue[fileName].push(cb);
+    }
+}
+
+function _releaseLock(fileName) {
+    _fileLocks[fileName] = false;
+    var queue = _fileLockQueue[fileName];
+    if (queue && queue.length > 0) {
+        var next = queue.shift();
+        _fileLocks[fileName] = true;
+        next();
+    }
+}
+
+// 深合并：src 中非空值覆盖 target，嵌套对象递归合并
+function _deepMerge(target, src) {
+    if (!target || typeof target !== 'object') return src;
+    if (!src || typeof src !== 'object') return src;
+    var out = Array.isArray(target) ? target.slice() : Object.assign({}, target);
+    for (var k in src) {
+        if (!src.hasOwnProperty(k)) continue;
+        var v = src[k];
+        if (v === null || v === undefined || v === '') continue;
+        if (v && typeof v === 'object' && !Array.isArray(v) && out[k] && typeof out[k] === 'object' && !Array.isArray(out[k])) {
+            out[k] = _deepMerge(out[k], v);
+        } else {
+            out[k] = v;
+        }
+    }
+    return out;
+}
+
+// 提取本地日期部分用于范围比较：兼容 'YYYY-MM-DD HH:mm:ss' / 'YYYY-MM-DDTHH:mm:ss.sssZ' / Date
+function _localDateStr(v) {
+    if (!v) return '';
+    if (v instanceof Date) {
+        var y = v.getFullYear(), m = v.getMonth() + 1, d = v.getDate();
+        return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+    }
+    var s = String(v);
+    if (s.indexOf('T') > -1) return s.split('T')[0];
+    return s.slice(0, 10);
+}
+
+// 备份保留最近 20 个
+var MAX_BACKUPS = 20;
+function _cleanupBackups(fileName) {
+    var bakDir = path.join(dataDir, '.bak');
+    var prefix = fileName.replace(/\.json$/, '');
+    fs.readdir(bakDir, function(err, files) {
+        if (err || !files) return;
+        var bakFiles = files.filter(function(f) { return f.indexOf(prefix + '.') === 0 && f.endsWith('.json'); });
+        if (bakFiles.length <= MAX_BACKUPS) return;
+        bakFiles.sort();
+        var toDelete = bakFiles.slice(0, bakFiles.length - MAX_BACKUPS);
+        toDelete.forEach(function(f) {
+            fs.unlink(path.join(bakDir, f), function() { /* 静默 */ });
+        });
+    });
+}
 function readListFile(fileName, cb) {
     var fp = path.join(dataDir, fileName);
     fs.stat(fp, function(statErr, st) {
@@ -100,22 +169,36 @@ function readListFile(fileName, cb) {
     });
 }
 
-// 写数组 json 文件（写后立即失效缓存；全量覆盖前自动备份到 data/.bak/）
+// 写数组 json 文件（原子写：临时文件+rename；写后立即失效缓存；全量覆盖前自动备份）
 function writeListFile(fileName, list, cb) {
-    var fp = path.join(dataDir, fileName);
-    var bakDir = path.join(dataDir, '.bak');
-    // 备份旧文件（存在才备份；异步，不阻塞主流程）
-    fs.stat(fp, function(statErr) {
-        if (!statErr) {
-            fs.mkdir(bakDir, { recursive: true }, function() {
-                var bakName = fileName.replace(/\.json$/, '') + '.' + Date.now() + '.json';
-                fs.copyFile(fp, path.join(bakDir, bakName), function() { /* 备份失败静默 */ });
+    _acquireLock(fileName, function() {
+        var fp = path.join(dataDir, fileName);
+        var tmpFp = fp + '.tmp.' + Date.now();
+        var bakDir = path.join(dataDir, '.bak');
+        // 备份旧文件（存在才备份；异步，不阻塞主流程）
+        fs.stat(fp, function(statErr) {
+            if (!statErr) {
+                fs.mkdir(bakDir, { recursive: true }, function() {
+                    var bakName = fileName.replace(/\.json$/, '') + '.' + Date.now() + '.json';
+                    fs.copyFile(fp, path.join(bakDir, bakName), function() {
+                        _cleanupBackups(fileName);
+                    });
+                });
+            }
+        });
+        // 原子写：先写临时文件，再 rename
+        fs.writeFile(tmpFp, JSON.stringify(list, null, 2), 'utf8', function(writeErr) {
+            if (writeErr) {
+                _releaseLock(fileName);
+                cb(writeErr);
+                return;
+            }
+            fs.rename(tmpFp, fp, function(renameErr) {
+                delete _listFileCache[fileName];
+                _releaseLock(fileName);
+                cb(renameErr);
             });
-        }
-    });
-    fs.writeFile(fp, JSON.stringify(list, null, 2), 'utf8', function(err) {
-        delete _listFileCache[fileName];
-        cb(err);
+        });
     });
 }
 
@@ -297,7 +380,7 @@ function handleApi(req, res, urlPath) {
             // 闭环：扣除已完成排查的房屋（records 里状态为 submitted/rectified 的 houseNo），避免"已排查又出现待办"
             // 注意：draft（草稿）不视为已完成，仍保留在待排查中
             readListFile('farm-review-records.json', function(errR, records) {
-                if (errR) records = [];
+                if (errR) { sendJson(res, 500, { error: '读取排查记录失败，无法排除已排查房屋' }); return; }
                 var doneSet = {};
                 (records || []).forEach(function(x) {
                     if (x && x.houseNo && (x.status === 'submitted' || x.status === 'rectified')) doneSet[x.houseNo] = true;
@@ -413,8 +496,8 @@ function handleApi(req, res, urlPath) {
                     var hit = suArr.some(function(s) { return recSuArr.indexOf(s) > -1; });
                     if (!hit) return false;
                 }
-                if (dateFrom && (r.inspectTime || r.submitTime || '') < dateFrom) return false;
-                if (dateTo && (r.inspectTime || r.submitTime || '') > dateTo + ' 23:59') return false;
+                if (dateFrom && _localDateStr(r.inspectTime || r.submitTime || '') < dateFrom) return false;
+                if (dateTo && _localDateStr(r.inspectTime || r.submitTime || '') > dateTo) return false;
                 if (q) {
                     var hay = ((r.houseNo || '') + '|' + (r.houseAddress || '')).toLowerCase();
                     if (hay.indexOf(q) < 0) return false;
@@ -463,16 +546,38 @@ function handleApi(req, res, urlPath) {
         var village2 = (urlObj2.searchParams.get('village') || '').trim();
         var status2 = (urlObj2.searchParams.get('status') || '').trim();
         var hazard2 = (urlObj2.searchParams.get('hazard') || '').trim();
+        var houseUsage2 = (urlObj2.searchParams.get('houseUsage') || '').trim();
+        var houseType2 = (urlObj2.searchParams.get('houseType') || '').trim();
+        var specificUsage2 = (urlObj2.searchParams.get('specificUsage') || '').trim();
+        var q2 = (urlObj2.searchParams.get('q') || '').trim().toLowerCase();
+        var dateFrom2 = (urlObj2.searchParams.get('dateFrom') || '').trim();
+        var dateTo2 = (urlObj2.searchParams.get('dateTo') || '').trim();
 
         readListFile('farm-review-records.json', function(err, list) {
             if (err) { sendJson(res, 500, { error: '读取失败' }); return; }
 
+            // 与 /page 接口过滤口径保持一致，保证「所见即所导」
             var filtered = list.filter(function(r) {
                 if (!r) return false;
                 if (town2 && (r.town || '') !== town2) return false;
                 if (village2 && (r.village || '') !== village2) return false;
                 if (status2 && (r.status || '') !== status2) return false;
                 if (hazard2 && (r.hazardLevel || '') !== hazard2) return false;
+                if (houseUsage2 && (r.houseUsage || '') !== houseUsage2) return false;
+                if (houseType2 && (r.houseType || '') !== houseType2) return false;
+                if (specificUsage2) {
+                    var suArr2 = specificUsage2.split(/[,,]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    var recSu2 = (r.specificUsage || '');
+                    var recSuArr2 = recSu2.split(/[,,、]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    var hit2 = suArr2.some(function(s) { return recSuArr2.indexOf(s) > -1; });
+                    if (!hit2) return false;
+                }
+                if (dateFrom2 && _localDateStr(r.inspectTime || r.submitTime || '') < dateFrom2) return false;
+                if (dateTo2 && _localDateStr(r.inspectTime || r.submitTime || '') > dateTo2) return false;
+                if (q2) {
+                    var hay2 = ((r.houseNo || '') + '|' + (r.houseAddress || '')).toLowerCase();
+                    if (hay2.indexOf(q2) < 0) return false;
+                }
                 return true;
             });
 
@@ -546,16 +651,9 @@ function handleApi(req, res, urlPath) {
                         } else if (mode === 'overwrite') {
                             map[key] = r;
                             updated++;
-                        } else { // merge：新数据优先，空字段保留旧值
+                        } else { // merge：新数据优先，空字段保留旧值（嵌套对象深合并）
                             var old = map[key];
-                            var merged = {};
-                            for (var k in old) merged[k] = old[k];
-                            for (var k2 in r) {
-                                if (r[k2] !== '' && r[k2] !== null && r[k2] !== undefined) {
-                                    merged[k2] = r[k2];
-                                }
-                            }
-                            map[key] = merged;
+                            map[key] = _deepMerge(old, r);
                             updated++;
                         }
                     } else {
@@ -603,14 +701,9 @@ function handleApi(req, res, urlPath) {
                     if (map[key]) {
                         if (mode === 'append') { skipped++; return; }
                         else if (mode === 'overwrite') { map[key] = r; updated++; }
-                        else {
+                        else { // merge：新数据优先，空字段保留旧值（嵌套对象深合并）
                             var old = map[key];
-                            var merged = {};
-                            for (var k in old) merged[k] = old[k];
-                            for (var k2 in r) {
-                                if (r[k2] !== '' && r[k2] !== null && r[k2] !== undefined) merged[k2] = r[k2];
-                            }
-                            map[key] = merged;
+                            map[key] = _deepMerge(old, r);
                             updated++;
                         }
                     } else {
@@ -683,17 +776,16 @@ function handleApi(req, res, urlPath) {
                     if (payload.pushedTime) payload.pushCount = 1;
                     list.unshift(payload);
                 } else {
-                    // 合并更新
+                    // 深合并更新（嵌套对象递归合并，避免整体替换丢失字段）
                     var old = list[idx];
                     // 推送时间戳变化 → 累加推送次数（用于前端显示"已推送×N"）
                     var pushTimeChanged = payload.pushedTime && payload.pushedTime !== old.pushedTime;
-                    for (var k in payload) {
-                        if (payload.hasOwnProperty(k)) old[k] = payload[k];
-                    }
+                    var merged = _deepMerge(old, payload);
                     if (pushTimeChanged) {
-                        old.pushCount = (parseInt(old.pushCount, 10) || 0) + 1;
+                        merged.pushCount = (parseInt(old.pushCount, 10) || 0) + 1;
                     }
-                    old.houseNo = houseNo;
+                    merged.houseNo = houseNo;
+                    list[idx] = merged;
                 }
                 writeListFile('farm-review-records.json', list, function(err3) {
                     if (err3) { sendJson(res, 500, { error: '保存失败' }); return; }
@@ -748,7 +840,7 @@ function handleApi(req, res, urlPath) {
                     if (!pHit) return false;
                 }
                 if (pDispatched) {
-                    var isDisp = r.dispatched === true || r.dispatched === 'true';
+                    var isDisp = r.dispatched === true || r.dispatched === 'true' || r.dispatched === 'yes' || r.dispatched === 1 || r.dispatched === '1';
                     if (pDispatched === 'yes' && !isDisp) return false;
                     if (pDispatched === 'no' && isDisp) return false;
                 }
@@ -800,24 +892,48 @@ function handleApi(req, res, urlPath) {
         var pTown2 = (pUrlObj2.searchParams.get('town') || '').trim();
         var pVillage2 = (pUrlObj2.searchParams.get('village') || '').trim();
         var pHazard2 = (pUrlObj2.searchParams.get('hazard') || '').trim();
+        var pHouseUsage2 = (pUrlObj2.searchParams.get('houseUsage') || '').trim();
+        var pHouseType2 = (pUrlObj2.searchParams.get('houseType') || '').trim();
+        var pSpecificUsage2 = (pUrlObj2.searchParams.get('specificUsage') || '').trim();
+        var pQ2 = (pUrlObj2.searchParams.get('q') || '').trim().toLowerCase();
+        var pDispatched2 = (pUrlObj2.searchParams.get('dispatched') || '').trim();
 
         readListFile('farm-review-pending.json', function(err, list) {
             if (err) { sendJson(res, 500, { error: '读取失败' }); return; }
 
             // 闭环：导出待排查同样扣除已完成排查的房屋（草稿不算完成）
             readListFile('farm-review-records.json', function(errR, records) {
-                if (errR) records = [];
+                if (errR) { sendJson(res, 500, { error: '读取排查记录失败，无法排除已排查房屋' }); return; }
                 var doneSet = {};
                 (records || []).forEach(function(x) {
                     if (x && x.houseNo && (x.status === 'submitted' || x.status === 'rectified')) doneSet[x.houseNo] = true;
                 });
                 list = (list || []).filter(function(r) { return r && r.houseNo && !doneSet[r.houseNo]; });
 
+            // 与 /page 接口过滤口径保持一致
             var filtered = list.filter(function(r) {
                 if (!r) return false;
                 if (pTown2 && (r.town || '') !== pTown2) return false;
                 if (pVillage2 && (r.village || '') !== pVillage2) return false;
                 if (pHazard2 && (r.hazardLevel || '') !== pHazard2) return false;
+                if (pHouseUsage2 && (r.houseUsage || '') !== pHouseUsage2) return false;
+                if (pHouseType2 && (r.houseType || '') !== pHouseType2) return false;
+                if (pSpecificUsage2) {
+                    var pSuArr2 = pSpecificUsage2.split(/[,,]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    var pRecSu2 = (r.specificUsage || '');
+                    var pRecSuArr2 = pRecSu2.split(/[,,、]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    var pHit2 = pSuArr2.some(function(s) { return pRecSuArr2.indexOf(s) > -1; });
+                    if (!pHit2) return false;
+                }
+                if (pDispatched2) {
+                    var isDisp2 = r.dispatched === true || r.dispatched === 'true' || r.dispatched === 'yes' || r.dispatched === 1 || r.dispatched === '1';
+                    if (pDispatched2 === 'yes' && !isDisp2) return false;
+                    if (pDispatched2 === 'no' && isDisp2) return false;
+                }
+                if (pQ2) {
+                    var hayP2 = ((r.houseNo || '') + '|' + (r.houseAddress || '')).toLowerCase();
+                    if (hayP2.indexOf(pQ2) < 0) return false;
+                }
                 return true;
             });
 
@@ -831,10 +947,10 @@ function handleApi(req, res, urlPath) {
             }
 
             var headers = ['唯一标识','街镇','村居委','组','路','号栋','地址','房屋产权人','房屋用途','具体用途','房屋层数','建筑面积','建成年份','隐患等级','初步判定','鉴定结论','导入时间'];
-            var lines = ['﻿' + headers.join(',')];
+            var lines = ['\ufeff' + headers.join(',')];
             filtered.forEach(function(r) {
                 lines.push([
-                    escCsvP(r.houseNo), escCsvP(r.town), escCsvP(r.villageName || r.village), escCsvP(r.groupName),
+                    escCsvP(r.houseNo), escCsvP(r.town), escCsvP(r.village || r.villageName), escCsvP(r.groupName),
                     escCsvP(r.roadName), escCsvP(r.buildingNo), escCsvP(r.houseAddress),
                     escCsvP(r.houseOwner || r.owner), escCsvP(r.houseUsage), escCsvP(r.specificUsage),
                     escCsvP(r.floors || r.houseFloors), escCsvP(r.area), escCsvP(r.buildYear),
@@ -866,7 +982,13 @@ function handleApi(req, res, urlPath) {
             var timeStr = flag ? new Date().toLocaleString('sv-SE').slice(0, 16) : '';
             var dispatchedToMap = (payload.dispatchedToMap && typeof payload.dispatchedToMap === 'object') ? payload.dispatchedToMap : null;
             var want = {};
-            payload.houseNos.forEach(function(n) { if (n) want[n] = true; });
+            var uniqueHouseNos = [];
+            payload.houseNos.forEach(function(n) {
+                if (n && !want[n]) {
+                    want[n] = true;
+                    uniqueHouseNos.push(n);
+                }
+            });
             readListFile('farm-review-pending.json', function(err2, list) {
                 if (err2) { sendJson(res, 500, { error: '读取失败' }); return; }
                 var updated = 0;
@@ -910,10 +1032,8 @@ function handleApi(req, res, urlPath) {
                     list.unshift(payload);
                 } else {
                     var old = list[idx];
-                    for (var k in payload) {
-                        if (payload.hasOwnProperty(k)) old[k] = payload[k];
-                    }
-                    old.houseNo = pHouseNo;
+                    list[idx] = _deepMerge(old, payload);
+                    list[idx].houseNo = pHouseNo;
                 }
                 writeListFile('farm-review-pending.json', list, function(err3) {
                     if (err3) { sendJson(res, 500, { error: '保存失败' }); return; }
