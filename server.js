@@ -193,11 +193,31 @@ function writeListFile(fileName, list, cb) {
                 cb(writeErr);
                 return;
             }
-            fs.rename(tmpFp, fp, function(renameErr) {
-                delete _listFileCache[fileName];
-                _releaseLock(fileName);
-                cb(renameErr);
-            });
+            var attempts = 0;
+            function tryRename() {
+                fs.rename(tmpFp, fp, function(renameErr) {
+                    // Windows 上杀软/索引可能瞬时占用目标文件 → EPERM/EBUSY，做有限重试
+                    if (renameErr && (renameErr.code === 'EPERM' || renameErr.code === 'EBUSY') && attempts < 5) {
+                        attempts++;
+                        return setTimeout(tryRename, 80 * attempts);
+                    }
+                    if (renameErr && (renameErr.code === 'EPERM' || renameErr.code === 'EBUSY')) {
+                        // 重试仍失败 → 降级为 copy + unlink（非原子，但能落盘）
+                        return fs.copyFile(tmpFp, fp, function(copyErr) {
+                            if (!copyErr) {
+                                fs.unlink(tmpFp, function() {});
+                            }
+                            delete _listFileCache[fileName];
+                            _releaseLock(fileName);
+                            cb(copyErr || null);
+                        });
+                    }
+                    delete _listFileCache[fileName];
+                    _releaseLock(fileName);
+                    cb(renameErr);
+                });
+            }
+            tryRename();
         });
     });
 }
@@ -486,7 +506,14 @@ function handleApi(req, res, urlPath) {
                 if (town && (r.town || '') !== town) return false;
                 if (village && (r.village || '') !== village) return false;
                 if (status && (r.status || '') !== status) return false;
-                if (hazard && (r.hazardLevel || '') !== hazard) return false;
+                if (hazard) {
+                    // 顶层优先，兜底 answers.hazardLevel（H5 老版本只写 answers，顶层为空）
+                    var recHz = ((r.hazardLevel !== undefined && r.hazardLevel !== null && r.hazardLevel !== '')
+                        ? r.hazardLevel
+                        : (r.answers && r.answers.hazardLevel) || '').toString().trim();
+                    var hzArr = hazard.split(/[,，]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    if (hzArr.indexOf(recHz) < 0) return false;
+                }
                 if (houseUsage && (r.houseUsage || '') !== houseUsage) return false;
                 if (houseType && (r.houseType || '') !== houseType) return false;
                 if (specificUsage) {
@@ -562,7 +589,14 @@ function handleApi(req, res, urlPath) {
                 if (town2 && (r.town || '') !== town2) return false;
                 if (village2 && (r.village || '') !== village2) return false;
                 if (status2 && (r.status || '') !== status2) return false;
-                if (hazard2 && (r.hazardLevel || '') !== hazard2) return false;
+                if (hazard2) {
+                    // 顶层优先，兜底 answers.hazardLevel
+                    var recHz2 = ((r.hazardLevel !== undefined && r.hazardLevel !== null && r.hazardLevel !== '')
+                        ? r.hazardLevel
+                        : (r.answers && r.answers.hazardLevel) || '').toString().trim();
+                    var hzArr2 = hazard2.split(/[,，]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    if (hzArr2.indexOf(recHz2) < 0) return false;
+                }
                 if (houseUsage2 && (r.houseUsage || '') !== houseUsage2) return false;
                 if (houseType2 && (r.houseType || '') !== houseType2) return false;
                 if (specificUsage2) {
@@ -787,6 +821,8 @@ function handleApi(req, res, urlPath) {
                     var old = list[idx];
                     // 推送时间戳变化 → 累加推送次数（用于前端显示"已推送×N"）
                     var pushTimeChanged = payload.pushedTime && payload.pushedTime !== old.pushedTime;
+                    // 推送时先清掉老快照，避免 _deepMerge 递归合并导致快照里残留旧字段
+                    if (pushTimeChanged && old.pushedSnapshot) delete old.pushedSnapshot;
                     var merged = _deepMerge(old, payload);
                     if (pushTimeChanged) {
                         merged.pushCount = (parseInt(old.pushCount, 10) || 0) + 1;
@@ -795,7 +831,11 @@ function handleApi(req, res, urlPath) {
                     list[idx] = merged;
                 }
                 writeListFile('farm-review-records.json', list, function(err3) {
-                    if (err3) { sendJson(res, 500, { error: '保存失败' }); return; }
+                    if (err3) {
+                        console.error('[farm-review-records] 保存失败:', err3.code || '', err3.message || err3);
+                        sendJson(res, 500, { error: '保存失败: ' + (err3.code || err3.message || 'IO错误') });
+                        return;
+                    }
                     sendJson(res, 200, { success: true });
                 });
             });

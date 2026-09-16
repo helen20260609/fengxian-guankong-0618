@@ -28,6 +28,8 @@
 .tc-status { font-size: 11px; padding: 3px 10px; border-radius: 8px; font-weight: 600; flex-shrink: 0; }
 .st-draft { background: rgba(249,171,0,.15); color: #c68400; }
 .st-submitted { background: rgba(24,128,56,.12); color: #188038; }
+.tc-pushed { font-size: 11px; color: #1a73e8; margin-top: 3px; display: flex; align-items: center; gap: 3px; }
+.tc-pushed i { font-size: 10px; }
 .tc-row { display: flex; font-size: 12px; margin-top: 4px; }
 .tc-label { width: 60px; flex-shrink: 0; color: var(--text2); }
 .tc-value { flex: 1; color: var(--text-primary); }
@@ -146,6 +148,21 @@
                String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     }
 
+    // 推送快照覆盖：H5 冻结在推送那一刻，PC 后续保存不影响手机端
+    function applySnapshot(rec) {
+        if (!rec || typeof rec !== 'object') return rec;
+        var snap = rec.pushedSnapshot;
+        if (!snap || typeof snap !== 'object') return rec;
+        var KEEP_KEYS = { houseNo: 1, status: 1, submitTime: 1, saveTime: 1, updateTime: 1, pushedTime: 1, pushCount: 1, checkin: 1, rectify: 1, pushedSnapshot: 1 };
+        var out = {};
+        Object.keys(rec).forEach(function(k) { out[k] = rec[k]; });
+        Object.keys(snap).forEach(function(k) {
+            if (KEEP_KEYS[k]) return;
+            out[k] = snap[k];
+        });
+        return out;
+    }
+
     function renderList() {
         var tickets = loadTickets();
         var list = currentTab === 'draft' ? tickets.drafts : tickets.submitted;
@@ -199,7 +216,14 @@
             }
 
             html += '<div class="tc-foot">';
+            html += '<div>';
             html += '<div class="tc-time">' + timeLabel + '：' + time + '</div>';
+            // 已推送标记：pushCount > 0 时显示（系统字段，快照覆盖时保留主记录值）
+            var pCnt = parseInt(t.pushCount, 10) || 0;
+            if (pCnt > 0) {
+                html += '<div class="tc-pushed" title="最后推送：' + (t.pushedTime || '') + '"><i class="fa-solid fa-paper-plane"></i>已推送×' + pCnt + (t.pushedTime ? ' · ' + t.pushedTime.slice(5) : '') + '</div>';
+            }
+            html += '</div>';
             html += '<div class="tc-actions">';
             if (isDraft) {
                 html += '<button class="tc-btn primary" data-action="continue" data-no="' + (t.houseNo || '') + '">继续排查</button>';
@@ -309,6 +333,8 @@
                 var local = [];
                 try { local = JSON.parse(localStorage.getItem('farm-review-records') || '[]'); } catch(e) {}
                 var merged = mergeRecords(local, remote);
+                // 推送快照覆盖：H5 冻结在推送那一刻，PC 后续保存不影响手机端
+                merged = merged.map(applySnapshot);
                 // 数据签名：houseNo + 关键字段序列化，判断是否真有变化（conclusion 在 answers 下，顶层无此字段）
                 var sig = JSON.stringify(merged.map(function(r) { return [r.houseNo, r.submitTime, r.updateTime, r.pushedTime, r.village, r.houseAddress, (r.answers && r.answers.conclusion) || '']; }));
                 localStorage.setItem('farm-review-records', JSON.stringify(merged));

@@ -230,16 +230,50 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
     .side-nav { display: none; }
     .form-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ===== rectify 模式：1-4 节只读 ===== */
+body.mode-edit.rectify-mode #sec-basic input:not([type="checkbox"]):not([type="radio"]),
+body.mode-edit.rectify-mode #sec-basic textarea,
+body.mode-edit.rectify-mode #sec-basic select,
+body.mode-edit.rectify-mode #sec-check input:not([type="checkbox"]):not([type="radio"]),
+body.mode-edit.rectify-mode #sec-check textarea,
+body.mode-edit.rectify-mode #sec-check select,
+body.mode-edit.rectify-mode #sec-checkin input:not([type="checkbox"]):not([type="radio"]),
+body.mode-edit.rectify-mode #sec-checkin textarea,
+body.mode-edit.rectify-mode #sec-checkin select,
+body.mode-edit.rectify-mode #sec-photos input:not([type="checkbox"]):not([type="radio"]),
+body.mode-edit.rectify-mode #sec-photos textarea,
+body.mode-edit.rectify-mode #sec-photos select {
+    pointer-events: none; background: var(--bg-hover) !important; color: var(--text-secondary) !important;
+}
+body.mode-edit.rectify-mode #sec-basic .radio-pill,
+body.mode-edit.rectify-mode #sec-basic .checkbox-pill,
+body.mode-edit.rectify-mode #sec-check .radio-pill,
+body.mode-edit.rectify-mode #sec-check .checkbox-pill,
+body.mode-edit.rectify-mode #sec-checkin .radio-pill,
+body.mode-edit.rectify-mode #sec-checkin .checkbox-pill,
+body.mode-edit.rectify-mode #sec-photos .radio-pill,
+body.mode-edit.rectify-mode #sec-photos .checkbox-pill { pointer-events: none; opacity: .75; }
+body.mode-edit.rectify-mode #sec-basic .radio-pill.active,
+body.mode-edit.rectify-mode #sec-basic .checkbox-pill.active,
+body.mode-edit.rectify-mode #sec-check .radio-pill.active,
+body.mode-edit.rectify-mode #sec-check .checkbox-pill.active { opacity: 1; }
+body.mode-edit.rectify-mode #sec-photos .photo-add-btn,
+body.mode-edit.rectify-mode #sec-photos .ph-del,
+body.mode-edit.rectify-mode #sec-check .hazard-add,
+body.mode-edit.rectify-mode #sec-check .hc-del { display: none !important; }
+body.mode-edit.rectify-mode #sec-photos .photo-item { cursor: zoom-in; }
 </style>
 </head>
-<body>
+<body class="mode-readonly">
 <div class="page-header">
     <div class="ph-left">
         <button class="btn-back" id="btnBack"><i class="fa-solid fa-arrow-left"></i> 返回列表</button>
         <div class="page-title">排查详情<span class="no" id="headNo">—</span></div>
     </div>
     <div class="header-actions" id="headerActions">
-        <button class="btn btn-edit" id="btnEdit"><i class="fa-solid fa-pen-to-square"></i> 编辑</button>
+        <button class="btn btn-rectify" id="btnRectify" style="display:none;background:linear-gradient(135deg,#ea580c 0%,#dc2626 100%);color:#fff;border:none;"><i class="fa-solid fa-hammer"></i> 进入整治</button>
+        <button class="btn btn-edit" id="btnEdit" style="display:none;"><i class="fa-solid fa-pen-to-square"></i> 编辑</button>
         <button class="btn btn-cancel" id="btnCancel" style="display:none;"><i class="fa-solid fa-xmark"></i> 取消</button>
         <button class="btn" id="btnReset" style="display:none;"><i class="fa-solid fa-rotate-left"></i> 重置</button>
         <button class="btn btn-primary" id="btnSave" style="display:none;"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
@@ -293,6 +327,9 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
     // 兼容旧参数：?town&village&houseNo=xxx → 归一化为 ?no=xxx（farm-review-edit/rectify 等旧回链仍在用）
     var houseNo = getParam('no') || getParam('houseNo');
     var isPending = getParam('tab') === 'pending';
+    // 场景模式：'' 排查详情（显示1-4节） | 'rectify' 隐患整治（显示1-6节，5/6可编辑）
+    var pageMode = getParam('mode');
+    var isRectify = pageMode === 'rectify';
     var apiSave = isPending ? '/api/farm-review-pending/' : '/api/farm-review-records/';
 
     var record = null;
@@ -531,7 +568,61 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
         html += card(4, 'sec-photos', '现场照片', buildPhotosEditable(r));
         sections.push({ id: 'sec-photos', title: '现场照片' });
 
+        // 隐患整治模式：追加 5. 房屋鉴定情况 + 6. 隐患整治情况
+        if (isRectify) {
+            html += buildAppraisalSection(r);
+            sections.push({ id: 'sec-appraisal', title: '房屋鉴定情况' });
+            html += buildRectifySection(r);
+            sections.push({ id: 'sec-rectify', title: '隐患整治情况' });
+        }
+
         return { html: html, sections: sections };
+    }
+
+    // ================= 5. 房屋鉴定情况（rectify 模式） =================
+    function buildAppraisalSection(r) {
+        var ap = (r.rectify && r.rectify.appraisal) || {};
+        return card(5, 'sec-appraisal', '房屋鉴定情况',
+            inp(r, 'rectify.appraisal.done', '安全鉴定', { radio: [{ value: '是', label: '是' }, { value: '否', label: '否' }] }) +
+            inp(r, 'rectify.appraisal.date', '安全鉴定时间', { dateType: 'date' }) +
+            inp(r, 'rectify.appraisal.conclusion', '鉴定结论', { radio: [{ value: 'A级', label: 'A级' }, { value: 'B级', label: 'B级' }, { value: 'C级', label: 'C级' }, { value: 'D级', label: 'D级' }] }) +
+            '<div class="form-item"></div>' +
+            inp(r, 'rectify.appraisal.orgName', '鉴定机构名称（盖章）', { span2: true }) +
+            inp(r, 'rectify.appraisal.orgCode', '统一社会信用代码', { span2: true }));
+    }
+
+    // ================= 6. 隐患整治情况（rectify 模式） =================
+    function buildRectifySection(r) {
+        var m = (r.rectify && r.rectify.measures) || {};
+        return card(6, 'sec-rectify', '隐患整治情况',
+            // 整治措施
+            '<div class="form-item full" style="margin-top:8px;padding-top:14px;border-top:1px solid var(--border);"><label style="font-size:13px;font-weight:600;color:var(--text-primary);">整治措施</label></div>' +
+            // 安全管控照片 + 完成安全管控 + 管控措施
+            '<div class="form-item full"><label>房屋隐患安全管控照片</label><div class="photo-grid" id="controlPhotoGrid"></div><div class="photo-add-btn" id="btnAddControlPhoto"><i class="fa-solid fa-plus"></i><span>上传照片</span></div></div>' +
+            inp(r, 'rectify.measures.controlDone', '完成安全管控', { radio: [{ value: '是', label: '是' }, { value: '否', label: '否' }] }) +
+            inp(r, 'rectify.measures.controlTypes', '管控措施（多选）', { checkbox: ['停止使用','停止经营','封控警示','人员撤离','硬隔离防护措施','其他'].map(function(s){return{value:s,label:s};}), span3: true, otherPlaceholder: '请输入其他管控措施' }) +
+            // 工程性整治照片 + 完成工程措施 + 工程措施
+            '<div class="form-item full"><label>房屋隐患工程性整治照片</label><div class="photo-grid" id="engineeringPhotoGrid"></div><div class="photo-add-btn" id="btnAddEngineeringPhoto"><i class="fa-solid fa-plus"></i><span>上传照片</span></div></div>' +
+            inp(r, 'rectify.measures.engineeringDone', '完成工程措施', { radio: [{ value: '是', label: '是' }, { value: '否', label: '否' }] }) +
+            inp(r, 'rectify.measures.engineeringTypes', '工程措施（多选）', { checkbox: ['拆除重建','维修加固','拆除','其他'].map(function(s){return{value:s,label:s};}), span3: true, otherPlaceholder: '请输入其他工程措施' }) +
+            // 签名确认
+            '<div class="form-item full" style="margin-top:8px;padding-top:14px;border-top:1px solid var(--border);"><label style="font-size:13px;font-weight:600;color:var(--text-primary);">签名确认</label></div>' +
+            inp(r, 'rectify.measures.ownerSign', '产权人姓名') +
+            inp(r, 'rectify.measures.ownerPhone', '产权人联系方式') +
+            inp(r, 'rectify.measures.ownerSignDate', '产权人签名日期', { dateType: 'date' }) +
+            '<div class="form-item"></div>' +
+            inp(r, 'rectify.measures.userSign', '使用人姓名') +
+            inp(r, 'rectify.measures.userPhone', '使用人联系方式') +
+            inp(r, 'rectify.measures.userDate', '使用人签名日期', { dateType: 'date' }) +
+            '<div class="form-item"></div>' +
+            inp(r, 'rectify.measures.townSign', '镇审核人姓名') +
+            inp(r, 'rectify.measures.townOrg', '镇审核人单位（盖章）') +
+            inp(r, 'rectify.measures.townPhone', '镇审核人联系方式') +
+            inp(r, 'rectify.measures.townDate', '镇审核人签名日期', { dateType: 'date' }) +
+            inp(r, 'rectify.measures.districtSign', '区管理人姓名') +
+            inp(r, 'rectify.measures.districtOrg', '区管理人单位（盖章）') +
+            inp(r, 'rectify.measures.districtPhone', '区管理人联系方式') +
+            inp(r, 'rectify.measures.districtDate', '区管理人签名日期', { dateType: 'date' }));
     }
 
     // 现场打卡只读视图：经纬度/精度/打卡时间/定位方式/操作人
@@ -680,10 +771,17 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
     var PHOTO_CATS = [
         { key: 'currentStatus', label: '现场照片', max: Infinity }
     ];
+    // rectify 模式新增两类整治照片
+    var RECTIFY_PHOTO_CATS = [
+        { key: 'controlPhotos', label: '安全管控照片', max: Infinity },
+        { key: 'engineeringPhotos', label: '工程整治照片', max: Infinity }
+    ];
     var pvList = [], pvIndex = 0;
     // pcPhotos: 当前编辑中的照片（含已有 + 新上传），保存时写回 record.photos
     // 结构：{ currentStatus: [{id, dataUrl, w, h, size, time}] }
     var pcPhotos = { currentStatus: [] };
+    // rectifyPhotos: 整治照片（controlPhotos / engineeringPhotos）
+    var rectifyPhotos = { controlPhotos: [], engineeringPhotos: [] };
     var pcPhotoSeq = 0;
 
     // 智能压缩（与 H5 方案 B 对齐）：maxWidth 1280 + 按原图兆像素自适应 JPEG 质量
@@ -728,6 +826,14 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
             if (p && typeof p === 'object') return Object.assign({}, p);
             return { id: 'ph_' + (++pcPhotoSeq), dataUrl: p, w: 0, h: 0, size: 0, time: '' };
         });
+        // rectify 模式：初始化整治照片
+        if (isRectify) {
+            var m = (record && record.rectify && record.rectify.measures) || {};
+            rectifyPhotos = {
+                controlPhotos: Array.isArray(m.controlPhotos) ? m.controlPhotos.slice() : [],
+                engineeringPhotos: Array.isArray(m.engineeringPhotos) ? m.engineeringPhotos.slice() : []
+            };
+        }
     }
 
     function buildPhotosEditable(r) {
@@ -815,17 +921,20 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
         input.addEventListener('change', function() {
             var catKey = input.getAttribute('data-cat');
             if (!catKey) return;
-            var cat = PHOTO_CATS.filter(function(c) { return c.key === catKey; })[0];
+            // 判断是普通现场照片还是整治照片
+            var isRectifyPhoto = catKey === 'controlPhotos' || catKey === 'engineeringPhotos';
             var files = Array.prototype.slice.call(input.files || []);
             if (!files.length) return;
-            // 不限制数量，全部上传
             var toProcess = files;
-            var addBtn = document.querySelector('#sec-photos .photo-cat-block[data-cat="' + catKey + '"] .photo-add-btn');
+            var addBtn = isRectifyPhoto
+                ? $('btnAdd' + (catKey === 'controlPhotos' ? 'Control' : 'Engineering') + 'Photo')
+                : document.querySelector('#sec-photos .photo-cat-block[data-cat="' + catKey + '"] .photo-add-btn');
             if (addBtn) { addBtn.classList.add('uploading'); addBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>压缩中...</span>'; }
             var done = 0, success = 0;
             toProcess.forEach(function(f) {
                 compressImage(f, 1280).then(function(r) {
-                    pcPhotos[catKey].push({
+                    var target = isRectifyPhoto ? rectifyPhotos[catKey] : pcPhotos[catKey];
+                    target.push({
                         id: 'ph_' + (++pcPhotoSeq),
                         dataUrl: r.dataUrl,
                         w: r.width, h: r.height, size: r.size,
@@ -837,11 +946,64 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
                 }).finally(function() {
                     done++;
                     if (done === toProcess.length) {
-                        rerenderPhotoCat(catKey);
+                        if (isRectifyPhoto) renderRectifyPhotoGrid(catKey);
+                        else rerenderPhotoCat(catKey);
                         if (success > 0) toast('已添加 ' + success + ' 张照片（保存后生效）', 'success');
                     }
                 });
             });
+        });
+    }
+
+    // ================= rectify 模式：整治照片渲染 / 绑定 =================
+    function renderRectifyPhotoGrid(catKey) {
+        var grid = document.getElementById(catKey === 'controlPhotos' ? 'controlPhotoGrid' : 'engineeringPhotoGrid');
+        if (!grid) return;
+        var arr = rectifyPhotos[catKey] || [];
+        if (arr.length === 0) {
+            grid.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;padding:20px;text-align:center;grid-column:1/-1;">暂无照片</div>';
+            return;
+        }
+        grid.innerHTML = arr.map(function(p, i) {
+            var src = (p && (p.dataUrl || p.url)) || p;
+            return '<div class="photo-item" data-idx="' + i + '">' +
+                '<img src="' + esc(src) + '" onerror="this.parentNode.style.display=\'none\'">' +
+                '<div class="ph-del" data-del="' + i + '" title="删除"><i class="fa-solid fa-xmark"></i></div>' +
+                '</div>';
+        }).join('');
+        // 绑定查看 / 删除
+        var items = Array.prototype.slice.call(grid.querySelectorAll('.photo-item'));
+        var srcs = items.map(function(it) { var im = it.querySelector('img'); return im ? im.src : ''; });
+        items.forEach(function(it, i) {
+            it.addEventListener('click', function(e) {
+                if (e.target.closest && e.target.closest('.ph-del')) return;
+                openPhotoViewer(i, srcs);
+            });
+        });
+        grid.querySelectorAll('.ph-del').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!confirm('确定删除这张照片吗？（保存后生效）')) return;
+                rectifyPhotos[catKey].splice(parseInt(btn.getAttribute('data-del'), 10), 1);
+                renderRectifyPhotoGrid(catKey);
+            });
+        });
+    }
+
+    function bindRectifyPhotos() {
+        renderRectifyPhotoGrid('controlPhotos');
+        renderRectifyPhotoGrid('engineeringPhotos');
+        $('btnAddControlPhoto').addEventListener('click', function() {
+            var input = $('photoFileInput');
+            input.setAttribute('data-cat', 'controlPhotos');
+            input.value = '';
+            input.click();
+        });
+        $('btnAddEngineeringPhoto').addEventListener('click', function() {
+            var input = $('photoFileInput');
+            input.setAttribute('data-cat', 'engineeringPhotos');
+            input.value = '';
+            input.click();
         });
     }
 
@@ -996,10 +1158,29 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
         buildSideNav(built.sections);
         bindControls();
         if (!isPending) { bindPcHazards(); bindPhotos(); bindViewerOnce(); bindPhotoFileInputOnce(); }
+        if (isRectify) bindRectifyPhotos();
         initCheckinMap(record);
         $('headNo').textContent = ' · ' + record.houseNo + (isPending ? '（待排查任务）' : '');
         // 草稿 → 强制只读（不显示编辑按钮）
         if (record && record.status === 'draft') setMode('readonly');
+        // rectify 模式：已整改的记录整体只读（含 5/6 节）
+        if (isRectify && record && record.status === 'rectified') setMode('readonly');
+        // rectify 模式默认定位：
+        //   - 未整改（编辑态）→ 定位到第 5 节房屋鉴定情况，便于整改人员直接录入
+        //   - 已整改（只读态）→ 从第 1 节房屋底数开始，按顺序浏览
+        if (isRectify) {
+            var isRectifiedNow = record && record.status === 'rectified';
+            setTimeout(function() {
+                var targetId = isRectifiedNow ? 'sec-basic' : 'sec-appraisal';
+                var target = $(targetId);
+                if (target) target.scrollIntoView({ behavior: 'auto', block: 'start' });
+                var items = $('sideNav').querySelectorAll('.sn-item');
+                items.forEach(function(n) { n.classList.remove('active'); });
+                // 已整改定位到第 1 节（索引 0），未整改定位到第 5 节（索引 4）
+                var activeIdx = isRectifiedNow ? 0 : 4;
+                if (items[activeIdx]) items[activeIdx].classList.add('active');
+            }, 50);
+        }
     }
 
     // ================= 现场打卡只读地图 =================
@@ -1102,9 +1283,9 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
         if (payload.inspector !== undefined) payload.inspectorName = payload.inspector;
         // 房屋底数「村居委」villageName 同步回 village，保持与旧数据/H5 一致
         if (payload.villageName !== undefined) payload.village = payload.villageName;
-        // 刷新推送时间戳：H5 地图轮询据此检测 PC 端修改并自动刷新
+        // 刷新修改时间戳：H5 地图轮询据此检测 PC 端修改并自动刷新
+        // （仅更新 updateTime；pushedTime 只在列表页点「推送」按钮时才刷新，避免误增 pushCount）
         payload.updateTime = new Date().toLocaleString('sv-SE').slice(0, 16);
-        payload.pushedTime = payload.updateTime;
         // 状态联动：仅当本次编辑把状态「改为」rectified 时才补 rectifyTime；
         // 编辑已是 rectified 的记录时保留原 rectifyTime，避免整改完成时间被误重置
         var wasRectified = record && record.status === 'rectified';
@@ -1130,6 +1311,13 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
                 return sum + ((pcPhotos[c.key] || []).length);
             }, 0);
         }
+        // rectify 模式：把整治照片写回 rectify.measures
+        if (isRectify) {
+            payload.rectify = payload.rectify || {};
+            payload.rectify.measures = payload.rectify.measures || {};
+            payload.rectify.measures.controlPhotos = rectifyPhotos.controlPhotos;
+            payload.rectify.measures.engineeringPhotos = rectifyPhotos.engineeringPhotos;
+        }
         return payload;
     }
     function pruneAnswers(rec, formData) {
@@ -1153,6 +1341,16 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
                 data.rectify.measures = Object.assign({}, record.rectify.measures, rectifyPatch.measures || {});
             }
             data.rectify.updateTime = new Date().toISOString();
+        }
+        // rectify 模式：状态流转为已整改
+        if (isRectify) {
+            data.status = 'rectified';
+            data.rectifyTime = new Date().toISOString();
+            // 同步档案数据（调用 house-arch-data.js 的全局函数）
+            if (typeof window.syncRectifyRecordToHouse === 'function') {
+                var merged = Object.assign({}, record, data);
+                try { window.syncRectifyRecordToHouse(merged, '农房回头看'); } catch(e) { console.warn('同步档案失败', e); }
+            }
         }
         var btn = $('btnSave');
         btn.disabled = true;
@@ -1201,6 +1399,23 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
             }
             $('pageBody').style.display = '';
             render();
+            // 初始模式：rectify 模式直接进入编辑态（但已整改的只读），普通模式只读
+            if (isRectify && record && record.status !== 'rectified') {
+                setMode('edit');
+            } else {
+                // 普通模式（含未整改 submitted）：初始只读，编辑按钮由 setMode 内部控制显示
+                setMode('readonly');
+            }
+            // rectify 模式下调整标题
+            if (isRectify) {
+                document.title = '隐患整治';
+                var titleEl = document.querySelector('.page-title');
+                if (titleEl) titleEl.childNodes[0].textContent = '隐患整治';
+            }
+            // 普通模式：已提交且有隐患等级的记录显示"进入整治"按钮
+            if (!isRectify && record && record.status === 'submitted' && (record.hazardLevel === '严重' || record.hazardLevel === '一般')) {
+                $('btnRectify').style.display = '';
+            }
         }).catch(function() {
             $('notFoundDesc').textContent = '数据加载失败，请确认服务已启动';
             $('notFound').style.display = '';
@@ -1219,10 +1434,11 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
         currentMode = mode;
         document.body.classList.toggle('mode-readonly', mode === 'readonly');
         document.body.classList.toggle('mode-edit', mode === 'edit');
+        document.body.classList.toggle('rectify-mode', isRectify);
         var isDraft = record && record.status === 'draft';
         var isRectified = record && record.status === 'rectified';
         // 草稿仅手机端可编辑；已整改为终态不可再编辑：均不显示编辑按钮
-        $('btnEdit').style.display    = (mode === 'readonly' && !isDraft && !isRectified) ? '' : 'none';
+        $('btnEdit').style.display    = (mode === 'readonly' && !isDraft && !isRectified && !isRectify) ? '' : 'none';
         $('btnCancel').style.display  = (mode === 'edit') ? '' : 'none';
         $('btnReset').style.display   = (mode === 'edit') ? '' : 'none';
         $('btnSave').style.display    = (mode === 'edit') ? '' : 'none';
@@ -1243,8 +1459,10 @@ body.mode-readonly .photo-item { cursor: zoom-in; }
         if (confirm('放弃当前修改并恢复为已保存的内容？')) render();
     });
 
-    // 初始进入只读态
-    setMode('readonly');
+    // 进入整治：跳转到 rectify 模式
+    $('btnRectify').addEventListener('click', function() {
+        location.href = './farm-review-detail.html?no=' + encodeURIComponent(houseNo) + '&mode=rectify';
+    });
 
     init();
 })();

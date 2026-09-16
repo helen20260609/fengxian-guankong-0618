@@ -276,6 +276,22 @@
         };
     }
 
+    // 推送快照覆盖：H5 冻结在推送那一刻，PC 后续保存不影响手机端
+    // 业务字段用快照覆盖；系统字段（状态/时间戳/推送计数/PC私有节）保留主记录最新值
+    function applySnapshot(rec) {
+        if (!rec || typeof rec !== 'object') return rec;
+        var snap = rec.pushedSnapshot;
+        if (!snap || typeof snap !== 'object') return rec;
+        var KEEP_KEYS = { houseNo: 1, status: 1, submitTime: 1, saveTime: 1, updateTime: 1, pushedTime: 1, pushCount: 1, checkin: 1, rectify: 1, pushedSnapshot: 1 };
+        var out = {};
+        Object.keys(rec).forEach(function(k) { out[k] = rec[k]; });
+        Object.keys(snap).forEach(function(k) {
+            if (KEEP_KEYS[k]) return;
+            out[k] = snap[k];
+        });
+        return out;
+    }
+
     // 加载本地缓存（pending + records）
     function loadLocalData() {
         var pending = [], done = [];
@@ -337,6 +353,8 @@
             };
             try { localStorage.setItem('farm-review-pending', JSON.stringify(merged.pending)); } catch (e) {}
             try { localStorage.setItem('farm-review-records', JSON.stringify(merged.done)); } catch (e) {}
+            // 推送快照覆盖：H5 冻结在推送那一刻，PC 后续保存不影响手机端
+            merged.done = merged.done.map(applySnapshot);
             // 补偿：inspect 提交后 DELETE pending 失败的记录，趁同步时补删
             flushPendingDeleteQueue();
             // 补偿：inspect 提交后 POST records 失败的记录，趁同步时补推

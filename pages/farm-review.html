@@ -396,6 +396,7 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
 }
 .sub-tab-btn.active .cnt { background: rgba(255,255,255,0.25); color: #fff; }
 .sub-tab-btn[data-cat="draft"]:not(.active) .cnt { background: var(--primary-light); color: var(--primary); }
+.sub-tab-btn[data-cat="safe"]:not(.active) .cnt { background: #e0f2f1; color: #00897b; }
 .sub-tab-btn[data-cat="unrectified"]:not(.active) .cnt { background: #fef7e0; color: var(--warning); }
 .sub-tab-btn[data-cat="rectified"]:not(.active) .cnt { background: #e6f4ea; color: var(--success); }
 
@@ -491,6 +492,7 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
 <div class="sub-tab-bar" id="subTabBar" data-only="records">
     <button class="sub-tab-btn active" data-cat=""><i class="fa-solid fa-list"></i> 全部 <span class="cnt" id="cntAll">0</span></button>
     <button class="sub-tab-btn" data-cat="draft"><i class="fa-solid fa-file-pen"></i> 草稿 <span class="cnt" id="cntDraft">0</span></button>
+    <button class="sub-tab-btn" data-cat="safe"><i class="fa-solid fa-shield-halved"></i> 未发现隐患 <span class="cnt" id="cntSafe">0</span></button>
     <button class="sub-tab-btn" data-cat="unrectified"><i class="fa-solid fa-screwdriver-wrench"></i> 未整改 <span class="cnt" id="cntUnrectified">0</span></button>
     <button class="sub-tab-btn" data-cat="rectified"><i class="fa-solid fa-circle-check"></i> 已整改 <span class="cnt" id="cntRectified">0</span></button>
 </div>
@@ -715,9 +717,48 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         var t = new URLSearchParams(location.search).get('tab');
         return t === 'pending' ? 'pending' : 'records';
     })();
-    // 排查结果二级分类：''=全部 / draft=草稿 / unrectified=未整改 / rectified=已整改
+    // 排查结果二级分类：''=全部 / draft=草稿 / safe=未发现隐患 / unrectified=未整改 / rectified=已整改
     var currentCat = '';
-    var CAT_STATUS_MAP = { '': '', 'draft': 'draft', 'unrectified': 'submitted', 'rectified': 'rectified' };
+    // cat → { status, hazard } 查询条件；hazard 为逗号分隔多值
+    var CAT_FILTER_MAP = {
+        '':           { status: '',          hazard: '' },
+        'draft':      { status: 'draft',     hazard: '' },
+        'safe':       { status: 'submitted', hazard: '未发现' },
+        'unrectified':{ status: 'submitted', hazard: '一般,严重' },
+        'rectified':  { status: 'rectified', hazard: '' }
+    };
+    // 当前 cat 是否锁定了隐患等级（safe/unrectified 锁定，其余放开）
+    function catHazardLock() {
+        var f = CAT_FILTER_MAP[currentCat] || CAT_FILTER_MAP[''];
+        return f.hazard || '';
+    }
+    function applyHazardLock() {
+        var lock = catHazardLock();
+        var sel = $('filterHazard');
+        if (!sel) return;
+        // 锁定时若为多值（如 一般,严重），临时注入一个组合选项用于展示
+        var comboOpt = sel.querySelector('option[data-combo="1"]');
+        if (lock && lock.indexOf(',') > -1) {
+            if (!comboOpt) {
+                comboOpt = document.createElement('option');
+                comboOpt.setAttribute('data-combo', '1');
+                comboOpt.value = lock;
+                comboOpt.textContent = lock.replace(/[,，]/g, ' / ');
+                sel.appendChild(comboOpt);
+            }
+            comboOpt.value = lock;
+            comboOpt.textContent = lock.replace(/[,，]/g, ' / ');
+        } else if (comboOpt) {
+            comboOpt.remove();
+            comboOpt = null;
+        }
+        if (lock) {
+            sel.value = lock;
+            sel.disabled = true;
+        } else {
+            sel.disabled = false;
+        }
+    }
     var states = {
         records: { page: 1, size: 10, total: 0, rows: [] },
         pending: { page: 1, size: 10, total: 0, rows: [] }
@@ -796,11 +837,12 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
     });
 
     function getFilters() {
+        var catF = CAT_FILTER_MAP[currentCat] || CAT_FILTER_MAP[''];
         return {
             town: $('filterTown').value,
             village: $('filterVillage').value,
-            status: CAT_STATUS_MAP[currentCat] || '',
-            hazard: $('filterHazard').value,
+            status: catF.status || '',
+            hazard: catF.hazard || $('filterHazard').value,
             houseUsage: $('filterHouseUsage').value,
             houseType: $('filterHouseType').value,
             specificUsage: msFilterSpecificUsage.get(),
@@ -818,28 +860,37 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         base.set('page', 1); base.set('size', 1);
         if (f.town) base.set('town', f.town);
         if (f.village) base.set('village', f.village);
-        if (f.hazard) base.set('hazard', f.hazard);
+        // hazard 下拉条件只在 tab 未锁定时继承到计数；tab 锁定（safe/unrectified）时由各计数请求自带 hazard
+        if (!catHazardLock() && f.hazard) base.set('hazard', f.hazard);
         if (f.houseUsage) base.set('houseUsage', f.houseUsage);
         if (f.houseType) base.set('houseType', f.houseType);
         if (f.specificUsage.length) base.set('specificUsage', f.specificUsage.join(','));
         if (f.q) base.set('q', f.q);
         if (f.dateFrom) base.set('dateFrom', f.dateFrom);
         if (f.dateTo) base.set('dateTo', f.dateTo);
-        var fetchCount = function(status) {
+        var fetchCount = function(status, hazard) {
             var p = new URLSearchParams(base);
             if (status) p.set('status', status);
+            if (hazard) p.set('hazard', hazard);
             return fetch('/api/farm-review-records/page?' + p.toString())
                 .then(function(r) { return r.json(); })
                 .then(function(res) { return res.total || 0; })
                 .catch(function() { return 0; });
         };
-        Promise.all([fetchCount(''), fetchCount('draft'), fetchCount('submitted'), fetchCount('rectified')])
+        Promise.all([
+            fetchCount('', ''),
+            fetchCount('draft', ''),
+            fetchCount('submitted', '未发现'),
+            fetchCount('submitted', '一般,严重'),
+            fetchCount('rectified', '')
+        ])
             .then(function(rs) {
                 var setTxt = function(id, v) { var el = $(id); if (el) el.textContent = v; };
                 setTxt('cntAll', rs[0]);
                 setTxt('cntDraft', rs[1]);
-                setTxt('cntUnrectified', rs[2]);
-                setTxt('cntRectified', rs[3]);
+                setTxt('cntSafe', rs[2]);
+                setTxt('cntUnrectified', rs[3]);
+                setTxt('cntRectified', rs[4]);
             });
     }
     function switchCat(cat) {
@@ -848,6 +899,7 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         document.querySelectorAll('.sub-tab-btn').forEach(function(b) {
             b.classList.toggle('active', b.dataset.cat === cat);
         });
+        applyHazardLock();
         states.records.page = 1;
         loadList();
     }
@@ -1017,7 +1069,8 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
             }
             if (currentTab === 'records') {
                 var isDraft = r.status === 'draft';
-                if (!isDraft) {
+                var isRectified = r.status === 'rectified';
+                if (!isDraft && !isRectified) {
                     // 有隐患（一般/严重）的记录显示整改入口
                     if (hz === '严重' || hz === '一般') {
                         cols += '<button class="btn btn-sm" style="color:#e65100;border-color:#e65100;" onclick="window.__openRectify(\'' + esc(r.houseNo) + '\')"><i class="fa-solid fa-screwdriver-wrench"></i> 整改</button>';
@@ -1030,8 +1083,8 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
                     } else {
                         cols += '<button class="btn btn-sm btn-push" onclick="window.__pushToMini(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-paper-plane"></i> 推送</button>';
                     }
-                    cols += '<button class="btn btn-sm btn-arch" onclick="window.__syncToArchive(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-box-archive"></i> 入档</button>';
                 }
+                // 已整改记录：只保留"详情"按钮，进入详情页后只读展示全部 6 节
             }
             cols += '</td>';
             return '<tr>' + cols + '</tr>';
@@ -1080,10 +1133,50 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         return null;
     }
 
-    // 单条推送核心逻辑（返回 Promise），刷新推送时间戳，小程序端据此检测到变化
+    // 推送白名单：只推送 PC 详情页第 1/2/4 节字段（房屋底数 + 排查问题清单 + 现场照片）
+    // 不含第 3 节现场打卡（checkin）、第 5 节房屋鉴定（rectify.appraisal）、第 6 节隐患整治（rectify.measures 下的非排查字段）
+    var PUSH_KEYS = [
+        // 标识 / 系统字段（H5 识别 + 服务端计数需要）
+        'houseNo', 'status', 'submitTime', 'saveTime', 'updateTime', 'pushedTime', 'pushCount',
+        // 第 1 节 房屋底数
+        'district', 'town', 'village', 'villageName', 'groupName', 'roadName', 'buildingNo',
+        'houseAddress', 'houseUsage', 'specificUsage', 'otherUsage',
+        'floors', 'area', 'buildYear', 'initialJudgment', 'appraisalResult',
+        // 第 2 节 排查问题清单
+        'checkFindTime', 'homesteadLocation', 'uniqueId', 'houseOwner', 'contactPhone',
+        'houseFloors', 'houseType', 'hazards', 'structuralProblems', 'hazardLevel',
+        'tempControlMeasures', 'tempControlMeasuresOther',
+        'inspector', 'inspectorName', 'checkRemark',
+        // 第 4 节 现场照片
+        'photos', 'photoCount',
+        // H5 地图/详情渲染依赖（房屋定位 + 产权人兜底）
+        'lat', 'lng', 'houseLat', 'houseLng', 'owner', 'houseName'
+    ];
+
+    // 单条推送核心逻辑（返回 Promise），只推送第 1/2/4 节内容，小程序端据此检测到变化
     function pushOne(r) {
-        var payload = JSON.parse(JSON.stringify(r));
+        // 按白名单挑字段，避免把现场打卡/鉴定/整治等 PC 私有字段推给小程序
+        var payload = {};
+        PUSH_KEYS.forEach(function(k) {
+            if (r[k] !== undefined) payload[k] = r[k];
+        });
+        // 第 2 节里嵌套的「需产权人落实整改措施 / 计划整改完成时限」属于推送范围
+        // 但 rectify 下的 appraisal、controlPhotos、engineeringPhotos、签名等属于第 5/6 节，不推
+        var rm = (r.rectify && r.rectify.measures) || {};
+        if (rm.controlTypes !== undefined || rm.ownerDate !== undefined) {
+            payload.rectify = { measures: {} };
+            if (rm.controlTypes !== undefined) payload.rectify.measures.controlTypes = rm.controlTypes;
+            if (rm.ownerDate !== undefined) payload.rectify.measures.ownerDate = rm.ownerDate;
+        }
         payload.pushedTime = new Date().toLocaleString('sv-SE').slice(0, 16);
+        // 推送快照：H5 端冻结在推送那一刻的数据，PC 后续保存不影响手机端
+        // 剔除 pushedSnapshot 自身避免嵌套膨胀；剔除 checkin/rectify 等 PC 私有字段（白名单已过滤，但快照要完整副本）
+        var snapshot = {};
+        Object.keys(r).forEach(function(k) {
+            if (k === 'pushedSnapshot') return;
+            snapshot[k] = r[k];
+        });
+        payload.pushedSnapshot = snapshot;
         return fetch('/api/farm-review-records/' + encodeURIComponent(r.houseNo), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1222,29 +1315,45 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         runBatch();
     }
 
-    // 批量入档到风险档案
+    // 批量入档到风险档案（仅已整改记录可入档）
     function batchArchive() {
         if (typeof patchHouseRecord !== 'function') { toast('档案数据层未加载', 'error'); return; }
         var rows = getSelectedRows();
         if (!rows.length) { toast('请先勾选要入档的记录', 'error'); return; }
+        // 过滤：只允许"已整改"状态入档
+        var eligible = rows.filter(function(r) { return r.status === 'rectified'; });
+        var skipped = rows.length - eligible.length;
+        if (!eligible.length) {
+            toast('仅「已整改」状态的记录可入档，当前勾选 ' + rows.length + ' 条均不符合', 'error');
+            return;
+        }
         var done = 0, fail = 0;
-        rows.forEach(function(r) {
+        eligible.forEach(function(r) {
             try { archiveOne(r); done++; } catch (e) { fail++; }
         });
-        if (fail === 0) toast('已批量入档 ' + done + ' 条到风险档案', 'success');
-        else toast('入档完成：成功 ' + done + ' 条，失败 ' + fail + ' 条', fail ? 'error' : 'success');
+        var msg = '已批量入档 ' + done + ' 条到风险档案';
+        if (skipped > 0) msg += '，跳过非已整改 ' + skipped + ' 条';
+        if (fail === 0) toast(msg, skipped > 0 ? 'info' : 'success');
+        else toast('入档完成：成功 ' + done + ' 条，失败 ' + fail + ' 条' + (skipped > 0 ? '，跳过非已整改 ' + skipped + ' 条' : ''), fail ? 'error' : 'success');
     }
 
     window.__openDetail = function(houseNo) {
         // 跳转到独立详情页（抽屉逻辑已迁移到 farm-review-detail.html）
         var url = './farm-review-detail.html?no=' + encodeURIComponent(houseNo);
-        if (currentTab === 'pending') url += '&tab=pending';
+        if (currentTab === 'pending') {
+            url += '&tab=pending';
+        } else {
+            // 已整改记录：带 mode=rectify 让详情页显示全部 6 节（含房屋鉴定、隐患整治），只读
+            var r = findRow(houseNo);
+            if (r && r.status === 'rectified') url += '&mode=rectify';
+        }
         location.href = url;
     };
 
     // 跳转到隐患整改页（records 有隐患记录的整改入口）
+    // 已合并到 detail 页：使用 mode=rectify 参数
     window.__openRectify = function(houseNo) {
-        location.href = './farm-review-rectify.html?houseNo=' + encodeURIComponent(houseNo);
+        location.href = './farm-review-detail.html?no=' + encodeURIComponent(houseNo) + '&mode=rectify';
     };
 
     // ================= 待排查任务下发 / 收回 =================
