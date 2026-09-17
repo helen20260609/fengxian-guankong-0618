@@ -159,7 +159,7 @@ new_left_column = """<!-- Left Tab Navigation -->
     <div class="section-body">
         <div class="info-grid">
             <div class="info-item">
-                <span class="info-label">房屋编号</span>
+                <span class="info-label">唯一标识</span>
                 <span class="info-value" id="house-no">-</span>
             </div>
             <div class="info-item">

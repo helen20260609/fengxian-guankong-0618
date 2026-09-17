@@ -47,7 +47,7 @@ function buildPointModalContent(point) {
             <div class="point-detail-section-title">房屋信息</div>
             <div class="point-info-grid">
                 <div class="point-info-item">
-                    <span class="point-info-label">房屋编号</span>
+                    <span class="point-info-label">唯一标识</span>
                     <span class="point-info-value">${point.houseNo || ('FX-NC-ZF-' + String(point.id).padStart(4, '0'))}</span>
                 </div>
                 <div class="point-info-item">

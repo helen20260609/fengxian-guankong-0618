@@ -321,7 +321,7 @@
         html.bs-theme .modal-content,
         html.bs-theme .map-picker-box { background: var(--bg-card) !important; border-color: var(--border) !important; color: var(--text-primary); }
 
-        /* 大屏弹窗模式：隐藏顶部栏（房屋编号重复 + 返回按钮不需要） */
+        /* 大屏弹窗模式：隐藏顶部栏（唯一标识重复 + 返回按钮不需要） */
         html.bs-theme .topbar { display: none !important; }
 
         html.bs-theme .sidebar-header,
@@ -1370,7 +1370,7 @@
 
         const basicData_RURAL = {
             jbxx: [
-                ['房屋编号', 'NF-2025-00001'],
+                ['唯一标识', 'NF-2025-00001'],
                 ['房屋性质', '住宅'],
                 ['所在区域', '奉贤区西渡街道'],
                 ['路号信息', '西闸公路二一三九弄35号'],
@@ -1538,12 +1538,47 @@
         const surveySubTabs_URBAN = JSON.parse(JSON.stringify(surveySubTabs_RURAL));
         const surveyData_URBAN    = JSON.parse(JSON.stringify(surveyData_RURAL));
         const basicData_URBAN     = JSON.parse(JSON.stringify(basicData_RURAL));
-        // 城镇自建房不含农村独有字段（户主联系方式 / 家庭成员信息）
-        basicData_URBAN.jbxx = basicData_URBAN.jbxx.filter(function(r) { return !r[2]; });
-        // 城镇自建房不含宅基地相关字段
-        basicData_URBAN.jbxx = basicData_URBAN.jbxx.filter(function(r) { return r[0] !== '土地性质' && r[0] !== '集体土地'; });
+        // 城镇自建房基本信息字段（固定21项，与农村版字段差异维护）
+        basicData_URBAN.jbxx = [
+            ['唯一标识', 'NF-2025-00001'],
+            ['房屋性质', '住宅'],
+            ['所在区域', '奉贤区西渡街道'],
+            ['路号信息', '西闸公路二一三九弄35号'],
+            ['不需要排查原因', '—'],
+            ['产权人 / 使用人信息', '陈连明'],
+            ['身份证号码', '31022619680714051X'],
+            ['房屋用途', '自住'],
+            ['是否同时自住', '是'],
+            ['具体用途', '日常居住'],
+            ['其他具体用途', '—'],
+            ['人员聚集场所周边', '否'],
+            ['其他人员密集场所周边', '否'],
+            ['土地性质', '国有土地'],
+            ['国有土地', '—'],
+            ['所在区域（区域类型）', '建制镇'],
+            ['城市建成区类型', '—'],
+            ['建筑层数', '3层'],
+            ['建筑面积 (m²)', '237.3'],
+            ['建成时间', '1976年'],
+            ['具体年份', '1976']
+        ];
         basicData_URBAN.zjd = [];
-        basicData_URBAN.glqk = basicData_URBAN.glqk.filter(function(r) { return r[0] !== '已取得的行政许可'; });
+        // 城镇自建房管理情况字段（2项，与农村一致）
+        basicData_URBAN.glqk = [
+            ['已取得的行政许可', '建设工程规划许可证'],
+            ['违法建设和违法审批', '否']
+        ];
+        // 城镇自建房建设情况字段（8项，含"装修是否改变主体结构"）
+        basicData_URBAN.jsqk = [
+            ['常住或使用人数超过 10 人', '否'],
+            ['设计方式', '有专业设计'],
+            ['建造方式', '有资质施工队伍'],
+            ['结构类型', '砖混'],
+            ['楼屋盖', '现浇板'],
+            ['是否改扩建', '否'],
+            ['是否装修', '否'],
+            ['装修是否改变主体结构', '否']
+        ];
         const tableData_URBAN     = JSON.parse(JSON.stringify(tableData_RURAL));
         const measureSubTabs_URBAN= JSON.parse(JSON.stringify(measureSubTabs_RURAL));
         const measureData_URBAN   = JSON.parse(JSON.stringify(measureData_RURAL));
@@ -1949,8 +1984,33 @@
                 const r = rows.find(function(row) { return row[0] === label; });
                 return r ? r[1] : fallback;
             }
-            const jbxx = [
-                ['房屋编号', libVal(libJbxx, '房屋编号', s.no || 'NF-2025-00001')],
+            const isUrban = isUrbanHouse();
+            const jbxx = isUrban ? [
+                // 城镇自建房字段（固定21项）
+                ['唯一标识', libVal(libJbxx, '唯一标识', s.no || 'NF-2025-00001')],
+                ['房屋性质', libVal(libJbxx, '房屋性质', s.houseType || '住宅')],
+                ['所在区域', libVal(libJbxx, '所在区域', '奉贤区' + (s.street || '—'))],
+                ['路号信息', libVal(libJbxx, '路号信息', s.address || '—')],
+                ['不需要排查原因', libVal(libJbxx, '不需要排查原因', '—')],
+                ['产权人 / 使用人信息', libVal(libJbxx, '产权人 / 使用人信息', s.owner || '—')],
+                ['身份证号码', libVal(libJbxx, '身份证号码', '—')],
+                ['房屋用途', libVal(libJbxx, '房屋用途', '自住')],
+                ['是否同时自住', libVal(libJbxx, '是否同时自住', '是')],
+                ['具体用途', libVal(libJbxx, '具体用途', '日常居住')],
+                ['其他具体用途', libVal(libJbxx, '其他具体用途', '—')],
+                ['人员聚集场所周边', libVal(libJbxx, '人员聚集场所周边', '否')],
+                ['其他人员密集场所周边', libVal(libJbxx, '其他人员密集场所周边', '否')],
+                ['土地性质', libVal(libJbxx, '土地性质', '—')],
+                ['国有土地', libVal(libJbxx, '国有土地', '—')],
+                ['所在区域（区域类型）', libVal(libJbxx, '所在区域（区域类型）', '建制镇')],
+                ['城市建成区类型', libVal(libJbxx, '城市建成区类型', '—')],
+                ['建筑层数', libVal(libJbxx, '建筑层数', '3层')],
+                ['建筑面积 (m²)', libVal(libJbxx, '建筑面积 (m²)', '—')],
+                ['建成时间', (s.year ? s.year + '年' : '—')],
+                ['具体年份', libVal(libJbxx, '具体年份', s.year || '—')]
+            ] : [
+                // 农村自建房字段
+                ['唯一标识', libVal(libJbxx, '唯一标识', s.no || 'NF-2025-00001')],
                 ['房屋性质', libVal(libJbxx, '房屋性质', s.houseType || '住宅')],
                 ['所在区域', libVal(libJbxx, '所在区域', '奉贤区' + (s.street || '—'))],
                 ['路号信息', libVal(libJbxx, '路号信息', s.address || '—')],
@@ -1978,7 +2038,16 @@
                 ['审批情况', libVal(libZjd, '审批情况', '自然资源部门审批通过')],
                 ['权属证明', libVal(libZjd, '权属证明', '—')]
             ];
-            const jsqk = [
+            const jsqk = isUrbanHouse() ? [
+                ['常住或使用人数超过 10 人', libVal(libJsqk, '常住或使用人数超过 10 人', '否')],
+                ['设计方式', libVal(libJsqk, '设计方式', '有专业设计')],
+                ['建造方式', libVal(libJsqk, '建造方式', '有资质施工队伍')],
+                ['结构类型', libVal(libJsqk, '结构类型', s.category || '砖混')],
+                ['楼屋盖', libVal(libJsqk, '楼屋盖', '现浇板')],
+                ['是否改扩建', libVal(libJsqk, '是否改扩建', '否')],
+                ['是否装修', libVal(libJsqk, '是否装修', '否')],
+                ['装修是否改变主体结构', libVal(libJsqk, '装修是否改变主体结构', '否')]
+            ] : [
                 ['常住或使用人数超过 10 人', libVal(libJsqk, '常住或使用人数超过 10 人', '否')],
                 ['设计方式', libVal(libJsqk, '设计方式', '有专业设计')],
                 ['建造方式', libVal(libJsqk, '建造方式', '有资质施工队伍')],
@@ -1998,11 +2067,9 @@
                 return [r[0], r[1], true];
             });
             const dynamicBasic = { jbxx, zjd, jsqk, glqk, jgxx, syxx };
-            // 城镇自建房：剔除宅基地相关字段
+            // 城镇自建房：剔除宅基地相关字段（jbxx 已在构建时按城镇字段独立，无需再过滤）
             if (isUrbanHouse()) {
                 dynamicBasic.zjd = [];
-                dynamicBasic.jbxx = dynamicBasic.jbxx.filter(function(r) { return r[0] !== '土地性质' && r[0] !== '集体土地'; });
-                dynamicBasic.glqk = dynamicBasic.glqk.filter(function(r) { return r[0] !== '已取得的行政许可'; });
             }
 
             // 设计施工信息：记录列表 + 详情（参考 rural-house-detail）
@@ -3019,7 +3086,7 @@
                 '<td>' + r.judge + '</td><td style="text-align:left;">' + r.reason + '</td>' +
                 '<td>' + r.reporter + '</td><td>' + r.reportTime + '</td></tr>').join('');
             return '<div class="record-detail-header"><div class="title">隐患动态记录（' + records.length + '）</div>' +
-                '<div class="meta">房屋编号：' + (s.no || '—') + '</div></div>' +
+                '<div class="meta">唯一标识：' + (s.no || '—') + '</div></div>' +
                 '<div class="table-wrap"><table class="arch-table"><thead><tr><th>隐患判定情况</th><th>新增隐患原因</th><th>填报人</th><th>填报时间</th></tr></thead>' +
                 '<tbody>' + rows + '</tbody></table></div>';
         }
@@ -3062,7 +3129,7 @@
             const photoHtml = '<div class="info-item full-width"><div class="info-label">质检现场照片</div>' +
                 renderPhotoValue(mockPhotoPair('质检现场照片 1', '质检现场照片 2', '#4b6d8a', '#8a7a4b'), '质检现场照片') + '</div>';
             return '<div class="record-detail-header"><div class="title">最新质检信息</div>' +
-                '<div class="meta">房屋编号：' + (s.no || '—') + '</div></div>' +
+                '<div class="meta">唯一标识：' + (s.no || '—') + '</div></div>' +
                 '<div class="info-grid info-grid-2col">' + grid + photoHtml + '</div>';
         }
 
@@ -3091,7 +3158,7 @@
                 '<td><span class="status-badge ' + (r.done ? 'safe' : 'warning') + '">' + r.selfConfirm + '</span></td>' +
                 '<td style="text-align:left;">' + r.remark + '</td><td>' + r.time + '</td></tr>').join('');
             return '<div class="record-detail-header"><div class="title">历史整改信息（' + rows.length + '）</div>' +
-                '<div class="meta">房屋编号：' + (s.no || '—') + '</div></div>' +
+                '<div class="meta">唯一标识：' + (s.no || '—') + '</div></div>' +
                 '<div class="table-wrap"><table class="arch-table"><thead><tr><th>序号</th><th>历史整改员</th><th>自查确认</th><th>备注</th><th>整改时间</th></tr></thead>' +
                 '<tbody>' + body + '</tbody></table></div>';
         }

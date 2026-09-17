@@ -995,7 +995,7 @@
             }
             if (view === 'measure') {
                 const records = generateMeasureRecords();
-                const headers = ['变更编号', '房屋编号', '街镇', '风险等级', '措施类型', '责任人', '责任单位', '是否完成', '是否有效控制', '效果评估', '变更次数'];
+                const headers = ['变更编号', '唯一标识', '街镇', '风险等级', '措施类型', '责任人', '责任单位', '是否完成', '是否有效控制', '效果评估', '变更次数'];
                 const rows = records.map(r => [r.id, r.houseNo, r.street, getRiskLabel(r.risk, r.houseType), r.measureType, r.responsiblePerson, r.responsibleDept, r.done ? '是' : '否', r.controlled ? '是' : '否', r.effectEvaluation, r.changeCount]);
                 const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
                 const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1008,7 +1008,7 @@
             if (view === 'project') {
                 projectRecords = generateProjectRecords();
                 const records = getProjectRecords();
-                const headers = ['工程编号', '房屋编号', '街镇', '措施类型', '施工单位', '资金(元)', '工程状态', '开工日期'];
+                const headers = ['工程编号', '唯一标识', '街镇', '措施类型', '施工单位', '资金(元)', '工程状态', '开工日期'];
                 const rows = records.map(r => [r.id, r.houseNo, r.street, r.type, r.company, r.fund, r.status, r.startDate]);
                 const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
                 const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });

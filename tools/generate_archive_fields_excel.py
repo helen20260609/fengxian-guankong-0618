@@ -44,7 +44,7 @@ for col_idx, _ in enumerate(headers, 1):
 FIELDS = [
     # ================ 1. 房屋概况 overview ================
     ("房屋概况", "基本信息", [
-        ("房屋编号", "no / overview.houseNo", "字符串", "NF-2025-00001", "主键"),
+        ("唯一标识", "no / overview.houseNo", "字符串", "NF-2025-00001", "主键"),
         ("房屋名称", "overview.houseName / name", "字符串", "李家宅基1号", ""),
         ("所属乡镇/行政村", "street + community/village", "字符串", "南桥镇 / 张翁庙村", "组合字段"),
         ("自然村", "naturalVillage / village", "字符串", "张翁庙村", ""),
