@@ -631,7 +631,7 @@
         .modal-close:hover { background: var(--danger); color: #fff; }
         .modal-body { padding: 20px; flex: 1; overflow-y: auto; }
         .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; background: #fafbfc; }
-        .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 20px; }
+        .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 20px; }
         .form-item { display: flex; flex-direction: column; gap: 6px; }
         .form-item.form-item-full { grid-column: 1 / -1; }
         .form-label { font-size: 12px; color: var(--text-secondary); }
@@ -1538,30 +1538,53 @@
         const surveySubTabs_URBAN = JSON.parse(JSON.stringify(surveySubTabs_RURAL));
         const surveyData_URBAN    = JSON.parse(JSON.stringify(surveyData_RURAL));
         const basicData_URBAN     = JSON.parse(JSON.stringify(basicData_RURAL));
-        // 城镇自建房基本信息字段（固定21项，与农村版字段差异维护）
-        basicData_URBAN.jbxx = [
-            ['唯一标识', 'NF-2025-00001'],
+        // ===== 城镇自建房基本信息字段（按房屋性质分组）=====
+        // 共用字段（住宅/非住宅共有）—— 按截图字段顺序
+        // 每行: [label, value, isRuralOnlyGreen(保留第三参兼容)]
+        const jbxx_URBAN_COMMON = [
             ['房屋性质', '住宅'],
-            ['所在区域', '奉贤区西渡街道'],
-            ['路号信息', '西闸公路二一三九弄35号'],
-            ['不需要排查原因', '—'],
-            ['产权人 / 使用人信息', '陈连明'],
-            ['身份证号码', '31022619680714051X'],
-            ['房屋用途', '自住'],
-            ['是否同时自住', '是'],
-            ['具体用途', '日常居住'],
-            ['其他具体用途', '—'],
-            ['人员聚集场所周边', '否'],
-            ['其他人员密集场所周边', '否'],
-            ['土地性质', '国有土地'],
-            ['国有土地', '—'],
-            ['所在区域（区域类型）', '建制镇'],
-            ['城市建成区类型', '—'],
-            ['建筑层数', '3层'],
-            ['建筑面积 (m²)', '237.3'],
-            ['建成时间', '1976年'],
-            ['具体年份', '1976']
+            ['小区', '解放新村'],
+            ['所在区域', '奉贤区南桥镇解放第三居委会'],
+            ['建筑名称', '解放新村132,133,134号商品房'],
+            ['路号信息', '奉贤区解放路505弄132,133,134'],
+            ['是否有物业管理', '是'],
+            ['物业名称', '上海奉房置业有限公司'],
+            ['户数(户)', '24'],
+            ['是否为自建房', '否'],
+            ['异常标记', '正常'],
+            ['房屋权属', '商品房'],
+            ['房屋权属其他内容', ''],
+            ['房屋类型', '联列住宅'],
+            ['建造时间', '1986-01'],
+            ['是否采用外墙外保温', '否'],
+            ['地上建筑面积', '2598.32'],
+            ['地下建筑面积', '0'],
+            ['地上建筑层数', '4'],
+            ['地下建筑层数', '0'],
+            ['建筑高度', '13'],
+            ['土地性质', '国有土地-居住用地'],
+            ['土地性质其他内容', ''],
+            ['结构类型', '砌体结构'],
+            ['二级结构类型', '其他'],
+            ['是否专业设计建造', '是'],
+            ['是否保护性建筑', '否'],
+            ['是否取得施工许可', ''],
+            ['外墙面类型', '涂料'],
+            ['建筑外立面附属构件', '无']
         ];
+        // 住宅专属字段（当前截图全为共用字段，暂无住宅专属）
+        const jbxx_URBAN_RESIDENTIAL = [
+        ];
+        // 非住宅专属字段（后续补充）
+        const jbxx_URBAN_COMMERCIAL = [
+        ];
+        // 兼容旧结构：basicData_URBAN.jbxx 作为"完整字段库"（所有字段合并）
+        // 实际渲染/编辑通过 getJbxxRows() 按当前房屋性质动态组合
+        basicData_URBAN.jbxx_common = jbxx_URBAN_COMMON;
+        basicData_URBAN.jbxx_residential = jbxx_URBAN_RESIDENTIAL;
+        basicData_URBAN.jbxx_commercial = jbxx_URBAN_COMMERCIAL;
+        // jbxx 字段保留为 common + residential 默认（保证旧代码不崩）
+        basicData_URBAN.jbxx = JSON.parse(JSON.stringify(jbxx_URBAN_COMMON.concat(jbxx_URBAN_RESIDENTIAL)));
         basicData_URBAN.zjd = [];
         // 城镇自建房管理情况字段（2项，与农村一致）
         basicData_URBAN.glqk = [
@@ -1596,6 +1619,52 @@
         }
         function getSidebarItems()   { return isUrbanHouse() ? sidebarItems_URBAN_filtered : sidebarItems_RURAL; }
         function getBasicData()      { return isUrbanHouse() ? basicData_URBAN      : basicData_RURAL; }
+        // ===== 城镇自建房：按房屋性质动态返回基本信息字段 =====
+        // 返回当前房屋性质对应的字段行数组（住宅=common+residential，非住宅=common+commercial）
+        // 字段值优先取分组，其次回退到旧 jbxx 数组（草稿兼容），最后用默认值
+        function getJbxxRows(houseNature) {
+            const data = getBasicData();
+            if (!isUrbanHouse()) return data.jbxx || [];
+            // 房屋性质：参数 > jbxx_common > jbxx > 默认
+            let nature = houseNature;
+            if (!nature) {
+                nature = libValLocal(data.jbxx_common, '房屋性质') || libValLocal(data.jbxx, '房屋性质') || '住宅';
+            }
+            const common = data.jbxx_common || [];
+            const residential = data.jbxx_residential || [];
+            const commercial = data.jbxx_commercial || [];
+            const rows = (nature === '非住宅') ? common.concat(commercial) : common.concat(residential);
+            // 每行 value 优先取自身，再回退到旧 jbxx 中同名字段
+            return rows.map(function(row) {
+                const label = row[0];
+                const curVal = row[1];
+                // 若分组中值为空/默认，尝试从旧 jbxx 取
+                if ((curVal === undefined || curVal === null || curVal === '' || curVal === '—') && data.jbxx) {
+                    const oldVal = libValLocal(data.jbxx, label);
+                    if (oldVal !== undefined && oldVal !== null && oldVal !== '' && oldVal !== '—') {
+                        return [label, oldVal];
+                    }
+                }
+                return row;
+            });
+        }
+        // 本地 libVal（避免与外层作用域冲突）
+        function libValLocal(rows, label) {
+            if (!Array.isArray(rows)) return undefined;
+            const r = rows.find(function(row) { return row[0] === label; });
+            return r ? r[1] : undefined;
+        }
+        // 从所有城镇字段（含三组）查找某 label 的值（用于跨组读取）
+        function libValUrbanAll(label, fallback) {
+            const groups = [basicData_URBAN.jbxx_common, basicData_URBAN.jbxx_residential, basicData_URBAN.jbxx_commercial];
+            for (let g = 0; g < groups.length; g++) {
+                const rows = groups[g] || [];
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i][0] === label) return rows[i][1];
+                }
+            }
+            return fallback;
+        }
         function getSurveySubTabs()  { return isUrbanHouse() ? surveySubTabs_URBAN  : surveySubTabs_RURAL; }
         function getSurveyData()     { return isUrbanHouse() ? surveyData_URBAN     : surveyData_RURAL; }
         function getTableData()      { return isUrbanHouse() ? tableData_URBAN      : tableData_RURAL; }
@@ -1644,15 +1713,54 @@
             pairs.forEach(function(p) {
                 const target = p[0], src = p[1];
                 if (!src) return;
+                // 城镇自建房 basic 特殊处理：保留新增的 jbxx_common/residential/commercial 分组字段
+                // 因为旧草稿可能没有这些 key，合并后会丢失，导致房屋概况无字段显示
+                const isUrbanBasic = (target === basicData_URBAN);
+                const preservedKeys = isUrbanBasic ? {
+                    jbxx_common: target.jbxx_common,
+                    jbxx_residential: target.jbxx_residential,
+                    jbxx_commercial: target.jbxx_commercial
+                } : null;
                 // 清空 target 再把 src 的 key 合并进来，保持 target 引用不变（因为字段库是 const）
                 Object.keys(target).forEach(k => delete target[k]);
                 Object.keys(src).forEach(k => target[k] = src[k]);
+                // 恢复保留的分组字段（若 src 中没有这些 key）
+                if (preservedKeys) {
+                    if (!target.jbxx_common && preservedKeys.jbxx_common) target.jbxx_common = preservedKeys.jbxx_common;
+                    if (!target.jbxx_residential && preservedKeys.jbxx_residential) target.jbxx_residential = preservedKeys.jbxx_residential;
+                    if (!target.jbxx_commercial && preservedKeys.jbxx_commercial) target.jbxx_commercial = preservedKeys.jbxx_commercial;
+                }
             });
         }
         // 页面加载时恢复草稿里的字段库（如有）
         if (currentHouseArch && currentHouseArch._fieldsLibrary) {
             restoreFieldsLibrary(currentHouseArch._fieldsLibrary);
         }
+        // 城镇基本信息分组兜底：restore 后若分组不是数组（旧草稿无此 key），重新用默认数组
+        if (!Array.isArray(basicData_URBAN.jbxx_common)) basicData_URBAN.jbxx_common = JSON.parse(JSON.stringify(jbxx_URBAN_COMMON));
+        if (!Array.isArray(basicData_URBAN.jbxx_residential)) basicData_URBAN.jbxx_residential = JSON.parse(JSON.stringify(jbxx_URBAN_RESIDENTIAL));
+        if (!Array.isArray(basicData_URBAN.jbxx_commercial)) basicData_URBAN.jbxx_commercial = JSON.parse(JSON.stringify(jbxx_URBAN_COMMERCIAL));
+        // 旧草稿兼容：若 jbxx_common 存在但缺少新字段（如"小区"/"物业名称"等），从默认数组补齐
+        (function mergeMissingUrbanFields() {
+            const defaults = [
+                ['房屋性质', '住宅'], ['小区', '解放新村'], ['所在区域', '奉贤区南桥镇解放第三居委会'],
+                ['建筑名称', '解放新村132,133,134号商品房'], ['路号信息', '奉贤区解放路505弄132,133,134'],
+                ['是否有物业管理', '是'], ['物业名称', '上海奉房置业有限公司'], ['户数(户)', '24'],
+                ['是否为自建房', '否'], ['异常标记', '正常'], ['房屋权属', '商品房'], ['房屋权属其他内容', ''],
+                ['房屋类型', '联列住宅'], ['建造时间', '1986-01'], ['是否采用外墙外保温', '否'],
+                ['地上建筑面积', '2598.32'], ['地下建筑面积', '0'], ['地上建筑层数', '4'], ['地下建筑层数', '0'],
+                ['建筑高度', '13'], ['土地性质', '国有土地-居住用地'], ['结构类型', '砌体结构'],
+                ['二级结构类型', '其他'], ['是否专业设计建造', '是'], ['是否保护性建筑', '否'],
+                ['是否取得施工许可', ''], ['外墙面类型', '涂料'], ['建筑外立面附属构件', '无']
+            ];
+            const common = basicData_URBAN.jbxx_common;
+            defaults.forEach(function(def) {
+                const label = def[0];
+                if (!common.some(function(r) { return r[0] === label; })) {
+                    common.push([label, def[1]]);
+                }
+            });
+        })();
         // 结构信息字段兜底（旧草稿字段库无 jgxx 时补默认，避免 restore 清空后丢失）
         const JGXX_DEFAULT = [
             ['墙体材料', '烧结普通砖', true],
@@ -1985,30 +2093,22 @@
                 return r ? r[1] : fallback;
             }
             const isUrban = isUrbanHouse();
-            const jbxx = isUrban ? [
-                // 城镇自建房字段（固定21项）
-                ['唯一标识', libVal(libJbxx, '唯一标识', s.no || 'NF-2025-00001')],
-                ['房屋性质', libVal(libJbxx, '房屋性质', s.houseType || '住宅')],
-                ['所在区域', libVal(libJbxx, '所在区域', '奉贤区' + (s.street || '—'))],
-                ['路号信息', libVal(libJbxx, '路号信息', s.address || '—')],
-                ['不需要排查原因', libVal(libJbxx, '不需要排查原因', '—')],
-                ['产权人 / 使用人信息', libVal(libJbxx, '产权人 / 使用人信息', s.owner || '—')],
-                ['身份证号码', libVal(libJbxx, '身份证号码', '—')],
-                ['房屋用途', libVal(libJbxx, '房屋用途', '自住')],
-                ['是否同时自住', libVal(libJbxx, '是否同时自住', '是')],
-                ['具体用途', libVal(libJbxx, '具体用途', '日常居住')],
-                ['其他具体用途', libVal(libJbxx, '其他具体用途', '—')],
-                ['人员聚集场所周边', libVal(libJbxx, '人员聚集场所周边', '否')],
-                ['其他人员密集场所周边', libVal(libJbxx, '其他人员密集场所周边', '否')],
-                ['土地性质', libVal(libJbxx, '土地性质', '—')],
-                ['国有土地', libVal(libJbxx, '国有土地', '—')],
-                ['所在区域（区域类型）', libVal(libJbxx, '所在区域（区域类型）', '建制镇')],
-                ['城市建成区类型', libVal(libJbxx, '城市建成区类型', '—')],
-                ['建筑层数', libVal(libJbxx, '建筑层数', '3层')],
-                ['建筑面积 (m²)', libVal(libJbxx, '建筑面积 (m²)', '—')],
-                ['建成时间', (s.year ? s.year + '年' : '—')],
-                ['具体年份', libVal(libJbxx, '具体年份', s.year || '—')]
-            ] : [
+            // 城镇：按当前房屋性质动态组装字段；农村：保持原有 23 项
+            let jbxx;
+            if (isUrban) {
+                const urbanRows = getJbxxRows(); // 返回 common + (residential | commercial)
+                // 给每行加 libVal 回退，确保旧字段库数据可显示
+                jbxx = urbanRows.map(function(row) {
+                    const label = row[0];
+                    const fallback = row[1];
+                    // 优先读 libJbxx（用户编辑过的值）
+                    const userVal = libVal(libJbxx, label, undefined);
+                    return [label, (userVal !== undefined && userVal !== null && userVal !== '') ? userVal : fallback];
+                });
+                // 查看页面：隐藏"房屋权属其他内容"和"土地性质其他内容"（编辑辅助字段，非独立展示项）
+                jbxx = jbxx.filter(function(row) { return row[0] !== '房屋权属其他内容' && row[0] !== '土地性质其他内容'; });
+            } else {
+                jbxx = [
                 // 农村自建房字段
                 ['唯一标识', libVal(libJbxx, '唯一标识', s.no || 'NF-2025-00001')],
                 ['房屋性质', libVal(libJbxx, '房屋性质', s.houseType || '住宅')],
@@ -2033,6 +2133,7 @@
                 ['户主联系方式', libVal(libJbxx, '户主联系方式', (s.overview && s.overview.phone) || '—'), true],
                 ['家庭成员信息', libVal(libJbxx, '家庭成员信息', s.familyMembers || '—'), true]
             ];
+            }
             const zjd = [
                 ['宅基地面积', libVal(libZjd, '宅基地面积', '132㎡')],
                 ['审批情况', libVal(libZjd, '审批情况', '自然资源部门审批通过')],
@@ -4232,14 +4333,387 @@
                 document.getElementById('editModalForm').innerHTML = '<div class="form-grid">' + dcHtml + '</div>';
                 return;
             }
-            const rows = getBasicData()[editModalSubTab] || [];
+            // 城镇自建房基本信息：按当前房屋性质动态组合 common + residential/commercial
+            // 其他情况仍读 getBasicData()[editModalSubTab]
+            let rows;
+            if (isUrbanHouse() && editModalSubTab === 'jbxx') {
+                // 从字段库读取当前房屋性质（用户可能在编辑中已切换）
+                const curNatureInput = document.querySelector('#editModalForm select[data-idx]');
+                let curNature = null;
+                // 查找房屋性质 select 的当前值（如果表单已渲染过）
+                document.querySelectorAll('#editModalForm select.form-input').forEach(function(sel) {
+                    const label = sel.closest('.form-item') && sel.closest('.form-item').querySelector('.form-label');
+                    if (label && label.textContent === '房屋性质') curNature = sel.value;
+                });
+                rows = getJbxxRows(curNature);
+            } else {
+                rows = getBasicData()[editModalSubTab] || [];
+            }
+            const abnormalMarkOptions = ['正常', '非城房排查范围', '非管辖范围(土地性质不明)', '已拆除', '异常图斑', '需合并图斑'];
+            const houseNatureOptions = ['住宅', '非住宅'];
+            // 行政区划数据（镇→村列表），来自 js/urban-house-arch-data.js
+            const TOWN_VILLAGES = (typeof FENGXIAN_TOWN_VILLAGES !== 'undefined') ? FENGXIAN_TOWN_VILLAGES : {};
+            const townOptions = Object.keys(TOWN_VILLAGES);
+            // 解析当前"所在区域"值：例如"奉贤区西渡街道" 或 "奉贤区南桥镇张翁庙村"
+            function parseRegionValue(val) {
+                const s = (val || '').replace(/^上海市/, '').replace(/^奉贤区/, '');
+                let town = '', village = '';
+                for (let i = 0; i < townOptions.length; i++) {
+                    const t = townOptions[i];
+                    if (s.indexOf(t) === 0) {
+                        town = t;
+                        const rest = s.substring(t.length);
+                        if (rest) village = rest;
+                        break;
+                    }
+                }
+                if (!town && s) town = s; // 兜底：未匹配时整体作为镇
+                return { district: '奉贤区', town: town, village: village };
+            }
+            // ===== 城镇自建房基本信息：各字段选项配置 =====
+            const URBAN_FIELD_OPTS = {
+                '是否有物业管理': ['是', '否'],
+                '是否为自建房': ['是', '否'],
+                '是否采用外墙外保温': ['是', '否'],
+                '是否专业设计建造': ['是', '否'],
+                '是否保护性建筑': ['否', '市优秀历史建筑', '全国重点文物保护单位', '市级文物保护单位', '区级文物保护单位', '区级文物保护点'],
+                '是否取得施工许可': ['是', '否'],
+                '房屋权属': ['商品房', '系统公房', '直管公房', '售后公房', '私房', '其他公房', '动迁安置房', '公租房或廉住房', '共有产权房', '其他'],
+                '房屋类型': ['简屋', '里弄', '花园住宅', '联列住宅', '公寓', '职工住宅(新工房)'],
+                '结构类型': ['砌体结构', '钢筋混凝土结构', '钢结构', '木结构', '其它'],
+                '二级结构类型': ['底部框架-抗震墙结构砌体结构', '其他'],
+                '外墙面类型': ['涂料', '马赛克', '面砖', '石材', '清水墙', '其他'],
+                '建筑外立面附属构件': ['挑檐', '装饰构架', '装饰线条（GRC、EPS）', '栏杆', '无'],
+                '土地性质': ['国有土地-居住用地', '国有土地-商住用地', '国有土地-商业用地', '国有土地-国有非建筑用地', '国有土地-其他', '集体土地']
+            };
+            // 带单位的数字字段
+            const URBAN_UNIT_FIELDS = {
+                '地上建筑面积': 'm²', '地下建筑面积': 'm²',
+                '地上建筑层数': '层', '地下建筑层数': '层',
+                '建筑高度': 'm', '户数(户)': ''
+            };
+            // 多选字段（checkbox）
+            const URBAN_CHECKBOX_FIELDS = ['外墙面类型', '建筑外立面附属构件'];
+            // 独占一行字段
+            const URBAN_FULL_WIDTH = ['路号信息', '土地性质', '房屋权属', '建筑外立面附属构件', '异常标记', '房屋类型'];
+            // 月份选择字段
+            const URBAN_MONTH_FIELDS = ['建造时间'];
+
+            // 生成单选 radio HTML
+            function buildUrbanRadio(name, label, options, curVal) {
+                return '<div class="urban-radio-group" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">' +
+                    options.map(function(o) {
+                        const checked = (o === curVal) ? ' checked' : '';
+                        return '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;">' +
+                            '<input type="radio" name="urban-radio-' + name + '" class="urban-radio" data-idx="' + name + '" value="' + o + '"' + checked + ' style="cursor:pointer;">' +
+                            '<span>' + o + '</span>' +
+                            '</label>';
+                    }).join('') +
+                    '</div>';
+            }
+            // 生成 checkbox HTML
+            function buildUrbanCheckbox(idx, options, curVal) {
+                const curArr = (curVal || '').split(/[,，、]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                return '<div class="urban-checkbox-group" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">' +
+                    options.map(function(o) {
+                        const checked = curArr.indexOf(o) !== -1 ? ' checked' : '';
+                        return '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;">' +
+                            '<input type="checkbox" class="urban-checkbox" data-idx="' + idx + '" value="' + o + '"' + checked + ' style="cursor:pointer;">' +
+                            '<span>' + o + '</span>' +
+                            '</label>';
+                    }).join('') +
+                    '</div>';
+            }
+
             const gridHtml = rows.map((r, idx) => {
-                return '<div class="form-item">' +
-                    '<label class="form-label">' + r[0] + '</label>' +
-                    '<input class="form-input" type="text" data-idx="' + idx + '" value="' + (r[1] || '').replace(/"/g, '&quot;') + '">' +
+                let inputHtml;
+                const label = r[0];
+                const curVal = (r[1] || '') + '';
+                // 跳过辅助字段：房屋权属其他内容、土地性质其他内容（不单独展示）
+                if (label === '房屋权属其他内容' || label === '土地性质其他内容') return '';
+                if (label === '异常标记') {
+                    inputHtml = buildUrbanRadio(idx, label, abnormalMarkOptions, curVal) +
+                        '<input type="hidden" class="form-input urban-radio-hidden" data-idx="' + idx + '" value="' + curVal.replace(/"/g, '&quot;') + '">';
+                } else if (label === '房屋性质') {
+                    inputHtml = buildUrbanRadio(idx, label, houseNatureOptions, curVal) +
+                        '<input type="hidden" class="form-input urban-radio-hidden" data-idx="' + idx + '" value="' + curVal.replace(/"/g, '&quot;') + '">';
+                } else if (URBAN_FIELD_OPTS[label] && URBAN_CHECKBOX_FIELDS.indexOf(label) === -1) {
+                    // 单选 radio（所有有选项的非 checkbox 字段）
+                    inputHtml = buildUrbanRadio(idx, label, URBAN_FIELD_OPTS[label], curVal) +
+                        '<input type="hidden" class="form-input urban-radio-hidden" data-idx="' + idx + '" value="' + curVal.replace(/"/g, '&quot;') + '">';
+                    // 房屋权属"其他"需要额外输入框
+                    if (label === '房屋权属') {
+                        const otherVal = libValLocal(rows, '房屋权属其他内容') || '';
+                        inputHtml += '<input class="form-input" type="text" data-extra-label="房屋权属其他内容" placeholder="请输入其他内容" value="' + (otherVal || '').replace(/"/g, '&quot;') + '" style="margin-top:6px;' + (curVal === '其他' ? '' : 'display:none;') + '" id="houseRightOtherInput">';
+                    }
+                    // 土地性质"国有土地-其他"需要额外输入框
+                    if (label === '土地性质') {
+                        const landOtherVal = libValLocal(rows, '土地性质其他内容') || '';
+                        inputHtml += '<input class="form-input" type="text" data-extra-label="土地性质其他内容" placeholder="请输入其他土地使用用途" value="' + (landOtherVal || '').replace(/"/g, '&quot;') + '" style="margin-top:6px;' + (curVal === '国有土地-其他' ? '' : 'display:none;') + '" id="landRightOtherInput">';
+                    }
+                } else if (URBAN_CHECKBOX_FIELDS.indexOf(label) !== -1) {
+                    // 多选 checkbox
+                    inputHtml = buildUrbanCheckbox(idx, URBAN_FIELD_OPTS[label], curVal) +
+                        '<input type="hidden" class="form-input urban-checkbox-hidden" data-idx="' + idx + '" value="' + curVal.replace(/"/g, '&quot;') + '">';
+                } else if (URBAN_MONTH_FIELDS.indexOf(label) !== -1) {
+                    // 月份选择
+                    inputHtml = '<input class="form-input" type="month" data-idx="' + idx + '" value="' + curVal.replace(/"/g, '&quot;') + '">';
+                } else if (URBAN_UNIT_FIELDS[label] !== undefined && URBAN_UNIT_FIELDS[label] !== '') {
+                    // 带单位输入
+                    inputHtml = '<div style="display:flex;align-items:center;gap:6px;">' +
+                        '<input class="form-input" type="number" data-idx="' + idx + '" value="' + curVal.replace(/"/g, '&quot;') + '" style="flex:1;">' +
+                        '<span style="color:#595959;font-size:13px;white-space:nowrap;">' + URBAN_UNIT_FIELDS[label] + '</span>' +
+                        '</div>';
+                } else if (label === '所在区域') {
+                    // 三级联动：区(固定奉贤区) + 镇/街道 + 村/居委
+                    const parsed = parseRegionValue(curVal);
+                    const townOpts = ['<option value="">请选择镇/街道</option>'].concat(
+                        townOptions.map(t => '<option value="' + t + '"' + (t === parsed.town ? ' selected' : '') + '>' + t + '</option>')
+                    ).join('');
+                    const villageList = (parsed.town && TOWN_VILLAGES[parsed.town]) ? TOWN_VILLAGES[parsed.town] : [];
+                    const villageOpts = ['<option value="">请选择村/居委</option>'].concat(
+                        villageList.map(v => '<option value="' + v + '"' + (v === parsed.village ? ' selected' : '') + '>' + v + '</option>')
+                    ).join('');
+                    inputHtml =
+                        '<div style="display:flex;gap:6px;align-items:center;">' +
+                        '<input type="hidden" class="form-input region-hidden" data-idx="' + idx + '" value="' + curVal.replace(/"/g, '&quot;') + '">' +
+                        '<select class="form-input-inline region-district" data-region-part="district" data-idx="' + idx + '" disabled style="flex:1;padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;background:#f5f5f5;">' +
+                            '<option value="奉贤区" selected>奉贤区</option>' +
+                        '</select>' +
+                        '<select class="form-input-inline region-town" data-region-part="town" data-idx="' + idx + '" style="flex:1;padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;">' + townOpts + '</select>' +
+                        '<select class="form-input-inline region-village" data-region-part="village" data-idx="' + idx + '" style="flex:1;padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;">' + villageOpts + '</select>' +
+                        '</div>';
+                } else if (label === '路号信息') {
+                    // 分段：路名 + 号 + 栋，独占一行，支持多地址
+                    const fullVal = curVal;
+                    const addrParts = fullVal.split(/[;；]/).map(s => s.trim()).filter(s => s);
+                    const mainAddr = addrParts[0] || '';
+                    const extraAddrs = addrParts.slice(1);
+                    function parseAddr(s) {
+                        let roadName = '', haoPart = '', dongPart = '';
+                        const m1 = (s || '').match(/^(.+?(?:路|街|道|巷|弄))(.*)$/);
+                        if (m1) {
+                            roadName = m1[1];
+                            const rest = m1[2] || '';
+                            const m2 = rest.match(/^(\d+(?:号|室)?)?(.*)$/);
+                            if (m2) {
+                                haoPart = (m2[1] || '').replace(/号$/, '');
+                                dongPart = m2[2] || '';
+                            }
+                        } else {
+                            roadName = s || '';
+                        }
+                        return { roadName: roadName, haoPart: haoPart, dongPart: dongPart };
+                    }
+                    const inputStyle = 'padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;';
+                    function buildAddrRow(subIdx, addrObj, isMain) {
+                        const rn = (addrObj.roadName || '').replace(/"/g, '&quot;');
+                        const hp = (addrObj.haoPart || '').replace(/"/g, '&quot;');
+                        const dp = (addrObj.dongPart || '').replace(/"/g, '&quot;');
+                        let html =
+                            '<div class="road-addr-row" data-idx="' + idx + '" data-sub-idx="' + subIdx + '" style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap;margin-bottom:6px;">' +
+                            '<div style="position:relative;flex:2;min-width:140px;">' +
+                                '<input type="text" class="form-input-inline road-name" data-idx="' + idx + '" data-sub-idx="' + subIdx + '" placeholder="路名" value="' + rn + '" style="width:100%;' + inputStyle + 'padding-right:26px;">' +
+                                '<i class="fas fa-search" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#bfbfbf;font-size:12px;pointer-events:none;"></i>' +
+                            '</div>' +
+                            '<span style="color:#595959;font-size:12px;white-space:nowrap;padding:0 2px;">路(街道/巷)</span>' +
+                            '<input type="text" class="form-input-inline road-hao" data-idx="' + idx + '" data-sub-idx="' + subIdx + '" placeholder="100" value="' + hp + '" style="flex:1;min-width:70px;' + inputStyle + '">' +
+                            '<span style="color:#595959;font-size:12px;white-space:nowrap;padding:0 2px;">号(弄)</span>' +
+                            '<input type="text" class="form-input-inline road-dong" data-idx="' + idx + '" data-sub-idx="' + subIdx + '" placeholder="" value="' + dp + '" style="flex:1;min-width:70px;' + inputStyle + '">' +
+                            '<span style="color:#595959;font-size:12px;white-space:nowrap;padding:0 2px;">栋(单元/号)</span>';
+                        if (isMain) {
+                            html += '<a href="javascript:void(0)" class="road-add-multi" data-idx="' + idx + '" style="color:#1890ff;font-size:12px;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:2px;padding:0 4px;" title="添加多地址">' +
+                                '<i class="fas fa-plus-circle"></i> 添加多地址' +
+                            '</a>';
+                        } else {
+                            html += '<a href="javascript:void(0)" class="road-remove-multi" data-idx="' + idx + '" data-sub-idx="' + subIdx + '" style="color:#ff4d4f;font-size:12px;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:2px;padding:0 4px;" title="删除该地址">' +
+                                '<i class="fas fa-minus-circle"></i> 删除' +
+                            '</a>';
+                        }
+                        html += '</div>';
+                        return html;
+                    }
+                    let rowsHtml = buildAddrRow(0, parseAddr(mainAddr), true);
+                    extraAddrs.forEach(function(addr, i) {
+                        rowsHtml += buildAddrRow(i + 1, parseAddr(addr), false);
+                    });
+                    inputHtml =
+                        '<div class="road-addr-container" data-idx="' + idx + '" style="width:100%;">' +
+                        '<input type="hidden" class="form-input road-hidden" data-idx="' + idx + '" value="' + fullVal.replace(/"/g, '&quot;') + '">' +
+                        '<div class="road-addr-list" data-idx="' + idx + '">' + rowsHtml + '</div>' +
+                        '</div>';
+                } else {
+                    inputHtml = '<input class="form-input" type="text" data-idx="' + idx + '" value="' + curVal.replace(/"/g, '&quot;') + '">';
+                }
+                // 独占一行字段
+                const isFullWidth = (label === '路号信息') || URBAN_FULL_WIDTH.indexOf(label) !== -1;
+                const itemClass = isFullWidth ? 'form-item form-item-full' : 'form-item';
+                return '<div class="' + itemClass + '">' +
+                    '<label class="form-label">' + label + '</label>' +
+                    inputHtml +
                     '</div>';
             }).join('');
             document.getElementById('editModalForm').innerHTML = '<div class="form-grid">' + gridHtml + '</div>';
+
+            // 绑定镇→村联动
+            document.querySelectorAll('#editModalForm .region-town').forEach(function(townSel) {
+                townSel.addEventListener('change', function() {
+                    const idx = this.dataset.idx;
+                    const villageSel = document.querySelector('#editModalForm .region-village[data-idx="' + idx + '"]');
+                    const hiddenInput = document.querySelector('#editModalForm .region-hidden[data-idx="' + idx + '"]');
+                    if (!villageSel) return;
+                    const town = this.value;
+                    villageSel.innerHTML = '<option value="">请选择村/居委</option>';
+                    if (town && TOWN_VILLAGES[town]) {
+                        TOWN_VILLAGES[town].forEach(function(v) {
+                            const opt = document.createElement('option');
+                            opt.value = v; opt.textContent = v;
+                            villageSel.appendChild(opt);
+                        });
+                    }
+                    // 更新隐藏字段值
+                    if (hiddenInput) {
+                        hiddenInput.value = '奉贤区' + town + (villageSel.value || '');
+                    }
+                });
+            });
+            document.querySelectorAll('#editModalForm .region-village').forEach(function(villageSel) {
+                villageSel.addEventListener('change', function() {
+                    const idx = this.dataset.idx;
+                    const townSel = document.querySelector('#editModalForm .region-town[data-idx="' + idx + '"]');
+                    const hiddenInput = document.querySelector('#editModalForm .region-hidden[data-idx="' + idx + '"]');
+                    if (hiddenInput && townSel) {
+                        hiddenInput.value = '奉贤区' + (townSel.value || '') + (this.value || '');
+                    }
+                });
+            });
+
+            // 路号信息分段输入：实时合并多行地址到隐藏域（用 ; 分隔）
+            function updateRoadHidden(idx) {
+                const hiddenInput = document.querySelector('#editModalForm .road-hidden[data-idx="' + idx + '"]');
+                if (!hiddenInput) return;
+                const rows = document.querySelectorAll('#editModalForm .road-addr-row[data-idx="' + idx + '"]');
+                const addrList = [];
+                rows.forEach(function(row) {
+                    const subIdx = row.dataset.subIdx;
+                    const roadName = (row.querySelector('.road-name') || {}).value || '';
+                    const haoPart = (row.querySelector('.road-hao') || {}).value || '';
+                    const dongPart = (row.querySelector('.road-dong') || {}).value || '';
+                    if (!roadName && !haoPart && !dongPart) return; // 跳过空行
+                    let combined = roadName;
+                    if (haoPart) combined += haoPart + '号';
+                    if (dongPart) combined += dongPart;
+                    addrList.push(combined);
+                });
+                hiddenInput.value = addrList.join(';');
+            }
+            // 给指定容器内所有路号输入绑定 input 事件
+            function bindRoadInputs(container) {
+                container.querySelectorAll('.road-name, .road-hao, .road-dong').forEach(function(inp) {
+                    inp.addEventListener('input', function() { updateRoadHidden(this.dataset.idx); });
+                });
+            }
+            bindRoadInputs(document.getElementById('editModalForm'));
+
+            // 城镇自建房：radio 单选绑定（把选中值写入隐藏域）
+            document.querySelectorAll('#editModalForm .urban-radio').forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    const idx = this.dataset.idx;
+                    const hidden = document.querySelector('#editModalForm .urban-radio-hidden[data-idx="' + idx + '"]');
+                    if (hidden) hidden.value = this.value;
+                    // 房屋权属"其他"：显示/隐藏附加输入框
+                    const otherInput = document.getElementById('houseRightOtherInput');
+                    if (otherInput) {
+                        otherInput.style.display = (this.value === '其他') ? '' : 'none';
+                    }
+                    // 土地性质"国有土地-其他"：显示/隐藏附加输入框
+                    const landOtherInput = document.getElementById('landRightOtherInput');
+                    if (landOtherInput) {
+                        landOtherInput.style.display = (this.value === '国有土地-其他') ? '' : 'none';
+                    }
+                });
+            });
+            // 城镇自建房：checkbox 多选绑定（把选中值用 , 连接写入隐藏域）
+            document.querySelectorAll('#editModalForm .urban-checkbox').forEach(function(cb) {
+                cb.addEventListener('change', function() {
+                    const idx = this.dataset.idx;
+                    const checked = document.querySelectorAll('#editModalForm .urban-checkbox[data-idx="' + idx + '"]:checked');
+                    const vals = Array.prototype.map.call(checked, function(c) { return c.value; });
+                    const hidden = document.querySelector('#editModalForm .urban-checkbox-hidden[data-idx="' + idx + '"]');
+                    if (hidden) hidden.value = vals.join(',');
+                });
+            });
+
+            // 城镇自建房：监听"房屋性质"切换，自动刷新表单字段（住宅↔非住宅）
+            if (isUrbanHouse() && editModalSubTab === 'jbxx') {
+                document.querySelectorAll('#editModalForm .urban-radio').forEach(function(radio) {
+                    const formItem = radio.closest('.form-item');
+                    const label = formItem && formItem.querySelector('.form-label');
+                    if (label && label.textContent === '房屋性质') {
+                        radio.addEventListener('change', function() {
+                            // 切换时先把当前所有 form-input 值写回 rows（保留用户已填内容）
+                            document.querySelectorAll('#editModalForm .form-input').forEach(function(inp) {
+                                const i = parseInt(inp.dataset.idx, 10);
+                                if (rows && rows[i]) rows[i][1] = inp.value;
+                            });
+                            // 重新渲染表单（按新房屋性质）
+                            renderEditModalForm();
+                        });
+                    }
+                });
+            }
+            // 添加多地址：克隆主行结构（清空值）追加到末尾
+            document.querySelectorAll('#editModalForm .road-add-multi').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const idx = this.dataset.idx;
+                    const list = document.querySelector('#editModalForm .road-addr-list[data-idx="' + idx + '"]');
+                    if (!list) return;
+                    const existingRows = list.querySelectorAll('.road-addr-row');
+                    const newSubIdx = existingRows.length;
+                    // 用模板构建新行
+                    const inputStyle = 'padding:6px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;';
+                    const newRowHtml =
+                        '<div class="road-addr-row" data-idx="' + idx + '" data-sub-idx="' + newSubIdx + '" style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap;margin-bottom:6px;">' +
+                        '<div style="position:relative;flex:2;min-width:140px;">' +
+                            '<input type="text" class="form-input-inline road-name" data-idx="' + idx + '" data-sub-idx="' + newSubIdx + '" placeholder="路名" value="" style="width:100%;' + inputStyle + 'padding-right:26px;">' +
+                            '<i class="fas fa-search" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#bfbfbf;font-size:12px;pointer-events:none;"></i>' +
+                        '</div>' +
+                        '<span style="color:#595959;font-size:12px;white-space:nowrap;padding:0 2px;">路(街道/巷)</span>' +
+                        '<input type="text" class="form-input-inline road-hao" data-idx="' + idx + '" data-sub-idx="' + newSubIdx + '" placeholder="100" value="" style="flex:1;min-width:70px;' + inputStyle + '">' +
+                        '<span style="color:#595959;font-size:12px;white-space:nowrap;padding:0 2px;">号(弄)</span>' +
+                        '<input type="text" class="form-input-inline road-dong" data-idx="' + idx + '" data-sub-idx="' + newSubIdx + '" placeholder="" value="" style="flex:1;min-width:70px;' + inputStyle + '">' +
+                        '<span style="color:#595959;font-size:12px;white-space:nowrap;padding:0 2px;">栋(单元/号)</span>' +
+                        '<a href="javascript:void(0)" class="road-remove-multi" data-idx="' + idx + '" data-sub-idx="' + newSubIdx + '" style="color:#ff4d4f;font-size:12px;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:2px;padding:0 4px;" title="删除该地址">' +
+                            '<i class="fas fa-minus-circle"></i> 删除' +
+                        '</a>' +
+                        '</div>';
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = newRowHtml;
+                    const newRow = tempDiv.firstElementChild;
+                    list.appendChild(newRow);
+                    // 绑定新行输入事件
+                    bindRoadInputs(newRow);
+                    // 绑定新行删除按钮
+                    const removeBtn = newRow.querySelector('.road-remove-multi');
+                    if (removeBtn) {
+                        removeBtn.addEventListener('click', function() {
+                            newRow.remove();
+                            updateRoadHidden(idx);
+                        });
+                    }
+                });
+            });
+            // 删除已存在的附加地址行
+            document.querySelectorAll('#editModalForm .road-remove-multi').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const idx = this.dataset.idx;
+                    const row = this.closest('.road-addr-row');
+                    if (row) {
+                        row.remove();
+                        updateRoadHidden(idx);
+                    }
+                });
+            });
         }
 
         function saveBasicEdit() {
@@ -4267,13 +4741,59 @@
                 return;
             }
             const inputs = document.querySelectorAll('#editModalForm .form-input');
-            const rows = getBasicData()[editModalSubTab];
-            inputs.forEach(input => {
-                const idx = parseInt(input.dataset.idx, 10);
-                if (rows && rows[idx]) {
-                    rows[idx][1] = input.value;
-                }
-            });
+            // 城镇自建房基本信息：按房屋性质分组回写（common + residential/commercial）
+            if (isUrbanHouse() && editModalSubTab === 'jbxx') {
+                const urbanData = getBasicData();
+                // 收集所有分组字段（common + residential + commercial），按 label 匹配写回
+                const allGroups = [
+                    urbanData.jbxx_common || [],
+                    urbanData.jbxx_residential || [],
+                    urbanData.jbxx_commercial || []
+                ];
+                // 当前编辑界面展示的字段（含顺序）
+                const displayRows = getJbxxRows();
+                inputs.forEach(input => {
+                    const idx = parseInt(input.dataset.idx, 10);
+                    if (displayRows && displayRows[idx]) {
+                        const label = displayRows[idx][0];
+                        // 在所有分组中找到该 label 并更新
+                        let updated = false;
+                        for (let g = 0; g < allGroups.length; g++) {
+                            const group = allGroups[g];
+                            for (let i = 0; i < group.length; i++) {
+                                if (group[i][0] === label) {
+                                    group[i][1] = input.value;
+                                    updated = true;
+                                    break;
+                                }
+                            }
+                            if (updated) break;
+                        }
+                    }
+                });
+                // 特殊字段：房屋权属其他内容（data-extra-label 方式保存）
+                document.querySelectorAll('#editModalForm [data-extra-label]').forEach(function(inp) {
+                    const extraLabel = inp.dataset.extraLabel;
+                    for (let g = 0; g < allGroups.length; g++) {
+                        const group = allGroups[g];
+                        for (let i = 0; i < group.length; i++) {
+                            if (group[i][0] === extraLabel) {
+                                group[i][1] = inp.value;
+                                break;
+                            }
+                        }
+                    }
+                });
+            } else {
+                // 其他情况：按原逻辑直接通过 idx 写回
+                const rows = getBasicData()[editModalSubTab];
+                inputs.forEach(input => {
+                    const idx = parseInt(input.dataset.idx, 10);
+                    if (rows && rows[idx]) {
+                        rows[idx][1] = input.value;
+                    }
+                });
+            }
             currentSubTab = editModalSubTab;
             // 字段库改动持久化到草稿
             currentHouseArch._fieldsLibrary = dumpFieldsLibrary();
