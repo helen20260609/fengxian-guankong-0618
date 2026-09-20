@@ -4,6 +4,41 @@
 
 const URBAN_HOUSE_ARCH_KEY = 'urbanHouseArchData';
 const URBAN_CLOSE_APPLY_KEY = 'urbanCloseApplyData';
+const URBAN_HOUSE_ARCH_DRAFT_KEY_GLOBAL = 'urbanHouseArchDraft';
+
+// ---------------- 一次性编号迁移：城镇 NF- → CF- ----------------
+// 背景：城乡拆分后城镇记录统一使用 CF- 前缀。本函数在任意浏览器首次加载本数据层时自动执行一次，
+// 把 urbanHouseArchData / urbanHouseArchDraft 里的 NF- 键改为 CF-（含 record.no 字段），并做安全备份。
+// 幂等：完成后写入标记 urbanNoMigratedToCF=1，之后不再执行。
+(function __migrateUrbanNoToCF() {
+    try {
+        if (localStorage.getItem('urbanNoMigratedToCF') === '1') return;
+        var stamp = Date.now();
+        ['urbanHouseArchData', 'urbanHouseArchDraft'].forEach(function (key) {
+            var raw = localStorage.getItem(key);
+            if (!raw) return;
+            var all;
+            try { all = JSON.parse(raw); } catch (e) { return; }
+            if (!all || typeof all !== 'object') return;
+            var nfKeys = Object.keys(all).filter(function (k) { return /^NF-/i.test(k); });
+            if (!nfKeys.length) return;
+            // 备份原始数据
+            try { localStorage.setItem(key + '.nfbackup-' + stamp, raw); } catch (e) {}
+            nfKeys.forEach(function (oldKey) {
+                var newKey = oldKey.replace(/^NF-/i, 'CF-');
+                var rec = all[oldKey];
+                if (rec && typeof rec === 'object') {
+                    if (rec.no && /^NF-/i.test(rec.no)) rec.no = rec.no.replace(/^NF-/i, 'CF-');
+                    if (rec.houseNo && /^NF-/i.test(rec.houseNo)) rec.houseNo = rec.houseNo.replace(/^NF-/i, 'CF-');
+                }
+                if (!all[newKey]) { all[newKey] = rec; }
+                delete all[oldKey];
+            });
+            localStorage.setItem(key, JSON.stringify(all));
+        });
+        localStorage.setItem('urbanNoMigratedToCF', '1');
+    } catch (e) { /* 静默失败，不阻塞页面 */ }
+})();
 
 const MODULE_STREETS = ['南桥镇', '奉城镇', '庄行镇', '金汇镇', '青村镇', '柘林镇', '四团镇', '海湾镇', '西渡街道', '奉浦街道', '海湾旅游区', '头桥街道', '金海街道'];
 const MODULE_COMMUNITIES = ['张翁庙村', '洪庙村', '五四村', '新寺村', '潘垫村', '明星村', '李窑村', '星火村', '杨王村', '久茂村', '三坎村', '营房村', '解放社区', '人民社区', '新建社区', '环城社区'];
