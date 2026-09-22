@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>城镇自建房 - 统计图表</title>
+    <link rel="stylesheet" href="./all.min.css">
+    <script src="./echarts.min.js"></script>
+    <script src="../js/urban-house-arch-data.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+            --success: #1e8e3e; --warning: #e65100; --danger: #d93025;
+            --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+            --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08);
+        }
+        :root[data-theme="dark"] {
+            --primary: #1e6fdb; --primary-light: #e8f1fd;
+            --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+            --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+            --shadow: rgba(0,0,0,0.3);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei','PingFang SC',-apple-system,sans-serif; background: var(--bg-dark); color: var(--text-primary); padding: 16px 20px; min-height: 100vh; }
+
+        /* ===== 信息检索 ===== */
+        .panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 3px var(--shadow); margin-bottom: 16px; overflow: hidden; }
+        .panel-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; color: var(--primary); }
+        .panel-header i { font-size: 14px; }
+        .panel-body { padding: 14px 16px; }
+
+        .search-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        .search-row select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text-primary); background: var(--bg-card); min-width: 130px; }
+        .btn { padding: 6px 16px; border-radius: 6px; font-size: 13px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+
+        /* ===== 房屋排查统计（左） + 隐患分类统计（右） 双栏 ===== */
+        .paichu-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        @media (max-width: 1100px) { .paichu-row { grid-template-columns: 1fr; } }
+        .paichu-row .panel { margin-bottom: 0; }
+        .pc-body { padding: 18px 20px; }
+        /* 左 panel: 数字区 */
+        .pc-nums { display: flex; align-items: flex-start; }
+        .pc-num-item { flex: 1; text-align: center; padding: 4px 6px; }
+        .pc-num-item + .pc-num-item { border-left: 1px solid var(--border); }
+        .pc-num-item .big { font-size: 26px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+        .pc-num-item .big.blue { color: #1a73e8; }
+        .pc-num-item .big.purple { color: #5c6bc0; }
+        .pc-num-item .big.red { color: #d93025; }
+        .pc-num-item .big.orange { color: #e65100; }
+        .pc-num-item .big.yellow { color: #f9ab00; }
+        .pc-num-item .lbl { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+        .pc-num-item .area { font-size: 15px; font-weight: 600; color: #1a73e8; margin-top: 6px; }
+        .pc-num-item .area.yellow { color: #f9ab00; }
+        .pc-num-item .area.purple { color: #5c6bc0; }
+        .pc-num-item .area.orange { color: #e65100; }
+        .pc-num-item .area-lbl { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .pc-donuts { display: flex; margin-top: 18px; }
+        .pc-donuts > div { flex: 1; height: 240px; }
+        /* 右 panel: 隐患（上下结构：环形图在上，图例双列在下） */
+        .hz-total { font-size: 14px; color: var(--text-secondary); margin-bottom: 6px; }
+        .hz-total b { font-size: 26px; font-weight: 700; color: #d93025; margin-left: 6px; }
+        .hz-pie { width: 420px; max-width: 100%; height: 300px; margin: 0 auto; }
+        .hz-legend { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(7, auto); gap: 10px 40px; padding: 4px 0 0; width: fit-content; margin: 0 auto; min-width: 480px; }
+        .hz-legend .hz-item { display: flex; align-items: center; font-size: 13px; color: var(--text-primary); min-width: 0; }
+        .hz-legend .dot { width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; flex-shrink: 0; }
+        .hz-legend .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hz-legend .v { font-weight: 600; flex-shrink: 0; padding-left: 6px; }
+
+        /* ===== 通用 section ===== */
+        .section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); padding: 12px 16px 0; }
+        .section-sub { font-size: 13px; color: var(--text-secondary); padding: 4px 16px 10px; display: flex; flex-wrap: wrap; gap: 20px; }
+        .section-sub b { color: var(--text-primary); font-size: 16px; }
+        .chart-lg { width: 100%; height: 320px; }
+        .chart-md { width: 100%; height: 280px; }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } .stats-overview { grid-template-columns: 1fr; } }
+        .empty-tip { text-align: center; color: var(--text-secondary); font-size: 13px; padding: 40px 0; }
+    </style>
+</head>
+<body>
+
+    <!-- 信息检索 -->
+    <div class="panel">
+        <div class="panel-header"><i class="fas fa-search"></i> 信息检索</div>
+        <div class="panel-body">
+            <div class="search-row">
+                <select id="qDistrict"><option value="">奉贤区</option></select>
+                <select id="qTown"><option value="">请选择镇/街道</option></select>
+                <select id="qVillage"><option value="">请选择社区</option></select>
+                <select id="qLand"><option value="">请选择土地性质</option>
+                    <option>国有土地-居住用地</option><option>国有土地-商住用地</option><option>国有土地-商业用地</option>
+                    <option>国有土地-国有非建筑用地</option><option>国有土地-其他</option><option>集体土地</option>
+                </select>
+                <button class="btn btn-primary" onclick="applyQuery()"><i class="fas fa-search"></i> 查询</button>
+                <button class="btn btn-outline" onclick="resetQuery()"><i class="fas fa-redo"></i> 重置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 房屋排查统计（左） + 隐患分类统计（右） -->
+    <div class="paichu-row">
+        <!-- 左:房屋排查统计 -->
+        <div class="panel">
+            <div class="panel-header"><i class="fas fa-chart-pie"></i> 房屋排查统计</div>
+            <div class="pc-body">
+                <div class="pc-nums">
+                    <div class="pc-num-item">
+                        <div class="big" id="totalCount">0</div>
+                        <div class="lbl">已排查正常城房总数(栋)</div>
+                    </div>
+                    <div class="pc-num-item">
+                        <div class="big blue" id="resCount">0</div>
+                        <div class="lbl">住宅(栋)</div>
+                        <div class="area" id="resArea">0.00</div>
+                        <div class="area-lbl">建筑总面积(m²)</div>
+                    </div>
+                    <div class="pc-num-item">
+                        <div class="big purple" id="comCount">0</div>
+                        <div class="lbl">非住宅(栋)</div>
+                        <div class="area purple" id="comArea">0.00</div>
+                        <div class="area-lbl">建筑总面积(m²)</div>
+                    </div>
+                    <div class="pc-num-item">
+                        <div class="big red" id="abnCount">0</div>
+                        <div class="lbl">异常标记(栋)</div>
+                    </div>
+                    <div class="pc-num-item">
+                        <div class="big red" id="demolCount">0</div>
+                        <div class="lbl">已拆除(栋)</div>
+                    </div>
+                </div>
+                <div class="pc-nums" style="margin-top:16px;">
+                    <div class="pc-num-item">
+                        <div class="big blue" id="goodCount">0</div>
+                        <div class="lbl">完好房或基本完好房(栋)</div>
+                        <div class="area" id="goodArea">0.00</div>
+                        <div class="area-lbl">建筑总面积(m²)</div>
+                    </div>
+                    <div class="pc-num-item">
+                        <div class="big yellow" id="badCount">0</div>
+                        <div class="lbl">一般损坏房(栋)</div>
+                        <div class="area yellow" id="badArea">0.00</div>
+                        <div class="area-lbl">建筑总面积(m²)</div>
+                    </div>
+                    <div class="pc-num-item">
+                        <div class="big orange" id="evalNeedCount">0</div>
+                        <div class="lbl">需专业评估和鉴定(栋)</div>
+                        <div class="area orange" id="evalNeedArea">0.00</div>
+                        <div class="area-lbl">建筑总面积(m²)</div>
+                    </div>
+                </div>
+                <div class="pc-donuts">
+                    <div id="natureChart"></div>
+                    <div id="qualityChart"></div>
+                </div>
+            </div>
+        </div>
+        <!-- 右:隐患分类统计(正常) -->
+        <div class="panel">
+            <div class="panel-header"><i class="fas fa-exclamation-triangle"></i> 隐患分类统计(正常)</div>
+            <div class="pc-body">
+                <div class="hz-total">发现隐患总数(处):<b id="hazardTotal">0</b></div>
+                <div class="hz-pie" id="hazardPie"></div>
+                <div class="hz-legend" id="hazardLegend"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 住宅统计(正常) -->
+    <div class="panel">
+        <div class="panel-header"><i class="fas fa-home"></i> 住宅统计(正常)</div>
+        <div class="section-sub">
+            <span>住宅总数: <b id="rTotal">0</b> 栋</span>
+            <span>建筑总面积: <b id="rArea">0.00</b> m²</span>
+            <span>地上面积: <b id="rAreaUp">0.00</b> m²</span>
+            <span>地下面积: <b id="rAreaDown">0.00</b> m²</span>
+        </div>
+        <div class="panel-body" style="padding-top:0;">
+            <div style="font-size:13px;color:var(--text-primary);font-weight:600;margin-bottom:6px;">住宅的房屋权属</div>
+            <div class="chart-lg" id="resRightChart"></div>
+        </div>
+    </div>
+
+    <!-- 非住宅统计(正常) -->
+    <div class="panel">
+        <div class="panel-header"><i class="fas fa-building"></i> 非住宅统计(正常)</div>
+        <div class="section-sub">
+            <span>非住宅总数: <b id="cTotal">0</b> 栋</span>
+            <span>建筑总面积: <b id="cArea">0.00</b> m²</span>
+            <span>地上面积: <b id="cAreaUp">0.00</b> m²</span>
+            <span>地下面积: <b id="cAreaDown">0.00</b> m²</span>
+        </div>
+        <div class="panel-body" style="padding-top:0;">
+            <div style="font-size:13px;color:var(--text-primary);font-weight:600;margin-bottom:6px;">非住宅的行业主管部门</div>
+            <div class="chart-lg" id="comDeptChart"></div>
+        </div>
+    </div>
+
+    <!-- 房屋分布统计 -->
+    <div class="panel">
+        <div class="panel-header"><i class="fas fa-map-marker-alt"></i> 房屋分布统计</div>
+        <div class="section-sub">
+            <span>总数: <b id="dTotal">0</b> 栋</span>
+            <span>建筑总面积: <b id="dArea">0.00</b> m²</span>
+            <span>地上面积: <b id="dAreaUp">0.00</b> m²</span>
+            <span>地下面积: <b id="dAreaDown">0.00</b> m²</span>
+        </div>
+        <div class="panel-body" style="padding-top:0;">
+            <div class="chart-lg" id="distChart"></div>
+        </div>
+    </div>
+
+    <!-- 已完成评估统计 / 已填报解危措施 -->
+    <div class="two-col">
+        <div class="panel">
+            <div class="panel-header"><i class="fas fa-clipboard-check"></i> 已完成评估统计</div>
+            <div class="section-sub">
+                <span>总数: <b id="eTotal">0</b> 栋</span>
+                <span>建筑总面积: <b id="eArea">0.00</b> m²</span>
+            </div>
+            <div class="section-sub">
+                <span>地上面积: <b id="eAreaUp">0.00</b> m²</span>
+                <span>地下面积: <b id="eAreaDown">0.00</b> m²</span>
+            </div>
+            <div class="panel-body" style="padding-top:0;">
+                <div class="chart-md" id="evalChart"></div>
+            </div>
+        </div>
+        <div class="panel">
+            <div class="panel-header"><i class="fas fa-tools"></i> 已填报解危措施</div>
+            <div class="section-sub">
+                <span>总数: <b id="mTotal">0</b> 栋</span>
+                <span>建筑总面积: <b id="mArea">0.00</b> m²</span>
+            </div>
+            <div class="section-sub">
+                <span>地上面积: <b id="mAreaUp">0.00</b> m²</span>
+                <span>地下面积: <b id="mAreaDown">0.00</b> m²</span>
+            </div>
+            <div class="panel-body" style="padding-top:0;">
+                <div style="font-size:13px;color:var(--text-primary);font-weight:600;margin-bottom:6px;">非住宅的行业主管部门</div>
+                <div class="chart-md" id="measureChart"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+(function() {
+    // ===== 数据加载 =====
+    let rawData = {};
+    try { rawData = JSON.parse(localStorage.getItem('urbanHouseArchData') || '{}'); } catch (e) { rawData = {}; }
+    let records = Object.keys(rawData).map(k => rawData[k]);
+
+    // 镇/村下拉
+    const TOWN_VILLAGES = (typeof FENGXIAN_TOWN_VILLAGES !== 'undefined') ? FENGXIAN_TOWN_VILLAGES : {};
+    const townSel = document.getElementById('qTown');
+    Object.keys(TOWN_VILLAGES).forEach(t => {
+        const o = document.createElement('option'); o.value = t; o.textContent = t; townSel.appendChild(o);
+    });
+    townSel.addEventListener('change', function() {
+        const vSel = document.getElementById('qVillage');
+        vSel.innerHTML = '<option value="">请选择社区</option>';
+        (TOWN_VILLAGES[this.value] || []).forEach(v => {
+            const o = document.createElement('option'); o.value = v; o.textContent = v; vSel.appendChild(o);
+        });
+    });
+
+    // 取字段工具
+    function num(v) { const n = parseFloat(String(v || '').replace(/[^\d.]/g, '')); return isNaN(n) ? 0 : n; }
+    function areaOf(r) { return num(r.overview && r.overview.buildingArea) || num(r.structure && r.structure.buildingArea); }
+    function nature(r) { return r.houseNature || '住宅'; }
+    function abnormal(r) { return r.abnormalMark || '正常'; }
+    function level(r) { return r.riskDisplayLevel || r.riskLevel || ''; }
+
+    // 筛选状态
+    let filter = { town: '', village: '', land: '' };
+    window.applyQuery = function() {
+        filter.town = document.getElementById('qTown').value;
+        filter.village = document.getElementById('qVillage').value;
+        filter.land = document.getElementById('qLand').value;
+        renderAll();
+    };
+    window.resetQuery = function() {
+        document.getElementById('qTown').value = '';
+        document.getElementById('qVillage').innerHTML = '<option value="">请选择社区</option>';
+        document.getElementById('qLand').value = '';
+        filter = { town: '', village: '', land: '' };
+        renderAll();
+    };
+
+    function filtered() {
+        return records.filter(r => {
+            if (filter.town && (r.street || '') !== filter.town) return false;
+            if (filter.village && (r.community || r.village || '') !== filter.village) return false;
+            if (filter.land) {
+                const ln = (r.overview && r.overview.landNature) || (r.homestead && r.homestead.landNature) || '';
+                if (ln.indexOf(filter.land.replace(/^国有土地-|^集体土地/, '')) === -1 && ln !== filter.land) return false;
+            }
+            return true;
+        });
+    }
+
+    // ===== 图表实例 =====
+    const charts = {};
+    function mk(id) { if (!charts[id]) charts[id] = echarts.init(document.getElementById(id)); return charts[id]; }
+
+    const COLORS = ['#1a73e8', '#34a853', '#fbbc04', '#ea4335', '#9c27b0', '#00acc1', '#ff7043', '#5c6bc0', '#26a69a', '#ec407a'];
+
+    function renderAll() {
+        const list = filtered();
+        const res = list.filter(r => nature(r) === '住宅');
+        const com = list.filter(r => nature(r) === '非住宅');
+        const abn = list.filter(r => abnormal(r) !== '正常' && abnormal(r) !== '已拆除');
+        const demol = list.filter(r => abnormal(r) === '已拆除');
+        const good = list.filter(r => /完好/.test(level(r)));
+        const bad = list.filter(r => /损坏|一般/.test(level(r)) && !/完好/.test(level(r)));
+        const needEval = list.filter(r => /评估|鉴定/.test(level(r)) || ((r.riskInfo && r.riskInfo.needAppraisal) === '是'));
+        const sumArea = arr => arr.reduce((s, r) => s + areaOf(r), 0);
+
+        // 左 panel 顶部数字
+        document.getElementById('totalCount').textContent = list.length;
+        document.getElementById('resCount').textContent = res.length;
+        document.getElementById('resArea').textContent = sumArea(res).toFixed(2);
+        document.getElementById('comCount').textContent = com.length;
+        document.getElementById('comArea').textContent = sumArea(com).toFixed(2);
+        document.getElementById('abnCount').textContent = abn.length;
+        document.getElementById('demolCount').textContent = demol.length;
+        document.getElementById('goodCount').textContent = good.length;
+        document.getElementById('goodArea').textContent = sumArea(good).toFixed(2);
+        document.getElementById('badCount').textContent = bad.length;
+        document.getElementById('badArea').textContent = sumArea(bad).toFixed(2);
+        document.getElementById('evalNeedCount').textContent = needEval.length;
+        document.getElementById('evalNeedArea').textContent = sumArea(needEval).toFixed(2);
+
+        // 左下环形图1：住宅/非住宅/异常标记
+        mk('natureChart').setOption({
+            tooltip: { trigger: 'item' },
+            legend: { bottom: 0, left: 'center', itemWidth: 14, itemHeight: 10, textStyle: { fontSize: 12 } },
+            series: [{
+                type: 'pie', radius: ['48%', '72%'], center: ['50%', '42%'],
+                label: { show: false },
+                data: [
+                    { name: '住宅', value: res.length, itemStyle: { color: '#1a73e8' } },
+                    { name: '非住宅', value: com.length, itemStyle: { color: '#5c6bc0' } },
+                    { name: '异常标记', value: abn.length, itemStyle: { color: '#fbbc04' } }
+                ]
+            }]
+        });
+
+        // 左下环形图2：完好或基本完好/一般损坏房/需专业评估和鉴定
+        mk('qualityChart').setOption({
+            tooltip: { trigger: 'item' },
+            legend: { bottom: 0, left: 'center', itemWidth: 14, itemHeight: 10, textStyle: { fontSize: 12 } },
+            series: [{
+                type: 'pie', radius: ['48%', '72%'], center: ['50%', '42%'],
+                label: { show: false },
+                data: [
+                    { name: '完好或基本完好', value: good.length, itemStyle: { color: '#1a73e8' } },
+                    { name: '一般损坏房', value: bad.length, itemStyle: { color: '#fbbc04' } },
+                    { name: '需专业评估和鉴定', value: needEval.length, itemStyle: { color: '#e65100' } }
+                ]
+            }]
+        });
+
+        // 隐患分类统计（固定12类，顺序与截图一致）
+        const HZ_CATS = ['使用安全隐患', '场地地质或周边环境风险', '房屋整体沉降倾斜', '屋面塌陷变形', '墙体开裂变形', '楼面开裂变形', '梁柱开裂变形', '楼梯损伤变形', '阳台开裂变形', '木构件腐朽开裂', '其他安全问题', '钢构件锈蚀', '混凝土构件铁胀'];
+        const HZ_COLORS = ['#ea4335', '#34a853', '#fbbc04', '#9c27b0', '#00acc1', '#e65100', '#5c6bc0', '#b06000', '#1a73e8', '#8e24aa', '#26a69a', '#3949ab', '#c0ca33'];
+        const hzMap = {};
+        HZ_CATS.forEach(c => { hzMap[c] = 0; });
+        list.forEach(r => {
+            const hz = r.hazards;
+            if (hz && typeof hz === 'object') {
+                Object.keys(hz).forEach(k => {
+                    const h = hz[k];
+                    let t = (h && (h.type || h.hazardType || h.name)) || '其他安全问题';
+                    if (!hzMap.hasOwnProperty(t)) t = '其他安全问题';
+                    hzMap[t]++;
+                });
+            }
+            if (r.riskInfo && r.riskInfo.riskType) {
+                let t = r.riskInfo.riskType;
+                if (!hzMap.hasOwnProperty(t)) t = '其他安全问题';
+                hzMap[t]++;
+            }
+        });
+        const hzTotal = HZ_CATS.reduce((s, k) => s + hzMap[k], 0);
+        document.getElementById('hazardTotal').textContent = hzTotal;
+        mk('hazardPie').setOption({
+            tooltip: { trigger: 'item' },
+            title: {
+                text: String(hzTotal), subtext: '隐患', left: 'center', top: '38%',
+                textStyle: { fontSize: 26, fontWeight: 700, color: '#202124' },
+                subtextStyle: { fontSize: 13, color: '#5f6368' }
+            },
+            series: [{
+                type: 'pie', radius: ['52%', '75%'], center: ['50%', '46%'],
+                label: { show: false },
+                data: HZ_CATS.map((k, i) => ({ name: k, value: hzMap[k], itemStyle: { color: HZ_COLORS[i % HZ_COLORS.length] } }))
+            }]
+        });
+        // 自定义双列图例（名称: 数值）
+        const hzLegendEl = document.getElementById('hazardLegend');
+        hzLegendEl.innerHTML = HZ_CATS.map((k, i) =>
+            `<div class="hz-item"><span class="dot" style="background:${HZ_COLORS[i % HZ_COLORS.length]}"></span><span class="nm" title="${k}">${k}</span><span class="v">: ${hzMap[k]}</span></div>`
+        ).join('');
+
+        // ===== 住宅统计（房屋权属） =====
+        const resNormal = res.filter(r => abnormal(r) === '正常');
+        document.getElementById('rTotal').textContent = resNormal.length;
+        document.getElementById('rArea').textContent = sumArea(resNormal).toFixed(2);
+        document.getElementById('rAreaUp').textContent = sumArea(resNormal).toFixed(2);
+        document.getElementById('rAreaDown').textContent = '0.00';
+        const RIGHT_CATS = ['商品房', '系统公房', '直管公房', '售后公房', '私房', '其他公房', '动迁安置房', '公租房或廉住房', '共有产权房', '其他'];
+        const rightCount = {}, rightArea = {};
+        RIGHT_CATS.forEach(c => { rightCount[c] = 0; rightArea[c] = 0; });
+        resNormal.forEach(r => {
+            const c = r.houseRight || '其他';
+            if (!rightCount.hasOwnProperty(c)) { rightCount[c] = 0; rightArea[c] = 0; }
+            rightCount[c]++; rightArea[c] += areaOf(r);
+        });
+        renderHBar('resRightChart', RIGHT_CATS.slice(),
+            RIGHT_CATS.slice().map(c => rightCount[c]),
+            RIGHT_CATS.slice().map(c => +rightArea[c].toFixed(2)));
+
+        // ===== 非住宅统计（行业主管部门） =====
+        const comNormal = com.filter(r => abnormal(r) === '正常');
+        document.getElementById('cTotal').textContent = comNormal.length;
+        document.getElementById('cArea').textContent = sumArea(comNormal).toFixed(2);
+        document.getElementById('cAreaUp').textContent = sumArea(comNormal).toFixed(2);
+        document.getElementById('cAreaDown').textContent = '0.00';
+        const DEPT_CATS = ['无', '教育', '民政', '商务', '交通', '卫生健康', '国资', '文化旅游', '民族宗教', '机关事务', '其他'];
+        const deptCount = {}, deptArea = {};
+        DEPT_CATS.forEach(c => { deptCount[c] = 0; deptArea[c] = 0; });
+        comNormal.forEach(r => {
+            const c = r.industryDept || '无';
+            if (!deptCount.hasOwnProperty(c)) { deptCount[c] = 0; deptArea[c] = 0; }
+            deptCount[c]++; deptArea[c] += areaOf(r);
+        });
+        renderHBar('comDeptChart', DEPT_CATS.slice(),
+            DEPT_CATS.slice().map(c => deptCount[c]),
+            DEPT_CATS.slice().map(c => +deptArea[c].toFixed(2)), '#5c6bc0');
+
+        // ===== 房屋分布统计（按镇） =====
+        document.getElementById('dTotal').textContent = list.length;
+        document.getElementById('dArea').textContent = sumArea(list).toFixed(2);
+        document.getElementById('dAreaUp').textContent = sumArea(list).toFixed(2);
+        document.getElementById('dAreaDown').textContent = '0.00';
+        const townMap = {};
+        list.forEach(r => {
+            const t = r.street || '未知';
+            if (!townMap[t]) townMap[t] = { count: 0, area: 0 };
+            townMap[t].count++; townMap[t].area += areaOf(r);
+        });
+        const towns = Object.keys(townMap);
+        mk('distChart').setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['栋数(栋)', '建筑总面积(m²)'], top: 0 },
+            grid: { left: 60, right: 70, top: 40, bottom: 60 },
+            xAxis: { type: 'category', data: towns, axisLabel: { rotate: 30, fontSize: 11 } },
+            yAxis: [
+                { type: 'value', name: '栋数(栋)' },
+                { type: 'value', name: '建筑总面积(m²)' }
+            ],
+            series: [
+                { name: '栋数(栋)', type: 'bar', data: towns.map(t => townMap[t].count), itemStyle: { color: '#1a73e8' }, barWidth: 14 },
+                { name: '建筑总面积(m²)', type: 'bar', yAxisIndex: 1, data: towns.map(t => +townMap[t].area.toFixed(2)), itemStyle: { color: '#a6c800' }, barWidth: 14 }
+            ]
+        });
+
+        // ===== 已完成评估统计 =====
+        const evaluated = list.filter(r => (r.appraisalReports && Object.keys(r.appraisalReports).length > 0) || (r.riskClassification && r.riskClassification.assessTime));
+        document.getElementById('eTotal').textContent = evaluated.length;
+        document.getElementById('eArea').textContent = sumArea(evaluated).toFixed(2);
+        document.getElementById('eAreaUp').textContent = sumArea(evaluated).toFixed(2);
+        document.getElementById('eAreaDown').textContent = '0.00';
+        const eLvMap = {}, eLvArea = {};
+        evaluated.forEach(r => { const l = level(r) || '未评级'; eLvMap[l] = (eLvMap[l] || 0) + 1; eLvArea[l] = (eLvArea[l] || 0) + areaOf(r); });
+        const EVAL_CATS = ['疑似危房', '严重损坏房', '一般损坏房', '完好房'];
+        const eLvKeys = EVAL_CATS;
+        mk('evalChart').setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['栋数(栋)', '建筑总面积(m²)'], top: 0 },
+            grid: { left: 100, right: 80, top: 40, bottom: 30 },
+            xAxis: [
+                { type: 'value' },
+                { type: 'value', position: 'top', axisLabel: { fontSize: 10 } }
+            ],
+            yAxis: { type: 'category', data: eLvKeys.length ? eLvKeys : ['暂无数据'] },
+            series: [
+                { name: '栋数(栋)', type: 'bar', data: eLvKeys.map(k => eLvMap[k]), itemStyle: { color: '#1a73e8' }, barWidth: 12 },
+                { name: '建筑总面积(m²)', type: 'bar', xAxisIndex: 1, data: eLvKeys.map(k => +(eLvArea[k] || 0).toFixed(2)), itemStyle: { color: '#fbbc04' }, barWidth: 12 }
+            ]
+        });
+
+        // ===== 已填报解危措施 =====
+        const withMeasure = list.filter(r => (r.measures && Array.isArray(r.measures) && r.measures.length > 0) || r.currentMeasure || r.governStatus === '已治理');
+        document.getElementById('mTotal').textContent = withMeasure.length;
+        document.getElementById('mArea').textContent = sumArea(withMeasure).toFixed(2);
+        document.getElementById('mAreaUp').textContent = sumArea(withMeasure).toFixed(2);
+        document.getElementById('mAreaDown').textContent = '0.00';
+        const M_CATS = ['暂停营业', '设立警示标志', '搭设防护措施', '人员撤离', '停止使用', '动态监测', '其他'];
+        const mCount = {}, mArea = {};
+        withMeasure.forEach(r => {
+            const txt = (r.currentMeasure || '') + '';
+            let hit = '其他';
+            for (const c of M_CATS) { if (txt.indexOf(c) !== -1) { hit = c; break; } }
+            mCount[hit] = (mCount[hit] || 0) + 1; mArea[hit] = (mArea[hit] || 0) + areaOf(r);
+        });
+        const mKeys = M_CATS;
+        mk('measureChart').setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['栋数(栋)', '建筑总面积(m²)'], top: 0 },
+            grid: { left: 100, right: 80, top: 40, bottom: 30 },
+            xAxis: [
+                { type: 'value' },
+                { type: 'value', position: 'top', axisLabel: { fontSize: 10 } }
+            ],
+            yAxis: { type: 'category', data: mKeys },
+            series: [
+                { name: '栋数(栋)', type: 'bar', data: mKeys.map(k => mCount[k] || 0), itemStyle: { color: '#1a73e8' }, barWidth: 10 },
+                { name: '建筑总面积(m²)', type: 'bar', xAxisIndex: 1, data: mKeys.map(k => +(mArea[k] || 0).toFixed(2)), itemStyle: { color: '#fbbc04' }, barWidth: 10 }
+            ]
+        });
+    }
+
+    function renderHBar(id, cats, counts, areas, barColor) {
+        barColor = barColor || '#1a73e8';
+        mk(id).setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['栋数(栋)', '建筑总面积(m²)'], top: 0, right: 10 },
+            grid: { left: 110, right: 80, top: 40, bottom: 30 },
+            xAxis: [
+                { type: 'value' },
+                { type: 'value', position: 'top', axisLabel: { fontSize: 10 } }
+            ],
+            yAxis: { type: 'category', data: cats, axisLabel: { fontSize: 11 } },
+            series: [
+                { name: '栋数(栋)', type: 'bar', data: counts, itemStyle: { color: barColor }, barWidth: 10 },
+                { name: '建筑总面积(m²)', type: 'bar', xAxisIndex: 1, data: areas, itemStyle: { color: '#fbbc04' }, barWidth: 10 }
+            ]
+        });
+    }
+
+    window.addEventListener('resize', () => { Object.keys(charts).forEach(k => charts[k].resize()); });
+    renderAll();
+})();
+</script>
+</body>
+</html>

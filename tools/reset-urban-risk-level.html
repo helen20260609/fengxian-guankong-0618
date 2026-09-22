@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>重置城镇自建房风险等级数据</title>
+<style>
+body { font-family: 'Microsoft YaHei', sans-serif; max-width: 720px; margin: 40px auto; padding: 20px; background: #f5f7fa; }
+.card { background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+h1 { font-size: 20px; color: #d93025; margin-bottom: 8px; }
+.desc { color: #5f6368; font-size: 14px; line-height: 1.7; margin-bottom: 20px; }
+.key-list { background: #f8f9fa; border-left: 3px solid #d93025; padding: 12px 16px; margin-bottom: 20px; font-family: Consolas, monospace; font-size: 13px; color: #5f6368; }
+.key-list li { margin: 4px 0; list-style: none; }
+.btn { padding: 12px 28px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 12px; }
+.btn-danger { background: #d93025; color: #fff; }
+.btn-danger:hover { background: #b71c1c; }
+.btn-default { background: #f1f3f4; color: #202124; }
+.result { margin-top: 20px; padding: 12px 16px; border-radius: 6px; font-size: 14px; display: none; }
+.result.success { background: #e6f4ea; color: #137333; display: block; }
+.result.info { background: #e8f0fe; color: #1a73e8; display: block; }
+</style>
+</head>
+<body>
+<div class="card">
+    <h1>⚠️ 重置城镇自建房风险等级数据</h1>
+    <div class="desc">
+        城镇自建房模块已从三分类（第一/二/三类）升级为四级分类（疑似危房/严重损坏房/一般损坏房/完好房）。<br>
+        点击下面按钮将<strong>清空所有城镇自建房相关 localStorage 数据</strong>并重新生成种子数据。<br>
+        <span style="color:#d93025;font-weight:600">此操作不可撤销！</span>
+    </div>
+    <div class="key-list">
+        <div style="font-weight:600;margin-bottom:6px;color:#202124">将清空以下键：</div>
+        <ul>
+            <li>• urbanHouseArchData（主存储，85条房屋）</li>
+            <li>• urbanHouseArchDraft（草稿区）</li>
+            <li>• urbanHouseArchSyncLog（同步日志）</li>
+            <li>• urbanCloseApplyData（销号申请）</li>
+            <li>• urbanNoMigratedToCF（编号迁移标记）</li>
+            <li>• review-2026-zone-checkins / -history（回头看打卡）</li>
+            <li>• urbanPatrolTaskDraft_*（巡查任务草稿）</li>
+            <li>• *.nfbackup-*（NF迁移备份）</li>
+        </ul>
+    </div>
+    <button class="btn btn-danger" id="btn-reset">🗑️ 立即清空并重新生成</button>
+    <button class="btn btn-default" onclick="location.reload()">🔄 刷新本页</button>
+    <div class="result" id="result"></div>
+</div>
+
+<script src="../js/urban-house-arch-data.js"></script>
+<script>
+document.getElementById('btn-reset').addEventListener('click', function() {
+    if (!confirm('确认清空所有城镇自建房数据并重新生成种子数据？此操作不可撤销！')) return;
+    const resultEl = document.getElementById('result');
+    const removedKeys = [];
+    
+    // 静态键
+    const staticKeys = [
+        'urbanHouseArchData',
+        'urbanHouseArchDraft',
+        'urbanHouseArchSyncLog',
+        'urbanCloseApplyData',
+        'urbanNoMigratedToCF',
+        'review-2026-zone-checkins',
+        'review-2026-zone-checkin-history'
+    ];
+    staticKeys.forEach(k => {
+        if (localStorage.getItem(k) !== null) {
+            localStorage.removeItem(k);
+            removedKeys.push(k);
+        }
+    });
+    
+    // 动态键
+    Object.keys(localStorage).slice().forEach(k => {
+        if (k.startsWith('urbanPatrolTaskDraft_') || k.includes('.nfbackup-')) {
+            localStorage.removeItem(k);
+            removedKeys.push(k);
+        }
+    });
+    
+    // 重新生成种子数据
+    let regenMsg = '';
+    if (typeof initHouseArchSeed === 'function') {
+        const all = initHouseArchSeed();
+        const count = all && typeof all === 'object' ? Object.keys(all).length : (Array.isArray(all) ? all.length : 0);
+        regenMsg = `<br>✅ 已重新生成 <strong>${count}</strong> 条四级分类种子数据`;
+    } else {
+        regenMsg = '<br>⚠️ initHouseArchSeed 函数未找到，请检查 urban-house-arch-data.js 是否已加载';
+    }
+    
+    resultEl.className = 'result success';
+    resultEl.innerHTML = `✅ 已清空 <strong>${removedKeys.length}</strong> 个键：${removedKeys.join('、') || '（无）'}${regenMsg}<br><br>👉 请回到 <a href="urban-warning-management.html" target="_blank">预警中心主页</a> 按 Ctrl+Shift+R 强制刷新查看效果`;
+});
+</script>
+</body>
+</html>

@@ -6,13 +6,14 @@ const URBAN_HOUSE_ARCH_KEY = 'urbanHouseArchData';
 const URBAN_CLOSE_APPLY_KEY = 'urbanCloseApplyData';
 const URBAN_HOUSE_ARCH_DRAFT_KEY_GLOBAL = 'urbanHouseArchDraft';
 
-// ---------------- 一次性编号迁移：城镇 NF- → CF- ----------------
-// 背景：城乡拆分后城镇记录统一使用 CF- 前缀。本函数在任意浏览器首次加载本数据层时自动执行一次，
-// 把 urbanHouseArchData / urbanHouseArchDraft 里的 NF- 键改为 CF-（含 record.no 字段），并做安全备份。
-// 幂等：完成后写入标记 urbanNoMigratedToCF=1，之后不再执行。
+// ---------------- 编号迁移：城镇 NF- → CF-（每次加载都执行，幂等） ----------------
+// 背景：城乡拆分后城镇记录统一使用 CF- 前缀。
+// 本函数在每次加载本数据层时执行，把 urbanHouseArchData / urbanHouseArchDraft 里的 NF- 键改为 CF-
+// （含 record.no 字段），并做安全备份。幂等：若已无 NF- 键则直接返回，无副作用。
+// 注意：旧版曾经用 urbanNoMigratedToCF=1 标记"只跑一次"，但种子重置后会再次生成 NF-，
+// 因此改为每次加载都扫描一次，确保仓库中永远没有 NF- 键。
 (function __migrateUrbanNoToCF() {
     try {
-        if (localStorage.getItem('urbanNoMigratedToCF') === '1') return;
         var stamp = Date.now();
         ['urbanHouseArchData', 'urbanHouseArchDraft'].forEach(function (key) {
             var raw = localStorage.getItem(key);
@@ -22,7 +23,7 @@ const URBAN_HOUSE_ARCH_DRAFT_KEY_GLOBAL = 'urbanHouseArchDraft';
             if (!all || typeof all !== 'object') return;
             var nfKeys = Object.keys(all).filter(function (k) { return /^NF-/i.test(k); });
             if (!nfKeys.length) return;
-            // 备份原始数据
+            // 备份原始数据（仅在确实发生迁移时）
             try { localStorage.setItem(key + '.nfbackup-' + stamp, raw); } catch (e) {}
             nfKeys.forEach(function (oldKey) {
                 var newKey = oldKey.replace(/^NF-/i, 'CF-');
@@ -36,7 +37,10 @@ const URBAN_HOUSE_ARCH_DRAFT_KEY_GLOBAL = 'urbanHouseArchDraft';
             });
             localStorage.setItem(key, JSON.stringify(all));
         });
-        localStorage.setItem('urbanNoMigratedToCF', '1');
+        // 兼容旧标记（之前已迁移过的浏览器不会有 NF- 键，上面的循环自然跳过）
+        if (localStorage.getItem('urbanNoMigratedToCF') !== '1') {
+            localStorage.setItem('urbanNoMigratedToCF', '1');
+        }
     } catch (e) { /* 静默失败，不阻塞页面 */ }
 })();
 
@@ -253,7 +257,8 @@ function setCloseApplyStorage(list) { return __setCloseApplyStorage(list); }
 // ---------------- 工具函数 ----------------
 function pad5(n) { return String(n).padStart(5, '0'); }
 function pad2(n) { return n < 10 ? '0' + n : n; }
-function generateNo(seq) { return 'NF-2025-' + pad5(seq); }
+// 城镇自建房统一使用 CF- 前缀（与农村 NF- 区分，避免路由分发错乱）
+function generateNo(seq) { return 'CF-2025-' + pad5(seq); }
 function generateCloseApplyId(prefix) {
     const d = new Date();
     return prefix + '-' + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '-' + Math.floor(Math.random() * 900 + 100);
@@ -356,6 +361,8 @@ function normalizeHouseRecord(record) {
     const rec = record;
     // 确保 no 存在
     if (!rec.no) rec.no = '';
+    // 房屋性质默认住宅（老数据兼容；种子中非住宅已显式标记）
+    if (!rec.houseNature) rec.houseNature = '住宅';
 
     // 确保全要素档案字段存在
     if (!rec.overview) rec.overview = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.overview));
@@ -1374,9 +1381,99 @@ function generateHouseSeed() {
             photos, riskInfo, inspectionRecords, appraisalReports, patrolRecords,
             riskIdentification, riskClassification, emergencyResponse
         };
+        // 模拟非住宅数据：约 1/3 记录标记为非住宅（含详情页字段库）
+        applyCommercialMock(record, i);
         data[no] = record;
     }
     return data;
+}
+
+// 非住宅模拟：给记录打非住宅标记，并写入详情页所需的字段库
+// 只在种子生成时调用；不影响已有住宅记录
+function applyCommercialMock(record, i) {
+    if (!record) return;
+    // 住宅默认：顶层标记 + 顶层字段库"房屋性质=住宅"不强制写（详情页默认即住宅）
+    if (i % 3 !== 0) {
+        record.houseNature = '住宅';
+        return;
+    }
+    // ===== 非住宅 =====
+    record.houseNature = '非住宅';
+    // 顶部概览使用用途改为经营类
+    if (record.overview) {
+        record.overview.usage = '经营';
+        record.overview.isSelfLive = '否';
+        record.overview.specificUsage = '出租经营';
+    }
+    if (record.usage) {
+        record.usage.usageType = '经营';
+        record.usage.isSelfLive = '否';
+        record.usage.specificUsage = '出租经营';
+    }
+    // 非住宅使用人/单位池
+    var users = [
+        '奉贤区青少年业余体育学校', '南桥镇社区卫生服务中心', '奉贤区文化馆',
+        '南桥镇社区事务受理服务中心', '奉贤区实验幼儿园', '南桥镇敬老院',
+        '上海奉贤商业发展有限公司', '南桥镇文化活动中心', '奉贤区图书馆分馆'
+    ];
+    var supervisors = ['教育', '卫生健康', '文化旅游', '民政', '商务', '机关事务'];
+    var propertyNatures = ['政府', '国有企业', '民营企业', '私有'];
+    var useTypes = ['非经营用房屋', '经营用房屋'];
+    var uses = [
+        '其他学校建筑', '医疗卫生用房', '文化设施用房', '养老服务用房',
+        '商业服务用房', '办公用房', '社区服务用房', '其他公共建筑'
+    ];
+    var u = users[i % users.length];
+    var sup = supervisors[i % supervisors.length];
+    var pn = propertyNatures[i % propertyNatures.length];
+    var ut = useTypes[i % useTypes.length];
+    var use = uses[i % uses.length];
+
+    // 详情页字段库：jbxx_common（房屋性质=非住宅 + 按该记录值）+ jbxx_commercial
+    var jbxxCommon = [
+        ['房屋性质', '非住宅'],
+        ['所在区域', '奉贤区' + (record.street || '') + (record.community || '')],
+        ['建筑名称', record.name || ''],
+        ['路号信息', (record.address || '').replace(/^上海市奉贤区/, '')],
+        ['是否有物业管理', '否'],
+        ['是否为自建房', '是'],
+        ['异常标记', record.abnormalMark || '正常'],
+        ['建造时间', (record.year || 1990) + '-01'],
+        ['是否采用外墙外保温', '否'],
+        ['地上建筑面积', (record.overview && record.overview.buildingArea) || '300'],
+        ['地下建筑面积', '0'],
+        ['地上建筑层数', '2'],
+        ['地下建筑层数', '0'],
+        ['建筑高度', '8'],
+        ['土地性质', '国有土地-公共管理与公共服务用地'],
+        ['土地性质其他内容', ''],
+        ['结构类型', record.category === '框架' ? '框架结构' : '砌体结构'],
+        ['结构类型其他内容', ''],
+        ['二级结构类型', '其他'],
+        ['是否专业设计建造', '是'],
+        ['是否保护性建筑', '否'],
+        ['是否取得施工许可', '是'],
+        ['外墙面类型', '涂料'],
+        ['建筑外立面附属构件', '无']
+    ];
+    var jbxxCommercial = [
+        ['使用人或单位(机构名称)', u],
+        ['行业主管部门', sup],
+        ['行业主管部门其他内容', ''],
+        ['产权性质', pn],
+        ['产权性质其他内容', ''],
+        ['房屋用途类型', ut],
+        ['房屋用途', use],
+        ['房屋用途其他内容', '']
+    ];
+    record._fieldsLibrary = record._fieldsLibrary || {};
+    record._fieldsLibrary.basic_URBAN = record._fieldsLibrary.basic_URBAN || {};
+    record._fieldsLibrary.basic_URBAN.jbxx_common = jbxxCommon;
+    record._fieldsLibrary.basic_URBAN.jbxx_commercial = jbxxCommercial;
+    // 兼容旧 jbxx 全量键
+    record._fieldsLibrary.basic_URBAN.jbxx = jbxxCommon.concat(jbxxCommercial);
+    // 使用情况：非住宅与住宅字段一致(由详情页 basicData_URBAN.syqk 默认提供)
+    delete record._fieldsLibrary.basic_URBAN.syqk;
 }
 
 // 初始化种子Storage 为空则写入 85 条数据；否则规范化已有数据

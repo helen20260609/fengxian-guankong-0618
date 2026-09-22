@@ -181,8 +181,9 @@
         .col-index { width: 50px; text-align: center; }
         .col-number { width: 140px; }
         .col-name { width: 180px; }
-        .col-owner { width: 100px; }
-        .col-street { width: 120px; }
+        .col-owner { width: 100px; display: none; }
+        .col-street { width: 110px; }
+        .col-village { width: 130px; }
         .col-address { min-width: 200px; }
         .col-category { width: 100px; }
         .col-status { width: 100px; }
@@ -1001,7 +1002,15 @@
 <!-- Search toolbar -->
 <div class="search-toolbar">
 <div class="toolbar-group">
-<input class="search-input fulltext" id="fulltextSearch" placeholder="输入唯一标识/地址/户主快速定位" type="text"/>
+<input class="search-input fulltext" id="fulltextSearch" placeholder="输入唯一标识/地址快速定位" type="text"/>
+<label class="group-label" for="townFilter">镇/街道</label>
+<select class="search-input" id="townFilter" style="max-width:140px;">
+<option value="">全部</option>
+</select>
+<label class="group-label" for="villageFilter">社区/居委</label>
+<select class="search-input" id="villageFilter" style="max-width:160px;">
+<option value="">请选择社区/居委</option>
+</select>
 </div>
 <div class="toolbar-actions">
 <button class="search-btn" id="searchBtn" title="搜索"><i class="fas fa-search"></i> 搜索</button>
@@ -1015,9 +1024,9 @@
 <tr>
 <th class="col-index">序</th>
 <th class="col-number">唯一标识</th>
-<th class="col-owner">户主姓名</th>
-<th class="col-street">所属街道</th>
-<th class="col-address">房屋地址</th>
+<th class="col-street">镇/街道</th>
+<th class="col-village">社区/居委</th>
+<th class="col-address">地址</th>
 <th class="col-status">风险等级</th>
 <th class="col-view">操作</th>
 </tr>
@@ -1845,6 +1854,7 @@
                     name: r.name,
                     owner: r.owner,
                     street: r.street,
+                    village: r.village || r.community || '',
                     address: r.address,
                     category: '农村自建房',
                     status: (typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status])
@@ -1869,6 +1879,7 @@
                     name: r.name,
                     owner: r.owner,
                     street: r.street,
+                    village: r.village || r.community || '',
                     address: r.address,
                     category: '城镇自建房',
                     status: r.riskLevel || r.status
@@ -1876,6 +1887,9 @@
                 baseData = ruralData.concat(urbanData);
                 // 数据加载完成后刷新列表与计数
                 updateTabCounts();
+                // 城镇数据到位后重建镇/街道 & 社区/居委下拉
+                buildTownOptions();
+                buildVillageOptions(townFilter ? townFilter.value : '');
                 filterData();
             })
             .catch(err => {
@@ -1983,6 +1997,8 @@
         const fulltextSearch = document.getElementById('fulltextSearch');
         const searchBtn = document.querySelector('.search-btn');
         const resetBtn = document.getElementById('resetBtn');
+        const townFilter = document.getElementById('townFilter');
+        const villageFilter = document.getElementById('villageFilter');
 
         function renderTable() {
             const start = (currentPage - 1) * pageSize;
@@ -1993,8 +2009,8 @@
                 <tr>
                     <td class="col-index">${start + index + 1}</td>
                     <td>${item.no}</td>
-                    <td>${item.owner}</td>
                     <td>${item.street}</td>
+                    <td>${item.village || '-'}</td>
                     <td>${item.address}</td>
                     <td><span class="status-tag ${getRiskBadgeClass(item.status)}">${getRiskDisplayText(item.status)}</span></td>
                     <td class="col-view"><span class="view-btn" data-index="${start + index}">查看</span></td>
@@ -2049,16 +2065,31 @@
 
         function filterData() {
             const keyword = fulltextSearch.value.trim().toLowerCase();
+            const town = townFilter.value.trim();
+            const village = villageFilter.value.trim();
 
             filteredData = baseData.filter(item => {
                 if (currentCategory && item.category !== currentCategory) return false;
+                if (town && item.street !== town) return false;
+                if (village && item.village !== village) return false;
                 if (!keyword) return true;
-                const fields = [item.no, item.owner, item.address].join(' ').toLowerCase();
+                const fields = [item.no, item.address].join(' ').toLowerCase();
                 return fields.includes(keyword);
             });
 
             currentPage = 1;
             updatePage();
+        }
+
+        // ===== 镇/街道 & 社区/居委 下拉联动 =====
+        function buildTownOptions() {
+            const towns = Array.from(new Set(baseData.map(i => (i.street || '').trim()).filter(Boolean))).sort();
+            townFilter.innerHTML = '<option value="">全部</option>' + towns.map(t => `<option value="${t}">${t}</option>`).join('');
+        }
+        function buildVillageOptions(town) {
+            const pool = town ? baseData.filter(i => i.street === town) : baseData;
+            const villages = Array.from(new Set(pool.map(i => (i.village || '').trim()).filter(Boolean))).sort();
+            villageFilter.innerHTML = '<option value="">请选择社区/居委</option>' + villages.map(v => `<option value="${v}">${v}</option>`).join('');
         }
 
         function updateTabCounts() {
@@ -2126,11 +2157,21 @@
         fulltextSearch.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') filterData();
         });
+        townFilter.addEventListener('change', () => {
+            buildVillageOptions(townFilter.value);
+            filterData();
+        });
+        villageFilter.addEventListener('change', filterData);
 
         resetBtn.addEventListener('click', () => {
             fulltextSearch.value = '';
+            townFilter.value = '';
+            buildVillageOptions('');
             filterData();
         });
+
+        buildTownOptions();
+        buildVillageOptions('');
 
         filterData();
 

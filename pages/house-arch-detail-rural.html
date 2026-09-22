@@ -1436,8 +1436,8 @@
 
         const tableData_RURAL = {
             survey: { title: '排查信息', columns: [], rows: [] },
-            assessment: { title: '安全鉴定', columns: ['隐患动态整治状态', '鉴定机构名称', '统一社会信用代码', '鉴定时间', '鉴定负责人', '鉴定结论', '阶段性标识', '鉴定报告', '备注', '填报人', '填报时间'], rows: [
-                ['整治中', '奉贤区房屋安全鉴定中心', '91310120MA1K123456', '2024-06-20', '张伟', 'C级（局部危险）', '阶段性鉴定', '—', '东侧承重墙需加固', '李志强', '2024-06-21 10:00']
+            assessment: { title: '安全鉴定', columns: ['鉴定机构名称', '统一社会信用代码', '鉴定时间', '鉴定负责人', '鉴定结论', '阶段性标识', '鉴定报告', '备注', '填报人', '填报时间'], rows: [
+                ['奉贤区房屋安全鉴定中心', '91310120MA1K123456', '2024-06-20', '张伟', 'C级（局部危险）', '阶段性鉴定', '—', '东侧承重墙需加固', '李志强', '2024-06-21 10:00']
             ]},
             plan: { title: '整治计划', columns: ['计划开始时间', '计划完成时间', '负责人信息', '联系电话', '整治方案', '是否采取硬隔离', '未硬隔离原因说明', '长期管控照片', '告知承诺书', '书面计划', '备注', '填报人', '填报时间'], rows: [
                 ['2024-07-05', '2024-09-30', '李志强', '138-1234-5678', '承重墙裂缝灌浆加固、屋面防水重做', '否', '资金尚未到位，暂未实施硬隔离', '—', '—', 'NF-2024-00001-FA', '计划已审核，待资金到位后启动施工', '李志强', '2024-07-05 14:30']
@@ -2932,9 +2932,16 @@
                 html += renderPlanContent(s);
             } else {
                 const data = getTableData()[key];
-                const columns = data.columns;
-                const values = data.rows[0] || [];
-                html += '<div class="info-grid info-grid-2col">' + renderKeyValueGrid(columns, values) + '</div>';
+                let columns = data.columns;
+                let values = data.rows[0] || [];
+                // 安全鉴定：查看面板隐藏"隐患动态整治状态"列（保留原数据以兼容历史存档）
+                if (key === 'assessment') {
+                    const keepIdx = columns.map((c, i) => c === '隐患动态整治状态' ? -1 : i).filter(i => i >= 0);
+                    columns = keepIdx.map(i => columns[i]);
+                    values = keepIdx.map(i => values[i]);
+                }
+                const fwFields = (key === 'assessment') ? ['鉴定报告', '备注'] : [];
+                html += '<div class="info-grid info-grid-2col">' + renderKeyValueGrid(columns, values, fwFields) + '</div>';
             }
 
             html += '</div></div>';
@@ -2976,9 +2983,12 @@
             return html;
         }
 
-        function renderKeyValueGrid(columns, values) {
+        function renderKeyValueGrid(columns, values, fullWidthFields) {
+            const fwFields = fullWidthFields || [];
             return columns.map((c, i) => {
                 const isPhoto = c && c.includes('照片');
+                const isAttach = c === '鉴定报告';
+                const isFullWidth = isPhoto || fwFields.includes(c);
                 const val = values[i] || '';
                 const isImageUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
                 let valueHtml = '';
@@ -2987,10 +2997,24 @@
                     valueHtml = urls.length
                         ? '<div class="info-value photo-value photo-grid">' + urls.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
                         : '<div class="info-value empty">—</div>';
+                } else if (isAttach && val && val !== '—' && val !== '-') {
+                    const files = projectFilesFromString(val);
+                    valueHtml = files.length
+                        ? '<div class="info-value attach-list">' + files.map(f => {
+                            const isImage = f.url && (f.url.startsWith('data:image') || (f.url.startsWith('http') && /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(f.url)));
+                            const icon = isImage ? 'fa-image' : 'fa-file';
+                            const clickAttr = isImage ? ' onclick="viewPhotoOnline(\'' + f.url + '\')" style="cursor:pointer;color:var(--primary);"' : ' style="color:var(--text-primary);"';
+                            return '<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;margin:2px 6px 2px 0;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;font-size:13px;">' +
+                                '<i class="fas ' + icon + '" style="color:var(--primary);"></i>' +
+                                '<span' + clickAttr + '>' + (f.name || '附件') + '</span>' +
+                                (f.size ? '<span style="color:#999;font-size:12px;">(' + f.size + ')</span>' : '') +
+                                '</div>';
+                        }).join('') + '</div>'
+                        : '<div class="info-value empty">—</div>';
                 } else {
                     valueHtml = '<div class="info-value ' + (val ? '' : 'empty') + '">' + (val || '--') + '</div>';
                 }
-                return '<div class="info-item ' + (isPhoto ? 'full-width' : '') + '">' +
+                return '<div class="info-item ' + (isFullWidth ? 'full-width' : '') + '">' +
                     '<div class="info-label">' + c + '</div>' + valueHtml +
                 '</div>';
             }).join('');
@@ -3479,7 +3503,7 @@
             // 审核列表（保留原有）
             html += '<div class="table-section-title" style="display:flex;justify-content:space-between;align-items:center;"><span>审核列表</span><button class="bottom-btn" style="padding:4px 12px;font-size:12px;" onclick="addCloseAudit()"><i class="fas fa-plus"></i> 新增记录</button></div>' +
                 '<div class="table-wrap"><table class="arch-table" id="closeAuditTable">' +
-                '<thead><tr><th>提交人</th><th>提交时间</th><th>审核时间</th><th>审核人</th><th>审核结论</th><th>审核报告</th><th>备注</th><th>操作</th></tr></thead>' +
+                '<thead><tr><th>序号</th><th>提交人</th><th>提交时间</th><th>审核时间</th><th>审核人</th><th>审核结论</th><th>审核报告</th><th>备注</th><th>操作</th></tr></thead>' +
                 '<tbody>' + renderAuditRows(buildCloseAuditList(), true) + '</tbody></table></div>';
             return html;
         }
@@ -3837,27 +3861,53 @@
             const r = list[idx] || {};
             editingAcceptAuditIndex = idx;
             document.getElementById('acceptAuditEditTitle').textContent = '编辑审核记录';
-            const greenLabel = (label) => '<label class="form-label" style="color:var(--safe);font-weight:600;">' + label + ' *</label>';
-            const textField = (label, key, val, type, options) => {
+            const greenLabel = (label, required) => '<label class="form-label" style="color:var(--safe);font-weight:600;">' + label + (required === false ? '' : ' *') + '</label>';
+            // 把 'YYYY-MM-DD HH:mm' 转成 datetime-local 控件需要的 'YYYY-MM-DDTHH:mm'
+            const toLocalInput = (v) => {
+                if (!v) return '';
+                return String(v).trim().replace(/\s+/, 'T').slice(0, 16);
+            };
+            const textField = (label, key, val, type, options, required) => {
                 let inputHtml;
+                const phMap = {
+                    submitter: '请输入姓名',
+                    auditor: '请输入姓名',
+                    report: '请输入文件名/编号',
+                    remark: '选填'
+                };
+                const ph = phMap[key] || '';
                 if (type === 'select') {
                     inputHtml = '<select class="form-input" data-audit-key="' + key + '">' +
                         options.map(o => '<option value="' + o + '"' + (String(val) === o ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>';
                 } else if (type === 'textarea') {
-                    inputHtml = '<textarea class="form-input" data-audit-key="' + key + '" rows="2">' + (val || '') + '</textarea>';
+                    inputHtml = '<textarea class="form-input" data-audit-key="' + key + '" rows="2" placeholder="' + ph + '">' + (val || '') + '</textarea>';
+                } else if (type === 'datetime') {
+                    inputHtml = '<input class="form-input" type="datetime-local" data-audit-key="' + key + '" value="' + toLocalInput(val) + '">';
+                } else if (key === 'report') {
+                    const curVal = String(val || '').replace(/"/g, '&quot;');
+                    const hasFile = val && (String(val).startsWith('data:') || String(val).startsWith('http'));
+                    const previewHtml = hasFile
+                        ? '<div style="font-size:12px;color:var(--safe);"><i class="fas fa-check-circle"></i> 已上传文件 <a href="javascript:void(0)" onclick="viewPhotoOnline(document.querySelector(\'[data-audit-key=report]\').value)" style="color:var(--primary);margin-left:6px;">预览</a></div>'
+                        : '';
+                    inputHtml = '<div class="file-upload-wrap">' +
+                        '<input class="form-input" type="text" data-audit-key="report" value="' + curVal + '" placeholder="' + ph + '">' +
+                        '<input class="file-upload-input" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onchange="handleAuditReportUpload(this)">' +
+                        '<div class="file-upload-dropzone" style="font-size:12px;padding:6px;"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传报告文件（PDF / Word / 图片）</div>' +
+                        previewHtml +
+                    '</div>';
                 } else {
-                    inputHtml = '<input class="form-input" type="' + (type || 'text') + '" data-audit-key="' + key + '" value="' + String(val || '').replace(/"/g, '&quot;') + '" placeholder="YYYY-MM-DD HH:mm">';
+                    inputHtml = '<input class="form-input" type="' + (type || 'text') + '" data-audit-key="' + key + '" value="' + String(val || '').replace(/"/g, '&quot;') + '" placeholder="' + ph + '">';
                 }
-                return '<div class="form-item' + (type === 'textarea' ? ' form-item-full' : '') + '">' + greenLabel(label) + inputHtml + '</div>';
+                return '<div class="form-item' + (type === 'textarea' || key === 'report' ? ' form-item-full' : '') + '">' + greenLabel(label, required) + inputHtml + '</div>';
             };
             document.getElementById('acceptAuditEditForm').innerHTML = '<div class="form-grid">' +
                 textField('提交人', 'submitter', r.submitter, 'text') +
-                textField('提交时间', 'submitTime', r.submitTime, 'text') +
-                textField('审核时间', 'auditTime', r.auditTime, 'text') +
+                textField('提交时间', 'submitTime', r.submitTime, 'datetime') +
+                textField('审核时间', 'auditTime', r.auditTime, 'datetime') +
                 textField('审核人', 'auditor', r.auditor, 'text') +
                 textField('审核结论', 'conclusion', r.conclusion, 'select', ['待审核', '审核通过', '复核通过', '已驳回']) +
                 textField('审核报告', 'report', r.report, 'text') +
-                textField('备注', 'remark', r.remark, 'textarea') +
+                textField('备注', 'remark', r.remark, 'textarea', null, false) +
             '</div>';
             document.getElementById('acceptAuditEditModal').classList.add('open');
         }
@@ -3867,14 +3917,86 @@
             editingAcceptAuditIndex = -1;
         }
 
+        // 审核报告文件上传：读取为 dataURL 写回文本框
+        function handleAuditReportUpload(input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+                alert('文件大小不能超过 5MB');
+                input.value = '';
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = e => {
+                const wrap = input.closest('.file-upload-wrap');
+                const txt = wrap.querySelector('[data-audit-key="report"]');
+                if (txt) {
+                    txt.value = e.target.result;
+                    let tip = wrap.querySelector('.report-upload-tip');
+                    if (!tip) {
+                        tip = document.createElement('div');
+                        tip.className = 'report-upload-tip';
+                        tip.style.cssText = 'font-size:12px;color:var(--safe);';
+                        wrap.appendChild(tip);
+                    }
+                    tip.innerHTML = '<i class="fas fa-check-circle"></i> 已选择：' + file.name + '（' + (file.size / 1024).toFixed(1) + ' KB）';
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 事件委托：让 acceptAuditEditForm 里的 dropzone 点击/拖拽能触发文件选择
+        (function bindAuditReportDropzone() {
+            const form = document.getElementById('acceptAuditEditForm');
+            if (!form) return;
+            form.addEventListener('click', e => {
+                const dz = e.target.closest('.file-upload-dropzone');
+                if (!dz) return;
+                const wrap = dz.closest('.file-upload-wrap');
+                const input = wrap && wrap.querySelector('.file-upload-input');
+                if (input) input.click();
+            });
+            ['dragenter', 'dragover'].forEach(ev => {
+                form.addEventListener(ev, e => {
+                    const dz = e.target.closest('.file-upload-dropzone');
+                    if (!dz) return;
+                    e.preventDefault();
+                    dz.classList.add('dragover');
+                });
+            });
+            ['dragleave', 'drop'].forEach(ev => {
+                form.addEventListener(ev, e => {
+                    const dz = e.target.closest('.file-upload-dropzone');
+                    if (!dz) return;
+                    e.preventDefault();
+                    dz.classList.remove('dragover');
+                });
+            });
+            form.addEventListener('drop', e => {
+                const dz = e.target.closest('.file-upload-dropzone');
+                if (!dz) return;
+                const wrap = dz.closest('.file-upload-wrap');
+                const input = wrap && wrap.querySelector('.file-upload-input');
+                if (!input) return;
+                if (e.dataTransfer.files && e.dataTransfer.files.length) {
+                    input.files = e.dataTransfer.files;
+                    handleAuditReportUpload(input);
+                }
+            });
+        })();
+
         function saveAcceptAuditEdit() {
             const s = currentHouseArch;
             const list = buildAcceptAuditList(s).slice();
             const idx = editingAcceptAuditIndex;
             if (idx < 0) return;
             const rec = list[idx] || {};
+            // datetime-local 控件返回 'YYYY-MM-DDTHH:mm'，统一转回 'YYYY-MM-DD HH:mm' 再存
+            const fromLocalInput = (v) => v ? String(v).replace('T', ' ') : '';
+            const dtKeys = ['submitTime', 'auditTime'];
             document.querySelectorAll('#acceptAuditEditForm [data-audit-key]').forEach(el => {
-                rec[el.dataset.auditKey] = el.value;
+                const k = el.dataset.auditKey;
+                rec[k] = dtKeys.includes(k) ? fromLocalInput(el.value) : el.value;
             });
             list[idx] = rec;
             s.acceptAuditRecords = list;
@@ -6260,27 +6382,65 @@
             const item = getSidebarItems().find(i => i.key === key);
             document.getElementById('commonEditTitle').innerHTML = '<i class="fas fa-edit"></i> 编辑' + item.title;
             const rows = data.rows[0] || [];
+            // 安全鉴定：编辑弹窗同样隐藏"隐患动态整治状态"列
+            // 注意：data-idx 必须保留原始索引，否则 saveCommonEdit 会写错位
+            let columnsArr = data.columns;
+            let origIdxArr = data.columns.map((_, i) => i); // 显示索引 -> 原始索引 的映射
+            if (key === 'assessment') {
+                origIdxArr = columnsArr.map((c, i) => c === '隐患动态整治状态' ? -1 : i).filter(i => i >= 0);
+                columnsArr = origIdxArr.map(i => columnsArr[i]);
+            }
             const isImageUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
-            const photoIndexes = data.columns.map((c, i) => (c && c.includes('照片')) ? i : -1).filter(i => i >= 0);
-            const gridHtml = data.columns.map((c, i) => {
+            const photoIndexes = columnsArr.map((c, i) => (c && c.includes('照片')) ? i : -1).filter(i => i >= 0);
+            const gridHtml = columnsArr.map((c, i) => {
+                const origIdx = origIdxArr[i]; // 写入 data-idx 用的真实索引
                 let inputHtml = '';
                 let fullWidth = '';
-                if (photoIndexes.includes(i)) {
-                    const val = rows[i] || '';
+                if (c === '鉴定结论') {
+                    const val = rows[origIdx] || '';
+                    const judgeOptions = ['A级', 'B级', 'C级', 'D级'];
+                    // 兼容历史值：C级（局部危险）→ C级
+                    const normalize = (v) => {
+                        if (!v) return '';
+                        const m = v.match(/^([ABCD])级/);
+                        return m ? (m[1] + '级') : v;
+                    };
+                    const curVal = normalize(val);
+                    const optsHtml = judgeOptions.map(opt => {
+                        const selected = curVal === opt ? ' selected' : '';
+                        return '<option value="' + opt + '"' + selected + '>' + opt + '</option>';
+                    }).join('');
+                    inputHtml = '<select class="form-input" data-idx="' + origIdx + '">' +
+                        '<option value="">请选择</option>' +
+                        optsHtml +
+                        '</select>';
+                } else if (photoIndexes.includes(i)) {
+                    const val = rows[origIdx] || '';
                     const imageUrls = val.split(',').map(s => s.trim()).filter(isImageUrl);
                     let thumbHtml = '';
                     if (imageUrls.length) {
                         thumbHtml = '<div class="file-thumb-preview">' + imageUrls.map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>';
                     }
-                    inputHtml = '<div class="file-upload-wrap" data-idx="' + i + '">' +
-                        '<input class="form-input file-url-input" type="text" data-idx="' + i + '" value="' + val.replace(/"/g, '&quot;') + '" placeholder="图片 URL 或将图片拖入下方">' +
-                        '<input class="file-upload-input" type="file" accept="image/*" multiple data-idx="' + i + '" onchange="handleCommonPhotoUpload(this)">' +
+                    inputHtml = '<div class="file-upload-wrap" data-idx="' + origIdx + '">' +
+                        '<input class="form-input file-url-input" type="text" data-idx="' + origIdx + '" value="' + val.replace(/"/g, '&quot;') + '" placeholder="图片 URL 或将图片拖入下方">' +
+                        '<input class="file-upload-input" type="file" accept="image/*" multiple data-idx="' + origIdx + '" onchange="handleCommonPhotoUpload(this)">' +
                         '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传图片</div>' +
                         thumbHtml +
                         '</div>';
                     fullWidth = 'form-item-full';
+                } else if (key === 'assessment' && c === '鉴定报告') {
+                    // 鉴定报告：附件上传，支持图片/PDF/Word/Excel/CAD/ZIP/RAR
+                    const val = rows[origIdx] || '';
+                    const files = projectFilesFromString(val);
+                    inputHtml = '<div class="file-upload-wrap" data-idx="' + origIdx + '" data-attach-field="assessment-report">' +
+                        '<input class="form-input file-url-input" type="text" data-idx="' + origIdx + '" value="' + projectFilesToString(files).replace(/"/g, '&quot;') + '" placeholder="文件 URL 或将文件拖入下方">' +
+                        '<input class="file-upload-input" type="file" multiple data-idx="' + origIdx + '" onchange="handleCommonFileUpload(this)">' +
+                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传文件（支持图片、PDF、Word、Excel、CAD、ZIP、RAR）</div>' +
+                        '<div class="project-file-list"></div>' +
+                        '</div>';
+                    fullWidth = 'form-item-full';
                 } else {
-                    inputHtml = '<input class="form-input" type="text" data-idx="' + i + '" value="' + (rows[i] || '').replace(/"/g, '&quot;') + '">';
+                    inputHtml = '<input class="form-input" type="text" data-idx="' + origIdx + '" value="' + (rows[origIdx] || '').replace(/"/g, '&quot;') + '">';
                 }
                 return '<div class="form-item ' + fullWidth + '">' +
                     '<label class="form-label">' + c + '</label>' +
@@ -6300,6 +6460,8 @@
             document.querySelectorAll('#commonEditForm .file-upload-wrap').forEach(wrap => {
                 const input = wrap.querySelector('.file-upload-input');
                 const dropzone = wrap.querySelector('.file-upload-dropzone');
+                const isAttach = wrap.dataset.attachField === 'assessment-report';
+                const uploadFn = isAttach ? handleCommonFileUpload : handleCommonPhotoUpload;
                 dropzone.addEventListener('click', () => input.click());
                 ['dragenter', 'dragover'].forEach(event => {
                     dropzone.addEventListener(event, (e) => {
@@ -6317,9 +6479,15 @@
                     const files = e.dataTransfer.files;
                     if (files.length > 0) {
                         input.files = files;
-                        handleCommonPhotoUpload(input);
+                        uploadFn(input);
                     }
                 });
+                // 初始渲染附件列表
+                if (isAttach) {
+                    const urlInput = wrap.querySelector('.file-url-input');
+                    const files = projectFilesFromString(urlInput.value || '');
+                    renderCommonFileList(wrap, files);
+                }
             });
         }
 
@@ -6357,6 +6525,69 @@
                 wrap.appendChild(thumb);
             }
             thumb.innerHTML = urls.filter(u => u && u !== '—' && u !== '-').map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('');
+        }
+
+        // 通用附件上传（用于"鉴定报告"等字段，支持图片/PDF/Word/Excel/CAD/ZIP/RAR）
+        async function handleCommonFileUpload(input) {
+            const files = Array.from(input.files || []);
+            if (files.length === 0) return;
+            const { valid, invalid } = validateFiles(files, false);
+            if (invalid.length > 0) {
+                alert('以下文件格式不允许：\n' + invalid.join('\n') + '\n\n允许上传：图片、PDF、Word、Excel、CAD、ZIP、RAR 等文件。');
+                return;
+            }
+            const wrap = input.closest('.file-upload-wrap');
+            const urlInput = wrap.querySelector('.file-url-input');
+            const current = projectFilesFromString(urlInput.value || '');
+            const newFiles = [];
+            for (const file of valid) {
+                if (file.type.startsWith('image/')) {
+                    try {
+                        const url = await fileToDataUrl(file);
+                        newFiles.push({ name: file.name, url: url, type: file.type, size: formatFileSize(file.size), uploadTime: formatDateTime(new Date()) });
+                    } catch (e) { /* ignore */ }
+                } else {
+                    // 非图片文件仅存文件名，避免 dataURL 撑爆 localStorage
+                    newFiles.push({ name: file.name, url: file.name, type: file.type, size: formatFileSize(file.size), uploadTime: formatDateTime(new Date()) });
+                }
+            }
+            const all = current.concat(newFiles);
+            urlInput.value = projectFilesToString(all);
+            urlInput.dispatchEvent(new Event('input'));
+            renderCommonFileList(wrap, all);
+        }
+
+        function renderCommonFileList(wrap, files) {
+            let list = wrap.querySelector('.project-file-list');
+            if (!list) {
+                list = document.createElement('div');
+                list.className = 'project-file-list';
+                wrap.appendChild(list);
+            }
+            if (!files || files.length === 0) {
+                list.innerHTML = '';
+                return;
+            }
+            list.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">已上传 ' + files.length + ' 个附件</div>' + files.map((f, idx) => {
+                const isImage = f.url && (f.url.startsWith('data:image') || f.url.startsWith('http') && /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(f.url));
+                const icon = isImage ? 'fa-image' : 'fa-file';
+                const preview = isImage ? ' onclick="viewPhotoOnline(\'' + f.url + '\')" style="cursor:pointer;color:var(--primary);"' : ' style="color:var(--text-secondary);"';
+                return '<div class="project-file-item">' +
+                    '<i class="fas ' + icon + '"></i> ' +
+                    '<span' + preview + '>' + (f.name || '附件') + ' <span style="color:#999;">(' + (f.size || '-') + ')</span></span>' +
+                    '<button type="button" class="project-file-remove" onclick="removeCommonFile(this, ' + idx + ')" title="删除"><i class="fas fa-times"></i></button>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function removeCommonFile(btn, idx) {
+            const wrap = btn.closest('.file-upload-wrap');
+            const urlInput = wrap.querySelector('.file-url-input');
+            const current = projectFilesFromString(urlInput.value || '');
+            current.splice(idx, 1);
+            urlInput.value = projectFilesToString(current);
+            urlInput.dispatchEvent(new Event('input'));
+            renderCommonFileList(wrap, current);
         }
 
         function renderCommonEditAuditList(list, showSeq) {
