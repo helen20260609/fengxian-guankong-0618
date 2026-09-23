@@ -123,7 +123,7 @@
         // 按当前 category 动态返回风险标签（城镇四级口径 / 农村三类口径）
         function getRiskLabel(code, houseType) {
             const isUrban = houseType === '城镇自建房' || (!houseType && window.hsStatsCategory === '城镇自建房');
-            const urbanMap = { danger: '疑似危房', major: '严重损坏房', warning: '一般损坏房', safe: '完好房' };
+            const urbanMap = { danger: '疑似危房', major: '疑似严重损坏房', warning: '疑似一般损坏房', safe: '完好房（基本完好房）' };
             const ruralMap = { danger: '第三类', major: '第三类', warning: '第二类', safe: '第一类' };
             return (isUrban ? urbanMap : ruralMap)[code] || code;
         }
@@ -133,9 +133,9 @@
             if (isUrban) {
                 return {
                     danger: { label: '疑似危房', color: '#d93025' },
-                    major: { label: '严重损坏房', color: '#e8710a' },
-                    warning: { label: '一般损坏房', color: '#f9ab00' },
-                    safe: { label: '完好房', color: '#1a73e8' }
+                    major: { label: '疑似严重损坏房', color: '#e8710a' },
+                    warning: { label: '疑似一般损坏房', color: '#f9ab00' },
+                    safe: { label: '完好房（基本完好房）', color: '#1a73e8' }
                 };
             }
             return riskMap;
@@ -309,7 +309,7 @@
             const isUrban = window.hsStatsCategory === '城镇自建房';
             // 更新 summary 卡片标签
             const summaryLabels = isUrban
-                ? { danger: '疑似危房', warning: '严重损坏房', safe: '一般损坏房' }
+                ? { danger: '疑似危房', warning: '疑似严重损坏房', safe: '疑似一般损坏房' }
                 : { danger: '第三类', warning: '第二类', safe: '第一类' };
             const dangerLabel = document.querySelector('#dangerCount')?.closest('.summary-card')?.querySelector('.summary-label');
             const warningLabel = document.querySelector('#warningCount')?.closest('.summary-card')?.querySelector('.summary-label');
@@ -317,7 +317,7 @@
             if (dangerLabel) dangerLabel.textContent = summaryLabels.danger;
             if (warningLabel) warningLabel.textContent = summaryLabels.warning;
             if (safeLabel) safeLabel.textContent = summaryLabels.safe;
-            // 切换第4个卡片的 icon 颜色和图标（城镇=一般损坏房 黄色警告 / 农村=第一类 蓝色盾牌）
+            // 切换第4个卡片的 icon 颜色和图标（城镇=疑似一般损坏房 黄色警告 / 农村=第一类 蓝色盾牌）
             const safeIcon = document.querySelector('#safeCount')?.closest('.summary-card')?.querySelector('.summary-icon');
             if (safeIcon) {
                 const iconEl = safeIcon.querySelector('i');
@@ -334,7 +334,7 @@
             if (riskFilter) {
                 const currentVal = riskFilter.value;
                 const options = isUrban
-                    ? [['', '全部等级'], ['danger', '疑似危房'], ['major', '严重损坏房'], ['warning', '一般损坏房'], ['safe', '完好房']]
+                    ? [['', '全部等级'], ['danger', '疑似危房'], ['major', '疑似严重损坏房'], ['warning', '疑似一般损坏房'], ['safe', '完好房（基本完好房）']]
                     : [['', '全部等级'], ['danger', '第三类'], ['warning', '第二类'], ['safe', '第一类']];
                 riskFilter.innerHTML = options.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
                 // 恢复之前选中的值（如果还存在）
@@ -409,7 +409,7 @@
             const order = isUrban ? ['danger', 'major', 'warning', 'safe'] : ['danger', 'warning', 'safe'];
             const tagMap = { danger: 'tag-danger', major: 'tag-major', warning: 'tag-warning', safe: 'tag-safe' };
             const labelMap = isUrban
-                ? { danger: '疑似危房', major: '严重损坏房', warning: '一般损坏房', safe: '完好房' }
+                ? { danger: '疑似危房', major: '疑似严重损坏房', warning: '疑似一般损坏房', safe: '完好房（基本完好房）' }
                 : { danger: '第三类', major: '第三类', warning: '第二类', safe: '第一类' };
             const tbody = document.querySelector('#riskTable tbody');
             tbody.innerHTML = order.map(risk => {

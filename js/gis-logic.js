@@ -30,7 +30,7 @@ const ruralRecs = getAllHouseRecords()
 // 先初始化 baseData 为农村数据，城镇数据异步加载后合并
 let baseData = [...ruralRecs];
 
-// 动态加载城镇自建房数据层（urban-house-arch-data.js，四级口径：疑似危房/严重损坏房/一般损坏房/完好房）
+// 动态加载城镇自建房数据层（urban-house-arch-data.js，四级口径：疑似危房/疑似严重损坏房/疑似一般损坏房/完好房（基本完好房））
 // 用 fetch + new Function 在隔离作用域内执行，避免与 house-arch-data.js 的全局函数冲突
 fetch('../js/urban-house-arch-data.js')
     .then(res => res.text())
@@ -103,9 +103,9 @@ const RISK_LABEL_RURAL = {
 // 城镇自建房四级口径标签
 const RISK_LABEL_URBAN = {
     danger: '疑似危房',
-    major: '严重损坏房',
-    warning: '一般损坏房',
-    safe: '完好房'
+    major: '疑似严重损坏房',
+    warning: '疑似一般损坏房',
+    safe: '完好房（基本完好房）'
 };
 
 // 根据房屋类型获取风险等级标签

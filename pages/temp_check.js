@@ -1665,7 +1665,7 @@
             const surveyData = getSurveyData();
             const s = currentHouseArch;
 
-            // 排查记录列表：读取档案真实排查记录（2026回头看/农房常态化监测等同步写入 inspectionRecords）
+            // 排查记录列表：读取档案真实排查记录（2026回头看/农房回头看等同步写入 inspectionRecords）
             // 按填报时间倒序，最新在前；无记录时保留一条空占位
             let list = (Array.isArray(s.inspectionRecords) ? s.inspectionRecords.slice() : []);
             list.sort(function(a, b) {

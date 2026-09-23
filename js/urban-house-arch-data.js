@@ -68,12 +68,12 @@ const MODULE_RISKS = ['danger', 'major', 'warning', 'safe'];
 const MODULE_GOVERNANCE = ['pending', 'doing', 'done', 'overdue'];
 
 // 把房屋风险状态映射到统一风险等级（内部数据层）
-// 城镇口径四级：danger→疑似危房(红)；major→严重损坏房(橙)；warning→一般损坏房(黄)；safe→完好房(蓝)
+// 城镇口径四级：danger→疑似危房(红)；major→疑似严重损坏房(橙)；warning→疑似一般损坏房(黄)；safe→完好房（基本完好房）(蓝)
 const RISK_LABEL_MAP = {
     'danger': '疑似危房',
-    'major': '严重损坏房',
-    'warning': '一般损坏房',
-    'safe': '完好房'
+    'major': '疑似严重损坏房',
+    'warning': '疑似一般损坏房',
+    'safe': '完好房（基本完好房）'
 };
 const APPRAISAL_LEVEL_MAP = {
     'danger': 'D级',
@@ -83,9 +83,12 @@ const APPRAISAL_LEVEL_MAP = {
 };
 const RISK_LABEL_MAP_INV = {
     '疑似危房': 'danger',
+    '疑似严重损坏房': 'major',
+    '疑似一般损坏房': 'warning',
     '严重损坏房': 'major',
     '一般损坏房': 'warning',
     '完好房': 'safe',
+    '完好房（基本完好房）': 'safe',
     '完好房(基本完好房)': 'safe',
     '安全': 'safe',
     '无风险': 'safe'
@@ -94,12 +97,15 @@ const RISK_LABEL_MAP_INV = {
 // 城镇自建房展示用风险等级：与数据层保持一致（四级）
 const HAZARD_TO_RISK_LEVEL = {
     '疑似危房': '疑似危房',
-    '严重损坏房': '严重损坏房',
-    '一般损坏房': '一般损坏房',
-    '完好房': '完好房',
-    '完好房(基本完好房)': '完好房',
-    '安全': '完好房',
-    '无风险': '完好房'
+    '疑似严重损坏房': '疑似严重损坏房',
+    '疑似一般损坏房': '疑似一般损坏房',
+    '严重损坏房': '疑似严重损坏房',
+    '一般损坏房': '疑似一般损坏房',
+    '完好房': '完好房（基本完好房）',
+    '完好房（基本完好房）': '完好房（基本完好房）',
+    '完好房(基本完好房)': '完好房（基本完好房）',
+    '安全': '完好房（基本完好房）',
+    '无风险': '完好房（基本完好房）'
 };
 const STATUS_LABEL_MAP = {
     'pending': '待整治',
@@ -151,12 +157,44 @@ function __getHouseArchStorage() {
 }
 function __setHouseArchStorage(all) {
     localStorage.setItem(URBAN_HOUSE_ARCH_KEY, JSON.stringify(all));
+    __pushToServer('urban-house-arch', all);
 }
 function __getCloseApplyStorage() {
     try { const raw = localStorage.getItem(URBAN_CLOSE_APPLY_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
 function __setCloseApplyStorage(list) {
     localStorage.setItem(URBAN_CLOSE_APPLY_KEY, JSON.stringify(list));
+}
+
+// ---------------- 后端持久化（原型演示：跨浏览器/跨设备共享） ----------------
+// 写入时异步推送到 server.js；读取时启动页先拉后端覆盖本地，保证多端一致
+function __pushToServer(apiLabel, obj) {
+    try {
+        fetch('/api/' + apiLabel, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(obj)
+        }).catch(function() { /* 后端未启动时静默失败，仍保留 localStorage */ });
+    } catch (e) { /* ignore */ }
+}
+// 从后端拉取并覆盖 localStorage；done 回调无论成败都会执行
+function __pullFromServer(apiLabel, storageKey, done) {
+    fetch('/api/' + apiLabel)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(obj) {
+            if (obj && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length > 0) {
+                try { localStorage.setItem(storageKey, JSON.stringify(obj)); } catch (e) {}
+            }
+        })
+        .catch(function() { /* 后端不可用时忽略 */ })
+        .then(function() { if (typeof done === 'function') done(); });
+}
+// 启动时拉取发布区+草稿区，全部完成后回调（原型演示入口用）
+function initUrbanHouseArchFromServer(done) {
+    var pending = 2;
+    function fin() { pending--; if (pending <= 0 && typeof done === 'function') done(); }
+    __pullFromServer('urban-house-arch', URBAN_HOUSE_ARCH_KEY, fin);
+    __pullFromServer('urban-house-arch-draft', URBAN_HOUSE_ARCH_DRAFT_KEY, fin);
 }
 
 // ---------------- 草稿区（风险档案工作区） ----------------
@@ -173,6 +211,7 @@ function __getHouseArchDraft() {
 }
 function __setHouseArchDraft(all) {
     localStorage.setItem(URBAN_HOUSE_ARCH_DRAFT_KEY, JSON.stringify(all));
+    __pushToServer('urban-house-arch-draft', all);
 }
 function __getSyncLog() {
     try { const raw = localStorage.getItem(URBAN_HOUSE_ARCH_SYNC_LOG_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
@@ -272,7 +311,7 @@ function generateArchId(prefix) {
 // 默认单条房屋结构（兼容 house-arch-detail 的 DEFAULT_HOUSE_STATUS）
 const DEFAULT_HOUSE_STATUS = {
     no: '', name: '', owner: '', street: '', address: '', community: '', village: '',
-    riskLevel: '一般损坏房', governStatus: '待整治', currentMeasure: '',
+    riskLevel: '疑似一般损坏房', governStatus: '待整治', currentMeasure: '',
     managerName: '', managerPhone: '',
     manageRecords: [], projectRecords: [], qualityTrace: [], archiveRecords: [],
     closeStatus: '未申请', closeApplyTime: '', closeAuditTime: '', closeAuditor: '',
@@ -355,7 +394,7 @@ const DEFAULT_HOUSE_STATUS = {
 };
 
 // 规范化单条记录：保持 risk/riskLevel、governance/governStatus 两对字段一致，
-// 销号通过则统一为 safe/完好房 + done/已治理，并补全编号。
+// 销号通过则统一为 safe/完好房（基本完好房） + done/已治理，并补全编号。
 function normalizeHouseRecord(record) {
     if (!record) return record;
     const rec = record;
@@ -392,10 +431,10 @@ function normalizeHouseRecord(record) {
     // 销号已通过：强制无风险/已治理，但保留原始风险等级用于统计
     if (rec.closeStatus === '已通过') {
         rec.originalRisk = rec.originalRisk || rec.risk || 'warning';
-        rec.originalRiskLevel = rec.originalRiskLevel || rec.riskLevel || RISK_LABEL_MAP[rec.risk] || '完好房';
+        rec.originalRiskLevel = rec.originalRiskLevel || rec.riskLevel || RISK_LABEL_MAP[rec.risk] || '完好房（基本完好房）';
         rec.risk = 'safe';
         rec.governance = 'done';
-        rec.riskLevel = '完好房';
+        rec.riskLevel = '完好房（基本完好房）';
         rec.governStatus = '已治理';
         rec.isRemovedFromFocus = true;
         rec.riskDisplayLevel = HAZARD_TO_RISK_LEVEL[rec.originalRiskLevel] || rec.originalRiskLevel;
@@ -409,7 +448,7 @@ function normalizeHouseRecord(record) {
         rec.riskLevel = RISK_LABEL_MAP[rec.risk];
     } else {
         rec.risk = 'warning';
-        rec.riskLevel = '一般损坏房';
+        rec.riskLevel = '疑似一般损坏房';
     }
 
     // 保留原始风险信息（便于销号后追溯）
@@ -429,7 +468,7 @@ function normalizeHouseRecord(record) {
 
     if (!rec.closeStatus) rec.closeStatus = '未申请';
     if (!rec.riskInfo) rec.riskInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskInfo));
-    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '一般损坏房';
+    rec.riskInfo.riskLevel = rec.riskInfo.riskLevel || rec.riskLevel || '疑似一般损坏房';
     rec.riskInfo.riskStatus = rec.riskInfo.riskStatus || rec.governStatus || '待整治';
     rec.riskInfo.relatedHouse = rec.riskInfo.relatedHouse || rec.no || '';
     rec.riskInfo.relatedOwner = rec.riskInfo.relatedOwner || rec.owner || '';
@@ -754,7 +793,7 @@ function generateInspectionRecords(no, risk, i) {
     const type = HAZARD_TYPES[(i + 3) % HAZARD_TYPES.length];
     const checkDate = '2024-' + pad2(5 + (i % 4)) + '-' + pad2(10 + (i % 15));
     const checkTime = pad2(8 + (i % 3)) + ':' + pad2(10 + (i % 40));
-    const preliminary = risk === 'danger' ? '立即停止使用' : (risk === 'major' ? '停止使用危险区域' : '加强观察');
+    const preliminary = risk === 'danger' ? '存在严重安全隐患（疑似危房）' : (risk === 'major' ? '存在一定安全隐患（疑似严重损坏房）' : '未发现安全隐患（完好或基本完好房）');
     const conclusion = risk === 'danger' ? '存在重大安全隐患' : (risk === 'major' ? '存在较大安全隐患' : '存在一般安全隐患');
     const checkerRole = i % 2 === 0 ? '村干部' : '网格员';
     const checkOrg = i % 3 === 0 ? '奉城镇人民政府' : ('奉城镇' + VILLAGES[i % VILLAGES.length] + '村民委员会');
@@ -1002,7 +1041,7 @@ function syncTaskToHouseRecords(task) {
                     checkDate: dateStr,
                     checker: task.person || '',
                     checkerPhone: '',
-                    structureStatus: rec.riskLevel || '一般损坏房',
+                    structureStatus: rec.riskLevel || '疑似一般损坏房',
                     damagePart: '',
                     overload: '否',
                     otherRisk: '暂无',
@@ -1112,10 +1151,10 @@ function generateHouseSeed() {
     // 城镇自建房风险分布：安全/轻微瑕疵占多数，危房占少数
     const RISK_DISTRIBUTION = [
         { risk: 'danger',  governanceWeights: { done: 0.35, doing: 0.30, overdue: 0.20, pending: 0.15 }, ratio: 0.10 }, // 疑似危房（红）
-        { risk: 'major',   governanceWeights: { done: 0.30, doing: 0.40, overdue: 0.15, pending: 0.15 }, ratio: 0.15 }, // 严重损坏房（橙）
-        { risk: 'warning', governanceWeights: { done: 0.45, doing: 0.25, overdue: 0.10, pending: 0.20 }, ratio: 0.25 }, // 一般损坏房（黄·高整治权重）
-        { risk: 'warning', governanceWeights: { done: 0.70, doing: 0.15, overdue: 0.05, pending: 0.10 }, ratio: 0.15 }, // 一般损坏房（黄·低整治权重）
-        { risk: 'safe',    governanceWeights: { done: 1.0 },                                 ratio: 0.35 }  // 完好房（蓝）
+        { risk: 'major',   governanceWeights: { done: 0.30, doing: 0.40, overdue: 0.15, pending: 0.15 }, ratio: 0.15 }, // 疑似严重损坏房（橙）
+        { risk: 'warning', governanceWeights: { done: 0.45, doing: 0.25, overdue: 0.10, pending: 0.20 }, ratio: 0.25 }, // 疑似一般损坏房（黄·高整治权重）
+        { risk: 'warning', governanceWeights: { done: 0.70, doing: 0.15, overdue: 0.05, pending: 0.10 }, ratio: 0.15 }, // 疑似一般损坏房（黄·低整治权重）
+        { risk: 'safe',    governanceWeights: { done: 1.0 },                                 ratio: 0.35 }  // 完好房（基本完好房）（蓝）
     ];
 
     const weightedPick = (weights) => {
@@ -1220,7 +1259,7 @@ function generateHouseSeed() {
         const originalRisk = risk;
         const originalRiskLevel = riskLevel;
         const displayRisk = isClosed ? 'safe' : risk;
-        const displayRiskLevel = isClosed ? '完好房' : riskLevel;
+        const displayRiskLevel = isClosed ? '完好房（基本完好房）' : riskLevel;
 
         const managerName = owner;
         const managerPhone = MANAGER_PHONES[i % MANAGER_PHONES.length];

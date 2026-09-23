@@ -37,8 +37,10 @@
 .split-main { padding-top: 14px; overflow-y: auto; scrollbar-width: none; }
 .split-main::-webkit-scrollbar { display: none; }
 .page-hero .ph-sub { position: static; text-align: center; font-size: 12.5px; opacity: .85; margin-top: 40px; width: 100%; z-index: 2; }
-.page-hero .hero-stats-v2 { position: relative; z-index: 2; width: 100%; margin-top: 40px; }
+.page-hero .hero-stats-v2 { position: relative; z-index: 2; width: 100%; margin-top: 48px; }
 .page-hero .ph-action { position: absolute; right: 14px; top: calc(34px + 16px); margin: 0; display: flex; align-items: center; height: 32px; z-index: 2; }
+/* 含统计格时改为纵向布局，避免标题被遮挡 */
+.page-hero { flex-direction: column; align-items: stretch; justify-content: flex-start; }
 </style>
 </head>
 <body>
@@ -63,11 +65,12 @@
     <div class="page-hero">
         <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
         <div class="ph-title" id="pageTitle">风险清单</div>
-        <div class="hero-stats-v2" style="margin-top:16px">
+        <div class="hero-stats-v2" style="margin-top:44px">
             <div class="hs-item"><div class="hs-value" id="statTotal">--</div><div class="hs-label" data-level="total">全部风险</div></div>
             <div class="hs-item"><div class="hs-value red" id="statRed">--</div><div class="hs-label" data-level="red">红色</div></div>
             <div class="hs-item"><div class="hs-value orange" id="statOrange">--</div><div class="hs-label" data-level="orange">橙色</div></div>
             <div class="hs-item"><div class="hs-value yellow" id="statYellow">--</div><div class="hs-label" data-level="yellow">黄色</div></div>
+            <div class="hs-item"><div class="hs-value blue" id="statBlue">--</div><div class="hs-label" data-level="blue">蓝色</div></div>
         </div>
         <div id="pickHint" style="display:none;margin-top:10px;font-size: 12px;color:#fff;opacity:.9;text-align:center">请点击列表项选择关联风险</div>
     </div>
@@ -122,24 +125,63 @@
     }
 
     var isHouseDomain = currentDomain === 'rural' || currentDomain === 'urban';
-    var selfbuildLevelNames = {
+    var isUrbanDomain = currentDomain === 'urban';
+    var isRuralDomain = currentDomain === 'rural';
+    // 农村自建房 3 档：红/橙=第三类、黄=第二类、蓝=第一类
+    var ruralLevelNames = {
         red: '第三类',
         orange: '第三类',
         yellow: '第二类',
         blue: '第一类'
     };
+    // 城镇自建房 4 档：红=疑似危房、橙=疑似严重损坏房、黄=疑似一般损坏房、蓝=完好房（基本完好房）
+    var urbanLevelNames = {
+        red: '疑似危房',
+        orange: '疑似严重损坏房',
+        yellow: '疑似一般损坏房',
+        blue: '完好房（基本完好房）'
+    };
+    var selfbuildLevelNames = isUrbanDomain ? urbanLevelNames : ruralLevelNames;
+
+    // 农村：UI 层把 orange 合并到 red（第三类），徽标/统计/筛选统一用红色
+    function displayLevel(level) {
+        if (isRuralDomain && level === 'orange') return 'red';
+        return level;
+    }
 
     function updateLevelLabels() {
         if (!isHouseDomain) return;
         document.querySelectorAll('#levelFilter .chip[data-level]').forEach(function(c) {
             var lv = c.dataset.level;
             if (!lv) return;
+            // 农村：隐藏 orange chip（已合并进 red）
+            if (isRuralDomain && lv === 'orange') {
+                c.style.display = 'none';
+                return;
+            }
             c.textContent = selfbuildLevelNames[lv] || '';
         });
         document.querySelectorAll('.hero-stats-v2 .hs-label[data-level]').forEach(function(l) {
             var lv = l.dataset.level;
             if (lv && selfbuildLevelNames[lv]) l.textContent = selfbuildLevelNames[lv];
         });
+    }
+
+    // 按域隐藏不需要的统计格，统一 4 格布局
+    // - 农村：隐藏 orange（合并到 red）
+    // - 城镇：隐藏 blue
+    // - 非自建房：隐藏 blue
+    function toggleStatItems() {
+        var orangeLabel = document.querySelector('.hero-stats-v2 .hs-label[data-level="orange"]');
+        if (orangeLabel) {
+            var oItem = orangeLabel.closest('.hs-item');
+            if (oItem) oItem.style.display = isRuralDomain ? 'none' : '';
+        }
+        var blueLabel = document.querySelector('.hero-stats-v2 .hs-label[data-level="blue"]');
+        if (blueLabel) {
+            var bItem = blueLabel.closest('.hs-item');
+            if (bItem) bItem.style.display = isRuralDomain ? '' : 'none';
+        }
     }
 
     // 筛选标签使用与列表记录相同的 risk-badge 配色（仅农村/城镇自建房）
@@ -165,12 +207,14 @@
         var all = RiskData.getList(currentDomain, {});
         var counts = { red: 0, orange: 0, yellow: 0, blue: 0 };
         all.forEach(function(item) {
-            if (counts[item.level] !== undefined) counts[item.level]++;
+            var lv = displayLevel(item.level);
+            if (counts[lv] !== undefined) counts[lv]++;
         });
         document.getElementById('statTotal').textContent = all.length;
         document.getElementById('statRed').textContent = counts.red;
         document.getElementById('statOrange').textContent = counts.orange;
         document.getElementById('statYellow').textContent = counts.yellow;
+        document.getElementById('statBlue').textContent = counts.blue;
     }
 
     // 等级筛选高亮
@@ -203,7 +247,15 @@
         var container = document.getElementById('riskList');
         if (clear) container.innerHTML = '';
 
-        var list = RiskData.getList(currentDomain, { level: currentLevel, keyword: keyword });
+        // 农村：red chip 同时匹配 red+orange（第三类合并）
+        var filterLevel = currentLevel;
+        var list;
+        if (isRuralDomain && currentLevel === 'red') {
+            list = RiskData.getList(currentDomain, { keyword: keyword })
+                .filter(function(it) { return it.level === 'red' || it.level === 'orange'; });
+        } else {
+            list = RiskData.getList(currentDomain, { level: filterLevel, keyword: keyword });
+        }
         // 按风险等级排序：红(red) > 橙(orange) > 黄(yellow) > 蓝(blue)
         var levelOrder = { red: 0, orange: 1, yellow: 2, blue: 3 };
         list = list.slice().sort(function(a, b) {
@@ -223,10 +275,11 @@
             var clickAction = isPickMode
                 ? 'onclick="pickRisk(\'' + item.id + '\')"'
                 : 'onclick="App.go(\'risk-detail.html?id=' + item.id + '\')"';
+            var dl = displayLevel(item.level);
             var html = '<div class="risk-card-item tap anim" ' + clickAction + '>' +
                 '<div class="rc-header">' +
                 '<div class="rc-title">' + App.escapeHtml(item.riskIdentify.length > 40 ? item.riskIdentify.slice(0, 40) + '…' : item.riskIdentify) + '</div>' +
-                '<span class="risk-badge ' + item.level + (isHouseDomain && item.level === 'blue' ? ' two-line' : '') + '" style="flex-shrink:0">' + levelName(item.level) + '</span>' +
+                '<span class="risk-badge ' + dl + (isUrbanDomain && dl === 'blue' ? ' two-line' : '') + '" style="flex-shrink:0">' + levelName(item.level) + '</span>' +
                 '</div>' +
                 '<div class="rc-meta">' +
                 '<span><i class="fa-solid fa-layer-group"></i> ' + App.escapeHtml(item.main) + '</span>' +
@@ -246,8 +299,14 @@
 
     function levelName(level) {
         if (isHouseDomain && selfbuildLevelNames[level]) {
+            if (isUrbanDomain) {
+                // 城镇：完好房（基本完好房）两行展示
+                if (level === 'blue') return '<span>完好房</span><span>（基本完好房）</span>';
+                return selfbuildLevelNames[level];
+            }
+            // 农村：第一类
             if (level === 'blue') {
-                return '<span>第一类</span><span>（基本完好房）</span>';
+                return '第一类';
             }
             return selfbuildLevelNames[level];
         }
@@ -278,6 +337,7 @@
 
     updateLevelLabels();
     styleLevelChips();
+    toggleStatItems();
     renderStats();
     renderList(true);
 })();

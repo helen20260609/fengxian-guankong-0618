@@ -479,6 +479,47 @@ function handleApi(req, res, urlPath) {
         return true;
     }
 
+    // ============ 城镇自建房档案（发布区 + 草稿区）后端持久化 ============
+    // 原型演示用：单文件全量读写，跨浏览器/跨设备共享同一份数据
+    function handleUrbanHouseArch(req, res, urlPath, fileName, label) {
+        var filePath = path.join(dataDir, fileName);
+        if (req.method === 'GET' && urlPath === '/api/' + label) {
+            fs.readFile(filePath, 'utf8', function(err, data) {
+                if (err) {
+                    if (err.code === 'ENOENT') { sendJson(res, 200, {}); }
+                    else { sendJson(res, 500, { error: '读取失败' }); }
+                    return;
+                }
+                try {
+                    var obj = JSON.parse(data);
+                    sendJson(res, 200, (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {});
+                } catch (e) {
+                    sendJson(res, 500, { error: '数据格式错误' });
+                }
+            });
+            return true;
+        }
+        if (req.method === 'POST' && urlPath === '/api/' + label) {
+            readJsonBody(req, function(err, obj) {
+                if (err) { sendJson(res, 400, { error: '请求体格式错误' }); return; }
+                if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+                    sendJson(res, 400, { error: '数据必须是对象' });
+                    return;
+                }
+                fs.writeFile(filePath, JSON.stringify(obj, null, 2), 'utf8', function(err2) {
+                    if (err2) { sendJson(res, 500, { error: '保存失败' }); return; }
+                    sendJson(res, 200, { success: true, count: Object.keys(obj).length });
+                });
+            });
+            return true;
+        }
+        return false;
+    }
+    if (handleUrbanHouseArch(req, res, urlPath, 'urban-house-arch.json', 'urban-house-arch')) return true;
+    if (handleUrbanHouseArch(req, res, urlPath, 'urban-house-arch-draft.json', 'urban-house-arch-draft')) return true;
+    if (handleUrbanHouseArch(req, res, urlPath, 'rural-house-arch.json', 'rural-house-arch')) return true;
+    if (handleUrbanHouseArch(req, res, urlPath, 'rural-house-arch-draft.json', 'rural-house-arch-draft')) return true;
+
     // ============ 农房回头看 高级接口 ============
     // readListFile / writeListFile 已提升到 handleApi 外（顶部），此处直接用
 
@@ -1100,51 +1141,6 @@ function handleApi(req, res, urlPath) {
             writeListFile('farm-review-pending.json', newList, function(err2) {
                 if (err2) { sendJson(res, 500, { error: '保存失败' }); return; }
                 sendJson(res, 200, { success: true, removed: (list || []).length - newList.length });
-            });
-        });
-        return true;
-    }
-
-    // GET /api/farm-monitor-records -> 读取 农房常态化监测 排查记录
-    if (req.method === 'GET' && urlPath === '/api/farm-monitor-records') {
-        var farmFile = path.join(dataDir, 'farm-monitor-records.json');
-        fs.readFile(farmFile, 'utf8', function(err, data) {
-            if (err) {
-                if (err.code === 'ENOENT') {
-                    sendJson(res, 200, []);
-                } else {
-                    sendJson(res, 500, { error: '读取失败' });
-                }
-                return;
-            }
-            try {
-                var list = JSON.parse(data);
-                sendJson(res, 200, Array.isArray(list) ? list : []);
-            } catch (e) {
-                sendJson(res, 500, { error: '数据格式错误' });
-            }
-        });
-        return true;
-    }
-
-    // POST /api/farm-monitor-records -> 保存 农房常态化监测 排查记录（全量覆盖）
-    if (req.method === 'POST' && urlPath === '/api/farm-monitor-records') {
-        readJsonBody(req, function(err, list) {
-            if (err) {
-                sendJson(res, 400, { error: '请求体格式错误' });
-                return;
-            }
-            if (!Array.isArray(list)) {
-                sendJson(res, 400, { error: '数据必须是数组' });
-                return;
-            }
-            var farmFile = path.join(dataDir, 'farm-monitor-records.json');
-            fs.writeFile(farmFile, JSON.stringify(list, null, 2), 'utf8', function(err2) {
-                if (err2) {
-                    sendJson(res, 500, { error: '保存失败' });
-                    return;
-                }
-                sendJson(res, 200, { success: true, count: list.length });
             });
         });
         return true;

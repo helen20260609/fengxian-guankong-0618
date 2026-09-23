@@ -178,6 +178,35 @@ function __getHouseArchDraft() {
 }
 function __setHouseArchDraft(all) {
     localStorage.setItem(HOUSE_ARCH_DRAFT_KEY, JSON.stringify(all));
+    if (!__syncToServerEnabled) return;
+    if (typeof fetch !== 'function') return;
+    try {
+        fetch('/api/rural-house-arch-draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(all)
+        }).catch(function() { /* 离线静默 */ });
+    } catch (e) { /* ignore */ }
+}
+
+// 启动时从服务端拉取发布区+草稿区覆盖本地（服务端优先，本地独有保留）
+function syncRuralHouseArchFromServer() {
+    if (typeof fetch !== 'function') return Promise.resolve(false);
+    function pull(api, key) {
+        return fetch(api).then(function(r) { return r.ok ? r.json() : null; }).then(function(serverData) {
+            if (!serverData || typeof serverData !== 'object' || Array.isArray(serverData)) return;
+            if (Object.keys(serverData).length === 0) return;
+            var local = {};
+            try { local = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) {}
+            var merged = Object.assign({}, local, serverData);
+            __syncToServerEnabled = false;
+            try { localStorage.setItem(key, JSON.stringify(merged)); } finally { __syncToServerEnabled = true; }
+        }).catch(function() {});
+    }
+    return Promise.all([
+        pull('/api/house-arch', HOUSE_ARCH_KEY),
+        pull('/api/rural-house-arch-draft', HOUSE_ARCH_DRAFT_KEY)
+    ]).then(function() { return true; });
 }
 function __getSyncLog() {
     try { const raw = localStorage.getItem(HOUSE_ARCH_SYNC_LOG_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
@@ -756,7 +785,8 @@ function generateInspectionRecords(no, risk, i) {
     const type = HAZARD_TYPES[(i + 3) % HAZARD_TYPES.length];
     const checkDate = '2024-' + pad2(5 + (i % 4)) + '-' + pad2(10 + (i % 15));
     const checkTime = pad2(8 + (i % 3)) + ':' + pad2(10 + (i % 40));
-    const preliminary = risk === 'danger' ? '立即停止使用' : (risk === 'major' ? '停止使用危险区域' : '加强观察');
+    // 农房初步判定仅三类：第一类（安全）/第二类（一般隐患）/第三类（严重隐患）
+    const preliminary = risk === 'danger' ? '存在严重安全隐患(第三类)' : (risk === 'major' ? '存在一定安全隐患(第二类)' : '未发现安全隐患(第一类)');
     const conclusion = risk === 'danger' ? '存在重大安全隐患' : (risk === 'major' ? '存在较大安全隐患' : '存在一般安全隐患');
     const checkerRole = i % 2 === 0 ? '村干部' : '网格员';
     const checkOrg = i % 3 === 0 ? '奉城镇人民政府' : ('奉城镇' + VILLAGES[i % VILLAGES.length] + '村民委员会');
@@ -1059,7 +1089,7 @@ function syncTaskToHouseRecords(task) {
 }
 
 // ============================================================
-// 排查记录库 → 农房档案 同步（2026回头看 / 农房常态化监测 共用）
+// 排查记录库 → 农房档案 同步（2026回头看 / 农房回头看 等来源共用）
 // 规则：
 //  - 只向 inspectionRecords 追加记录（按 sourceTag+recordId 去重），不修改房屋风险等级/整治状态
 //  - 结论为隐患时，同步把 rectify 的鉴定与整治信息写入档案 riskIdentification / manageRecords
@@ -1070,7 +1100,7 @@ const INSPECT_DANGER_RE = /隐患|危险|C级|D级|需要整改|存在/;
 
 // 把一条排查记录库记录同步到农房档案（inspectionRecords 追加一条）
 // record: 排查记录库中的记录（含 houseNo/town/village/answers/submitTime 等）
-// sourceTag: 来源标识，如 '2026回头看' 或 '农房常态化监测'
+// sourceTag: 来源标识，如 '2026回头看' 或 '农房回头看'
 // 返回 { appended: bool, insId: string|null }
 function syncInspectRecordToHouse(record, sourceTag) {
     if (!record || !record.houseNo) return { appended: false, insId: null };
