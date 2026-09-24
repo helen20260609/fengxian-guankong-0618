@@ -2441,15 +2441,6 @@
             const gridHtml = rows.map(r => {
                 const label = r[0];
                 const val = (r[1] || '') + '';
-                // 房屋安全状况：照片字段渲染为图片
-                if (currentSubTab === 'aqzk' && (label === '门牌号照片' || label === '外观照片')) {
-                    const urls = val.split(',').map(function(s) { return s.trim(); }).filter(function(u) { return u && (u.indexOf('data:image') === 0 || u.indexOf('http') === 0); });
-                    const photoHtml = urls.length
-                        ? '<div class="info-value photo-value" style="display:flex;flex-wrap:wrap;gap:8px;">' + urls.map(function(u) { return '<img src="' + u + '" alt="' + label + '" onclick="viewPhotoOnline(\'' + u.replace(/'/g, "\\'") + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">'; }).join('') + '</div>'
-                        : '<div class="info-value empty">--</div>';
-                    return '<div class="info-item" style="grid-column:1/-1;">' +
-                        '<div class="info-label">' + label + '</div>' + photoHtml + '</div>';
-                }
                 const ruralCls = (r[2] && r[1] && r[1] !== '—') ? ' rural-only' : '';
                 const isViewFull = isUrbanJbxx && (URBAN_VIEW_FULL_WIDTH.indexOf(label) !== -1 ||
                     (viewJbxxNature === '非住宅' && (label === '房屋性质' || label === '是否有物业管理')));
@@ -2462,9 +2453,45 @@
 
             const sub = basicSubTabs.find(t => t.key === currentSubTab);
             const item = getSidebarItems().find(i => i.key === 'basic');
+            // ===== 城房房屋安全状况查看：门牌号照片 + 外观照片（与农房 safeStatus 一致） =====
+            let aqzkViewHtml = '';
+            if (currentSubTab === 'aqzk') {
+                const aqzkRows = rows || [];
+                const getAqzkVal = (label) => {
+                    const r = aqzkRows.find(x => x[0] === label);
+                    return r ? (r[1] || '') : '';
+                };
+                const renderAqzkPhotoField = (label) => {
+                    const val = getAqzkVal(label);
+                    const urls = (val || '').split('\n').map(s => s.trim()).filter(Boolean);
+                    let photosHtml = '';
+                    if (urls.length) {
+                        photosHtml = '<div style="display:flex;flex-wrap:wrap;gap:12px;">' +
+                            urls.map(u => '<div style="position:relative;width:180px;height:130px;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fafafa;">' +
+                                '<img src="' + u + '" alt="' + label + '" onclick="viewPhotoOnline(\'' + u + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                            '</div>').join('') +
+                        '</div>';
+                    } else {
+                        photosHtml = '<div style="color:#bfbfbf;font-size:13px;padding:24px 0;text-align:center;border:1px dashed #d9d9d9;border-radius:6px;background:#fafafa;">暂未上传</div>';
+                    }
+                    return '<div style="margin-bottom:20px;">' +
+                        '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px;">' +
+                            '<span style="color:#f5222d;">*</span>' +
+                            '<span style="font-size:14px;color:var(--text-primary);font-weight:500;">' + label + '</span>' +
+                        '</div>' +
+                        photosHtml +
+                    '</div>';
+                };
+                aqzkViewHtml = '<div style="padding:6px 0;">' +
+                    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px 32px;">' +
+                        renderAqzkPhotoField('门牌号照片') +
+                        renderAqzkPhotoField('外观照片') +
+                    '</div>' +
+                '</div>';
+            }
             const bodyHtml = currentSubTab === 'designConstruction'
                 ? designConstructionHtml
-                : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>';
+                : (currentSubTab === 'aqzk' ? aqzkViewHtml : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>');
 
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
@@ -5218,7 +5245,115 @@
             });
         }
 
+        // ===== 城房房屋安全状况编辑表单：门牌号照片 + 外观照片（与农房 safeStatus 一致） =====
+        function renderAqzkEditForm() {
+            const rows = getBasicData().aqzk || [];
+            const getVal = (label) => {
+                const r = rows.find(x => x[0] === label);
+                return r ? (r[1] || '') : '';
+            };
+            const reqMark = '<span style="color:#f5222d;margin-right:2px;">*</span>';
+            const esc = (s) => String(s || '').replace(/"/g, '&quot;');
+            const buildPhotoField = (label, idx) => {
+                const val = getVal(label);
+                const urls = (val || '').split('\n').map(s => s.trim()).filter(Boolean);
+                const thumbsHtml = urls.map((u, i) =>
+                    '<div class="safe-photo-item" style="position:relative;width:160px;height:120px;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fafafa;">' +
+                        '<img src="' + esc(u) + '" alt="' + label + (i + 1) + '" onclick="viewPhotoOnline(\'' + esc(u) + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                        '<button type="button" class="safe-photo-remove" data-idx="' + idx + '" data-photo-idx="' + i + '" title="删除" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:#f5222d;color:#fff;border:none;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 1px 3px rgba(0,0,0,0.2);">×</button>' +
+                    '</div>'
+                ).join('');
+                const addBoxHtml =
+                    '<label class="safe-photo-add" data-idx="' + idx + '" style="width:160px;height:120px;border:1px dashed #d9d9d9;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:#fafafa;transition:all 0.15s;" onmouseover="this.style.borderColor=\'var(--primary)\';this.style.background=\'#f0f7ff\'" onmouseout="this.style.borderColor=\'#d9d9d9\';this.style.background=\'#fafafa\'">' +
+                        '<i class="fas fa-plus" style="font-size:28px;color:#bfbfbf;"></i>' +
+                        '<input type="file" accept="image/*" multiple data-idx="' + idx + '" class="safe-photo-input" style="display:none;">' +
+                    '</label>';
+                return '<div class="safe-photo-field" data-field="' + esc(label) + '" data-idx="' + idx + '" style="display:flex;flex-direction:column;gap:10px;">' +
+                    '<div style="display:flex;align-items:baseline;gap:6px;">' + reqMark +
+                        '<span style="font-size:13px;color:var(--text-primary);">' + label + '</span>' +
+                    '</div>' +
+                    '<div class="safe-photo-grid" data-idx="' + idx + '" style="display:flex;flex-wrap:wrap;gap:12px;">' +
+                        thumbsHtml + addBoxHtml +
+                    '</div>' +
+                    '<input type="hidden" class="form-input safe-photo-hidden" data-idx="' + idx + '" value="' + esc(val) + '">' +
+                '</div>';
+            };
+            const html =
+                '<div style="padding:6px 0;">' +
+                    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px 32px;">' +
+                        buildPhotoField('门牌号照片', 0) +
+                        buildPhotoField('外观照片', 1) +
+                    '</div>' +
+                '</div>';
+            document.getElementById('editModalForm').innerHTML = html;
+            // 绑定文件选择
+            document.querySelectorAll('#editModalForm .safe-photo-input').forEach(function(inp) {
+                inp.addEventListener('change', function() { handleAqzkPhotoUpload(this); });
+            });
+            // 绑定删除
+            document.querySelectorAll('#editModalForm .safe-photo-remove').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleAqzkPhotoRemove(this);
+                });
+            });
+        }
+
+        // 上传：读文件为 base64，追加到 hidden input，重新渲染当前表单
+        function handleAqzkPhotoUpload(input) {
+            const files = Array.from(input.files || []);
+            if (!files.length) return;
+            const idx = input.dataset.idx;
+            const hidden = document.querySelector('#editModalForm .safe-photo-hidden[data-idx="' + idx + '"]');
+            if (!hidden) return;
+            let pending = files.length;
+            const newUrls = [];
+            files.forEach(function(f) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    newUrls.push(e.target.result);
+                    pending--;
+                    if (pending === 0) {
+                        const cur = (hidden.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+                        const merged = cur.concat(newUrls);
+                        const joined = merged.join('\n');
+                        hidden.value = joined;
+                        // 同步到数据源，避免 renderAqzkEditForm 重渲染时回滚
+                        try {
+                            const rows = getBasicData().aqzk;
+                            if (Array.isArray(rows) && rows[idx]) rows[idx][1] = joined;
+                        } catch (e) {}
+                        renderAqzkEditForm();
+                    }
+                };
+                reader.readAsDataURL(f);
+            });
+        }
+
+        // 删除：从 hidden input 中移除对应索引的 URL
+        function handleAqzkPhotoRemove(btn) {
+            const idx = btn.dataset.idx;
+            const photoIdx = parseInt(btn.dataset.photoIdx, 10);
+            const hidden = document.querySelector('#editModalForm .safe-photo-hidden[data-idx="' + idx + '"]');
+            if (!hidden) return;
+            const urls = (hidden.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+            if (photoIdx >= 0 && photoIdx < urls.length) {
+                urls.splice(photoIdx, 1);
+                const joined = urls.join('\n');
+                hidden.value = joined;
+                // 同步到数据源，避免 renderAqzkEditForm 重渲染时回滚
+                try {
+                    const rows = getBasicData().aqzk;
+                    if (Array.isArray(rows) && rows[idx]) rows[idx][1] = joined;
+                } catch (e) {}
+            }
+            renderAqzkEditForm();
+        }
+
         function renderEditModalForm() {
+            // 房屋安全状况：走独立渲染函数（与农房 safeStatus 一致）
+            if (editModalSubTab === 'aqzk') { renderAqzkEditForm(); return; }
             if (editModalSubTab === 'designConstruction') {
                 const list = currentHouseArch.designConstructionRecords || [];
                 const idx = Math.min(recordViewState.designConstruction || 0, Math.max(list.length - 1, 0));
@@ -5553,109 +5688,6 @@
                     '</div>';
             }).join('');
             document.getElementById('editModalForm').innerHTML = '<div class="form-grid">' + gridHtml + '</div>';
-
-            // 房屋安全状况：照片上传卡片（门牌号照片 + 外观照片）
-            if (editModalSubTab === 'aqzk') {
-                const aqzkPhotos = [
-                    { label: '门牌号照片', idx: rows.findIndex(function(r) { return r[0] === '门牌号照片'; }) },
-                    { label: '外观照片', idx: rows.findIndex(function(r) { return r[0] === '外观照片'; }) }
-                ];
-                const cardHtml = '<div class="form-item form-item-full" style="grid-column:1/-1;">' +
-                    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">' +
-                    aqzkPhotos.map(function(p) {
-                        const curVal = (p.idx !== -1 && rows[p.idx]) ? (rows[p.idx][1] || '') : '';
-                        const urls = (curVal + '').split(',').map(function(s) { return s.trim(); }).filter(function(u) { return u && (u.indexOf('data:image') === 0 || u.indexOf('http') === 0); });
-                        const thumbs = urls.map(function(u, i) {
-                            return '<div class="aqzk-thumb" style="position:relative;width:100%;padding-top:75%;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#f5f5f5;">' +
-                                '<img src="' + u + '" alt="' + p.label + '" onclick="viewPhotoOnline(\'' + u.replace(/'/g, "\\'") + '\')" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
-                                '<span class="aqzk-del" data-idx="' + p.idx + '" data-url-i="' + i + '" title="删除" style="position:absolute;top:4px;right:4px;width:20px;height:20px;line-height:18px;text-align:center;background:rgba(0,0,0,0.55);color:#fff;border-radius:50%;cursor:pointer;font-size:12px;">×</span>' +
-                                '</div>';
-                        }).join('');
-                        return '<div>' +
-                            '<div style="font-size:13px;color:#595959;margin-bottom:8px;">' + p.label + '</div>' +
-                            '<div class="aqzk-photo-box" data-idx="' + p.idx + '" style="border:1px dashed var(--border);border-radius:6px;padding:12px;min-height:120px;">' +
-                                '<div class="aqzk-thumb-list" data-idx="' + p.idx + '" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">' + thumbs + '</div>' +
-                                '<label style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px;cursor:pointer;color:#bfbfbf;">' +
-                                    '<i class="fas fa-plus" style="font-size:22px;margin-bottom:6px;"></i>' +
-                                    '<span style="font-size:12px;">点击上传 / 粘贴截图</span>' +
-                                    '<input type="file" accept="image/*" multiple class="aqzk-file-input" data-idx="' + p.idx + '" style="display:none;">' +
-                                '</label>' +
-                            '</div>' +
-                            '<input type="hidden" class="form-input aqzk-photo-hidden" data-idx="' + p.idx + '" value="' + (curVal + '').replace(/"/g, '&quot;') + '">' +
-                            '</div>';
-                    }).join('') +
-                    '</div>' +
-                    '</div>';
-                document.getElementById('editModalForm').insertAdjacentHTML('beforeend', cardHtml);
-
-                // 更新某个照片框的隐藏域 + 缩略图
-                window.refreshAqzkBox = function(idx) {
-                    const hidden = document.querySelector('#editModalForm .aqzk-photo-hidden[data-idx="' + idx + '"]');
-                    const list = document.querySelector('#editModalForm .aqzk-thumb-list[data-idx="' + idx + '"]');
-                    if (!hidden || !list) return;
-                    const urls = (hidden.value + '').split(',').map(function(s) { return s.trim(); }).filter(function(u) { return u && (u.indexOf('data:image') === 0 || u.indexOf('http') === 0); });
-                    list.innerHTML = urls.map(function(u, i) {
-                        return '<div class="aqzk-thumb" style="position:relative;width:100%;padding-top:75%;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#f5f5f5;">' +
-                            '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u.replace(/'/g, "\\'") + '\')" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
-                            '<span class="aqzk-del" data-idx="' + idx + '" data-url-i="' + i + '" title="删除" style="position:absolute;top:4px;right:4px;width:20px;height:20px;line-height:18px;text-align:center;background:rgba(0,0,0,0.55);color:#fff;border-radius:50%;cursor:pointer;font-size:12px;">×</span>' +
-                            '</div>';
-                    }).join('');
-                };
-                // 追加图片 dataURL 到隐藏域
-                window.appendAqzkPhoto = function(idx, dataUrl) {
-                    const hidden = document.querySelector('#editModalForm .aqzk-photo-hidden[data-idx="' + idx + '"]');
-                    if (!hidden) return;
-                    hidden.value = hidden.value ? (hidden.value + ',' + dataUrl) : dataUrl;
-                    window.refreshAqzkBox(idx);
-                };
-                // 文件选择上传
-                document.querySelectorAll('#editModalForm .aqzk-file-input').forEach(function(inp) {
-                    inp.addEventListener('change', function() {
-                        const idx = this.dataset.idx;
-                        Array.prototype.forEach.call(this.files, function(f) {
-                            if (!f.type || f.type.indexOf('image/') !== 0) return;
-                            const reader = new FileReader();
-                            reader.onload = function(e) { window.appendAqzkPhoto(idx, e.target.result); };
-                            reader.readAsDataURL(f);
-                        });
-                        this.value = '';
-                    });
-                });
-                // 删除缩略图
-                document.getElementById('editModalForm').addEventListener('click', function(e) {
-                    const del = e.target.closest('.aqzk-del');
-                    if (!del) return;
-                    const idx = del.dataset.idx;
-                    const urlI = parseInt(del.dataset.urlI, 10);
-                    const hidden = document.querySelector('#editModalForm .aqzk-photo-hidden[data-idx="' + idx + '"]');
-                    if (!hidden) return;
-                    const urls = (hidden.value + '').split(',').map(function(s) { return s.trim(); }).filter(function(u) { return u && (u.indexOf('data:image') === 0 || u.indexOf('http') === 0); });
-                    urls.splice(urlI, 1);
-                    hidden.value = urls.join(',');
-                    window.refreshAqzkBox(idx);
-                });
-                // 粘贴截图上传（点击照片框后 Ctrl+V）
-                document.querySelectorAll('#editModalForm .aqzk-photo-box').forEach(function(box) {
-                    box.setAttribute('tabindex', '0');
-                    box.addEventListener('paste', function(e) {
-                        const idx = this.dataset.idx;
-                        const items = (e.clipboardData && e.clipboardData.items) || [];
-                        let handled = false;
-                        for (let i = 0; i < items.length; i++) {
-                            if (items[i].type && items[i].type.indexOf('image/') === 0) {
-                                const f = items[i].getAsFile();
-                                if (f) {
-                                    const reader = new FileReader();
-                                    reader.onload = function(ev) { window.appendAqzkPhoto(idx, ev.target.result); };
-                                    reader.readAsDataURL(f);
-                                    handled = true;
-                                }
-                            }
-                        }
-                        if (handled) e.preventDefault();
-                    });
-                });
-            }
 
             // 绑定镇→村联动
             document.querySelectorAll('#editModalForm .region-town').forEach(function(townSel) {

@@ -1234,7 +1234,8 @@
             { key: 'glqk', title: '管理情况', icon: 'fa-file-alt', count: 2 },
             { key: 'designConstruction', title: '设计施工信息', icon: 'fa-hard-hat', count: 11, ruralOnly: true },
             { key: 'jgxx', title: '结构信息', icon: 'fa-building', count: 12, ruralOnly: true },
-            { key: 'syxx', title: '使用信息', icon: 'fa-home', count: 13, ruralOnly: true }
+            { key: 'syxx', title: '使用信息', icon: 'fa-home', count: 13, ruralOnly: true },
+            { key: 'safeStatus', title: '房屋安全状况', icon: 'fa-shield-alt', count: 2, ruralOnly: true }
         ];
 
         const surveySubTabs_RURAL = [
@@ -1291,6 +1292,8 @@
                 ['自住+经营', ''],
                 ['经营用房屋', ''],
                 ['经营用房屋其他内容', ''],
+                ['非营利性公共建筑', ''],
+                ['非营利性公共建筑其他内容', ''],
                 ['建造时间', '2005-02'],
                 ['建筑高度 (m)', '7'],
                 ['建筑层数地下 (层)', '0'],
@@ -1764,6 +1767,14 @@
         ];
         if (!Array.isArray(basicData_RURAL.syxx)) basicData_RURAL.syxx = JSON.parse(JSON.stringify(SYXX_DEFAULT));
         if (!Array.isArray(basicData_URBAN.syxx)) basicData_URBAN.syxx = JSON.parse(JSON.stringify(SYXX_DEFAULT));
+        // 房屋安全状况字段兜底（旧草稿字段库无 safeStatus 时补默认）
+        // 每个字段: [label, value] value 为英文逗号分隔的图片 URL 列表
+        const SAFESTATUS_DEFAULT = [
+            ['门牌号照片', ''],
+            ['建筑全景外观照片', '']
+        ];
+        if (!Array.isArray(basicData_RURAL.safeStatus)) basicData_RURAL.safeStatus = JSON.parse(JSON.stringify(SAFESTATUS_DEFAULT));
+        if (!Array.isArray(basicData_URBAN.safeStatus)) basicData_URBAN.safeStatus = JSON.parse(JSON.stringify(SAFESTATUS_DEFAULT));
         // 城镇自建房"使用情况"字段兜底（旧草稿字段库无 syqk 时补默认；字段缺失时补齐）
         const SYqk_DEFAULT_URBAN = [
             ['是否小梁薄板房屋', '否'],
@@ -2139,7 +2150,10 @@
             const syxx = (libSyxx.length ? libSyxx : basicData_RURAL.syxx).map(function(r) {
                 return [r[0], r[1], true];
             });
-            const dynamicBasic = { jbxx, zjd, jsqk, glqk, syqk, jgxx, syxx };
+            const safeStatus = (libBasic.safeStatus && libBasic.safeStatus.length ? libBasic.safeStatus : (basicData_RURAL.safeStatus || [])).map(function(r) {
+                return [r[0], r[1], true];
+            });
+            const dynamicBasic = { jbxx, zjd, jsqk, glqk, syqk, jgxx, syxx, safeStatus };
             // 城镇自建房：剔除宅基地相关字段（jbxx 已在构建时按城镇字段独立，无需再过滤）
             if (isUrbanHouse()) {
                 dynamicBasic.zjd = [];
@@ -2245,9 +2259,11 @@
                 // 住宅/非住宅、房屋用途 联动显隐
                 const isFzzView = val('房屋性质') === '非住宅';
                 const isJyyView = val('房屋用途') === '经营用房屋';
+                const isNpoView = val('房屋用途') === '非营利性公共建筑';
                 const residentialRowStyle = isFzzView ? 'display:none;' : 'display:contents;';
                 const fzzRowStyle = isFzzView ? '' : 'display:none;';
                 const jyyRowStyle = (isFzzView && isJyyView) ? '' : 'display:none;';
+                const npoRowStyle = (isFzzView && isNpoView) ? '' : 'display:none;';
                 jbxxViewHtml = '<style>' +
                     '.rural-jbxx-view-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 40px;}' +
                     '.rural-jbxx-view-grid .info-item{display:flex;flex-direction:row;align-items:baseline;min-width:0;}' +
@@ -2275,12 +2291,15 @@
                         '</div>' +
                         fullItem('自住+经营') +
                     '</div>' +
-                    // 非住宅：房屋用途 + 经营用房屋
+                    // 非住宅：房屋用途 + 经营用房屋/非营利性公共建筑
                     '<div class="rural-fzz-row" style="grid-column:1 / -1;display:grid;grid-template-columns:1fr;gap:12px 40px;' + fzzRowStyle + '">' +
                         fullItem('房屋用途') +
                     '</div>' +
                     '<div class="rural-fzz-jyy-row" style="grid-column:1 / -1;display:grid;grid-template-columns:1fr;gap:12px 40px;' + jyyRowStyle + '">' +
                         fullItem('经营用房屋') +
+                    '</div>' +
+                    '<div class="rural-fzz-npo-row" style="grid-column:1 / -1;display:grid;grid-template-columns:1fr;gap:12px 40px;' + npoRowStyle + '">' +
+                        fullItem('非营利性公共建筑') +
                     '</div>' +
                     viewItem('建造时间') + viewItem('建筑面积 (㎡)') +
                     viewItem('建筑高度 (m)') + viewItem('建筑层数地上(层)') +
@@ -2290,9 +2309,45 @@
                     viewItem('是否采用预制板') + viewItem('是否人员聚集场所') +
                 '</div>';
             }
+            // 房屋安全状况查看页：标题 + 两个图片字段
+            let safeStatusViewHtml = '';
+            if (!isUrbanHouse() && currentSubTab === 'safeStatus') {
+                const safeRows = dynamicBasic.safeStatus || [];
+                const getSafeVal = (label) => {
+                    const r = safeRows.find(x => x[0] === label);
+                    return r ? (r[1] || '') : '';
+                };
+                const renderSafePhotoField = (label) => {
+                    const val = getSafeVal(label);
+                    const urls = (val || '').split('\n').map(s => s.trim()).filter(Boolean);
+                    let photosHtml = '';
+                    if (urls.length) {
+                        photosHtml = '<div style="display:flex;flex-wrap:wrap;gap:12px;">' +
+                            urls.map(u => '<div style="position:relative;width:180px;height:130px;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fafafa;">' +
+                                '<img src="' + u + '" alt="' + label + '" onclick="viewPhotoOnline(\'' + u + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                            '</div>').join('') +
+                        '</div>';
+                    } else {
+                        photosHtml = '<div style="color:#bfbfbf;font-size:13px;padding:24px 0;text-align:center;border:1px dashed #d9d9d9;border-radius:6px;background:#fafafa;">暂未上传</div>';
+                    }
+                    return '<div style="margin-bottom:20px;">' +
+                        '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px;">' +
+                            '<span style="color:#f5222d;">*</span>' +
+                            '<span style="font-size:14px;color:var(--text-primary);font-weight:500;">' + label + '</span>' +
+                        '</div>' +
+                        photosHtml +
+                    '</div>';
+                };
+                safeStatusViewHtml = '<div style="padding:6px 0;">' +
+                    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px 32px;">' +
+                        renderSafePhotoField('门牌号照片') +
+                        renderSafePhotoField('建筑全景外观照片') +
+                    '</div>' +
+                '</div>';
+            }
             const bodyHtml = currentSubTab === 'designConstruction'
                 ? designConstructionHtml
-                : ((!isUrbanHouse() && currentSubTab === 'jbxx') ? jbxxViewHtml : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>');
+                : ((!isUrbanHouse() && currentSubTab === 'jbxx') ? jbxxViewHtml : ((!isUrbanHouse() && currentSubTab === 'safeStatus') ? safeStatusViewHtml : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>'));
 
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
@@ -4855,6 +4910,7 @@
                 houseType2: getVal('房屋类型二级分类') || '独立住宅',
                 houseUsage: getVal('房屋用途') || '经营用房屋',
                 bizHouse: getVal('经营用房屋'),
+                npoBuilding: getVal('非营利性公共建筑'),
                 selfBusiness: getVal('自住+经营'),
                 buildTime: getVal('建造时间'),
                 buildHeight: getVal('建筑高度 (m)'),
@@ -4955,6 +5011,11 @@
                         ['商业', '工业', '办公', '文旅', '旅游酒店', '农贸市场', '仓储物流', '餐饮服务', '其他'],
                         v.bizHouse, true), { full: true }) +
                 '</div>' +
+                '<div class="rural-fzz-npo-block" style="display:' + ((v.houseNature === '非住宅' && v.houseUsage === '非营利性公共建筑') ? 'block' : 'none') + ';grid-column:1 / -1;">' +
+                    fieldItem('非营利性公共建筑', buildCheckbox('非营利性公共建筑',
+                        ['村委会等行政办公', '卫生所等医疗卫生设施', '文化室/图书馆/阅览室/礼堂等文化设施', '敬老院/养老院等养老设施', '幼儿园/学校等教育设施', '祠堂/寺庙/教堂等宗教场所', '体育设施', '公共浴厕', '基础设施建筑', '其他'],
+                        v.npoBuilding, true), { full: true }) +
+                '</div>' +
                 // 行9：建造时间 | 建筑面积
                 fieldItem('建造时间', '<input type="month" class="form-input" data-rural-field="建造时间" value="' + esc(v.buildTime) + '" style="' + inputCss + '">') +
                 fieldItem('建筑面积 (㎡)', '<input type="number" class="form-input" data-rural-field="建筑面积 (㎡)" value="' + esc(v.buildArea) + '" style="' + inputCss + '">') +
@@ -5003,6 +5064,11 @@
                     document.querySelectorAll('#editModalForm .rural-fzz-jyy-block').forEach(function(block) {
                         block.style.display = (isFzz && isJyy) ? 'block' : 'none';
                     });
+                    // 非营利性公共建筑：仅非住宅且房屋用途=非营利性公共建筑时显示
+                    const isNpo = usageChecked && usageChecked.value === '非营利性公共建筑';
+                    document.querySelectorAll('#editModalForm .rural-fzz-npo-block').forEach(function(block) {
+                        block.style.display = (isFzz && isNpo) ? 'block' : 'none';
+                    });
                 });
             });
 
@@ -5014,6 +5080,10 @@
                     const isJyy = this.value === '经营用房屋';
                     document.querySelectorAll('#editModalForm .rural-fzz-jyy-block').forEach(function(block) {
                         block.style.display = (isFzz && isJyy) ? 'block' : 'none';
+                    });
+                    const isNpo = this.value === '非营利性公共建筑';
+                    document.querySelectorAll('#editModalForm .rural-fzz-npo-block').forEach(function(block) {
+                        block.style.display = (isFzz && isNpo) ? 'block' : 'none';
                     });
                 });
             });
@@ -5058,6 +5128,112 @@
             });
         }
 
+        // ===== 农房房屋安全状况编辑表单：门牌号照片 + 建筑全景外观照片 =====
+        function renderSafeStatusEditForm() {
+            const rows = getBasicData().safeStatus || [];
+            const getVal = (label) => {
+                const r = rows.find(x => x[0] === label);
+                return r ? (r[1] || '') : '';
+            };
+            const reqMark = '<span style="color:#f5222d;margin-right:2px;">*</span>';
+            const esc = (s) => String(s || '').replace(/"/g, '&quot;');
+            const buildPhotoField = (label, idx) => {
+                const val = getVal(label);
+                const urls = (val || '').split('\n').map(s => s.trim()).filter(Boolean);
+                const thumbsHtml = urls.map((u, i) =>
+                    '<div class="safe-photo-item" style="position:relative;width:160px;height:120px;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fafafa;">' +
+                        '<img src="' + esc(u) + '" alt="' + label + (i + 1) + '" onclick="viewPhotoOnline(\'' + esc(u) + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                        '<button type="button" class="safe-photo-remove" data-idx="' + idx + '" data-photo-idx="' + i + '" title="删除" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:#f5222d;color:#fff;border:none;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 1px 3px rgba(0,0,0,0.2);">×</button>' +
+                    '</div>'
+                ).join('');
+                const addBoxHtml =
+                    '<label class="safe-photo-add" data-idx="' + idx + '" style="width:160px;height:120px;border:1px dashed #d9d9d9;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:#fafafa;transition:all 0.15s;" onmouseover="this.style.borderColor=\'var(--primary)\';this.style.background=\'#f0f7ff\'" onmouseout="this.style.borderColor=\'#d9d9d9\';this.style.background=\'#fafafa\'">' +
+                        '<i class="fas fa-plus" style="font-size:28px;color:#bfbfbf;"></i>' +
+                        '<input type="file" accept="image/*" multiple data-idx="' + idx + '" class="safe-photo-input" style="display:none;">' +
+                    '</label>';
+                return '<div class="safe-photo-field" data-field="' + esc(label) + '" data-idx="' + idx + '" style="display:flex;flex-direction:column;gap:10px;">' +
+                    '<div style="display:flex;align-items:baseline;gap:6px;">' + reqMark +
+                        '<span style="font-size:13px;color:var(--text-primary);">' + label + '</span>' +
+                    '</div>' +
+                    '<div class="safe-photo-grid" data-idx="' + idx + '" style="display:flex;flex-wrap:wrap;gap:12px;">' +
+                        thumbsHtml + addBoxHtml +
+                    '</div>' +
+                    '<input type="hidden" class="form-input safe-photo-hidden" data-idx="' + idx + '" value="' + esc(val) + '">' +
+                '</div>';
+            };
+            const html =
+                '<div style="padding:6px 0;">' +
+                    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px 32px;">' +
+                        buildPhotoField('门牌号照片', 0) +
+                        buildPhotoField('建筑全景外观照片', 1) +
+                    '</div>' +
+                '</div>';
+            document.getElementById('editModalForm').innerHTML = html;
+            // 绑定文件选择
+            document.querySelectorAll('#editModalForm .safe-photo-input').forEach(function(inp) {
+                inp.addEventListener('change', function() { handleSafeStatusPhotoUpload(this); });
+            });
+            // 绑定删除
+            document.querySelectorAll('#editModalForm .safe-photo-remove').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSafeStatusPhotoRemove(this);
+                });
+            });
+        }
+
+        // 上传：读文件为 base64，追加到 hidden input，重新渲染当前表单
+        function handleSafeStatusPhotoUpload(input) {
+            const files = Array.from(input.files || []);
+            if (!files.length) return;
+            const idx = input.dataset.idx;
+            const hidden = document.querySelector('#editModalForm .safe-photo-hidden[data-idx="' + idx + '"]');
+            if (!hidden) return;
+            let pending = files.length;
+            const newUrls = [];
+            files.forEach(function(f) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    newUrls.push(e.target.result);
+                    pending--;
+                    if (pending === 0) {
+                        const cur = (hidden.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+                        const merged = cur.concat(newUrls);
+                        const joined = merged.join('\n');
+                        hidden.value = joined;
+                        // 同步到数据源，避免 renderSafeStatusEditForm 重渲染时回滚
+                        try {
+                            const rows = getBasicData().safeStatus;
+                            if (Array.isArray(rows) && rows[idx]) rows[idx][1] = joined;
+                        } catch (e) {}
+                        renderSafeStatusEditForm(); // 重新渲染以刷新缩略图
+                    }
+                };
+                reader.readAsDataURL(f);
+            });
+        }
+
+        // 删除：从 hidden input 中移除对应索引的 URL
+        function handleSafeStatusPhotoRemove(btn) {
+            const idx = btn.dataset.idx;
+            const photoIdx = parseInt(btn.dataset.photoIdx, 10);
+            const hidden = document.querySelector('#editModalForm .safe-photo-hidden[data-idx="' + idx + '"]');
+            if (!hidden) return;
+            const urls = (hidden.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+            if (photoIdx >= 0 && photoIdx < urls.length) {
+                urls.splice(photoIdx, 1);
+                const joined = urls.join('\n');
+                hidden.value = joined;
+                // 同步到数据源，避免 renderSafeStatusEditForm 重渲染时回滚
+                try {
+                    const rows = getBasicData().safeStatus;
+                    if (Array.isArray(rows) && rows[idx]) rows[idx][1] = joined;
+                } catch (e) {}
+            }
+            renderSafeStatusEditForm();
+        }
+
         function renderEditModalForm() {
             if (editModalSubTab === 'designConstruction') {
                 const list = currentHouseArch.designConstructionRecords || [];
@@ -5090,6 +5266,11 @@
             // ===== 农房基本信息：按截图重做（两列布局 + 特定控件）=====
             if (!isUrbanHouse() && editModalSubTab === 'jbxx') {
                 renderRuralJbxxEditForm();
+                return;
+            }
+            // ===== 农房房屋安全状况：图片上传 =====
+            if (!isUrbanHouse() && editModalSubTab === 'safeStatus') {
+                renderSafeStatusEditForm();
                 return;
             }
             // 城镇自建房基本信息：按当前房屋性质动态组合 common + residential/commercial
