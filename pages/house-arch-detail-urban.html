@@ -468,6 +468,17 @@
             background: #f0f2f5; color: var(--text-secondary);
         }
         .sidebar-item.active .sidebar-tag { background: rgba(26,115,232,0.12); color: var(--primary); }
+        .sidebar-static-badge {
+            font-size: 10px; padding: 1px 5px; border-radius: 3px; white-space: nowrap;
+            background: #e6f4ea; color: #188038; border: 1px solid #ceead6;
+            line-height: 1.2; flex-shrink: 0;
+        }
+        .sidebar-item.active .sidebar-static-badge {
+            background: rgba(24,128,56,0.12); color: #188038; border-color: rgba(24,128,56,0.3);
+        }
+        .sidebar-item:hover .sidebar-static-badge {
+            background: #ceead6; border-color: #a8d5b5;
+        }
 
         .content-area { flex: 1; min-width: 0; }
         .content-card {
@@ -2180,8 +2191,10 @@
             const menu = document.getElementById('sidebarMenu');
             menu.innerHTML = getSidebarItems().map(item => {
                 const active = item.key === currentSidebar ? 'active' : '';
+                const staticBadge = item.tag === '静态档案' ? '<span class="sidebar-static-badge" title="静态档案数据，每轮排查仅偶尔修订">静态</span>' : '';
                 return '<div class="sidebar-item ' + active + '" data-key="' + item.key + '">' +
                     '<div class="sidebar-item-left"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div>' +
+                    staticBadge +
                     '</div>';
             }).join('');
             // 若当前选中的 key 已不在菜单中（如已移除的 archive），回退到 basic
@@ -7518,13 +7531,13 @@
                         '</div>';
                     fullWidth = 'form-item-full';
                 } else if (key === 'assessment' && c === '鉴定报告') {
-                    // 鉴定报告：附件上传，支持图片/PDF/Word/Excel/CAD/ZIP/RAR
+                    // 鉴定报告：附件上传，支持图片/PDF
                     const val = rows[origIdx] || '';
                     const files = projectFilesFromString(val);
                     inputHtml = '<div class="file-upload-wrap" data-idx="' + origIdx + '" data-attach-field="assessment-report">' +
                         '<input class="form-input file-url-input" type="text" data-idx="' + origIdx + '" value="' + projectFilesToString(files).replace(/"/g, '&quot;') + '" placeholder="文件 URL 或将文件拖入下方">' +
-                        '<input class="file-upload-input" type="file" multiple data-idx="' + origIdx + '" onchange="handleCommonFileUpload(this)">' +
-                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传文件（支持图片、PDF、Word、Excel、CAD、ZIP、RAR）</div>' +
+                        '<input class="file-upload-input" type="file" accept="image/*,.pdf" multiple data-idx="' + origIdx + '" onchange="handleCommonFileUpload(this)">' +
+                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传文件（支持图片、PDF）</div>' +
                         '<div class="project-file-list"></div>' +
                         '</div>';
                     fullWidth = 'form-item-full';
@@ -7619,13 +7632,13 @@
             thumb.innerHTML = urls.filter(u => u && u !== '—' && u !== '-').map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('');
         }
 
-        // 通用附件上传（用于"鉴定报告"等字段，支持图片/PDF/Word/Excel/CAD/ZIP/RAR）
+        // 通用附件上传（用于"鉴定报告"等字段，支持图片/PDF）
         async function handleCommonFileUpload(input) {
             const files = Array.from(input.files || []);
             if (files.length === 0) return;
-            const { valid, invalid } = validateFiles(files, false);
+            const { valid, invalid } = validateFiles(files, 'imagePdf');
             if (invalid.length > 0) {
-                alert('以下文件格式不允许：\n' + invalid.join('\n') + '\n\n允许上传：图片、PDF、Word、Excel、CAD、ZIP、RAR 等文件。');
+                alert('以下文件格式不允许：\n' + invalid.join('\n') + '\n\n允许上传：图片、PDF 文件。');
                 return;
             }
             const wrap = input.closest('.file-upload-wrap');
@@ -8077,6 +8090,7 @@
         ];
 
         const ALLOWED_IMAGE_TYPES = ALLOWED_FILE_TYPES.filter(t => t.mime.startsWith('image/'));
+        const ALLOWED_IMAGE_PDF_TYPES = ALLOWED_FILE_TYPES.filter(t => t.mime.startsWith('image/') || t.ext === '.pdf');
 
         let currentOrgSelectFor = null; // 'project'
         let selectedOrgId = '';
@@ -8099,6 +8113,11 @@
             return ALLOWED_IMAGE_TYPES.some(t => t.ext === ext) || file.type.startsWith('image/');
         }
 
+        function isAllowedImageOrPdf(file) {
+            const ext = getFileExtension(file.name);
+            return ALLOWED_IMAGE_PDF_TYPES.some(t => t.ext === ext) || file.type.startsWith('image/') || file.type === 'application/pdf';
+        }
+
         function formatFileSize(bytes) {
             if (!bytes || bytes < 0) return '-';
             if (bytes < 1024) return bytes + ' B';
@@ -8115,11 +8134,15 @@
             });
         }
 
-        function validateFiles(files, acceptImages) {
+        function validateFiles(files, mode) {
             const invalid = [];
             const valid = [];
             Array.from(files).forEach(f => {
-                if (acceptImages ? isAllowedImage(f) : isAllowedFile(f)) {
+                let ok = false;
+                if (mode === 'image' || mode === true) ok = isAllowedImage(f);
+                else if (mode === 'imagePdf') ok = isAllowedImageOrPdf(f);
+                else ok = isAllowedFile(f);
+                if (ok) {
                     valid.push(f);
                 } else {
                     invalid.push(f.name);

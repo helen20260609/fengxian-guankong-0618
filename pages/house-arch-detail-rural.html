@@ -212,6 +212,23 @@
             if (!Array.isArray(prj0.rectifyPhotos)) prj0.rectifyPhotos = [];
             // 农村专属页: 强制 houseType 为农村(路由/兜底以此为准, 不受表单房屋性质影响)
             rec.houseType = '农村自建房';
+            // ===== 轮次合并视图：把当前轮流程字段覆盖到根级 =====
+            // 先 dump 字段库（确保 _fieldsLibrary 存在，便于快照捕获流程部分）
+            try { if (typeof dumpFieldsLibrary === 'function') rec._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
+            ensureRoundsStructure(rec);
+            const __round = getCurrentRound(rec);
+            if (__round && __round.data) {
+                // 首次迁移：若当前轮 data 为空快照但根级有数据，则先吸收根级数据
+                const __snapKeys = Object.keys(__round.data).filter(k => k !== '_lib');
+                const __rootHasFlow = ROUND_SCOPED_FIELDS.some(k => {
+                    const v = rec[k];
+                    return Array.isArray(v) ? v.length > 0 : (v && typeof v === 'object' ? Object.keys(v).length > 0 : v !== undefined && v !== '' && v !== null);
+                });
+                if (__snapKeys.length === 0 && __rootHasFlow) {
+                    __round.data = __extractRoundSnapshot(rec);
+                }
+                __applyRoundSnapshot(rec, __round.data);
+            }
             return rec;
         }
 
@@ -245,6 +262,16 @@
             const no = getCurrentHouseNo();
             // 同步字段库到根级字段
             status = syncLibToRootFields(status);
+            // ===== 轮次拆分：把流程字段从合并视图写回当前轮 =====
+            // 注意：保留根级流程字段作为缓存（normalizeHouseRecord mock 兜底依赖它们），
+            //       rounds[current].data 才是真实数据源；get 时用 round.data 覆盖根级。
+            ensureRoundsStructure(status);
+            const __round = getCurrentRound(status);
+            if (__round) {
+                // 保存前确保字段库已 dump 到 status._fieldsLibrary
+                try { if (typeof dumpFieldsLibrary === 'function') status._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
+                __round.data = __extractRoundSnapshot(status);
+            }
             if (IS_DRAFT_MODE && typeof setDraftRecord === 'function') {
                 setDraftRecord(no, status); // 草稿区
             } else {
@@ -261,6 +288,176 @@
                        pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
             return prefix + '-' + ts + '-' + Math.floor(Math.random()*900 + 100);
         }
+
+        /* ==================== 排查轮次 rounds[] 数据模型 ====================
+         * 方案 A1（彻底隔离）：每轮一套完整 9 流程 TAB 数据副本
+         * - rec.rounds[]          轮次数组（每轮独立流程数据 + 字段库快照）
+         * - rec.currentRoundId    当前轮 id
+         * - 基础档案保留 rec 根级（basic 字段库 + overview/homestead 等）
+         * - emergencyResponse 保留根级（独立事件列表，不属任何轮）
+         * 代理策略：getCurrentHouseArch() 返回 基础档案+当前轮 合并视图；
+         *          saveCurrentHouseArch() 把流程字段拆分写回 rounds[current]。
+         * ==================================================================== */
+
+        // 归属于"轮次"的流程字段（9 流程 TAB 数据源；control 4 子tab 派生自这些）
+        const ROUND_SCOPED_FIELDS = [
+            // 排查(risk)
+            'riskInfo', 'riskClassification', 'riskIdentification',
+            // 排查记录(survey) / 巡查记录(patrol)
+            'inspectionRecords', 'appraisalReports', 'patrolRecords',
+            // 计划(plan)
+            'planMonitorTime',
+            // 措施(measure)
+            'rectifySituation', 'manageRecords', 'projectRecords',
+            // 管控(control) — addDanger 为根数据，其余子tab派生
+            'addDanger',
+            // 验收(accept) — 主读 projectRecords[0] + acceptAuditRecords
+            'acceptAuditRecords',
+            // 销号(close)
+            'closeInfo', 'closeHistoryRecords', 'closeAuditRecords', 'archiveRecords',
+            'closeStatus', 'closeApplyTime', 'closeAuditTime', 'closeAuditor',
+            'closeAuditOpinion', 'closeRejectReason', 'isRemovedFromFocus',
+            // 治理状态随轮次（每轮独立待整治/已治理/风险等级）
+            'governStatus', 'governance', 'rectDeadline', 'completeDate',
+            'totalTask', 'doneTask', 'fundUsed', 'fundTotal', 'overdue',
+            'projectMeasure', 'manageMeasure', 'progress', 'responsibleDept', 'responsiblePerson',
+            // 风险等级随轮次（每轮独立排查结论）
+            'risk', 'riskLevel', 'riskDisplayLevel', 'originalRisk', 'originalRiskLevel'
+        ];
+        // 字段库中属于轮次的 3 个分组（basic 留在根级）
+        const ROUND_SCOPED_LIB_KEYS = ['survey_RURAL', 'table_RURAL', 'measure_RURAL'];
+
+        // 生成新轮次 id
+        function generateRoundId() {
+            return 'R-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100);
+        }
+
+        // 深拷贝工具（undefined 安全）
+        function __deepClone(o) { return o === undefined ? undefined : JSON.parse(JSON.stringify(o)); }
+
+        // 从记录根级提取"当前轮流程字段"快照
+        function __extractRoundSnapshot(rec) {
+            const snap = {};
+            ROUND_SCOPED_FIELDS.forEach(k => {
+                if (rec[k] !== undefined) snap[k] = __deepClone(rec[k]);
+            });
+            // 流程字段库快照
+            const lib = rec._fieldsLibrary || {};
+            snap._lib = {};
+            ROUND_SCOPED_LIB_KEYS.forEach(k => {
+                if (lib[k] !== undefined) snap._lib[k] = __deepClone(lib[k]);
+            });
+            return snap;
+        }
+
+        // 把轮次快照写回记录根级（用于构造合并视图）
+        function __applyRoundSnapshot(rec, snap) {
+            if (!snap) return rec;
+            ROUND_SCOPED_FIELDS.forEach(k => {
+                if (snap[k] !== undefined) rec[k] = __deepClone(snap[k]);
+                else delete rec[k];
+            });
+            if (!rec._fieldsLibrary) rec._fieldsLibrary = {};
+            ROUND_SCOPED_LIB_KEYS.forEach(k => {
+                if (snap._lib && snap._lib[k] !== undefined) rec._fieldsLibrary[k] = __deepClone(snap._lib[k]);
+                else delete rec._fieldsLibrary[k];
+            });
+            return rec;
+        }
+
+        // 确保记录具备 rounds[] 结构；若无则用现状初始化第 1 轮（数据迁移入口）
+        function ensureRoundsStructure(rec) {
+            if (!rec) return rec;
+            if (!Array.isArray(rec.rounds)) rec.rounds = [];
+            if (rec.rounds.length === 0) {
+                // 迁移：把现有流程字段整体归入"第 1 轮"
+                const snap = __extractRoundSnapshot(rec);
+                rec.rounds.push({
+                    roundId: generateRoundId(),
+                    roundNo: 1,
+                    title: '第 1 轮排查',
+                    startDate: (snap.inspectionRecords && snap.inspectionRecords[0] && snap.inspectionRecords[0].checkTime) || '',
+                    status: '进行中',
+                    data: snap
+                });
+            }
+            // 保证 roundNo 连续、字段齐备
+            rec.rounds.forEach((r, i) => {
+                if (!r.roundId) r.roundId = generateRoundId();
+                if (!r.roundNo) r.roundNo = i + 1;
+                if (!r.title) r.title = '第 ' + r.roundNo + ' 轮排查';
+                if (!r.status) r.status = '进行中';
+                if (!r.data) r.data = {};
+                if (!r.data._lib) r.data._lib = {};
+            });
+            if (!rec.currentRoundId || !rec.rounds.some(r => r.roundId === rec.currentRoundId)) {
+                rec.currentRoundId = rec.rounds[rec.rounds.length - 1].roundId;
+            }
+            return rec;
+        }
+
+        function getCurrentRound(rec) {
+            ensureRoundsStructure(rec);
+            return rec.rounds.find(r => r.roundId === rec.currentRoundId) || rec.rounds[rec.rounds.length - 1];
+        }
+
+        // 切换当前轮（持久化在 rec 上，由外层 save 写回存储）
+        function setCurrentRound(rec, roundId) {
+            ensureRoundsStructure(rec);
+            if (rec.rounds.some(r => r.roundId === roundId)) {
+                rec.currentRoundId = roundId;
+                return true;
+            }
+            return false;
+        }
+
+        // 新建一轮：把当前轮标记完结，复制一份"空白流程"作为新轮
+        // options: { name?, type?, startDate? }
+        function createNewRound(rec, options) {
+            options = options || {};
+            ensureRoundsStructure(rec);
+            const cur = getCurrentRound(rec);
+            if (cur) {
+                cur.status = '已完结';
+                // 老轮若无 endDate，补上一个（默认今天）
+                if (!cur.endDate) cur.endDate = new Date().toISOString().slice(0, 10);
+            }
+            const newNo = rec.rounds.length + 1;
+            // 空白快照：清空流程字段，但保留字段库结构（作为新轮模板）
+            const blankSnap = {};
+            // 新轮需继承根级的字段（房屋物理风险等级——跨轮延续，直到新轮重新排查）
+            const INHERIT_FIELDS = ['risk', 'riskLevel', 'riskDisplayLevel', 'originalRisk', 'originalRiskLevel'];
+            ROUND_SCOPED_FIELDS.forEach(k => {
+                const v = rec[k];
+                if (INHERIT_FIELDS.indexOf(k) >= 0) {
+                    blankSnap[k] = __deepClone(v !== undefined ? v : DEFAULT_HOUSE_STATUS[k]);
+                } else if (Array.isArray(v)) blankSnap[k] = [];
+                else if (v && typeof v === 'object') blankSnap[k] = __deepClone(DEFAULT_HOUSE_STATUS[k] || {});
+                // 标量状态字段重置为默认
+                else blankSnap[k] = __deepClone(DEFAULT_HOUSE_STATUS[k]);
+            });
+            blankSnap._lib = {};
+            const curLib = (cur && cur.data && cur.data._lib) || (rec._fieldsLibrary || {});
+            ROUND_SCOPED_LIB_KEYS.forEach(k => {
+                // 新轮字段库沿用上一轮结构，但清空输入值（保留表头/标签列）
+                if (curLib[k]) blankSnap._lib[k] = __deepClone(curLib[k]);
+            });
+            const newRound = {
+                roundId: generateRoundId(),
+                roundNo: newNo,
+                name: (options.name || '').trim() || ('第 ' + newNo + ' 轮排查'),
+                type: options.type || '常规',
+                title: (options.name || '').trim() || ('第 ' + newNo + ' 轮排查'),  // title 保留作为兼容别名
+                startDate: options.startDate || new Date().toISOString().slice(0, 10),
+                endDate: null,
+                status: '进行中',
+                data: blankSnap
+            };
+            rec.rounds.push(newRound);
+            rec.currentRoundId = newRound.roundId;
+            return newRound;
+        }
+        /* ==================== 轮次模型 END ==================== */
     </script>    <style>
         :root {
             --primary: #1a73e8;
@@ -451,6 +648,102 @@
             padding: 14px 16px; font-size: 14px; font-weight: 600; color: var(--text-primary);
             border-bottom: 1px solid var(--border); background: #fafbfc;
         }
+        /* 轮次切换器 */
+        .round-switcher {
+            padding: 10px 12px; border-bottom: 1px solid var(--border); background: #f5f7fa;
+        }
+        .round-switcher-label {
+            font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;
+            display: flex; align-items: center; gap: 4px;
+        }
+        .round-switcher-row {
+            display: flex; align-items: center; gap: 6px;
+        }
+        .round-select {
+            flex: 1; min-width: 0; padding: 6px 8px; font-size: 12px;
+            border: 1px solid var(--border); border-radius: 4px; background: #fff;
+            color: var(--text-primary); cursor: pointer; outline: none;
+        }
+        .round-select:focus { border-color: var(--primary); }
+        .round-add-btn {
+            padding: 6px 10px; font-size: 12px; border: 1px solid var(--primary);
+            background: var(--primary); color: #fff; border-radius: 4px;
+            cursor: pointer; white-space: nowrap; transition: background 0.15s;
+        }
+        .round-add-btn:hover { background: var(--primary-dark); }
+        .round-status-tag {
+            display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 3px;
+            margin-left: 4px; font-weight: normal;
+        }
+        .round-status-tag.doing { background: #e6f4ff; color: #0958d9; }
+        .round-status-tag.done { background: #f6ffed; color: #389e0d; }
+
+        /* 当前轮紧凑卡片 */
+        .round-current-card {
+            margin-top: 8px; padding: 10px 12px; background: #fff;
+            border: 1px solid var(--border); border-radius: 6px;
+        }
+        .round-current-name {
+            font-size: 13px; font-weight: 600; color: var(--text-primary);
+            display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+        }
+        .round-current-name .round-type-tag {
+            display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 3px;
+            background: #f0f2f5; color: var(--text-secondary); font-weight: normal;
+        }
+        .round-current-name .round-type-tag.type-special { background: #fff7e6; color: #d46b08; }
+        .round-current-name .round-type-tag.type-emergency { background: #fff1f0; color: #cf1322; }
+        .round-current-meta {
+            font-size: 11px; color: var(--text-secondary); margin-top: 4px;
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .round-switch-actions {
+            margin-top: 10px; display: flex; gap: 6px;
+        }
+        .round-action-btn {
+            flex: 1; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border);
+            background: #fff; color: var(--text-primary); border-radius: 4px;
+            cursor: pointer; transition: all 0.15s; white-space: nowrap;
+            display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+        }
+        .round-action-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+        .round-action-btn.primary {
+            background: var(--primary); border-color: var(--primary); color: #fff;
+        }
+        .round-action-btn.primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+        /* 只读徽标 */
+        .round-readonly-banner {
+            margin-top: 8px; padding: 6px 10px; background: #fff7e6; border: 1px solid #ffd591;
+            border-radius: 4px; font-size: 11px; color: #d46b08;
+            display: flex; align-items: center; gap: 6px;
+        }
+
+        /* 轮次选择弹窗 */
+        .round-picker-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .round-picker-table th, .round-picker-table td {
+            padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+        }
+        .round-picker-table thead th {
+            background: #fafbfc; font-weight: 600; color: var(--text-secondary);
+            font-size: 12px; position: sticky; top: 0;
+        }
+        .round-picker-table tbody tr { cursor: pointer; transition: background 0.12s; }
+        .round-picker-table tbody tr:hover { background: var(--primary-light); }
+        .round-picker-table tbody tr.current { background: #e6f4ff; }
+        .round-picker-table tbody tr.current:hover { background: #d6e9ff; }
+        .round-picker-table td .name-cell {
+            display: flex; align-items: center; gap: 6px; font-weight: 500;
+        }
+        .round-picker-table .summary-cell {
+            font-size: 11px; color: var(--text-secondary);
+        }
+        .round-picker-table .summary-cell .node-count {
+            display: inline-block; padding: 0 5px; background: #f0f2f5; border-radius: 8px;
+            font-size: 10px; margin-right: 4px;
+        }
+        .round-picker-empty {
+            padding: 40px; text-align: center; color: var(--text-secondary); font-size: 13px;
+        }
         .sidebar-menu { padding: 8px; }
         .sidebar-item {
             display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -466,6 +759,17 @@
             background: #f0f2f5; color: var(--text-secondary);
         }
         .sidebar-item.active .sidebar-tag { background: rgba(26,115,232,0.12); color: var(--primary); }
+        .sidebar-static-badge {
+            font-size: 10px; padding: 1px 5px; border-radius: 3px; white-space: nowrap;
+            background: #e6f4ea; color: #188038; border: 1px solid #ceead6;
+            line-height: 1.2; flex-shrink: 0;
+        }
+        .sidebar-item.active .sidebar-static-badge {
+            background: rgba(24,128,56,0.12); color: #188038; border-color: rgba(24,128,56,0.3);
+        }
+        .sidebar-item:hover .sidebar-static-badge {
+            background: #ceead6; border-color: #a8d5b5;
+        }
 
         .content-area { flex: 1; min-width: 0; }
         .content-card {
@@ -619,7 +923,7 @@
         }
         .modal-overlay {
             display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999;
-            justify-content: center; align-items: flex-start; padding: 40px 16px; overflow-y: auto;
+            justify-content: center; align-items: flex-start; padding: 40px 16px; overflow-y: auto; overflow-x: hidden;
         }
         .modal-overlay.open { display: flex; }
         .modal-box {
@@ -649,6 +953,15 @@
             background: #fafbfc; transition: all 0.2s;
         }
         .file-upload-dropzone:hover, .file-upload-dropzone.dragover { border-color: var(--primary); color: var(--primary); background: #f0f7ff; }
+        /* 简洁按钮模式：隐藏 URL 输入框，dropzone 变为按钮样式 */
+        .file-upload-wrap .file-url-input[type="hidden"] { display: none; }
+        .file-upload-dropzone.file-upload-btn-only {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 7px 14px; border: 1px solid var(--border); background: #fff;
+            color: var(--text-primary); font-size: 13px; border-radius: 4px;
+            cursor: pointer; transition: all 0.2s; width: fit-content;
+        }
+        .file-upload-dropzone.file-upload-btn-only:hover { border-color: var(--primary); color: var(--primary); background: #f0f7ff; }
         .file-thumb-preview { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
         .file-thumb-preview img { width: 72px; height: 72px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; }
         .file-thumb-pdf { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; background: #fafbfc; color: var(--text-secondary); font-size: 13px; }
@@ -805,7 +1118,7 @@
     <div class="modal-overlay" id="surveyEditModal">
         <div class="modal-box">
             <div class="modal-header">
-                <div class="modal-title"><i class="fas fa-edit"></i> 编辑排查信息</div>
+                <div class="modal-title"><i class="fas fa-edit"></i> 编辑排查登记</div>
                 <button class="modal-close" onclick="closeSurveyEditModal()">×</button>
             </div>
             <div class="modal-body">
@@ -959,6 +1272,38 @@
             <div class="modal-footer">
                 <button class="modal-btn" onclick="closeControlEditModal()">取消</button>
                 <button class="modal-btn primary" onclick="saveControlEdit()"><i class="fas fa-save"></i> 保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="addDangerEditModal">
+        <div class="modal-box" style="max-width:900px;">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-plus-circle"></i> 新增隐患 (选填)</div>
+                <button class="modal-close" onclick="closeAddDangerEditModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="addDangerEditForm"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="closeAddDangerEditModal()">取消</button>
+                <button class="modal-btn primary" onclick="saveAddDangerEdit()"><i class="fas fa-save"></i> 保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="rectifySituationEditModal">
+        <div class="modal-box" style="max-width:min(1100px, calc(100vw - 32px));">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-clipboard-check"></i> 整治情况</div>
+                <button class="modal-close" onclick="closeRectifySituationEditModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="rectifySituationEditForm"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="closeRectifySituationEditModal()">取消</button>
+                <button class="modal-btn primary" onclick="saveRectifySituationEdit()"><i class="fas fa-save"></i> 保存</button>
             </div>
         </div>
     </div>
@@ -1205,7 +1550,8 @@
 
         <div class="main-body">
             <div class="sidebar" id="sidebar">
-                <div class="sidebar-header" id="sidebarHeader">自建房安全排查</div>
+                <div class="sidebar-header" id="sidebarHeader">自建房风险档案</div>
+                <div class="round-switcher" id="roundSwitcher"></div>
                 <div class="sidebar-menu" id="sidebarMenu"></div>
             </div>
             <div class="content-area" id="contentArea"></div>
@@ -1215,9 +1561,8 @@
     <script>
         const sidebarItems_RURAL = [
             { key: 'basic', icon: 'fa-id-card', title: '房屋概况', tag: '静态档案' },
+            { key: 'discovery', icon: 'fa-search', title: '风险发现', tag: '排查/巡查' },
             { key: 'risk', icon: 'fa-exclamation-triangle', title: '风险信息记录', tag: '风险辨识' },
-            { key: 'survey', icon: 'fa-search', title: '排查信息', tag: '动态录入' },
-            { key: 'patrol', icon: 'fa-walking', title: '动态巡查', tag: '动态巡查' },
             { key: 'assessment', icon: 'fa-clipboard-check', title: '安全鉴定', tag: '动态录入' },
             { key: 'plan', icon: 'fa-calendar-alt', title: '整治计划', tag: '方案制定' },
             { key: 'measure', icon: 'fa-tools', title: '整治措施', tag: '措施实施' },
@@ -1252,9 +1597,9 @@
                     ['2024-06-12 09:30', '奉城镇人民政府', '王建国', 'C级（局部危险）', 'C级（局部危险）', '东侧承重墙出现纵向裂缝', '裂缝长约1.2m，缝宽约2mm，存在继续发展风险', '东侧承重墙', '否', '暂无', '存在严重安全隐患(第三类)', '121.523,30.923', '陈连明', '138****1234', '王建军', '139****5678', '否', '资金尚未到位', '2024-06-12 09:30']
                 ],
                 extraRows: [
+                    [{ label: '上传证明文件', value: '', colspan: 'all', isPhoto: true }],
                     [{ label: '排查备注', value: '东侧承重墙纵向裂缝长约1.2m，缝宽约2mm', colspan: 'all' }],
-                    [{ label: '排查照片', value: '', colspan: 'all', isPhoto: true }],
-                    [{ label: '上传证明文件', value: '', colspan: 'all', isPhoto: true }]
+                    [{ label: '排查照片', value: '', colspan: 'all', isPhoto: true }]
                 ]
             },
             survey2: {
@@ -1399,6 +1744,7 @@
         };
 
         const measureSubTabs_RURAL = [
+            { key: 'situation', title: '整治情况', icon: 'fa-clipboard-check' },
             { key: 'manage', title: '管理措施', icon: 'fa-shield-alt' },
             { key: 'project', title: '工程措施', icon: 'fa-hammer' }
         ];
@@ -1651,14 +1997,23 @@
         function getMeasureSubTabs() { return measureSubTabs_RURAL; }
         function getMeasureData()    { return measureData_RURAL; }
 
-        // 支持 URL 参数 tab=patrol 初始定位到"动态巡查"页（大屏巡查明细跳转）
+        // 支持 URL 参数 tab=xxx 初始定位（兼容 tab=survey/patrol → discovery 及 sub 参数）
         let currentSidebar = (function(){
             const t = getUrlParam('tab');
+            if (t === 'survey' || t === 'patrol') return 'discovery';
             return t ? t : 'basic';
         })();
         let currentSubTab = 'jbxx';
         let currentMeasureSubTab = 'manage';
         let currentSurveySubTab = 'survey1';
+        // 风险发现一级 TAB：survey（排查信息）| patrol（动态巡查）
+        let currentDiscoveryTab = (function(){
+            const t = getUrlParam('tab');
+            if (t === 'patrol') return 'patrol';
+            const s = getUrlParam('sub');
+            if (s === 'patrol') return 'patrol';
+            return 'survey';
+        })();
         let currentControlSubTab = 'situation'; // 隐患动态 子tab：situation/dynamic/quality/history
         let currentHouseArch = getCurrentHouseArch();
 
@@ -1686,28 +2041,93 @@
             pairs.forEach(function(p) {
                 const target = p[0], src = p[1];
                 if (!src) return;
+                // 合并而非清空：只覆盖 src 中存在的 key，保留静态定义中 src 没有的 key
+                // （防止 localStorage 快照缺少部分 key 时导致字段丢失）
+                Object.keys(src).forEach(k => target[k] = src[k]);
                 // 城镇自建房 basic 特殊处理：保留新增的 jbxx_common/residential/commercial 分组字段
                 // 因为旧草稿可能没有这些 key，合并后会丢失，导致房屋概况无字段显示
                 const isUrbanBasic = (target === basicData_URBAN);
-                const preservedKeys = isUrbanBasic ? {
-                    jbxx_common: target.jbxx_common,
-                    jbxx_residential: target.jbxx_residential,
-                    jbxx_commercial: target.jbxx_commercial
-                } : null;
-                // 清空 target 再把 src 的 key 合并进来，保持 target 引用不变（因为字段库是 const）
-                Object.keys(target).forEach(k => delete target[k]);
-                Object.keys(src).forEach(k => target[k] = src[k]);
-                // 恢复保留的分组字段（若 src 中没有这些 key）
-                if (preservedKeys) {
-                    if (!target.jbxx_common && preservedKeys.jbxx_common) target.jbxx_common = preservedKeys.jbxx_common;
-                    if (!target.jbxx_residential && preservedKeys.jbxx_residential) target.jbxx_residential = preservedKeys.jbxx_residential;
-                    if (!target.jbxx_commercial && preservedKeys.jbxx_commercial) target.jbxx_commercial = preservedKeys.jbxx_commercial;
+                if (isUrbanBasic) {
+                    // 如果静态定义有这些 key 但合并后丢了（理论上不会，因为不 delete），兜底恢复
+                    // 注：由于不再 delete target，这里只是防御性检查
                 }
             });
         }
         // 页面加载时恢复草稿里的字段库（如有）
         if (currentHouseArch && currentHouseArch._fieldsLibrary) {
             restoreFieldsLibrary(currentHouseArch._fieldsLibrary);
+        }
+        // ===== 轮次：恢复当前轮的流程字段库（basic 留在根级 _fieldsLibrary）=====
+        (function restoreCurrentRoundLib() {
+            if (!currentHouseArch) return;
+            ensureRoundsStructure(currentHouseArch);
+            const r = getCurrentRound(currentHouseArch);
+            if (r && r.data && r.data._lib) {
+                const libPart = {};
+                ROUND_SCOPED_LIB_KEYS.forEach(k => { if (r.data._lib[k]) libPart[k] = r.data._lib[k]; });
+                if (Object.keys(libPart).length) restoreFieldsLibrary(libPart);
+            }
+        })();
+
+        // ===== 轮次切换（核心入口）=====
+        // 流程：dump 当前内存字段库 + 根级流程字段 → 写回旧轮 → 切换 → 应用新轮 → 持久化 → 重渲染
+        function switchRound(roundId) {
+            if (!currentHouseArch) return false;
+            ensureRoundsStructure(currentHouseArch);
+            const oldRound = getCurrentRound(currentHouseArch);
+            if (oldRound && oldRound.roundId === roundId) return true; // 已是当前轮
+            // 1. 把当前内存状态写回旧轮
+            if (oldRound) {
+                try { currentHouseArch._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
+                oldRound.data = __extractRoundSnapshot(currentHouseArch);
+                oldRound.status = oldRound.status || '进行中';
+            }
+            // 2. 切换
+            if (!setCurrentRound(currentHouseArch, roundId)) return false;
+            const newRound = getCurrentRound(currentHouseArch);
+            // 3. 应用新轮到根级 + 字段库
+            if (newRound && newRound.data) {
+                __applyRoundSnapshot(currentHouseArch, newRound.data);
+                if (newRound.data._lib) {
+                    const libPart = {};
+                    ROUND_SCOPED_LIB_KEYS.forEach(k => { if (newRound.data._lib[k]) libPart[k] = newRound.data._lib[k]; });
+                    if (Object.keys(libPart).length) restoreFieldsLibrary(libPart);
+                }
+            }
+            // 4. 持久化（saveCurrentHouseArch 会再次 dump+extract 写回新轮，幂等）
+            saveCurrentHouseArch(currentHouseArch);
+            // 5. 重置 UI 状态（recordViewState / measureFormState / closeHistoryFormState 等）
+            try { if (typeof recordViewState !== 'undefined') Object.keys(recordViewState).forEach(k => recordViewState[k] = 0); } catch (e) {}
+            // 6. 重渲染
+            renderSidebar();
+            renderContent();
+            return true;
+        }
+
+        // 新建一轮并切换
+        // options: { name?, type?, startDate? }（来自新建轮弹窗）
+        function addNewRound(options) {
+            if (!currentHouseArch) return;
+            // 先把当前内存写回旧轮
+            const oldRound = getCurrentRound(currentHouseArch);
+            if (oldRound) {
+                try { currentHouseArch._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
+                oldRound.data = __extractRoundSnapshot(currentHouseArch);
+            }
+            const nr = createNewRound(currentHouseArch, options);
+            // 应用新轮（空白）到根级 + 字段库
+            if (nr && nr.data) {
+                __applyRoundSnapshot(currentHouseArch, nr.data);
+                if (nr.data._lib) {
+                    const libPart = {};
+                    ROUND_SCOPED_LIB_KEYS.forEach(k => { if (nr.data._lib[k]) libPart[k] = nr.data._lib[k]; });
+                    if (Object.keys(libPart).length) restoreFieldsLibrary(libPart);
+                }
+            }
+            saveCurrentHouseArch(currentHouseArch);
+            try { if (typeof recordViewState !== 'undefined') Object.keys(recordViewState).forEach(k => recordViewState[k] = 0); } catch (e) {}
+            renderSidebar();
+            renderContent();
         }
         // 城镇基本信息分组兜底：restore 后若分组不是数组（旧草稿无此 key），重新用默认数组
         if (!Array.isArray(basicData_URBAN.jbxx_common)) basicData_URBAN.jbxx_common = JSON.parse(JSON.stringify(jbxx_URBAN_COMMON));
@@ -1946,8 +2366,10 @@
             const menu = document.getElementById('sidebarMenu');
             menu.innerHTML = getSidebarItems().map(item => {
                 const active = item.key === currentSidebar ? 'active' : '';
+                const staticBadge = item.tag === '静态档案' ? '<span class="sidebar-static-badge" title="静态档案数据，每轮排查仅偶尔修订">静态</span>' : '';
                 return '<div class="sidebar-item ' + active + '" data-key="' + item.key + '">' +
                     '<div class="sidebar-item-left"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div>' +
+                    staticBadge +
                     '</div>';
             }).join('');
             menu.querySelectorAll('.sidebar-item').forEach(el => {
@@ -1956,6 +2378,204 @@
                     renderSidebar();
                     renderContent();
                 });
+            });
+            // 渲染轮次切换器
+            renderRoundSwitcher();
+        }
+
+        // 渲染轮次切换器（紧凑卡片 + 弹窗选择）
+        function renderRoundSwitcher() {
+            const box = document.getElementById('roundSwitcher');
+            if (!box) return;
+            if (!currentHouseArch) { box.innerHTML = ''; return; }
+            ensureRoundsStructure(currentHouseArch);
+            const rounds = currentHouseArch.rounds;
+            const curId = currentHouseArch.currentRoundId;
+            const curRound = rounds.find(r => r.roundId === curId);
+            if (!curRound) { box.innerHTML = ''; return; }
+            const isCurDone = curRound.status === '已完结';
+            const typeCls = curRound.type === '专项' ? 'type-special' : (curRound.type === '应急' ? 'type-emergency' : '');
+            const statusTag = isCurDone
+                ? '<span class="round-status-tag done">已完结</span>'
+                : '<span class="round-status-tag doing">进行中</span>';
+            const typeTag = curRound.type
+                ? '<span class="round-type-tag ' + typeCls + '">' + curRound.type + '</span>'
+                : '';
+            const readonlyBanner = isCurDone
+                ? '<div class="round-readonly-banner"><i class="fas fa-lock"></i><span>当前轮已完结，流程数据为只读</span></div>'
+                : '';
+            box.innerHTML =
+                '<div class="round-switcher-label"><i class="fas fa-layer-group"></i> 风险治理轮次 <span style="margin-left:auto;color:var(--text-secondary);font-weight:normal;">共 ' + rounds.length + ' 轮</span></div>' +
+                '<div class="round-current-card">' +
+                    '<div class="round-current-name">' + (curRound.name || curRound.title) + typeTag + statusTag + '</div>' +
+                    '<div class="round-current-meta">' +
+                        '<span><i class="far fa-calendar"></i> ' + (curRound.startDate || '—') + '</span>' +
+                        (curRound.endDate ? '<span>→ ' + curRound.endDate + '</span>' : '') +
+                    '</div>' +
+                '</div>' +
+                readonlyBanner +
+                '<div class="round-switch-actions">' +
+                    '<button class="round-action-btn" id="roundPickerBtn" title="查看所有轮次"><i class="fas fa-list"></i> 切换轮次</button>' +
+                    '<button class="round-action-btn primary" id="roundAddBtn" title="新建一轮治理"><i class="fas fa-plus"></i> 新轮</button>' +
+                '</div>';
+            const pickerBtn = document.getElementById('roundPickerBtn');
+            const addBtn = document.getElementById('roundAddBtn');
+            if (pickerBtn) pickerBtn.addEventListener('click', openRoundPickerModal);
+            if (addBtn) addBtn.addEventListener('click', openNewRoundModal);
+        }
+
+        // ===== 轮次选择弹窗 =====
+        function openRoundPickerModal() {
+            if (!currentHouseArch) return;
+            ensureRoundsStructure(currentHouseArch);
+            const rounds = currentHouseArch.rounds.slice();
+            const curId = currentHouseArch.currentRoundId;
+            // 按开始日期倒序（最新在前）；无日期的排最后
+            rounds.sort((a, b) => {
+                const da = a.startDate || '';
+                const db = b.startDate || '';
+                if (da === db) return (b.roundNo || 0) - (a.roundNo || 0);
+                return db.localeCompare(da);
+            });
+            const rows = rounds.map(r => {
+                const isCur = r.roundId === curId;
+                const isDone = r.status === '已完结';
+                const statusTag = isDone
+                    ? '<span class="round-status-tag done">已完结</span>'
+                    : '<span class="round-status-tag doing">进行中</span>';
+                const typeTag = r.type ? '<span class="round-type-tag">' + r.type + '</span>' : '';
+                const d = r.data || {};
+                const counts = [];
+                if ((d.inspectionRecords || []).length) counts.push('排查 ' + d.inspectionRecords.length);
+                if ((d.patrolRecords || []).length) counts.push('巡查 ' + d.patrolRecords.length);
+                if ((d.appraisalReports || []).length) counts.push('鉴定 ' + d.appraisalReports.length);
+                if ((d.manageRecords || []).length) counts.push('管理 ' + d.manageRecords.length);
+                if ((d.projectRecords || []).length) counts.push('工程 ' + d.projectRecords.length);
+                if ((d.acceptAuditRecords || []).length) counts.push('验收 ' + d.acceptAuditRecords.length);
+                if ((d.archiveRecords || []).length) counts.push('档案 ' + d.archiveRecords.length);
+                const summary = counts.length
+                    ? counts.map(c => '<span class="node-count">' + c + '</span>').join('')
+                    : '<span style="color:var(--text-secondary);">空白</span>';
+                return '<tr data-round-id="' + r.roundId + '" class="' + (isCur ? 'current' : '') + '">' +
+                    '<td><div class="name-cell">' + (r.name || r.title) + (isCur ? ' <i class="fas fa-check-circle" style="color:var(--primary);font-size:12px;" title="当前轮"></i>' : '') + '</div></td>' +
+                    '<td>' + typeTag + '</td>' +
+                    '<td>' + (r.startDate || '—') + '</td>' +
+                    '<td>' + (r.endDate || '—') + '</td>' +
+                    '<td>' + statusTag + '</td>' +
+                    '<td class="summary-cell">' + summary + '</td>' +
+                '</tr>';
+            }).join('');
+            const tbody = rows || '<tr><td colspan="6"><div class="round-picker-empty">暂无轮次</div></td></tr>';
+
+            let modal = document.getElementById('roundPickerModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'roundPickerModal';
+                modal.className = 'modal-overlay';
+                document.body.appendChild(modal);
+            }
+            modal.innerHTML =
+                '<div class="modal-box" style="max-width:880px;">' +
+                    '<div class="modal-header">' +
+                        '<div class="modal-title"><i class="fas fa-layer-group"></i> 选择治理轮次</div>' +
+                        '<button class="modal-close" data-act="close"><i class="fas fa-times"></i></button>' +
+                    '</div>' +
+                    '<div class="modal-body" style="padding:0;">' +
+                        '<table class="round-picker-table">' +
+                            '<thead><tr>' +
+                                '<th style="width:32%;">排查名称</th>' +
+                                '<th style="width:8%;">类型</th>' +
+                                '<th style="width:11%;">开始日期</th>' +
+                                '<th style="width:11%;">完结日期</th>' +
+                                '<th style="width:9%;">状态</th>' +
+                                '<th>节点统计</th>' +
+                            '</tr></thead>' +
+                            '<tbody>' + tbody + '</tbody>' +
+                        '</table>' +
+                    '</div>' +
+                    '<div class="modal-footer">' +
+                        '<button class="modal-btn" data-act="close">关闭</button>' +
+                    '</div>' +
+                '</div>';
+            modal.classList.add('open');
+            // 事件
+            modal.querySelectorAll('[data-act="close"]').forEach(el => {
+                el.addEventListener('click', () => modal.classList.remove('open'));
+            });
+            modal.addEventListener('click', function onBackdrop(e) {
+                if (e.target === modal) modal.classList.remove('open');
+            });
+            modal.querySelectorAll('tbody tr[data-round-id]').forEach(tr => {
+                tr.addEventListener('click', () => {
+                    const rid = tr.dataset.roundId;
+                    modal.classList.remove('open');
+                    if (rid && rid !== curId) switchRound(rid);
+                });
+            });
+        }
+
+        // ===== 新建轮次弹窗 =====
+        function openNewRoundModal() {
+            if (!currentHouseArch) return;
+            ensureRoundsStructure(currentHouseArch);
+            const newNo = currentHouseArch.rounds.length + 1;
+            const today = new Date().toISOString().slice(0, 10);
+            let modal = document.getElementById('newRoundModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'newRoundModal';
+                modal.className = 'modal-overlay';
+                document.body.appendChild(modal);
+            }
+            modal.innerHTML =
+                '<div class="modal-box" style="max-width:520px;">' +
+                    '<div class="modal-header">' +
+                        '<div class="modal-title"><i class="fas fa-plus-circle"></i> 新建治理轮次</div>' +
+                        '<button class="modal-close" data-act="close"><i class="fas fa-times"></i></button>' +
+                    '</div>' +
+                    '<div class="modal-body">' +
+                        '<div class="form-grid" style="grid-template-columns:1fr;">' +
+                            '<div class="form-item">' +
+                                '<label class="form-label">轮次名称 <span style="color:var(--danger);">*</span></label>' +
+                                '<input type="text" class="form-input" id="newRoundName" placeholder="例如：2026 年汛期专项治理" value="第 ' + newNo + ' 轮">' +
+                            '</div>' +
+                            '<div class="form-item">' +
+                                '<label class="form-label">轮次类型</label>' +
+                                '<select class="form-select" id="newRoundType">' +
+                                    '<option value="常规" selected>常规</option>' +
+                                    '<option value="专项">专项</option>' +
+                                    '<option value="应急">应急</option>' +
+                                '</select>' +
+                            '</div>' +
+                            '<div class="form-item">' +
+                                '<label class="form-label">开始日期</label>' +
+                                '<input type="date" class="form-input" id="newRoundStartDate" value="' + today + '">' +
+                            '</div>' +
+                            '<div style="padding:8px 12px;background:#fff7e6;border:1px solid #ffd591;border-radius:4px;font-size:12px;color:#d46b08;">' +
+                                '<i class="fas fa-info-circle"></i> 新建后，当前轮将标记为"已完结"，新轮将复制字段库结构但清空流程数据。' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="modal-footer">' +
+                        '<button class="modal-btn" data-act="close">取消</button>' +
+                        '<button class="modal-btn" data-act="ok" style="background:var(--primary);color:#fff;border-color:var(--primary);">确定新建</button>' +
+                    '</div>' +
+                '</div>';
+            modal.classList.add('open');
+            modal.querySelectorAll('[data-act="close"]').forEach(el => {
+                el.addEventListener('click', () => modal.classList.remove('open'));
+            });
+            modal.addEventListener('click', function onBackdrop(e) {
+                if (e.target === modal) modal.classList.remove('open');
+            });
+            modal.querySelector('[data-act="ok"]').addEventListener('click', () => {
+                const name = document.getElementById('newRoundName').value.trim();
+                const type = document.getElementById('newRoundType').value;
+                const startDate = document.getElementById('newRoundStartDate').value;
+                if (!name) { alert('请输入排查名称'); return; }
+                if (!startDate) { alert('请选择开始日期'); return; }
+                modal.classList.remove('open');
+                addNewRound({ name: name, type: type, startDate: startDate });
             });
         }
 
@@ -1970,13 +2590,28 @@
             const sidebarHeaderEl = document.getElementById('sidebarHeader');
             if (sidebarHeaderEl) {
                 const houseType = '农村自建房';
-                sidebarHeaderEl.innerHTML = '<i class="fas fa-home" style="margin-right:8px;color:#202124;"></i>' + houseType + '安全排查';
+                sidebarHeaderEl.innerHTML = '<i class="fas fa-home" style="margin-right:8px;color:#202124;"></i>' + houseType + '风险档案';
                 sidebarHeaderEl.style.borderLeft = '3px solid #202124';
             }
         }
 
+        // 已完结轮次只读：根据当前轮 status 切换 body.readonly-mode
+        // 注意：URL mode=publish 的强制只读优先级更高，不可被轮次逻辑覆盖
+        function applyRoundReadonlyMode() {
+            if (!IS_DRAFT_MODE) return; // publish 模式天然只读
+            if (!currentHouseArch) return;
+            try {
+                ensureRoundsStructure(currentHouseArch);
+                const cur = getCurrentRound(currentHouseArch);
+                const isDone = cur && cur.status === '已完结';
+                if (isDone) document.body.classList.add('readonly-mode');
+                else document.body.classList.remove('readonly-mode');
+            } catch (e) {}
+        }
+
         function renderContent() {
             currentHouseArch = getCurrentHouseArch();
+            applyRoundReadonlyMode();
             syncTopbarFromHouseArch();
             renderStatusPanel();
             const area = document.getElementById('contentArea');
@@ -1986,11 +2621,20 @@
             } else if (currentSidebar === 'measure') {
                 area.innerHTML = renderMeasureContent();
                 bindSubTabs();
+            } else if (currentSidebar === 'discovery') {
+                area.innerHTML = renderDiscoveryContent();
+                bindSubTabs();
             } else if (currentSidebar === 'survey') {
-                area.innerHTML = renderSurveyContent();
+                // 兼容旧调用：重定向到 discovery
+                currentSidebar = 'discovery';
+                currentDiscoveryTab = 'survey';
+                area.innerHTML = renderDiscoveryContent();
                 bindSubTabs();
             } else if (currentSidebar === 'patrol') {
-                area.innerHTML = renderPatrolContent();
+                // 兼容旧调用：重定向到 discovery
+                currentSidebar = 'discovery';
+                currentDiscoveryTab = 'patrol';
+                area.innerHTML = renderDiscoveryContent();
                 bindSubTabs();
             } else {
                 area.innerHTML = renderTableContent(currentSidebar);
@@ -2372,15 +3016,18 @@
         function bindSubTabs() {
             document.querySelectorAll('.content-tab').forEach(el => {
                 el.addEventListener('click', function() {
-                    if (currentSidebar === 'basic') {
-                currentSubTab = el.dataset.key;
-            } else if (currentSidebar === 'measure') {
-                currentMeasureSubTab = el.dataset.key;
-            } else if (currentSidebar === 'survey') {
-                currentSurveySubTab = el.dataset.key;
-            } else if (currentSidebar === 'control') {
-                currentControlSubTab = el.dataset.key;
-            }
+                    const scope = el.dataset.scope || '';
+                    if (scope === 'discovery') {
+                        currentDiscoveryTab = el.dataset.key;
+                    } else if (currentSidebar === 'basic') {
+                        currentSubTab = el.dataset.key;
+                    } else if (currentSidebar === 'measure') {
+                        currentMeasureSubTab = el.dataset.key;
+                    } else if (currentSidebar === 'survey' || (currentSidebar === 'discovery' && currentDiscoveryTab === 'survey')) {
+                        currentSurveySubTab = el.dataset.key;
+                    } else if (currentSidebar === 'control') {
+                        currentControlSubTab = el.dataset.key;
+                    }
                     renderContent();
                 });
             });
@@ -2587,6 +3234,28 @@
             const s = currentHouseArch;
             const sub = measureSubTabs.find(t => t.key === currentMeasureSubTab) || measureSubTabs[0];
             const item = getSidebarItems().find(i => i.key === 'measure') || { title: '整治措施', icon: 'fa-tools' };
+
+            // ===== 整治情况 TAB =====
+            if (currentMeasureSubTab === 'situation') {
+                const bodyHtml = renderRectifySituation(s);
+                return '<div class="content-card">' +
+                    '<div class="content-card-header">' +
+                        '<div class="content-card-title"><i class="fas ' + item.icon + '" style="width:16px;text-align:center;"></i> ' + item.title + '</div>' +
+                    '</div>' +
+                    '<div class="content-tabs">' + tabsHtml + '</div>' +
+                    '<div class="content-body">' + bodyHtml + '</div>' +
+                '</div>' +
+                '<div class="bottom-bar">' +
+                    '<div class="bottom-info">' +
+                        '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                        '当前节点：<span class="bottom-node">' + item.title + ' - ' + sub.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span>' +
+                    '</div>' +
+                    '<div class="bottom-actions">' +
+                        '<button class="bottom-btn primary" onclick="openRectifySituationEditModal()"><i class="fas fa-edit"></i> 编辑整治情况</button>' +
+                    '</div>' +
+                '</div>';
+            }
+
             const kind = (currentMeasureSubTab === 'project') ? 'project' : 'manage';
             const records = kind === 'manage' ? (s.manageRecords || []) : (s.projectRecords || []);
             // 历史记录折叠卡片列表
@@ -2777,30 +3446,14 @@
             const surveyData = getSurveyData();
             const s = currentHouseArch;
 
-            // 排查记录列表：读取档案真实排查记录（常态化监测/农房回头看等同步写入 inspectionRecords）
-            // 按填报时间倒序，最新在前；无记录时保留一条空占位
+            // 排查登记：一轮只登记一次，取 inspectionRecords[0]（或最新一条）作为唯一记录
             let list = (Array.isArray(s.inspectionRecords) ? s.inspectionRecords.slice() : []);
             list.sort(function(a, b) {
                 const ta = (a.reportTime || a.checkDate || '').toString();
                 const tb = (b.reportTime || b.checkDate || '').toString();
                 return tb.localeCompare(ta);
             });
-            if (list.length === 0) {
-                list = [{ checkDate: '', checker: '', structureStatus: '', preliminaryJudge: '', reportTime: '', reporter: '' }];
-            }
-            const activeIndex = Math.min(recordViewState.inspection || 0, Math.max(list.length - 1, 0));
-            recordViewState.inspection = activeIndex;
-            const listHtml = recordListTable(
-                ['排查日期', '排查人员', '结构状况', '初步判定', '填报时间', { title: '状态', tag: true, tagClass: v => v === '最新' ? 'primary' : 'info' }],
-                list.map(function(r, i) {
-                    const status = i === 0 ? '最新' : '历史';
-                    return [r.checkDate || '—', r.checker || '—', r.structureStatus || '—', r.preliminaryJudge || '—', r.reportTime || '—', status];
-                }),
-                'inspection',
-                activeIndex,
-                { showCrud: { edit: 'openCrudModal(\'survey\'', delete: 'deleteCrudRecord(\'survey\'' } }
-            );
-            const record = list[activeIndex] || list[0];
+            const record = list[0] || { checkDate: '', checker: '', structureStatus: '', preliminaryJudge: '', reportTime: '', reporter: '' };
 
             const tabsHtml = surveySubTabs.map(tab => {
                 const active = tab.key === currentSurveySubTab ? 'active' : '';
@@ -2810,7 +3463,7 @@
             }).join('');
 
             const data = surveyData[currentSurveySubTab] || { columns: [], rows: [], extraRows: [] };
-            // survey1（排查情况）详情按当前选中排查记录动态渲染，替换演示数据
+            // survey1（排查情况）详情按排查登记记录动态渲染，替换演示数据
             if (currentSurveySubTab === 'survey1' && record && (record.checkDate || record.srcKey)) {
                 const town = record.town || (record.townName || '');
                 data.rows = [[
@@ -2835,9 +3488,9 @@
                     (record.reportTime || '—')                                       // 更新时间
                 ]];
                 data.extraRows = [
+                    [{ label: '上传证明文件', value: (record.proofFiles || ''), colspan: 'all', isPhoto: true }],
                     [{ label: '排查备注', value: (record.remark || ''), colspan: 'all' }],
-                    [{ label: '排查照片', value: (record.photos || ''), colspan: 'all', isPhoto: true }],
-                    [{ label: '上传证明文件', value: (record.proofFiles || ''), colspan: 'all', isPhoto: true }]
+                    [{ label: '排查照片', value: (record.photos || ''), colspan: 'all', isPhoto: true }]
                 ];
             }
             const rows = data.rows[0] || [];
@@ -2847,8 +3500,45 @@
             const locationIndex = cols.indexOf('位置标注');
             const photoIndex = cols.indexOf('排查照片');
             const proofIndex = cols.indexOf('上传证明文件');
+            // 排查照片从 extraRows 抽出，作为整行插入到"安全鉴定：是否整治前鉴定"之前
+            const appraisalColIndex = cols.indexOf('安全鉴定：是否整治前鉴定');
+            // 更新时间从 cols 抽出，最后单独作为整行渲染
+            const updateTimeIndex = cols.indexOf('更新时间');
+            const updateTimeValue = updateTimeIndex !== -1 ? (rows[updateTimeIndex] || '') : '';
+            let photoExtraItem = null;
+            const extraRowsFiltered = extraRows.map(function(row) {
+                return row.filter(function(item) {
+                    if (item.label === '排查照片') { photoExtraItem = item; return false; }
+                    return true;
+                });
+            }).filter(function(row) { return row.length > 0; });
+            // extraRows 输出顺序固定：上传证明文件 → 排查备注 → 其他（避免 localStorage 缓存的旧字段库影响展示顺序）
+            (function sortExtraRows() {
+                const ORDER = ['上传证明文件', '排查备注'];
+                extraRowsFiltered.sort(function(a, b) {
+                    const al = (a[0] && a[0].label) || '';
+                    const bl = (b[0] && b[0].label) || '';
+                    const ai = ORDER.indexOf(al);
+                    const bi = ORDER.indexOf(bl);
+                    const av = ai === -1 ? 99 : ai;
+                    const bv = bi === -1 ? 99 : bi;
+                    return av - bv;
+                });
+            })();
 
             let gridHtml = cols.map(function(c, i) {
+                // 在"安全鉴定：是否整治前鉴定"之前插入排查照片整行
+                let prefixHtml = '';
+                if (i === appraisalColIndex && photoExtraItem) {
+                    let pv = '<div class="info-value ' + (photoExtraItem.value ? '' : 'empty') + '">' + (photoExtraItem.value || '—') + '</div>';
+                    if (photoExtraItem.isPhoto && photoExtraItem.value && photoExtraItem.value !== '—' && photoExtraItem.value !== '-') {
+                        pv = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + photoExtraItem.value + '\')">查看文件</button></div>';
+                    }
+                    prefixHtml = '<div class="info-item full-width">' +
+                        '<div class="info-label">排查照片</div>' + pv + '</div>';
+                }
+                // 更新时间跳过，最后整行渲染
+                if (i === updateTimeIndex) return prefixHtml;
                 const isRuralOnly = ruralOnlyCols.indexOf(c) !== -1;
                 const cls = (rows[i] ? '' : 'empty') + (isRuralOnly && rows[i] && rows[i] !== '—' && rows[i] !== '-' ? ' rural-only' : '');
                 let valueHtml = '<div class="info-value ' + cls.trim() + '">' + (rows[i] || '—') + '</div>';
@@ -2858,14 +3548,14 @@
                 if ((i === photoIndex || i === proofIndex) && rows[i] && rows[i] !== '—' && rows[i] !== '-') {
                     valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + rows[i] + '\')">查看文件</button></div>';
                 }
-                return '<div class="info-item">' +
+                return prefixHtml + '<div class="info-item">' +
                     '<div class="info-label">' + c + '</div>' +
                     valueHtml +
                     '</div>';
             }).join('');
 
-            if (extraRows.length) {
-                gridHtml += extraRows.map(function(row) {
+            if (extraRowsFiltered.length) {
+                gridHtml += extraRowsFiltered.map(function(row) {
                     return row.map(function(item) {
                         let valueHtml = '<div class="info-value ' + (item.value ? '' : 'empty') + '">' + (item.value || '—') + '</div>';
                         if (item.isPhoto && item.value && item.value !== '—' && item.value !== '-') {
@@ -2879,19 +3569,19 @@
                 }).join('');
             }
 
+            // 更新时间整行渲染在最末尾
+            if (updateTimeIndex !== -1) {
+                gridHtml += '<div class="info-item full-width">' +
+                    '<div class="info-label">更新时间</div>' +
+                    '<div class="info-value ' + (updateTimeValue ? '' : 'empty') + '">' + (updateTimeValue || '—') + '</div>' +
+                    '</div>';
+            }
+
             const sub = surveySubTabs.find(t => t.key === currentSurveySubTab);
-            const item = getSidebarItems().find(i => i.key === 'survey');
+            const item = getSidebarItems().find(i => i.key === 'survey') || { icon: 'fa-search', title: '排查登记' };
 
             return '<div class="content-card">' +
-                '<div class="content-card-header">' +
-                    '<div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div>' +
-                '</div>' +
                 '<div class="content-body">' +
-                    recordListWrapper('排查记录列表', listHtml, { icon: 'fa-search', showAdd: 'addCrudRecord(\'survey\')' }) +
-                    '<div class="record-detail-header">' +
-                        '<div class="title">排查详情（记录 ' + (activeIndex + 1) + ' / ' + list.length + '）</div>' +
-                        '<div class="meta">排查日期：' + (record.checkDate || '—') + ' | 填报人：' + (record.reporter || '—') + '</div>' +
-                    '</div>' +
                     '<div class="content-tabs" style="padding-left:0;padding-right:0;">' + tabsHtml + '</div>' +
                     '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + gridHtml + '</div>' +
                 '</div>' +
@@ -2907,10 +3597,32 @@
             '</div>';
         }
 
+        // ========== 风险发现（合并 排查信息 + 动态巡查）==========
+        // 外层 TAB 容器：一级 TAB（排查信息 | 动态巡查）+ 二级渲染原函数
+        function renderDiscoveryContent() {
+            const tabs = [
+                { key: 'survey', title: '排查登记', icon: 'fa-search' },
+                { key: 'patrol', title: '动态巡查', icon: 'fa-walking' }
+            ];
+            const tabsHtml = tabs.map(function(t) {
+                const active = t.key === currentDiscoveryTab ? 'active' : '';
+                return '<div class="content-tab ' + active + '" data-key="' + t.key + '" data-scope="discovery">' +
+                    '<i class="fas ' + t.icon + '"></i> ' + t.title +
+                    '</div>';
+            }).join('');
+            // 一级 TAB 条（独立卡片样式，仅放 TAB）
+            const topBar = '<div class="content-card" style="margin-bottom:0;">' +
+                '<div class="content-tabs" style="padding-left:16px;padding-right:16px;border-bottom:1px solid var(--border);">' + tabsHtml + '</div>' +
+                '</div>';
+            // 二级内容：直接复用原函数返回的 卡片 + bottom-bar
+            const body = (currentDiscoveryTab === 'patrol') ? renderPatrolContent() : renderSurveyContent();
+            return topBar + body;
+        }
+
         // ========== 动态巡查 ==========
         function renderPatrolContent() {
             const s = currentHouseArch;
-            const item = getSidebarItems().find(i => i.key === 'patrol');
+            const item = getSidebarItems().find(i => i.key === 'patrol') || { icon: 'fa-walking', title: '动态巡查' };
             let list = s.patrolRecords || [];
             list = list.slice().sort((a, b) => (b.patrolDate || '').localeCompare(a.patrolDate || ''));
             const activeIndex = Math.min(recordViewState.patrol || 0, Math.max(list.length - 1, 0));
@@ -2951,9 +3663,6 @@
                 : '<div class="info-value empty">—</div>';
             const photoItem = '<div class="info-item full-width"><div class="info-label">现场照片</div>' + photoHtml + '</div>';
             return '<div class="content-card">' +
-                '<div class="content-card-header">' +
-                    '<div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div>' +
-                '</div>' +
                 '<div class="content-body">' +
                     recordListWrapper('动态巡查记录列表', listHtml, { icon: 'fa-walking', showAdd: 'addCrudRecord(\'patrol\')' }) +
                     '<div class="record-detail-header">' +
@@ -3061,8 +3770,10 @@
             } else if (key === 'accept') {
                 html += '<button class="bottom-btn primary" onclick="openAcceptEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             } else if (key === 'control') {
-                // 隐患动态：situation/dynamic 可编辑，quality/history 由来源记录生成不显示编辑
-                if (currentControlSubTab === 'situation' || currentControlSubTab === 'dynamic') {
+                // 隐患动态：addDanger/situation/dynamic 可编辑，quality/history 由来源记录生成不显示编辑
+                if (currentControlSubTab === 'addDanger') {
+                    html += '<button class="bottom-btn primary" onclick="openAddDangerEditModal()"><i class="fas fa-edit"></i> 编辑新增隐患</button>';
+                } else if (currentControlSubTab === 'situation' || currentControlSubTab === 'dynamic') {
                     html += '<button class="bottom-btn primary" onclick="openControlEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
                 }
             } else {
@@ -3295,6 +4006,7 @@
         // 隐患动态：4 个子 tab（situation/dynamic/quality/history）
         function renderControlTable(s) {
             const tabsHtml = [
+                { key: 'addDanger', title: '新增隐患', icon: 'fa-plus-circle' },
                 { key: 'situation', title: '隐患控制情况', icon: 'fa-shield-alt' },
                 { key: 'dynamic', title: '隐患动态记录', icon: 'fa-exchange-alt' },
                 { key: 'quality', title: '最新质检信息', icon: 'fa-check-circle' },
@@ -3302,12 +4014,81 @@
             ].map(t => '<div class="content-tab ' + (currentControlSubTab === t.key ? 'active' : '') + '" data-key="' + t.key + '"><i class="fas ' + t.icon + '"></i> ' + t.title + '</div>').join('');
 
             let body = '';
-            if (currentControlSubTab === 'dynamic') body = renderControlDynamic(s);
+            if (currentControlSubTab === 'addDanger') body = renderControlAddDanger(s);
+            else if (currentControlSubTab === 'dynamic') body = renderControlDynamic(s);
             else if (currentControlSubTab === 'quality') body = renderControlQuality(s);
             else if (currentControlSubTab === 'history') body = renderControlHistory(s);
             else body = renderControlSituation(s);
 
             return '<div class="content-tabs" style="padding-left:0;padding-right:0;margin-bottom:14px;">' + tabsHtml + '</div>' + body;
+        }
+
+        // tab0 新增隐患
+        const ADD_DANGER_TYPES = ['场地周边安全风险', '房屋整体沉降倾斜', '房屋塌陷变形', '使用不当隐患', '墙体开裂变形', '楼面开裂变形', '梁柱开裂变形', '楼梯损伤变形', '阳台开裂变形', '其他安全问题'];
+        const ADD_DANGER_JUDGES = ['疑似危房', '严重损坏房', '一般损坏房', '完好房(基本完好房)'];
+
+        function getAddDanger() {
+            const s = currentHouseArch || {};
+            if (!s.addDanger || typeof s.addDanger !== 'object') {
+                s.addDanger = { types: [], typesOther: '', photosByType: {}, judge: '' };
+            }
+            if (!Array.isArray(s.addDanger.types)) s.addDanger.types = [];
+            if (!s.addDanger.photosByType || typeof s.addDanger.photosByType !== 'object') s.addDanger.photosByType = {};
+            // 旧字段 photos 兼容：若存在字符串则迁移到第一个勾选类型
+            if (typeof s.addDanger.photos === 'string' && s.addDanger.photos && s.addDanger.types.length) {
+                const first = s.addDanger.types[0];
+                if (!s.addDanger.photosByType[first]) s.addDanger.photosByType[first] = s.addDanger.photos;
+                delete s.addDanger.photos;
+            }
+            return s.addDanger;
+        }
+
+        function getAddDangerPhotos(type) {
+            const ad = getAddDanger();
+            const v = ad.photosByType[type];
+            if (!v) return [];
+            if (Array.isArray(v)) return v.filter(Boolean);
+            if (typeof v === 'string') return v.split('\n').filter(Boolean);
+            return [];
+        }
+
+        function setAddDangerPhotos(type, arr) {
+            const ad = getAddDanger();
+            ad.photosByType[type] = (arr || []).filter(Boolean).join('\n');
+        }
+
+        function renderControlAddDanger(s) {
+            const ad = getAddDanger();
+            const types = ad.types || [];
+            // 排查判断值带红色 * 前缀（与截图一致）
+            const judgeHtml = '<div class="info-item" style="grid-column:1 / -1;">' +
+                '<div class="info-label"><span style="color:#dc3545;">*</span>排查判断</div>' +
+                '<div class="info-value">' + (ad.judge || '—') + '</div>' +
+            '</div>';
+            // 隐患类型：勾选项每行一组照片（按类型独立存取）；未勾选任何时仅显示一行提示
+            let typesHtml = '';
+            if (!types.length) {
+                typesHtml = '<div class="info-item" style="grid-column:1 / -1;">' +
+                    '<div class="info-label">隐患类型</div>' +
+                    '<div class="info-value empty">暂未新增隐患</div>' +
+                '</div>';
+            } else {
+                typesHtml = types.map(t => {
+                    const label = (t === '其他安全问题' && ad.typesOther) ? (t + '（' + ad.typesOther + '）') : t;
+                    const photos = getAddDangerPhotos(t);
+                    const photoHtml = photos.length
+                        ? '<div style="display:flex;flex-wrap:wrap;gap:10px;">' + photos.map(u =>
+                            '<img src="' + u + '" onclick="viewPhotoOnline(\'' + u.replace(/'/g, "\\'") + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border);">'
+                          ).join('') + '</div>'
+                        : '<div class="info-value empty">暂未上传照片</div>';
+                    return '<div class="info-item" style="grid-column:1 / -1;align-items:flex-start;">' +
+                        '<div class="info-label">' + label + '</div>' +
+                        '<div class="info-value">' + photoHtml + '</div>' +
+                    '</div>';
+                }).join('');
+            }
+            return '<div class="record-detail-header"><div class="title">新增隐患</div></div>' +
+                '<div class="info-grid" style="grid-template-columns:1fr;">' + typesHtml + judgeHtml + '</div>';
         }
 
         // tab1 隐患控制情况
@@ -4717,6 +5498,296 @@
             renderContent();
         }
 
+        // ===== 新增隐患 编辑 =====
+        function openAddDangerEditModal() {
+            renderAddDangerEditForm();
+            document.getElementById('addDangerEditModal').classList.add('open');
+        }
+
+        function closeAddDangerEditModal() {
+            document.getElementById('addDangerEditModal').classList.remove('open');
+        }
+
+        function renderAddDangerEditForm() {
+            const ad = getAddDanger();
+            const types = ad.types || [];
+            // 隐患类型 checkbox：10 个，"其他安全问题" 选中时显示输入框
+            const typesHtml = ADD_DANGER_TYPES.map(t => {
+                const checked = types.indexOf(t) !== -1 ? ' checked' : '';
+                return '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:normal;padding:6px 0;">' +
+                    '<input type="checkbox" class="add-danger-type" value="' + t + '"' + checked + ' style="cursor:pointer;width:16px;height:16px;">' +
+                    '<span style="' + (types.indexOf(t) !== -1 ? 'color:var(--primary);font-weight:500;' : '') + '">' + t + '</span>' +
+                '</label>';
+            }).join('');
+            const otherDisplay = types.indexOf('其他安全问题') !== -1 ? '' : 'display:none;';
+            // 每个勾选的类型独占一行，行内只显示该类型自己的照片
+            const photoRowsHtml = types.length === 0
+                ? '<div style="color:var(--text-secondary);font-size:13px;padding:14px;background:var(--bg);border-radius:6px;text-align:center;">请先勾选上方"隐患类型"</div>'
+                : types.map(t => {
+                    const label = (t === '其他安全问题' && ad.typesOther) ? (t + '（' + ad.typesOther + '）') : t;
+                    const photos = getAddDangerPhotos(t);
+                    const photoItemsHtml = photos.map((u, i) =>
+                        '<div class="add-danger-photo-item" style="position:relative;width:160px;height:120px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">' +
+                            '<img src="' + u + '" onclick="viewPhotoOnline(\'' + u.replace(/'/g, "\\'") + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                            '<button type="button" class="add-danger-photo-remove" data-type="' + t.replace(/"/g, '&quot;') + '" data-photo-idx="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:#dc3545;color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>' +
+                        '</div>'
+                    ).join('');
+                    return '<div style="margin-bottom:14px;">' +
+                        '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">' + label + '</div>' +
+                        '<div style="display:flex;flex-wrap:wrap;gap:10px;">' +
+                            photoItemsHtml +
+                            '<label style="width:160px;height:120px;border:2px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--text-secondary);cursor:pointer;background:#fafafa;">' +
+                                '+' +
+                                '<input type="file" class="add-danger-photo-input" data-type="' + t.replace(/"/g, '&quot;') + '" accept="image/*" multiple style="display:none;">' +
+                            '</label>' +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            // 排查判断 select
+            const judgeOpts = ['<option value="">-- 请选择 --</option>'].concat(
+                ADD_DANGER_JUDGES.map(j => '<option value="' + j + '"' + (ad.judge === j ? ' selected' : '') + '>' + j + '</option>')
+            ).join('');
+
+            const html =
+                // 标题
+                '<div style="text-align:center;font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--border);">+ 新增隐患 (选填)</div>' +
+                // 隐患类型
+                '<div style="display:grid;grid-template-columns:140px 1fr;gap:14px;margin-bottom:14px;align-items:start;">' +
+                    '<div style="font-size:13px;color:var(--text-secondary);padding-top:8px;">隐患类型</div>' +
+                    '<div>' +
+                        '<div style="display:flex;flex-wrap:wrap;gap:4px 24px;">' + typesHtml + '</div>' +
+                        '<input type="text" id="addDangerOtherInput" class="form-input" placeholder="请输入其他内容" value="' + (ad.typesOther || '').replace(/"/g, '&quot;') + '" style="margin-top:10px;width:260px;padding:6px 10px;font-size:13px;' + otherDisplay + '">' +
+                    '</div>' +
+                '</div>' +
+                // 照片（按勾选类型分行显示，共用同一组照片）
+                '<div id="addDangerPhotoRows" style="margin-bottom:14px;">' + photoRowsHtml + '</div>' +
+                // 排查判断
+                '<div style="display:grid;grid-template-columns:140px 1fr;gap:14px;align-items:center;">' +
+                    '<div style="font-size:13px;color:var(--text-primary);"><span style="color:#dc3545;">*</span>排查判断</div>' +
+                    '<select id="addDangerJudge" class="form-input" style="max-width:320px;">' + judgeOpts + '</select>' +
+                '</div>';
+
+            document.getElementById('addDangerEditForm').innerHTML = html;
+
+            // 绑定：类型 checkbox 变化 -> 重新渲染（更新照片行）
+            document.querySelectorAll('#addDangerEditForm .add-danger-type').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const ad2 = getAddDanger();
+                    const prevTypes = (ad2.types || []).slice();
+                    ad2.types = Array.from(document.querySelectorAll('#addDangerEditForm .add-danger-type:checked')).map(x => x.value);
+                    // 取消勾选的类型，清理其照片
+                    prevTypes.forEach(t => {
+                        if (ad2.types.indexOf(t) === -1 && ad2.photosByType && ad2.photosByType[t]) {
+                            delete ad2.photosByType[t];
+                        }
+                    });
+                    const oi = document.getElementById('addDangerOtherInput');
+                    if (oi) ad2.typesOther = oi.value;
+                    const judgeSel = document.getElementById('addDangerJudge');
+                    if (judgeSel) ad2.judge = judgeSel.value; // 保留排查判断
+                    renderAddDangerEditForm();
+                });
+            });
+            // 其他内容输入
+            const otherInput = document.getElementById('addDangerOtherInput');
+            if (otherInput) {
+                otherInput.addEventListener('input', () => { getAddDanger().typesOther = otherInput.value; });
+            }
+            // 排查判断变化 -> 实时同步
+            const judgeSel = document.getElementById('addDangerJudge');
+            if (judgeSel) {
+                judgeSel.addEventListener('change', () => { getAddDanger().judge = judgeSel.value; });
+            }
+            // 照片上传（按类型）
+            document.querySelectorAll('#addDangerEditForm .add-danger-photo-input').forEach(inp => {
+                inp.addEventListener('change', () => handleAddDangerPhotoUpload(inp));
+            });
+            // 照片删除（按类型+索引）
+            document.querySelectorAll('#addDangerEditForm .add-danger-photo-remove').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    handleAddDangerPhotoRemove(btn.dataset.type, parseInt(btn.dataset.photoIdx, 10));
+                });
+            });
+        }
+
+        function handleAddDangerPhotoUpload(input) {
+            const files = Array.from(input.files || []);
+            if (!files.length) return;
+            const type = input.dataset.type;
+            if (!type) return;
+            const ad = getAddDanger();
+            // 同步排查判断（防止重渲染丢失）
+            const judgeSel = document.getElementById('addDangerJudge');
+            if (judgeSel) ad.judge = judgeSel.value;
+            const current = getAddDangerPhotos(type);
+            let pending = files.length;
+            files.forEach(f => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    current.push(ev.target.result);
+                    pending--;
+                    if (pending === 0) {
+                        setAddDangerPhotos(type, current);
+                        renderAddDangerEditForm();
+                    }
+                };
+                reader.readAsDataURL(f);
+            });
+        }
+
+        function handleAddDangerPhotoRemove(type, idx) {
+            const ad = getAddDanger();
+            // 同步排查判断（防止重渲染丢失）
+            const judgeSel = document.getElementById('addDangerJudge');
+            if (judgeSel) ad.judge = judgeSel.value;
+            const current = getAddDangerPhotos(type);
+            if (idx >= 0 && idx < current.length) {
+                current.splice(idx, 1);
+                setAddDangerPhotos(type, current);
+            }
+            renderAddDangerEditForm();
+        }
+
+        function saveAddDangerEdit() {
+            const s = currentHouseArch;
+            const ad = getAddDanger();
+            // 隐患类型
+            ad.types = Array.from(document.querySelectorAll('#addDangerEditForm .add-danger-type:checked')).map(x => x.value);
+            // 其他内容
+            const oi = document.getElementById('addDangerOtherInput');
+            ad.typesOther = oi ? oi.value.trim() : '';
+            // 排查判断
+            const judge = document.getElementById('addDangerJudge');
+            ad.judge = judge ? judge.value : '';
+            // photos 已在上传/删除时实时同步到 ad.photos
+            saveCurrentHouseArch(s);
+            closeAddDangerEditModal();
+            renderContent();
+        }
+
+        // =========================================================
+        // 整治情况（measure 子TAB：situation）
+        // =========================================================
+        const RECTIFY_MEASURES = [
+            '暂停营业', '人员撤离', '设立警示标志', '搭设防护设施', '房屋拆除',
+            '拆除重建', '修缮加固', '临时加固', '动态监测', '局部修缮',
+            '整体翻建', '征收处置', '集中居住处置', '城中村改造处置', '其他'
+        ];
+
+        function getRectifySituation() {
+            const s = currentHouseArch || {};
+            if (!s.rectifySituation || typeof s.rectifySituation !== 'object') {
+                s.rectifySituation = { measures: [], measuresOther: '', completed: '' };
+            }
+            if (!Array.isArray(s.rectifySituation.measures)) s.rectifySituation.measures = [];
+            return s.rectifySituation;
+        }
+
+        function renderRectifySituation(s) {
+            const rs = getRectifySituation();
+            const measures = rs.measures || [];
+            const measuresText = measures.length
+                ? measures.map(m => (m === '其他' && rs.measuresOther) ? ('其他（' + rs.measuresOther + '）') : m).join('、')
+                : '—';
+            const completedHtml = rs.completed === '是'
+                ? '<span class="status-badge safe">是</span>'
+                : (rs.completed === '否' ? '<span class="status-badge warning">否</span>' : '—');
+            return '<div class="record-detail-header"><div class="title">整治情况</div></div>' +
+                '<div class="info-grid" style="grid-template-columns:1fr;">' +
+                    '<div class="info-item" style="grid-column:1 / -1;align-items:flex-start;">' +
+                        '<div class="info-label">整治措施</div>' +
+                        '<div class="info-value">' + measuresText + '</div>' +
+                    '</div>' +
+                    '<div class="info-item">' +
+                        '<div class="info-label">是否完成整治</div>' +
+                        '<div class="info-value">' + completedHtml + '</div>' +
+                    '</div>' +
+                '</div>';
+        }
+
+        function openRectifySituationEditModal() {
+            renderRectifySituationEditForm();
+            document.getElementById('rectifySituationEditModal').classList.add('open');
+        }
+
+        function closeRectifySituationEditModal() {
+            document.getElementById('rectifySituationEditModal').classList.remove('open');
+        }
+
+        function renderRectifySituationEditForm() {
+            const rs = getRectifySituation();
+            const measures = rs.measures || [];
+            // 15 个 checkbox 一行流式排列，排不下自动换行
+            const renderCb = (t) => {
+                const checked = measures.indexOf(t) !== -1 ? ' checked' : '';
+                const spanStyle = measures.indexOf(t) !== -1 ? 'color:var(--primary);font-weight:500;' : '';
+                return '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:normal;padding:6px 0;">' +
+                    '<input type="checkbox" class="rectify-measure" value="' + t + '"' + checked + ' style="cursor:pointer;width:16px;height:16px;flex-shrink:0;">' +
+                    '<span style="' + spanStyle + '">' + t + '</span>' +
+                '</label>';
+            };
+            const checkboxesHtml = RECTIFY_MEASURES.map(renderCb).join('');
+            const otherDisplay = measures.indexOf('其他') !== -1 ? '' : 'display:none;';
+            const completedYes = rs.completed === '是' ? ' checked' : '';
+            const completedNo = rs.completed === '否' ? ' checked' : '';
+
+            const html =
+                // 标题
+                '<div style="text-align:center;font-size:15px;font-weight:600;color:var(--text-primary);margin:-20px -20px 18px -20px;padding:12px 20px;border-bottom:1px solid var(--border);background:#f8f9fa;border-radius:6px 6px 0 0;box-sizing:border-box;width:auto;">整治情况</div>' +
+                // 整治措施
+                '<div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px;margin-bottom:18px;align-items:start;">' +
+                    '<div style="font-size:13px;color:var(--text-secondary);padding-top:8px;text-align:right;background:#f8f9fa;padding:12px 14px;border-radius:4px;">整治措施</div>' +
+                    '<div style="padding-top:8px;min-width:0;">' +
+                        '<div style="display:flex;flex-wrap:wrap;gap:4px 24px;">' + checkboxesHtml + '</div>' +
+                        '<input type="text" id="rectifyOtherInput" class="form-input" placeholder="请输入其他内容" value="' + (rs.measuresOther || '').replace(/"/g, '&quot;') + '" style="margin-top:10px;width:260px;max-width:100%;padding:6px 10px;font-size:13px;' + otherDisplay + '">' +
+                    '</div>' +
+                '</div>' +
+                // 是否完成整治
+                '<div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px;align-items:center;">' +
+                    '<div style="font-size:13px;color:var(--text-secondary);text-align:right;background:#f8f9fa;padding:12px 14px;border-radius:4px;">是否完成整治</div>' +
+                    '<div style="display:flex;gap:24px;">' +
+                        '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">' +
+                            '<input type="radio" name="rectifyCompleted" value="是"' + completedYes + ' style="cursor:pointer;width:16px;height:16px;">' +
+                            '<span>是</span>' +
+                        '</label>' +
+                        '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">' +
+                            '<input type="radio" name="rectifyCompleted" value="否"' + completedNo + ' style="cursor:pointer;width:16px;height:16px;">' +
+                            '<span>否</span>' +
+                        '</label>' +
+                    '</div>' +
+                '</div>';
+
+            document.getElementById('rectifySituationEditForm').innerHTML = html;
+
+            // 监听 checkbox 变化（控制 "其他"输入框显示）
+            document.querySelectorAll('#rectifySituationEditForm .rectify-measure').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const oi = document.getElementById('rectifyOtherInput');
+                    const checked = Array.from(document.querySelectorAll('#rectifySituationEditForm .rectify-measure:checked')).map(x => x.value);
+                    if (oi) {
+                        oi.style.display = checked.indexOf('其他') !== -1 ? '' : 'none';
+                    }
+                    // 勾选样式
+                    const span = cb.parentElement.querySelector('span');
+                    if (span) span.style.cssText = cb.checked ? 'color:var(--primary);font-weight:500;' : '';
+                });
+            });
+        }
+
+        function saveRectifySituationEdit() {
+            const s = currentHouseArch;
+            const rs = getRectifySituation();
+            rs.measures = Array.from(document.querySelectorAll('#rectifySituationEditForm .rectify-measure:checked')).map(x => x.value);
+            const oi = document.getElementById('rectifyOtherInput');
+            rs.measuresOther = oi ? oi.value.trim() : '';
+            const completed = document.querySelector('#rectifySituationEditForm input[name="rectifyCompleted"]:checked');
+            rs.completed = completed ? completed.value : '';
+            saveCurrentHouseArch(s);
+            closeRectifySituationEditModal();
+            renderContent();
+        }
+
         // ===== 隐患控制情况 编辑 =====
         function openControlEditModal() {
             const s = currentHouseArch;
@@ -5027,7 +6098,7 @@
                 fieldItem('', '', { required: false }) +
                 // 行12：建造方式 (整行, checkbox + 其他输入框)
                 fieldItem('建造方式', buildCheckbox('建造方式', ['建筑工匠建造', '有资质的施工队伍', '按照正规审批建设程序建造', '其他'], v.buildMode, true), { full: true }) +
-                // 行13：结构类型 (整行, checkbox + 其他输入框)
+                // 行13：结构类型 (整行, checkbox + 其他输入框) - 住宅无"混凝土框架"，非住宅有
                 fieldItem('结构类型', buildCheckbox('结构类型', ['砖混', '砖木', '混凝土框架', '钢结构', '混杂结构', '木结构', '其他'], v.structType, true), { full: true }) +
                 // 行14：是否采用预制板 | 是否人员聚集场所
                 fieldItem('是否采用预制板', buildRadio('是否采用预制板', ['是', '否'], v.prefab), { tip: '请注意：大于等于2000年以后不允许有预制板' }) +
@@ -5047,6 +6118,22 @@
             });
 
             // 房屋性质切换：住宅 vs 非住宅
+            // 结构类型中"混凝土框架"仅非住宅可见
+            function updateStructTypeVisibility(isFzz) {
+                document.querySelectorAll('#editModalForm .rural-checkbox-group[data-field="结构类型"] label').forEach(function(lab) {
+                    const cb = lab.querySelector('input[type="checkbox"]');
+                    if (!cb) return;
+                    if (cb.value === '混凝土框架') {
+                        lab.style.display = isFzz ? 'inline-flex' : 'none';
+                        if (!isFzz && cb.checked) cb.checked = false; // 住宅时强制取消勾选
+                    }
+                });
+            }
+            // 初始按当前房屋性质设置一次
+            (function() {
+                const natureChecked = document.querySelector('#editModalForm input[name="rural-radio-房屋性质"]:checked');
+                updateStructTypeVisibility(natureChecked && natureChecked.value === '非住宅');
+            })();
             document.querySelectorAll('#editModalForm input[name="rural-radio-房屋性质"]').forEach(function(radio) {
                 radio.addEventListener('change', function() {
                     const isFzz = this.value === '非住宅';
@@ -5069,6 +6156,8 @@
                     document.querySelectorAll('#editModalForm .rural-fzz-npo-block').forEach(function(block) {
                         block.style.display = (isFzz && isNpo) ? 'block' : 'none';
                     });
+                    // 结构类型"混凝土框架"显隐
+                    updateStructTypeVisibility(isFzz);
                 });
             });
 
@@ -5948,8 +7037,68 @@
             const photoIndex = data.columns.indexOf('排查照片');
             const proofIndex = data.columns.indexOf('上传证明文件');
             const locationIndex = data.columns.indexOf('位置标注');
+            // 与查看页对齐：更新时间抽出最后整行渲染；排查照片（extraRows）抽出整行插入到"安全鉴定"前
+            const updateTimeIndex = data.columns.indexOf('更新时间');
+            const updateTimeValue = updateTimeIndex !== -1 ? (rows[updateTimeIndex] || '') : '';
+            const appraisalColIndex = data.columns.indexOf('安全鉴定：是否整治前鉴定');
+            let photoExtraItem = null;
+            let photoExtraIdx = '';
+            extraRows.forEach(function(row, rIdx) {
+                row.forEach(function(item, cIdx) {
+                    if (item.label === '排查照片' && !photoExtraItem) {
+                        photoExtraItem = item;
+                        photoExtraIdx = 'extra_' + rIdx + '_' + cIdx;
+                    }
+                });
+            });
+            const extraRowsFiltered = extraRows.map(function(row) {
+                return row.filter(function(item) { return item.label !== '排查照片'; });
+            }).filter(function(row) { return row.length > 0; });
+            // extraRowsFiltered 中每个 item 的原始 rIdx/cIdx（保证保存时能写回正确位置），并按固定顺序输出：上传证明文件 → 排查备注 → 其他
+            const extraRowsFilteredIdx = [];
+            const EXTRA_ORDER = ['上传证明文件', '排查备注'];
+            const flatExtras = [];
+            extraRows.forEach(function(row, rIdx) {
+                row.forEach(function(item, cIdx) {
+                    if (item.label !== '排查照片') flatExtras.push({ item: item, idx: 'extra_' + rIdx + '_' + cIdx });
+                });
+            });
+            flatExtras.sort(function(a, b) {
+                const ai = EXTRA_ORDER.indexOf(a.item.label);
+                const bi = EXTRA_ORDER.indexOf(b.item.label);
+                const av = ai === -1 ? 99 : ai;
+                const bv = bi === -1 ? 99 : bi;
+                return av - bv;
+            });
+            flatExtras.forEach(function(e) { extraRowsFilteredIdx.push(e.idx); });
+            const extraRowsFlatItems = flatExtras.map(function(e) { return e.item; });
+            // 生成排查照片整行 HTML（编辑控件），用于插入到"安全鉴定"列之前
+            let photoPrefixHtml = '';
+            if (photoExtraItem) {
+                const pVal = photoExtraItem.value || '';
+                const pValues = pVal.split(',').map(s => s.trim()).filter(Boolean);
+                const isImageFn = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
+                const pImages = pValues.filter(isImageFn);
+                let pThumb = '';
+                if (pImages.length) {
+                    pThumb = '<div class="file-thumb-preview">' + pImages.map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>';
+                }
+                photoPrefixHtml = '<div class="form-item form-item-full">' +
+                    '<label class="form-label">排查照片</label>' +
+                    '<div class="file-upload-wrap" data-idx="' + photoExtraIdx + '">' +
+                        '<input class="form-input file-url-input" type="hidden" data-idx="' + photoExtraIdx + '" value="' + pVal.replace(/"/g, '&quot;') + '">' +
+                        '<input class="file-upload-input" type="file" accept="image/*" multiple data-idx="' + photoExtraIdx + '" onchange="handleSurveyExtraPhotoUpload(this)">' +
+                        '<button type="button" class="file-upload-dropzone file-upload-btn-only"><i class="fas fa-cloud-upload-alt"></i> 上传图片</button>' +
+                        pThumb +
+                    '</div>' +
+                '</div>';
+            }
             const specialIndexes = [photoIndex, proofIndex, locationIndex];
             let gridHtml = data.columns.map((c, i) => {
+                // 更新时间跳过，最后整行渲染
+                if (i === updateTimeIndex) {
+                    return (i === appraisalColIndex) ? photoPrefixHtml : '';
+                }
                 let inputHtml = '';
                 if (i === locationIndex) {
                     const val = rows[i] || '';
@@ -5976,9 +7125,9 @@
                         thumbHtml = '<div class="file-thumb-preview file-thumb-pdf"><i class="fas fa-file-pdf"></i> PDF 已上传</div>';
                     }
                     inputHtml = '<div class="file-upload-wrap" data-idx="' + i + '">' +
-                        '<input class="form-input file-url-input" type="text" data-idx="' + i + '" value="' + val.replace(/"/g, '&quot;') + '" placeholder="' + placeholder + '">' +
+                        '<input class="form-input file-url-input" type="hidden" data-idx="' + i + '" value="' + val.replace(/"/g, '&quot;') + '">' +
                         '<input class="file-upload-input" type="file" accept="' + accept + '" ' + multiple + ' data-idx="' + i + '" onchange="handleSurveyPhotoUpload(this)">' +
-                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> ' + dropzoneText + '</div>' +
+                        '<button type="button" class="file-upload-dropzone file-upload-btn-only"><i class="fas fa-cloud-upload-alt"></i> ' + (i === proofIndex ? '上传 PDF 文件' : '上传图片') + '</button>' +
                         thumbHtml +
                         '</div>';
                 } else if (c === '初步判定') {
@@ -5994,18 +7143,19 @@
                 const fullWidth = specialIndexes.includes(i) ? 'form-item-full' : '';
                 const isRuralOnly = ruralOnlyCols.indexOf(c) !== -1;
                 const labelStyle = isRuralOnly ? ' style="color:var(--safe);font-weight:600;"' : '';
-                return '<div class="form-item ' + fullWidth + '">' +
+                const itemHtml = '<div class="form-item ' + fullWidth + '">' +
                     '<label class="form-label"' + labelStyle + '>' + c + '</label>' +
                     inputHtml +
                     '</div>';
+                // 在"安全鉴定：是否整治前鉴定"之前插入排查照片整行
+                return (i === appraisalColIndex) ? (photoPrefixHtml + itemHtml) : itemHtml;
             }).join('');
 
-            // extraRows（排查备注/排查照片/上传证明文件等）作为额外字段
-            if (extraRows.length) {
-                gridHtml += extraRows.map(function(row, rIdx) {
-                    return row.map(function(item, cIdx) {
-                        const idx = 'extra_' + rIdx + '_' + cIdx;
-                        const val = item.value || '';
+            // extraRows（上传证明文件/排查备注等）作为额外字段（排查照片已抽出到"安全鉴定"之前；顺序固定：上传证明文件 → 排查备注 → 其他）
+            if (extraRowsFlatItems.length) {
+                gridHtml += extraRowsFlatItems.map(function(item, i) {
+                    const idx = extraRowsFilteredIdx[i];
+                    const val = item.value || '';
                         let inputHtml = '';
                         if (item.isPhoto) {
                             const values = val.split(',').map(s => s.trim()).filter(Boolean);
@@ -6016,9 +7166,9 @@
                                 thumbHtml = '<div class="file-thumb-preview">' + imageUrls.map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>';
                             }
                             inputHtml = '<div class="file-upload-wrap" data-idx="' + idx + '">' +
-                                '<input class="form-input file-url-input" type="text" data-idx="' + idx + '" value="' + val.replace(/"/g, '&quot;') + '" placeholder="图片 URL 或将图片拖入下方">' +
+                                '<input class="form-input file-url-input" type="hidden" data-idx="' + idx + '" value="' + val.replace(/"/g, '&quot;') + '">' +
                                 '<input class="file-upload-input" type="file" accept="image/*" multiple data-idx="' + idx + '" onchange="handleSurveyExtraPhotoUpload(this)">' +
-                                '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传图片</div>' +
+                                '<button type="button" class="file-upload-dropzone file-upload-btn-only"><i class="fas fa-cloud-upload-alt"></i> 上传图片</button>' +
                                 thumbHtml +
                                 '</div>';
                         } else {
@@ -6028,8 +7178,15 @@
                             '<label class="form-label">' + (item.label || '') + '</label>' +
                             inputHtml +
                             '</div>';
-                    }).join('');
                 }).join('');
+            }
+
+            // 更新时间整行，放在最末
+            if (updateTimeIndex !== -1) {
+                gridHtml += '<div class="form-item form-item-full">' +
+                    '<label class="form-label">更新时间</label>' +
+                    '<input class="form-input" type="text" data-idx="' + updateTimeIndex + '" value="' + updateTimeValue.replace(/"/g, '&quot;') + '">' +
+                    '</div>';
             }
             document.getElementById('surveyEditModalForm').innerHTML = '<div class="form-grid">' + gridHtml + '</div>';
             bindSurveyPhotoDropzones();
@@ -6593,13 +7750,13 @@
                         '</div>';
                     fullWidth = 'form-item-full';
                 } else if (key === 'assessment' && c === '鉴定报告') {
-                    // 鉴定报告：附件上传，支持图片/PDF/Word/Excel/CAD/ZIP/RAR
+                    // 鉴定报告：附件上传，支持图片/PDF
                     const val = rows[origIdx] || '';
                     const files = projectFilesFromString(val);
                     inputHtml = '<div class="file-upload-wrap" data-idx="' + origIdx + '" data-attach-field="assessment-report">' +
                         '<input class="form-input file-url-input" type="text" data-idx="' + origIdx + '" value="' + projectFilesToString(files).replace(/"/g, '&quot;') + '" placeholder="文件 URL 或将文件拖入下方">' +
-                        '<input class="file-upload-input" type="file" multiple data-idx="' + origIdx + '" onchange="handleCommonFileUpload(this)">' +
-                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传文件（支持图片、PDF、Word、Excel、CAD、ZIP、RAR）</div>' +
+                        '<input class="file-upload-input" type="file" accept="image/*,.pdf" multiple data-idx="' + origIdx + '" onchange="handleCommonFileUpload(this)">' +
+                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传文件（支持图片、PDF）</div>' +
                         '<div class="project-file-list"></div>' +
                         '</div>';
                     fullWidth = 'form-item-full';
@@ -6691,13 +7848,13 @@
             thumb.innerHTML = urls.filter(u => u && u !== '—' && u !== '-').map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('');
         }
 
-        // 通用附件上传（用于"鉴定报告"等字段，支持图片/PDF/Word/Excel/CAD/ZIP/RAR）
+        // 通用附件上传（用于"鉴定报告"等字段，支持图片/PDF）
         async function handleCommonFileUpload(input) {
             const files = Array.from(input.files || []);
             if (files.length === 0) return;
-            const { valid, invalid } = validateFiles(files, false);
+            const { valid, invalid } = validateFiles(files, 'imagePdf');
             if (invalid.length > 0) {
-                alert('以下文件格式不允许：\n' + invalid.join('\n') + '\n\n允许上传：图片、PDF、Word、Excel、CAD、ZIP、RAR 等文件。');
+                alert('以下文件格式不允许：\n' + invalid.join('\n') + '\n\n允许上传：图片、PDF 文件。');
                 return;
             }
             const wrap = input.closest('.file-upload-wrap');
@@ -6824,6 +7981,12 @@
             const records = currentHouseArch.riskIdentification || [];
             const idx = Math.min(recordViewState.risk || 0, Math.max(records.length - 1, 0));
             const rec = records[idx] || {};
+            // 风险编号由系统生成：若为空自动补一个
+            if (!info.riskNo) {
+                info.riskNo = generateArchId('RISK');
+                if (!currentHouseArch.riskInfo) currentHouseArch.riskInfo = {};
+                currentHouseArch.riskInfo.riskNo = info.riskNo;
+            }
             const infoGroups = [
                 { title: '风险基础信息', icon: 'fa-id-card', fields: [
                     ['风险编号', 'riskNo'], ['风险名称', 'riskName'], ['风险类型', 'riskType'], ['风险等级', 'riskLevel'],
@@ -6839,9 +8002,38 @@
                 ]}
             ];
             function item(label, scope, field, val) {
-                return '<div class="form-item">' +
+                const v = (val === undefined || val === null) ? '' : String(val);
+                const esc = v.replace(/"/g, '&quot;');
+                let control;
+                if (field === 'riskNo') {
+                    control = '<input class="form-input risk-edit-input" type="text" data-scope="' + scope + '" data-field="' + field + '" value="' + esc + '" readonly style="background:#f5f6f7;color:var(--text-secondary);cursor:not-allowed;" title="系统生成，不可编辑">';
+                } else if (field === 'discoveryMethod') {
+                    const opts = ['排查发现', '鉴定确认', '巡查发现', '村民反映', '网格员上报'];
+                    const cur = v === '' ? '排查发现' : v;
+                    control = '<select class="form-input form-select risk-edit-input" data-scope="' + scope + '" data-field="' + field + '" id="riskEditDiscoveryMethod">' +
+                        opts.map(function(o) {
+                            return '<option value="' + o + '"' + (o === cur ? ' selected' : '') + '>' + o + '</option>';
+                        }).join('') +
+                        '</select>';
+                } else if (field === 'riskLevel') {
+                    const opts = ['第三类', '第二类', '第一类'];
+                    const cur = opts.indexOf(v) >= 0 ? v : '第三类';
+                    control = '<select class="form-input form-select risk-edit-input" data-scope="' + scope + '" data-field="' + field + '">' +
+                        opts.map(function(o) {
+                            return '<option value="' + o + '"' + (o === cur ? ' selected' : '') + '>' + o + '</option>';
+                        }).join('') +
+                        '</select>';
+                } else if (field === 'discoveryTime') {
+                    control = '<input class="form-input risk-edit-input" type="date" data-scope="' + scope + '" data-field="' + field + '" value="' + esc + '">';
+                } else {
+                    control = '<input class="form-input risk-edit-input" type="text" data-scope="' + scope + '" data-field="' + field + '" value="' + esc + '">';
+                }
+                // 关联记录字段：根据发现方式动态显示/隐藏
+                const linkFields = ['relatedInspectionId', 'relatedAppraisalId', 'relatedPatrolId'];
+                const linkAttr = linkFields.indexOf(field) >= 0 ? ' data-link-field="' + field + '"' : '';
+                return '<div class="form-item"' + linkAttr + '>' +
                     '<label class="form-label">' + label + '</label>' +
-                    '<input class="form-input risk-edit-input" type="text" data-scope="' + scope + '" data-field="' + field + '" value="' + ((val === undefined || val === null) ? '' : String(val)).replace(/"/g, '&quot;') + '">' +
+                    control +
                     '</div>';
             }
             let html = infoGroups.map(function(g) {
@@ -6867,6 +8059,30 @@
                 '</div></div>';
             document.getElementById('riskEditForm').innerHTML = html;
             document.getElementById('riskEditModal').classList.add('open');
+            // 发现方式 → 关联记录字段 条件联动
+            (function bindDiscoveryLinkage() {
+                const sel = document.getElementById('riskEditDiscoveryMethod');
+                if (!sel) return;
+                const linkMap = {
+                    '排查发现': 'relatedInspectionId',
+                    '鉴定确认': 'relatedAppraisalId',
+                    '巡查发现': 'relatedPatrolId'
+                };
+                function applyLinkage() {
+                    const cur = sel.value;
+                    const target = linkMap[cur]; // undefined 表示全部隐藏
+                    document.querySelectorAll('#riskEditForm [data-link-field]').forEach(function(el) {
+                        const f = el.getAttribute('data-link-field');
+                        const show = target && f === target;
+                        el.style.display = show ? '' : 'none';
+                        // 隐藏的字段清空，避免遗留脏数据
+                        const input = el.querySelector('.risk-edit-input');
+                        if (input && !show) input.value = '';
+                    });
+                }
+                sel.addEventListener('change', applyLinkage);
+                applyLinkage(); // 初始执行一次
+            })();
         }
 
         function closeRiskEditModal() {
@@ -7149,6 +8365,7 @@
         ];
 
         const ALLOWED_IMAGE_TYPES = ALLOWED_FILE_TYPES.filter(t => t.mime.startsWith('image/'));
+        const ALLOWED_IMAGE_PDF_TYPES = ALLOWED_FILE_TYPES.filter(t => t.mime.startsWith('image/') || t.ext === '.pdf');
 
         let currentOrgSelectFor = null; // 'project'
         let selectedOrgId = '';
@@ -7171,6 +8388,11 @@
             return ALLOWED_IMAGE_TYPES.some(t => t.ext === ext) || file.type.startsWith('image/');
         }
 
+        function isAllowedImageOrPdf(file) {
+            const ext = getFileExtension(file.name);
+            return ALLOWED_IMAGE_PDF_TYPES.some(t => t.ext === ext) || file.type.startsWith('image/') || file.type === 'application/pdf';
+        }
+
         function formatFileSize(bytes) {
             if (!bytes || bytes < 0) return '-';
             if (bytes < 1024) return bytes + ' B';
@@ -7187,11 +8409,15 @@
             });
         }
 
-        function validateFiles(files, acceptImages) {
+        function validateFiles(files, mode) {
             const invalid = [];
             const valid = [];
             Array.from(files).forEach(f => {
-                if (acceptImages ? isAllowedImage(f) : isAllowedFile(f)) {
+                let ok = false;
+                if (mode === 'image' || mode === true) ok = isAllowedImage(f);
+                else if (mode === 'imagePdf') ok = isAllowedImageOrPdf(f);
+                else ok = isAllowedFile(f);
+                if (ok) {
                     valid.push(f);
                 } else {
                     invalid.push(f.name);
