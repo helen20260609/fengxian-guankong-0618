@@ -6,6 +6,7 @@
 <title>机构入库管理 - 第三方服务机构</title>
 <link rel="stylesheet" href="./all.min.css">
 <script src="./echarts.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="../js/third-party-data.js"></script>
 <style>
 :root {
@@ -203,6 +204,13 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 /* 弹窗遮罩 */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: none; align-items: center; justify-content: center; }
 .modal-overlay.active { display: flex; }
+/* 嵌入模式：机构名录弹窗内仅展示机构详情弹窗 */
+body.tp-embed { overflow: hidden; }
+body.tp-embed > *:not(.modal-overlay):not(script):not(style):not(link) { display: none !important; }
+body.tp-embed .modal-overlay { background: transparent; }
+body.tp-embed .modal-overlay.active { display: block; }
+body.tp-embed .modal-container { width: 100%; max-width: none; height: 100%; max-height: none; border-radius: 0; box-shadow: none; }
+body.tp-embed .modal-close { display: none !important; }
 .modal-container { background: var(--bg-card); border-radius: 12px; width: 90%; max-width: 960px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
 #auditOpinionModal { z-index: 1100; }
 #historyModal { z-index: 1100; }
@@ -299,6 +307,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 <div class="filter-actions" style="display: flex; gap: 10px; margin-left: auto;">
                     <button class="btn btn-primary" style="padding: 8px 20px; font-size: 13px;"><i class="fas fa-search"></i> 查询</button>
                     <button class="btn btn-outline" style="padding: 8px 20px; font-size: 13px;"><i class="fas fa-undo"></i> 重置</button>
+                    <button class="btn btn-outline" style="padding: 8px 20px; font-size: 13px; color: var(--primary); border-color: var(--primary);" onclick="openImportOrgModal()"><i class="fas fa-file-import"></i> 批量导入</button>
                     <button class="btn btn-primary" style="padding: 8px 20px; font-size: 13px; background: var(--success);" onclick="addNewOrg()"><i class="fas fa-plus"></i> 新增机构</button>
                 </div>
             </div>
@@ -395,6 +404,56 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             <button class="btn btn-outline" onclick="closeAuditOpinionModal()"><i class="fas fa-times"></i> 取消</button>
             <button class="btn btn-danger" id="btnConfirmReject" onclick="confirmAuditOpinion('reject')"><i class="fas fa-times-circle"></i> 驳回</button>
             <button class="btn btn-primary" id="btnConfirmPass" onclick="confirmAuditOpinion('pass')"><i class="fas fa-check-circle"></i> 通过</button>
+        </div>
+    </div>
+</div>
+
+<!-- 批量导入机构弹窗 -->
+<div class="modal-overlay" id="importOrgModal" onclick="if(event.target===this) closeImportOrgModal()">
+    <div class="modal-container" style="max-width: 900px;">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-file-import" style="color: var(--primary);"></i> 批量导入机构</div>
+            <button class="modal-close" onclick="closeImportOrgModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+            <div style="background: var(--primary-light); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: var(--primary); line-height: 1.9; margin-bottom: 16px;">
+                <div><i class="fas fa-info-circle"></i> <strong>操作步骤</strong></div>
+                <div>1. 下载导入模板，模板含 5 个工作表：<strong>机构基本信息</strong>（必填）、人员信息、资质证书、设备信息、关联专家；</div>
+                <div>2. 明细工作表通过「统一社会信用代码」与机构关联，一个机构可填多行明细；</div>
+                <div>3. 上传填写好的文件（.xlsx / .xls / .csv），系统校验后可预览，确认无误后导入入库。</div>
+                <div style="color: var(--warning);"><i class="fas fa-exclamation-triangle"></i> 营业执照、社保证明、校准证书等附件无法通过 Excel 导入，请在导入后通过「编辑」单独补充。</div>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <button class="btn btn-outline" onclick="downloadOrgImportTemplate()"><i class="fas fa-download"></i> 下载导入模板</button>
+                <button class="btn btn-primary" onclick="document.getElementById('orgImportFileInput').click()"><i class="fas fa-folder-open"></i> 选择文件</button>
+                <input type="file" id="orgImportFileInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleOrgImportFile(this)">
+                <span id="orgImportFileName" style="font-size: 13px; color: var(--text-secondary);">未选择文件</span>
+            </div>
+            <div id="orgImportPreview" style="display: none; margin-top: 16px;">
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">解析预览（共 <span id="orgImportPreviewCount">0</span> 家机构）</div>
+                <div style="max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="background: var(--bg-hover); position: sticky; top: 0;">
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">行号</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">企业名称</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">统一社会信用代码</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">法人</th>
+                                <th style="padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--border); color: var(--text-secondary);">人员</th>
+                                <th style="padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--border); color: var(--text-secondary);">资质</th>
+                                <th style="padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--border); color: var(--text-secondary);">设备</th>
+                                <th style="padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--border); color: var(--text-secondary);">专家</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">校验结果</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orgImportPreviewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="form-actions" style="margin: 0 20px 20px; padding-top: 16px; justify-content: flex-end; gap: 12px;">
+            <button class="btn btn-outline" onclick="closeImportOrgModal()"><i class="fas fa-times"></i> 取消</button>
+            <button class="btn btn-primary" id="btnConfirmOrgImport" onclick="confirmOrgImport()" disabled style="opacity: 0.5;"><i class="fas fa-check"></i> 确认导入</button>
         </div>
     </div>
 </div>
@@ -937,19 +996,20 @@ var currentAuditDecision = ''; // 'pass' | 'reject'
 function buildOrgDataMap(org) {
     return {
         legalName: org.legalPerson || '-',
-        idCard: '',
+        idCard: org.idCard || '',
         phone: org.phone || '-',
         creditScore: org.score || 0,
         enterpriseName: org.orgName || '-',
         creditCode: org.orgCode || '-',
         address: org.region || '-',
-        serviceArea: org.region ? org.region.replace('上海市', '') : '',
+        serviceArea: org.serviceArea || (org.region ? org.region.replace('上海市', '') : ''),
         establishDate: org.established || '',
-        capital: '',
-        businessScope: org.field || '',
-        personnel: [],
-        qualifications: [],
-        equipment: []
+        capital: org.capital || '',
+        businessScope: org.businessScope || org.field || '',
+        industry: org.industry || '',
+        personnel: org.personnel || [],
+        qualifications: org.qualifications || [],
+        equipment: org.equipment || []
     };
 }
 
@@ -968,12 +1028,16 @@ function buildOrgDataMapFromApplication(app) {
         establishDate: basic.establishDate || '',
         capital: basic.capital || '',
         businessScope: basic.businessScope || '',
-        industry: basic.field || '',
-        personnel: [],
-        qualifications: (app.qualifications || []).map(function(q) {
-            return { name: q.name || '', certNo: q.code || '', issuer: q.issuer || '', start: '', end: q.end || '' };
+        industry: basic.industry || basic.field || '',
+        personnel: (app.personnel || []).map(function(p) {
+            return { name: p.name || '', title: p.title || '', certNo: p.certNo || '' };
         }),
-        equipment: []
+        qualifications: (app.qualifications || []).map(function(q) {
+            return { name: q.name || '', certNo: q.code || q.certNo || '', issuer: q.issuer || '', start: q.start || '', end: q.end || '' };
+        }),
+        equipment: (app.equipment || []).map(function(e) {
+            return { name: e.name || '', model: e.model || '', quantity: e.quantity || '' };
+        })
     };
 }
 
@@ -1263,7 +1327,8 @@ function fillOrgForm(id) {
                 serviceArea: data.serviceArea || (org.region ? org.region.replace('上海市', '') : ''),
                 establishDate: org.established || data.establishDate || '',
                 capital: data.capital || '',
-                businessScope: org.field || data.businessScope || '',
+                businessScope: data.businessScope || org.field || '',
+                industry: data.industry || '',
                 personnel: data.personnel || [],
                 qualifications: data.qualifications || [],
                 equipment: data.equipment || []
@@ -1314,8 +1379,40 @@ function fillOrgForm(id) {
             '<button class="btn-remove" onclick="removeEquipmentRowModal(this)" title="删除"><i class="fas fa-trash-alt"></i></button>';
     });
 
-    // 关联专家
-    renderRelatedExperts(org ? org.orgId : '');
+    // 关联专家：在线申请优先显示申请中填报的专家，已入库机构按 orgId 查询专家库
+    if (app && app.relatedExperts && app.relatedExperts.length) {
+        renderApplicationExperts(app.relatedExperts);
+    } else {
+        renderRelatedExperts(org ? org.orgId : '');
+    }
+}
+
+// 渲染在线申请中填报的关联专家
+function renderApplicationExperts(experts) {
+    var list = document.getElementById('relatedExpertsList');
+    if (!list) return;
+    if (!experts || !experts.length) {
+        list.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:24px 0;">暂无关联专家</div>';
+        return;
+    }
+    var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+    experts.forEach(function(ex) {
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);">' +
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:0;">' +
+                '<div style="font-size:14px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:8px;">' +
+                    '<span>' + (ex.name || '-') + '</span>' +
+                    '<span class="status-badge status-update">申请填报</span>' +
+                '</div>' +
+                '<div style="font-size:12px;color:var(--text-secondary);display:flex;gap:12px;flex-wrap:wrap;">' +
+                    '<span><i class="fas fa-briefcase" style="margin-right:4px;"></i>' + (ex.title || '-') + '</span>' +
+                    '<span><i class="fas fa-tags" style="margin-right:4px;"></i>' + (ex.domain || '-') + (ex.direction ? ' / ' + ex.direction : '') + '</span>' +
+                    '<span><i class="fas fa-phone" style="margin-right:4px;"></i>' + (ex.phone || '-') + '</span>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+    list.innerHTML = html;
 }
 
 // 渲染机构关联专家列表
@@ -1439,6 +1536,211 @@ function fillDynamicRows(containerId, dataList, renderFn, rowClass) {
     }
 }
 
+// ================= 批量导入机构 =================
+var orgImportParsed = null;
+
+function openImportOrgModal() {
+    orgImportParsed = null;
+    var input = document.getElementById('orgImportFileInput');
+    if (input) input.value = '';
+    document.getElementById('orgImportFileName').textContent = '未选择文件';
+    document.getElementById('orgImportPreview').style.display = 'none';
+    setOrgImportConfirmState(false);
+    document.getElementById('importOrgModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+function closeImportOrgModal() {
+    document.getElementById('importOrgModal').classList.remove('active');
+    document.body.style.overflow = '';
+}
+function setOrgImportConfirmState(enabled) {
+    var btn = document.getElementById('btnConfirmOrgImport');
+    btn.disabled = !enabled;
+    btn.style.opacity = enabled ? '1' : '0.5';
+}
+
+// 下载导入模板（5 个工作表）
+function downloadOrgImportTemplate() {
+    if (typeof XLSX === 'undefined') { alert('Excel 组件未加载，请检查网络后刷新重试'); return; }
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['企业名称*', '统一社会信用代码*', '法人姓名*', '联系电话*', '身份证号', '注册地址', '成立时间', '注册资本(万元)', '服务区域', '专业领域', '所属行业', '机构类型', '资质等级', '信用评分', '经营范围'],
+        ['上海示例检测技术有限公司', '91310000ABCDEF001X', '张示例', '021-12345678', '310101198001011234', '上海市黄浦区示例路100号', '2015-06-01', '500', '黄浦区', '建筑工地', '建筑业', '检测机构', '甲级', '85', '建设工程质量检测、安全风险评估'],
+        ['上海示例评估有限公司', '91310000ABCDEF002Y', '李示例', '021-87654321', '', '上海市奉贤区示例路200号', '2018-03-15', '300', '奉贤区', '农村自建房', '', '评估机构', '乙级', '', '房屋安全评估、安全鉴定']
+    ]), '机构基本信息');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['统一社会信用代码*', '姓名*', '职称', '职称证书编号'],
+        ['91310000ABCDEF001X', '王技术', '高级工程师', 'CERT-2020-001']
+    ]), '人员信息');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['统一社会信用代码*', '资质证书名称*', '证书编号', '发证机关', '有效期起', '有效期止'],
+        ['91310000ABCDEF001X', '建设工程质量检测机构资质证书', '沪建检字第001号', '上海市住建委', '2024-01-01', '2029-12-31']
+    ]), '资质证书');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['统一社会信用代码*', '设备名称*', '设备型号', '数量'],
+        ['91310000ABCDEF001X', '全站仪', 'Leica TS16', '3']
+    ]), '设备信息');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['统一社会信用代码*', '专家姓名*', '职称', '专业领域', '研究方向', '联系电话'],
+        ['91310000ABCDEF001X', '赵专家', '教授级高工', '建筑工地', '施工安全', '13800001111']
+    ]), '关联专家');
+    XLSX.writeFile(wb, '机构批量导入模板.xlsx');
+}
+
+function normalizeImportDate(v) {
+    if (!v) return '';
+    v = String(v).trim();
+    var m = v.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+    if (m) return m[1] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[3]).padStart(2, '0');
+    return v;
+}
+
+function readImportSheetRows(wb, sheetName) {
+    var ws = wb.Sheets[sheetName];
+    if (!ws) return [];
+    return XLSX.utils.sheet_to_json(ws, { defval: '', raw: false }).map(function(r) {
+        var o = {};
+        Object.keys(r).forEach(function(k) {
+            o[k.replace(/\*$/, '').trim()] = (r[k] === undefined || r[k] === null) ? '' : String(r[k]).trim();
+        });
+        return o;
+    }).filter(function(o) {
+        return Object.keys(o).some(function(k) { return o[k] !== ''; });
+    });
+}
+
+function handleOrgImportFile(input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    if (typeof XLSX === 'undefined') { alert('Excel 组件未加载，请检查网络后刷新重试'); return; }
+    document.getElementById('orgImportFileName').textContent = file.name;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var wb = XLSX.read(e.target.result, { type: 'array' });
+            orgImportParsed = parseOrgImportWorkbook(wb);
+            renderOrgImportPreview();
+        } catch (err) {
+            alert('文件解析失败：' + (err.message || err));
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function parseOrgImportWorkbook(wb) {
+    var mainRows = readImportSheetRows(wb, '机构基本信息');
+    if (!mainRows.length && wb.SheetNames.length) mainRows = readImportSheetRows(wb, wb.SheetNames[0]);
+    var personRows = readImportSheetRows(wb, '人员信息');
+    var qualRows = readImportSheetRows(wb, '资质证书');
+    var equipRows = readImportSheetRows(wb, '设备信息');
+    var expertRows = readImportSheetRows(wb, '关联专家');
+
+    var existing = {};
+    getAllOrgs().forEach(function(o) { if (o.orgCode) existing[o.orgCode] = true; });
+
+    var seen = {};
+    var validCodeIndex = {};
+    var items = [];
+    mainRows.forEach(function(r, idx) {
+        var errors = [];
+        var name = r['企业名称'], code = r['统一社会信用代码'], legal = r['法人姓名'], phone = r['联系电话'];
+        if (!name) errors.push('缺少企业名称');
+        if (!code) errors.push('缺少统一社会信用代码');
+        if (!legal) errors.push('缺少法人姓名');
+        if (!phone) errors.push('缺少联系电话');
+        if (code) {
+            if (seen[code]) errors.push('文件内统一社会信用代码重复');
+            if (existing[code]) errors.push('该统一社会信用代码已入库');
+        }
+        if (code && !errors.length) { seen[code] = true; validCodeIndex[code] = items.length; }
+        var score = parseFloat(r['信用评分']);
+        items.push({
+            rowNo: idx + 2,
+            basic: {
+                orgName: name, orgCode: code, legalPerson: legal, phone: phone,
+                idCard: r['身份证号'], region: r['注册地址'], established: normalizeImportDate(r['成立时间']),
+                capital: r['注册资本(万元)'], serviceArea: r['服务区域'], field: r['专业领域'],
+                industry: r['所属行业'], orgType: r['机构类型'], qual: r['资质等级'],
+                score: isNaN(score) ? 75 : score, businessScope: r['经营范围']
+            },
+            personnel: [], qualifications: [], equipment: [], experts: [],
+            errors: errors
+        });
+    });
+
+    var ignoredSub = 0;
+    function attach(rows, fn) {
+        rows.forEach(function(r) {
+            var idx = validCodeIndex[r['统一社会信用代码']];
+            if (idx === undefined) { ignoredSub++; return; }
+            fn(items[idx], r);
+        });
+    }
+    attach(personRows, function(item, r) { if (r['姓名']) item.personnel.push({ name: r['姓名'], title: r['职称'], certNo: r['职称证书编号'] }); });
+    attach(qualRows, function(item, r) { if (r['资质证书名称']) item.qualifications.push({ name: r['资质证书名称'], certNo: r['证书编号'], issuer: r['发证机关'], start: normalizeImportDate(r['有效期起']), end: normalizeImportDate(r['有效期止']) }); });
+    attach(equipRows, function(item, r) { if (r['设备名称']) item.equipment.push({ name: r['设备名称'], model: r['设备型号'], quantity: r['数量'] }); });
+    attach(expertRows, function(item, r) { if (r['专家姓名']) item.experts.push({ name: r['专家姓名'], title: r['职称'], domain: r['专业领域'], direction: r['研究方向'], phone: r['联系电话'] }); });
+
+    return { items: items, ignoredSub: ignoredSub };
+}
+
+function renderOrgImportPreview() {
+    var data = orgImportParsed;
+    var preview = document.getElementById('orgImportPreview');
+    var tbody = document.getElementById('orgImportPreviewBody');
+    preview.style.display = 'block';
+    if (!data || !data.items.length) {
+        document.getElementById('orgImportPreviewCount').textContent = '0';
+        tbody.innerHTML = '<tr><td colspan="9" style="padding: 20px; text-align: center; color: var(--text-secondary);">未解析到有效数据，请检查「机构基本信息」工作表</td></tr>';
+        setOrgImportConfirmState(false);
+        return;
+    }
+    var validCount = 0;
+    var html = '';
+    data.items.forEach(function(item) {
+        var ok = !item.errors.length;
+        if (ok) validCount++;
+        html += '<tr style="border-bottom: 1px solid var(--border);">' +
+            '<td style="padding: 8px 10px;">' + item.rowNo + '</td>' +
+            '<td style="padding: 8px 10px;">' + (item.basic.orgName || '-') + '</td>' +
+            '<td style="padding: 8px 10px;">' + (item.basic.orgCode || '-') + '</td>' +
+            '<td style="padding: 8px 10px;">' + (item.basic.legalPerson || '-') + '</td>' +
+            '<td style="padding: 8px 10px; text-align: center;">' + item.personnel.length + '</td>' +
+            '<td style="padding: 8px 10px; text-align: center;">' + item.qualifications.length + '</td>' +
+            '<td style="padding: 8px 10px; text-align: center;">' + item.equipment.length + '</td>' +
+            '<td style="padding: 8px 10px; text-align: center;">' + item.experts.length + '</td>' +
+            '<td style="padding: 8px 10px;">' + (ok
+                ? '<span class="status-badge status-normal">通过</span>'
+                : '<span class="status-badge status-rejected">' + item.errors.join('；') + '</span>') + '</td>' +
+        '</tr>';
+    });
+    if (data.ignoredSub) {
+        html += '<tr><td colspan="9" style="padding: 8px 10px; color: var(--warning); font-size: 12px;"><i class="fas fa-exclamation-triangle"></i> ' + data.ignoredSub + ' 条明细记录因统一社会信用代码未匹配到有效机构，导入时将被忽略</td></tr>';
+    }
+    tbody.innerHTML = html;
+    document.getElementById('orgImportPreviewCount').textContent = data.items.length;
+    setOrgImportConfirmState(validCount > 0);
+}
+
+function confirmOrgImport() {
+    if (!orgImportParsed) return;
+    var valid = orgImportParsed.items.filter(function(i) { return !i.errors.length; });
+    if (!valid.length) { alert('没有可导入的有效数据'); return; }
+    var imported = addOrgsBatch(valid);
+    var now = getCurrentTimeString();
+    imported.forEach(function(org) {
+        orgDataMap[org.orgId] = buildOrgDataMap(org);
+        addOrgHistoryRecord(org.orgId, { action: '批量导入', time: now, operator: '系统管理员', remark: '通过批量导入功能入库', diff: [] });
+    });
+    renderOrgTable();
+    var errCount = orgImportParsed.items.length - valid.length;
+    var msg = '成功导入 ' + imported.length + ' 家机构';
+    if (errCount) msg += '，' + errCount + ' 条因校验失败被跳过';
+    if (orgImportParsed.ignoredSub) msg += '，' + orgImportParsed.ignoredSub + ' 条明细未匹配被忽略';
+    alert(msg);
+    closeImportOrgModal();
+}
+
 // 新增机构 - 打开弹窗
 function addNewOrg() {
     openOrgModal('add');
@@ -1446,6 +1748,11 @@ function addNewOrg() {
 
 // 关闭弹窗
 function closeOrgModal() {
+    // 嵌入模式：通知外层机构总览页关闭小窗
+    if (document.body.classList.contains('tp-embed') && window.parent !== window) {
+        window.parent.postMessage({ action: 'tpCloseEmbed' }, '*');
+        return;
+    }
     document.getElementById('orgModal').classList.remove('active');
     document.body.style.overflow = '';
 }
@@ -1757,6 +2064,9 @@ function confirmAuditOpinion(decision) {
 
     // 初始化加载
     document.addEventListener('DOMContentLoaded', function() {
+        if (typeof getTPUrlParam === 'function' && getTPUrlParam('embed') === '1') {
+            document.body.classList.add('tp-embed');
+        }
         initOrgDataMap();
         renderOrgTable();
         renderPendingApplications();

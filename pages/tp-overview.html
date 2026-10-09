@@ -259,8 +259,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     <div class="stat-item">
         <div class="stat-icon cyan"><i class="fas fa-users"></i></div>
         <div class="stat-info">
-            <div class="stat-number" id="projectGroupCount">0</div>
-            <div class="stat-label">项目专家组</div>
+            <div class="stat-number" id="expertTotalCount">0</div>
+            <div class="stat-label">专家总数</div>
         </div>
     </div>
 </div>
@@ -1047,6 +1047,49 @@ function buildOrgListData() {
     });
 }
 
+// ===== 机构内容小窗：页内弹窗展示指定机构的详情/合同/业绩/信用 =====
+var ORG_VIEW_PAGES = {
+    warehouse: { url: 'tp-warehouse.html', label: '机构详情', icon: 'fa-warehouse' },
+    contract: { url: 'tp-contract.html', label: '合同台账', icon: 'fa-file-contract' },
+    performance: { url: 'tp-performance.html', label: '机构业绩', icon: 'fa-chart-line' },
+    credit: { url: 'tp-credit.html', label: '信用详情', icon: 'fa-medal' }
+};
+
+function openOrgModal(type, orgId) {
+    var cfg = ORG_VIEW_PAGES[type];
+    if (!cfg || !orgId) return;
+    closeOrgViewModal();
+    var modal = document.createElement('div');
+    modal.id = 'orgViewModal';
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1100; display: flex; align-items: center; justify-content: center;';
+    modal.innerHTML =
+        '<div style="position: relative; width: 88%; max-width: 1160px; height: 84vh;">' +
+            '<div style="width: 100%; height: 100%; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">' +
+                '<iframe src="' + cfg.url + '?orgId=' + encodeURIComponent(orgId) + '&embed=1" style="width: 100%; height: 100%; border: none; display: block; background: #fff;"></iframe>' +
+            '</div>' +
+            '<button onclick="closeOrgViewModal()" title="关闭" style="position: absolute; top: -14px; right: -14px; z-index: 20; width: 34px; height: 34px; border-radius: 50%; border: none; background: #fff; color: #5f6368; font-size: 16px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); display: flex; align-items: center; justify-content: center;"><i class="fas fa-times"></i></button>' +
+        '</div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) closeOrgViewModal();
+    });
+}
+
+function closeOrgViewModal() {
+    var m = document.getElementById('orgViewModal');
+    if (m) m.remove();
+}
+
+// 接收嵌入页发来的关闭请求
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'tpCloseEmbed') closeOrgViewModal();
+});
+
+function openOrgViewInNewTab(type, orgId) {
+    var cfg = ORG_VIEW_PAGES[type];
+    if (cfg) window.open(cfg.url + '?orgId=' + encodeURIComponent(orgId), '_blank');
+}
+
 var orgListData = buildOrgListData();
 
 function renderOrgList(reset) {
@@ -1077,10 +1120,10 @@ function renderOrgList(reset) {
         var field = org.field || '-';
         var qual = org.qual || '-';
         var actionBtns = orgId ?
-            '<button class="btn btn-outline" onclick="window.open(\'tp-warehouse.html?orgId=' + encodeURIComponent(orgId) + '\', \'_blank\')">详情</button>' +
-            '<button class="btn btn-outline" onclick="window.open(\'tp-contract.html?orgId=' + encodeURIComponent(orgId) + '\', \'_blank\')">合同</button>' +
-            '<button class="btn btn-outline" onclick="window.open(\'tp-performance.html?orgId=' + encodeURIComponent(orgId) + '\', \'_blank\')">业绩</button>' +
-            '<button class="btn btn-outline" onclick="window.open(\'tp-credit.html?orgId=' + encodeURIComponent(orgId) + '\', \'_blank\')">信用</button>' : '';
+            '<button class="btn btn-outline" onclick="openOrgModal(\'warehouse\', \'' + orgId + '\')">详情</button>' +
+            '<button class="btn btn-outline" onclick="openOrgModal(\'contract\', \'' + orgId + '\')">合同</button>' +
+            '<button class="btn btn-outline" onclick="openOrgModal(\'performance\', \'' + orgId + '\')">业绩</button>' +
+            '<button class="btn btn-outline" onclick="openOrgModal(\'credit\', \'' + orgId + '\')">信用</button>' : '';
         return '<tr>' +
             '<td>' + orgName + '</td>' +
             '<td>' + field + '</td>' +
@@ -1238,13 +1281,13 @@ function renderOrgPagination(totalPages) {
 
 document.addEventListener('DOMContentLoaded', function() {
     renderOrgList();
-    renderProjectGroupCount();
+    renderExpertTotalCount();
 });
 
-function renderProjectGroupCount() {
-    var el = document.getElementById('projectGroupCount');
+function renderExpertTotalCount() {
+    var el = document.getElementById('expertTotalCount');
     if (!el) return;
-    var count = (typeof getAllProjectGroups === 'function') ? getAllProjectGroups().length : 0;
+    var count = (typeof getAllExperts === 'function') ? getAllExperts().length : 0;
     el.textContent = count;
 }
 

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>业绩批量导入</title>
+<link rel="stylesheet" href="all.min.css">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+    --primary: #1a73e8;
+    --primary-dark: #1557b0;
+    --border: #e0e0e0;
+    --text-primary: #202124;
+    --text-secondary: #5f6368;
+    --bg-card: #ffffff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: var(--bg-card); color: var(--text-primary); padding: 24px 28px; display: flex; flex-direction: column; }
+.steps-box { background: #eef4ff; border-radius: 10px; padding: 16px 18px; margin-bottom: 22px; }
+.steps-title { font-size: 14px; font-weight: 600; color: var(--primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.steps-box ol { padding-left: 20px; font-size: 13px; color: var(--text-primary); line-height: 2; }
+.steps-box .warn { color: #e8710a; font-size: 13px; margin-top: 6px; display: flex; align-items: flex-start; gap: 6px; }
+.action-row { display: flex; align-items: center; gap: 12px; }
+.btn { padding: 9px 20px; border-radius: 8px; font-size: 13px; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; transition: all 0.2s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-outline { background: #fff; color: var(--text-primary); border: 1px solid var(--border); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.file-name { font-size: 13px; color: var(--text-secondary); }
+.file-name.has-file { color: var(--text-primary); }
+.hidden-input { display: none; }
+.spacer { flex: 1; }
+.form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+.parse-result { margin-top: 16px; font-size: 13px; display: none; }
+.parse-result.show { display: block; }
+.parse-result .ok { color: #188038; }
+.parse-result .bad { color: #d93025; }
+</style>
+</head>
+<body>
+
+<div class="steps-box">
+    <div class="steps-title"><i class="fas fa-info-circle"></i> 操作步骤</div>
+    <ol>
+        <li>下载导入模板，按模板列顺序填写业绩数据；</li>
+        <li>带 <span style="color:#d93025;">*</span> 为必填项：项目名称、机构名称、委托单位、服务领域、服务类型、服务时间、交付物；</li>
+        <li>上传填写好的文件（.xlsx / .xls / .csv），系统校验后导入入库，状态为「待审核」。</li>
+    </ol>
+    <div class="warn"><i class="fas fa-exclamation-triangle"></i> 证明材料等附件无法通过文件导入，请在导入后通过「编辑」单独补充。</div>
+</div>
+
+<div class="action-row">
+    <button class="btn btn-outline" onclick="downloadTemplate()"><i class="fas fa-download"></i> 下载导入模板</button>
+    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()"><i class="fas fa-folder-open"></i> 选择文件</button>
+    <span class="file-name" id="fileNameLabel">未选择文件</span>
+    <input type="file" id="fileInput" class="hidden-input" accept=".xlsx,.xls,.csv">
+</div>
+
+<div class="parse-result" id="parseResult"></div>
+
+<div class="spacer"></div>
+
+<div class="form-actions">
+    <button class="btn btn-outline" onclick="closeEntryWindow()"><i class="fas fa-times"></i> 取消</button>
+    <button class="btn btn-primary" id="importBtn" onclick="doImport()" disabled><i class="fas fa-check"></i> 确认导入</button>
+</div>
+
+<script>
+(function(){
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+
+var DOMAINS = ['建筑工地','基坑','交通','玻璃幕墙','燃气','高空坠物','城镇自建房','农村自建房'];
+var SERVICE_TYPES = ['应急咨询','安全评估','检测检验','隐患排查'];
+var CONCLUSIONS = ['合格','基本合格','不合格','待验收'];
+var SOURCES = ['平台录入','合同导入','手工补录','第三方接口'];
+var HEADERS = ['项目名称','机构名称','委托单位','服务领域','服务类型','服务时间','合同金额(万)','验收结论','数据来源','交付物','业绩说明'];
+
+var parsedRows = [];
+
+function getStorage(name) {
+    try { return JSON.parse(localStorage.getItem(name) || '[]'); } catch (e) { return []; }
+}
+function setStorage(name, data) {
+    localStorage.setItem(name, JSON.stringify(data));
+}
+
+var fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', function(){
+    if (fileInput.files.length) handleFile(fileInput.files[0]);
+    fileInput.value = '';
+});
+
+function handleFile(file) {
+    var label = document.getElementById('fileNameLabel');
+    label.textContent = file.name;
+    label.classList.add('has-file');
+    if (typeof XLSX === 'undefined') {
+        var elx = document.getElementById('parseResult');
+        elx.className = 'parse-result show bad';
+        elx.textContent = 'Excel 解析组件未加载，请检查网络后刷新重试。';
+        return;
+    }
+    var isCsv = /\.csv$/i.test(file.name);
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var wb = isCsv ? XLSX.read(e.target.result, { type: 'string' })
+                           : XLSX.read(e.target.result, { type: 'array' });
+            var ws = wb.Sheets[wb.SheetNames[0]];
+            var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+            parseRows(rows);
+        } catch (err) {
+            var el = document.getElementById('parseResult');
+            el.className = 'parse-result show bad';
+            el.textContent = '文件解析失败，请使用下载的模板填写后重新选择。';
+        }
+    };
+    if (isCsv) reader.readAsText(file, 'UTF-8');
+    else reader.readAsArrayBuffer(file);
+}
+
+function matchOption(arr, val) {
+    val = (val || '').trim();
+    return arr.indexOf(val) >= 0 ? val : '';
+}
+
+function parseRows(rows) {
+    parsedRows = [];
+    var lines = (rows || []).map(function(r){
+        return (r || []).map(function(cell){ return String(cell == null ? '' : cell).trim(); });
+    }).filter(function(r){ return r.some(function(cell){ return cell !== ''; }); });
+    if (lines.length && lines[0].join('').indexOf('项目名称') >= 0) lines.shift();
+    lines.forEach(function(c) {
+        var rec = {
+            projectName: (c[0] || '').trim(),
+            orgName: (c[1] || '').trim(),
+            client: (c[2] || '').trim(),
+            domain: matchOption(DOMAINS, c[3]),
+            serviceType: matchOption(SERVICE_TYPES, c[4]),
+            serviceTime: (c[5] || '').trim(),
+            amount: (c[6] || '').trim(),
+            conclusion: matchOption(CONCLUSIONS, c[7]) || '待验收',
+            source: matchOption(SOURCES, c[8]) || '平台录入',
+            deliverable: (c[9] || '').trim(),
+            desc: (c[10] || '').trim()
+        };
+        var errs = [];
+        if (!rec.projectName) errs.push('缺项目名称');
+        if (!rec.orgName) errs.push('缺机构名称');
+        if (!rec.client) errs.push('缺委托单位');
+        if (!rec.domain) errs.push('服务领域无效');
+        if (!rec.serviceType) errs.push('服务类型无效');
+        if (!rec.serviceTime) errs.push('缺服务时间');
+        if (!rec.deliverable) errs.push('缺交付物');
+        if (rec.amount && isNaN(parseFloat(rec.amount))) errs.push('金额非数字');
+        rec._errs = errs;
+        parsedRows.push(rec);
+    });
+    renderParseResult();
+}
+
+function renderParseResult() {
+    var el = document.getElementById('parseResult');
+    var btn = document.getElementById('importBtn');
+    if (!parsedRows.length) {
+        el.className = 'parse-result show bad';
+        el.textContent = '文件中未解析到有效数据，请核对模板格式后重新选择。';
+        btn.disabled = true;
+        return;
+    }
+    var okCount = parsedRows.filter(function(r){ return r._errs.length === 0; }).length;
+    var badCount = parsedRows.length - okCount;
+    var badRows = parsedRows.map(function(r, i){ return r._errs.length ? ('第' + (i + 1) + '行：' + r._errs.join('、')) : ''; }).filter(Boolean);
+    el.className = 'parse-result show';
+    el.innerHTML = '<span class="ok">解析成功，共 ' + parsedRows.length + ' 条，有效 ' + okCount + ' 条' + (badCount ? '，<span class="bad">异常 ' + badCount + ' 条（' + badRows.slice(0, 3).join('；') + (badRows.length > 3 ? ' 等' : '') + '），异常行不会导入</span>' : '') + '。</span>';
+    btn.disabled = okCount === 0;
+}
+
+function doImport() {
+    var valid = parsedRows.filter(function(r){ return r._errs.length === 0; });
+    if (!valid.length) { alert('没有可导入的有效数据'); return; }
+    if (!confirm('确认导入 ' + valid.length + ' 条业绩进入审核？')) return;
+
+    var data = getStorage('performanceData');
+    var auditList = getStorage('auditListData');
+    var now = new Date();
+    var dateStr = now.toISOString().slice(0, 10);
+    var timeStr = dateStr + ' ' + now.toTimeString().slice(0, 5);
+    valid.forEach(function(r, i) {
+        var record = {
+            id: Date.now() + i,
+            projectName: r.projectName,
+            orgName: r.orgName,
+            client: r.client,
+            domain: r.domain,
+            serviceType: r.serviceType,
+            serviceTime: r.serviceTime,
+            amount: parseFloat(r.amount) || 0,
+            conclusion: r.conclusion,
+            deliverable: r.deliverable,
+            desc: r.desc,
+            proofFiles: [],
+            auditStatus: '待审核',
+            source: r.source,
+            createTime: dateStr
+        };
+        data.unshift(record);
+        auditList.unshift({
+            id: record.id,
+            type: '业绩导入',
+            title: r.projectName,
+            org: r.orgName,
+            submitTime: timeStr,
+            status: '待审核'
+        });
+    });
+    setStorage('performanceData', data);
+    setStorage('auditListData', auditList);
+
+    alert('已导入 ' + valid.length + ' 条业绩，进入审核中心');
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ action: 'performanceEntrySaved' }, '*');
+    }
+}
+
+function downloadTemplate() {
+    if (typeof XLSX === 'undefined') { alert('Excel 组件未加载，请检查网络后刷新重试'); return; }
+    var sample = ['奉贤区某工地安全评估项目','上海建科检测技术有限公司','奉贤区住房城乡建设委','建筑工地','安全评估','2026-01 ~ 2026-06','85.5','合格','平台录入','提交安全评估报告并通过验收','示例说明（可删除本行）'];
+    var ws = XLSX.utils.aoa_to_sheet([HEADERS, sample]);
+    ws['!cols'] = HEADERS.map(function(){ return { wch: 18 }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '业绩导入');
+    XLSX.writeFile(wb, '业绩导入模板.xlsx');
+}
+
+function closeEntryWindow() {
+    if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ action: 'closeModal' }, '*');
+    }
+}
+</script>
+</body>
+</html>

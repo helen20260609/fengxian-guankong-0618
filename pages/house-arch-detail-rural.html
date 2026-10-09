@@ -1659,6 +1659,7 @@
                 ['结构类型其他内容', ''],
                 ['是否采用预制板', '是'],
                 ['建筑面积 (㎡)', '237.3'],
+                ['建筑层数', '3'],
                 ['建筑层数地上(层)', '3'],
                 ['建造方式', '有资质的施工队伍'],
                 ['建造方式其他内容', ''],
@@ -1675,7 +1676,6 @@
                 ['土地性质', '集体土地'],
                 ['集体土地', '宅基地'],
                 ['所在区域（区域类型）', '建制镇'],
-                ['建筑层数', '3层'],
                 ['户主联系方式', '13812345678', true],
                 ['家庭成员信息', '—', true]
             ],
@@ -2091,6 +2091,22 @@
             const idx = rows.findIndex(r => r[0] === '房屋类型');
             if (idx !== -1) rows.splice(idx + 1, 0, ['常住人口', '']);
             else rows.push(['常住人口', '']);
+        })();
+
+        // ===== 兜底：旧草稿 jbxx 缺"建筑层数"字段时，自动插入到"建筑层数地上(层)"之前 =====
+        (function ensureJbxxJianzhuCengshu() {
+            const rows = basicData_RURAL.jbxx;
+            if (!Array.isArray(rows)) return;
+            // 兼容区旧"建筑层数"（值如"3层"）迁移为新字段：去掉"层"后缀，移到"建筑层数地上(层)"之前
+            const oldIdx = rows.findIndex(r => r[0] === '建筑层数');
+            let oldVal = '';
+            if (oldIdx !== -1) {
+                oldVal = String(rows[oldIdx][1] || '').replace(/层/g, '').trim();
+                rows.splice(oldIdx, 1);
+            }
+            const anchor = rows.findIndex(r => r[0] === '建筑层数地上(层)');
+            if (anchor !== -1) rows.splice(anchor, 0, ['建筑层数', oldVal]);
+            else rows.push(['建筑层数', oldVal]);
         })();
 
         // ===== 兜底：旧草稿 safeStatus 缺"排查判断"字段时，自动追加到末尾 =====
@@ -2878,6 +2894,7 @@
                 ['结构类型', libVal(libJbxx, '结构类型', '—')],
                 ['是否采用预制板', libVal(libJbxx, '是否采用预制板', '—')],
                 ['建筑面积 (㎡)', libVal(libJbxx, '建筑面积 (㎡)', '—')],
+                ['建筑层数', libVal(libJbxx, '建筑层数', '—')],
                 ['建筑层数地上(层)', libVal(libJbxx, '建筑层数地上(层)', '—')],
                 ['建造方式', libVal(libJbxx, '建造方式', '—')],
                 ['是否人员聚集场所', libVal(libJbxx, '是否人员聚集场所', '—')],
@@ -3039,8 +3056,8 @@
                 // 行7b: 楼栋号/名称 | 住宅套数 (仅集合住宅显示)
                 // 行8:  自住+经营 (跨整行)
                 // 行9:  建造时间        | 建筑面积 (㎡)
-                // 行10: 建筑高度 (m)    | 建筑层数地上(层)
-                // 行11: 建筑层数地下(层)| (空)
+                // 行10: 建筑高度 (m)    | 建筑层数
+                // 行11: 建筑层数地上(层)| 建筑层数地下(层)
                 // 行12: 结构类型 (跨整行)
                 // 行13: 建造方式 (跨整行)
                 // 行14: 是否采用预制板  | 是否人员聚集场所
@@ -3095,8 +3112,8 @@
                         fullItem('非营利性公共建筑') +
                     '</div>' +
                     viewItem('建造时间') + viewItem('建筑面积 (㎡)') +
-                    viewItem('建筑高度 (m)') + viewItem('建筑层数地上(层)') +
-                    viewItem('建筑层数地下 (层)') + viewItem('') +
+                    viewItem('建筑高度 (m)') + viewItem('建筑层数') +
+                    viewItem('建筑层数地上(层)') + viewItem('建筑层数地下 (层)') +
                     fullItem('建造方式') +
                     fullItem('结构类型') +
                     viewItem('是否采用预制板') + viewItem('是否人员聚集场所') +
@@ -6755,6 +6772,7 @@
                 structType: getVal('结构类型'),
                 prefab: getVal('是否采用预制板') || '是',
                 buildArea: getVal('建筑面积 (㎡)'),
+                floors: getVal('建筑层数'),
                 floorAbove: getVal('建筑层数地上(层)'),
                 buildMode: getVal('建造方式'),
                 crowdPlace: getVal('是否人员聚集场所') || '否',
@@ -6783,8 +6801,8 @@
 
             // ============ 布局：左列 + 右列 逐行拼装 ============
             // 整行字段：异常标记、自住+经营、结构类型、建造方式（按截图这些跨两列）
-            // 其他字段两列并排：左列 [房屋性质, 所在区域, 是否有产权人, 产权人/使用人, 房屋类型, 房屋类型二级分类, 建造时间, 建筑高度, 建筑层数地下, 是否采用预制板]
-            //                  右列 [ (空),    路号信息, (空),      身份证号码,   (空),     (空),         建筑面积, 建筑层数地上, (空),       是否人员聚集场所 ]
+            // 其他字段两列并排：左列 [房屋性质, 所在区域, 是否有产权人, 产权人/使用人, 房屋类型, 房屋类型二级分类, 建造时间, 建筑高度, 建筑层数地上, 是否采用预制板]
+            //                  右列 [ (空),    路号信息, (空),      身份证号码,   (空),     (空),         建筑面积, 建筑层数, 建筑层数地下, 是否人员聚集场所 ]
 
             const html = '' +
             '<style>' +
@@ -6868,12 +6886,12 @@
                 // 行9：建造时间 | 建筑面积
                 fieldItem('建造时间', '<input type="month" class="form-input" data-rural-field="建造时间" value="' + esc(v.buildTime) + '" style="' + inputCss + '">') +
                 fieldItem('建筑面积 (㎡)', '<input type="number" class="form-input" data-rural-field="建筑面积 (㎡)" value="' + esc(v.buildArea) + '" style="' + inputCss + '">') +
-                // 行10：建筑高度 | 建筑层数地上
+                // 行10：建筑高度 | 建筑层数
                 fieldItem('建筑高度 (m)', '<input type="number" class="form-input" data-rural-field="建筑高度 (m)" value="' + esc(v.buildHeight) + '" style="' + inputCss + '">') +
+                fieldItem('建筑层数', '<input type="number" class="form-input" data-rural-field="建筑层数" value="' + esc(v.floors) + '" style="' + inputCss + '">') +
+                // 行11：建筑层数地上 | 建筑层数地下
                 fieldItem('建筑层数地上(层)', '<input type="number" class="form-input" data-rural-field="建筑层数地上(层)" value="' + esc(v.floorAbove) + '" style="' + inputCss + '">') +
-                // 行11：建筑层数地下 | (空)
                 fieldItem('建筑层数地下 (层)', '<input type="number" class="form-input" data-rural-field="建筑层数地下 (层)" value="' + esc(v.floorUnderground) + '" style="' + inputCss + '">') +
-                fieldItem('', '', { required: false }) +
                 // 行12：建造方式 (整行, checkbox + 其他输入框)
                 fieldItem('建造方式', buildCheckbox('建造方式', ['建筑工匠建造', '有资质的施工队伍', '按照正规审批建设程序建造', '其他'], v.buildMode, true), { full: true }) +
                 // 行13：结构类型 (整行, checkbox + 其他输入框) - 住宅无"混凝土框架"，非住宅有

@@ -150,6 +150,13 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 /* 模态框 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: none; align-items: center; justify-content: center; }
 .modal-overlay.active { display: flex; }
+/* 嵌入模式：机构名录弹窗内仅展示信用详情弹窗 */
+body.tp-embed { overflow: hidden; }
+body.tp-embed > *:not(.modal-overlay):not(script):not(style):not(link) { display: none !important; }
+body.tp-embed .modal-overlay { background: transparent; }
+body.tp-embed .modal-overlay.active { display: block; }
+body.tp-embed .modal-container { width: 100%; max-width: none; height: 100%; max-height: none; border-radius: 0; box-shadow: none; }
+body.tp-embed #creditModal .modal-close { display: none !important; }
 .modal-container { background: var(--bg-card); border-radius: 12px; width: 840px; max-width: 90vw; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 30px var(--shadow); }
 .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
 .modal-title { font-size: 16px; font-weight: 600; }
@@ -379,9 +386,6 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             <button class="modal-close" onclick="closeCreditModal()"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body" id="modalBody"></div>
-        <div class="modal-footer">
-            <button class="btn btn-outline" onclick="closeCreditModal()">关闭</button>
-        </div>
     </div>
 </div>
 
@@ -640,6 +644,15 @@ function init() {
     initEventModalOrgSelect();
     updateLastCalcInfo();
     startDailyCalcTimer();
+    // 嵌入模式：机构名录弹窗内仅展示信用详情弹窗
+    if (typeof getTPUrlParam === 'function' && getTPUrlParam('embed') === '1') {
+        document.body.classList.add('tp-embed');
+    }
+    // 机构名录跳转：携带 orgId 时直接打开该机构的信用详情
+    var qpOrgId = (typeof getTPUrlParam === 'function') ? getTPUrlParam('orgId') : '';
+    if (qpOrgId && getOrgById(qpOrgId)) {
+        setTimeout(function() { viewCreditDetail(qpOrgId); }, 200);
+    }
 }
 
 function updateLastCalcInfo() {
@@ -1075,6 +1088,11 @@ function getDimensionIcon(key) {
 }
 
 function closeCreditModal() {
+    // 嵌入模式：通知外层机构总览页关闭小窗
+    if (document.body.classList.contains('tp-embed') && window.parent !== window) {
+        window.parent.postMessage({ action: 'tpCloseEmbed' }, '*');
+        return;
+    }
     document.getElementById('creditModal').classList.remove('active');
     currentDetailOrgId = '';
 }

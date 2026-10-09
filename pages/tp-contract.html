@@ -48,6 +48,9 @@
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: var(--bg-dark); color: var(--text-primary); margin: 0; padding: 20px; }
+/* 嵌入模式：机构名录弹窗内仅展示该机构合同台账 */
+body.tp-embed { padding: 12px !important; }
+body.tp-embed > .stat-row, body.tp-embed > .analysis-card, body.tp-embed > #projectGroupCard { display: none !important; }
 
 /* 统计卡片 */
 .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
@@ -73,7 +76,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group label { font-size: 13px; color: var(--text-primary); }
 .form-group label .required { color: var(--danger); margin-left: 2px; }
-.form-group input, .form-group select {
+.form-group input, .form-group select, .form-group textarea {
     padding: 10px 12px;
     border: 1px solid var(--input-border);
     border-radius: 8px;
@@ -84,6 +87,18 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     transition: border-color 0.2s;
     font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
 }
+.form-group textarea { resize: vertical; line-height: 1.5; }
+
+/* 可搜索机构下拉 */
+.org-search-wrap { position: relative; }
+.org-search-wrap .org-search-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 12px; pointer-events: none; }
+.org-search-dropdown { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--input-border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); z-index: 50; }
+.org-search-dropdown.active { display: block; }
+.org-search-option { padding: 10px 12px; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.org-search-option:hover { background: var(--bg-hover); }
+.org-search-option.selected { background: var(--bg-hover); color: var(--primary); font-weight: 500; }
+.org-search-option .org-field { font-size: 12px; color: var(--text-secondary); }
+.org-search-empty { padding: 14px 12px; font-size: 13px; color: var(--text-secondary); text-align: center; }
 /* 只读字段样式 */
 .form-group input[readonly], .form-group select:disabled {
     background: var(--bg-hover);
@@ -121,6 +136,13 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .tag-red { background: rgba(217,48,37,0.12); color: var(--danger); }
 .tag-green { background: rgba(30,142,62,0.12); color: var(--success); }
 .tag-blue { background: rgba(26,115,232,0.12); color: var(--primary); }
+
+/* 服务期限状态标签 */
+.period-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; margin-left: 8px; }
+.period-tag.green { background: rgba(52,168,83,0.12); color: #34a853; }
+.period-tag.orange { background: rgba(251,188,4,0.12); color: #f9ab00; }
+.period-tag.red { background: rgba(234,67,53,0.12); color: #ea4335; }
+.period-tag.gray { background: rgba(0,0,0,0.06); color: var(--text-secondary); }
 
 /* 提醒列表 */
 .remind-list { padding: 0; }
@@ -175,6 +197,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .report-item .report-download:hover { color: var(--primary-dark, #1557b0); }
 .report-item .report-remove { cursor: pointer; color: var(--danger); margin-left: 4px; font-size: 12px; }
 .report-item .report-remove:hover { color: #b91c1c; }
+.report-item i.fa-file-pdf { color: #d93025; }
 
 /* 合同统计分析 */
 .analysis-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 20px; }
@@ -206,29 +229,29 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     <div class="stat-item">
         <div class="stat-icon blue"><i class="fas fa-file-contract"></i></div>
         <div class="stat-info">
-            <div class="stat-number">47</div>
+            <div class="stat-number" id="statTotalCount">0</div>
             <div class="stat-label">合同总数</div>
         </div>
     </div>
     <div class="stat-item">
         <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
         <div class="stat-info">
-            <div class="stat-number">28</div>
+            <div class="stat-number" id="statFinishedCount">0</div>
             <div class="stat-label">履约完成</div>
         </div>
     </div>
     <div class="stat-item">
         <div class="stat-icon orange"><i class="fas fa-clock"></i></div>
         <div class="stat-info">
-            <div class="stat-number">12</div>
+            <div class="stat-number" id="statRunningCount">0</div>
             <div class="stat-label">进行中</div>
         </div>
     </div>
     <div class="stat-item" onclick="openReminderModal()" style="cursor: pointer;">
         <div class="stat-icon red"><i class="fas fa-exclamation-triangle"></i></div>
         <div class="stat-info">
-            <div class="stat-number">3</div>
-            <div class="stat-label">逾期</div>
+            <div class="stat-number" id="statOverdueCount">0</div>
+            <div class="stat-label">逾期 / 临期</div>
         </div>
     </div>
 </div>
@@ -249,7 +272,12 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 </div>
                 <div class="form-group">
                     <label>机构名称 <span class="required">*</span></label>
-                    <select id="modalOrgName" onchange="onModalOrgChange(this.value)"></select>
+                    <select id="modalOrgName" style="display:none;"></select>
+                    <div class="org-search-wrap" id="orgSearchWrap">
+                        <input type="text" id="orgSearchInput" placeholder="输入关键字搜索机构" autocomplete="off">
+                        <i class="fas fa-chevron-down org-search-toggle"></i>
+                        <div class="org-search-dropdown" id="orgSearchDropdown"></div>
+                    </div>
                 </div>
             </div>
             <div class="form-row" id="orgInfoRow">
@@ -311,8 +339,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     <label>报告上传</label>
                     <div class="file-upload" id="modalReportUpload">
                         <label class="file-upload-btn" for="modalReportFile">选择文件</label>
-                        <input type="file" id="modalReportFile" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
-                        <span class="file-upload-text">支持 PDF、Word、图片等格式，可一次上传多个报告</span>
+                        <input type="file" id="modalReportFile" multiple accept=".pdf">
+                        <span class="file-upload-text">仅支持 PDF 格式，可一次上传多个报告</span>
                     </div>
                     <div id="modalReportList" class="report-list"></div>
                 </div>
@@ -426,59 +454,6 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         <div class="modal-body" id="reminderModalBody">
             <!-- 内容通过 JS 填充 -->
         </div>
-        <div class="modal-footer">
-            <button class="btn btn-outline" onclick="closeReminderModal()">关闭</button>
-        </div>
-    </div>
-</div>
-
-<!-- 报告交付提醒模板（用于弹窗） -->
-<div id="reminderTemplate" style="display:none">
-    <div class="remind-list">
-        <div class="remind-item">
-            <div class="remind-dot red"></div>
-            <div class="remind-content">
-                <div class="remind-title">
-                    <span class="name">上海建科检测</span>
-                    <span class="sep">—</span>
-                    <span class="desc">鉴定报告逾期 2 天</span>
-                </div>
-                <div class="remind-meta">2026-06-26</div>
-            </div>
-        </div>
-        <div class="remind-item">
-            <div class="remind-dot orange"></div>
-            <div class="remind-content">
-                <div class="remind-title">
-                    <span class="name">上海华安评估</span>
-                    <span class="sep">—</span>
-                    <span class="desc">报告交付期限 2026-07-03 (剩 7 天)</span>
-                </div>
-                <div class="remind-meta">2026-06-26</div>
-            </div>
-        </div>
-        <div class="remind-item">
-            <div class="remind-dot orange"></div>
-            <div class="remind-content">
-                <div class="remind-title">
-                    <span class="name">上海水利安全研究院</span>
-                    <span class="sep">—</span>
-                    <span class="desc">报告交付期限 2026-07-05 (剩 9 天)</span>
-                </div>
-                <div class="remind-meta">2026-06-26</div>
-            </div>
-        </div>
-        <div class="remind-item">
-            <div class="remind-dot green"></div>
-            <div class="remind-content">
-                <div class="remind-title">
-                    <span class="name">上海安信消防</span>
-                    <span class="sep">—</span>
-                    <span class="desc">报告已提交，待确认</span>
-                </div>
-                <div class="remind-meta">2026-06-25</div>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -545,6 +520,10 @@ window.addEventListener('message', function(e) {
 });
 // 当前 URL 中的机构筛选参数
 var currentOrgId = getTPUrlParam('orgId');
+// 嵌入模式：机构名录弹窗内打开时精简页面
+if (getTPUrlParam('embed') === '1') {
+    document.body.classList.add('tp-embed');
+}
 
 function initModalOrgSelect(selectedOrgId) {
     var select = document.getElementById('modalOrgName');
@@ -554,8 +533,101 @@ function initModalOrgSelect(selectedOrgId) {
         html += '<option value="' + org.orgId + '">' + org.orgName + '</option>';
     });
     select.innerHTML = html;
-    if (selectedOrgId) select.value = selectedOrgId;
+    select.value = selectedOrgId || '';
+    // 同步可搜索输入框显示
+    var input = document.getElementById('orgSearchInput');
+    if (input) {
+        var org = selectedOrgId ? getOrgById(selectedOrgId) : null;
+        input.value = org ? org.orgName : '';
+    }
+    renderOrgSearchOptions('');
 }
+
+function renderOrgSearchOptions(keyword) {
+    var dropdown = document.getElementById('orgSearchDropdown');
+    if (!dropdown) return;
+    var kw = (keyword || '').trim().toLowerCase();
+    var currentId = document.getElementById('modalOrgName').value;
+    var orgs = getAllOrgs().filter(function(org) {
+        if (!kw) return true;
+        return (org.orgName || '').toLowerCase().indexOf(kw) !== -1
+            || (org.orgCode || '').toLowerCase().indexOf(kw) !== -1
+            || (org.field || '').toLowerCase().indexOf(kw) !== -1;
+    });
+    if (!orgs.length) {
+        dropdown.innerHTML = '<div class="org-search-empty">未找到匹配的机构</div>';
+        return;
+    }
+    dropdown.innerHTML = orgs.map(function(org) {
+        return '<div class="org-search-option' + (org.orgId === currentId ? ' selected' : '') + '" data-org-id="' + org.orgId + '">'
+            + '<span>' + org.orgName + '</span>'
+            + '<span class="org-field">' + (org.field || '') + '</span>'
+            + '</div>';
+    }).join('');
+}
+
+function selectOrgFromSearch(orgId) {
+    var select = document.getElementById('modalOrgName');
+    var org = getOrgById(orgId);
+    select.value = orgId;
+    document.getElementById('orgSearchInput').value = org ? org.orgName : '';
+    closeOrgSearchDropdown();
+    onModalOrgChange(orgId);
+}
+
+function openOrgSearchDropdown() {
+    var dropdown = document.getElementById('orgSearchDropdown');
+    if (!dropdown || document.getElementById('orgSearchInput').disabled) return;
+    renderOrgSearchOptions(document.getElementById('orgSearchInput').value === getSelectedOrgName() ? '' : document.getElementById('orgSearchInput').value);
+    dropdown.classList.add('active');
+}
+
+function closeOrgSearchDropdown(restoreValue) {
+    var dropdown = document.getElementById('orgSearchDropdown');
+    if (dropdown) dropdown.classList.remove('active');
+    if (restoreValue !== false) {
+        // 未选择时恢复已选机构名，避免残留无效关键字
+        var input = document.getElementById('orgSearchInput');
+        var selectedName = getSelectedOrgName();
+        if (input && input.value.trim() !== selectedName) input.value = selectedName;
+    }
+}
+
+function getSelectedOrgName() {
+    var org = getOrgById(document.getElementById('modalOrgName').value);
+    return org ? org.orgName : '';
+}
+
+// 绑定可搜索下拉事件（一次即可）
+document.addEventListener('DOMContentLoaded', function() {
+    var input = document.getElementById('orgSearchInput');
+    var dropdown = document.getElementById('orgSearchDropdown');
+    if (!input || !dropdown) return;
+    input.addEventListener('focus', function() { openOrgSearchDropdown(); });
+    input.addEventListener('click', function() { openOrgSearchDropdown(); });
+    input.addEventListener('input', function() {
+        renderOrgSearchOptions(this.value);
+        dropdown.classList.add('active');
+    });
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { closeOrgSearchDropdown(); }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            var first = dropdown.querySelector('.org-search-option');
+            if (first) selectOrgFromSearch(first.getAttribute('data-org-id'));
+        }
+    });
+    dropdown.addEventListener('mousedown', function(e) {
+        var opt = e.target.closest('.org-search-option');
+        if (opt) {
+            e.preventDefault(); // 阻止 blur 先触发
+            selectOrgFromSearch(opt.getAttribute('data-org-id'));
+        }
+    });
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#orgSearchWrap')) closeOrgSearchDropdown();
+    });
+});
 
 function fillContractOrgInfo(orgId) {
     var org = getOrgById(orgId);
@@ -598,6 +670,7 @@ function buildContractData() {
         var statusClass = c.status === '已验收' ? 'tag-blue' : (c.status === '执行中' ? 'tag-orange' : 'tag-green');
         var displayStatus = c.status === '已验收' ? '已完成' : (c.status === '执行中' ? '进行中' : c.status);
         var projectGroup = c.projectId ? getProjectGroupById(c.projectId) : null;
+        var periodTag = getPeriodTag(c.servicePeriod, c.status);
         rows.push({
             id: c.contractId,
             project: c.projectName,
@@ -605,6 +678,7 @@ function buildContractData() {
             orgId: c.orgId,
             orgCode: c.orgCode,
             period: c.servicePeriod,
+            periodTag: periodTag,
             amount: '¥' + (parseFloat(c.amount) * 10000).toLocaleString('zh-CN', {minimumFractionDigits: 0, maximumFractionDigits: 0}),
             status: displayStatus,
             statusClass: statusClass,
@@ -629,6 +703,7 @@ function refreshContractData() {
     contractLedgerPage = 1;
     renderContractLedger();
     renderContractAnalysis();
+    renderStatCards();
 }
 
 function renderProjectGroupInfo() {
@@ -672,6 +747,10 @@ function setContractModalReadOnly(readonly) {
             document.getElementById(id).disabled = readonly;
         }
     });
+    // 可搜索机构输入框同步只读
+    var orgSearchInput = document.getElementById('orgSearchInput');
+    if (orgSearchInput) { orgSearchInput.readOnly = readonly; orgSearchInput.disabled = readonly; }
+    closeOrgSearchDropdown();
     document.getElementById('modalSaveBtn').style.display = readonly ? 'none' : 'inline-flex';
     document.getElementById('modalCloseBtn').style.display = readonly ? 'inline-flex' : 'none';
     var confirmBtn = document.getElementById('modalConfirmBtn');
@@ -695,8 +774,11 @@ function viewContract(id) {
     document.getElementById('modalPayment').value = data.payment;
     document.getElementById('modalDeliverable').value = data.deliverable;
     document.getElementById('modalAcceptance').value = data.acceptance;
+    // 查看模式：显示报告列表供下载，但隐藏上传控件
     var reportUploadRow = document.getElementById('reportUploadRow');
     if (reportUploadRow) reportUploadRow.style.display = '';
+    var uploadEl = document.getElementById('modalReportUpload');
+    if (uploadEl) uploadEl.style.display = 'none';
     renderModalReportList(data.reports || [], true);
     setContractModalReadOnly(true);
     // 查看模式下，若已上传报告且未履约完成，显示确认合格按钮
@@ -905,7 +987,7 @@ function renderContractLedger() {
         tr.innerHTML =
             '<td>' + item.project + '</td>' +
             '<td><a href="' + getOrgWarehouseUrl(item.orgId) + '" class="table-link" onclick="event.stopPropagation();">' + item.org + '</a></td>' +
-            '<td>' + item.period + '</td>' +
+            '<td>' + item.period + (item.periodTag ? '<span class="period-tag ' + item.periodTag.cls + '">' + item.periodTag.text + '</span>' : '') + '</td>' +
             '<td>' + item.amount + '</td>' +
             '<td>' + (item.projectGroupName ? item.projectGroupName + '（' + item.projectGroupCount + '人）' : '-') + '</td>' +
             '<td><span class="tag ' + item.statusClass + '">' + item.status + '</span></td>' +
@@ -986,6 +1068,8 @@ function editContract(id) {
     document.getElementById('modalAcceptance').value = data.acceptance;
     var reportUploadRow = document.getElementById('reportUploadRow');
     if (reportUploadRow) reportUploadRow.style.display = '';
+    var uploadEl = document.getElementById('modalReportUpload');
+    if (uploadEl) uploadEl.style.display = '';
     renderModalReportList(data.reports || [], false);
     document.getElementById('contractModal').classList.add('active');
 }
@@ -1000,25 +1084,17 @@ function renderModalReportList(reports, readonly) {
     container.innerHTML = reports.map(function(r, idx) {
         var isRead = readonly;
         var nameHtml = isRead
-            ? '<a href="javascript:void(0)" class="report-link" onclick="openReportPreview(' + idx + ')" title="在线预览">' + r + '</a>'
+            ? '<a href="javascript:void(0)" class="report-link" onclick="downloadReport(' + idx + ')" title="点击下载">' + r + '</a>'
             : '<span>' + r + '</span>';
         var actionHtml = isRead
             ? '<a href="javascript:void(0)" class="report-download" onclick="downloadReport(' + idx + ')" title="下载报告"><i class="fas fa-download"></i></a>'
             : '<i class="fas fa-times report-remove" onclick="removeModalReport(' + idx + ')" title="删除"></i>';
         return '<div class="report-item">' +
-            '<i class="fas fa-file-alt"></i>' +
+            '<i class="fas fa-file-pdf"></i>' +
             nameHtml +
             actionHtml +
             '</div>';
     }).join('');
-}
-
-function openReportPreview(index) {
-    var id = document.getElementById('modalContractId').value;
-    var data = contractData[id];
-    if (!data || !data.reports || index < 0 || index >= data.reports.length) return;
-    var reportName = data.reports[index];
-    alert('在线预览：' + reportName + '\n（此处可接入实际文件预览地址）');
 }
 
 function downloadReport(index) {
@@ -1026,9 +1102,11 @@ function downloadReport(index) {
     var data = contractData[id];
     if (!data || !data.reports || index < 0 || index >= data.reports.length) return;
     var reportName = data.reports[index];
+    var url = (data.reportUrls && data.reportUrls[index]) || '';
+    var fileName = /\.pdf$/i.test(reportName) ? reportName : reportName + '.pdf';
     var a = document.createElement('a');
-    a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent('这是 ' + reportName + ' 的示例下载内容');
-    a.download = reportName;
+    a.href = url || 'data:application/pdf;base64,JVBERi0xLjQKJTr69Q==';
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1048,6 +1126,13 @@ function bindModalReportUpload() {
     input.addEventListener('change', function(e) {
         var files = Array.from(e.target.files);
         if (!files.length) return;
+        // 仅允许 PDF
+        var invalid = files.filter(function(f) { return !/\.pdf$/i.test(f.name); });
+        if (invalid.length) {
+            alert('仅支持 PDF 格式，以下文件已忽略：\n' + invalid.map(function(f) { return f.name; }).join('\n'));
+        }
+        files = files.filter(function(f) { return /\.pdf$/i.test(f.name); });
+        if (!files.length) { input.value = ''; return; }
         var id = document.getElementById('modalContractId').value;
         var data = contractData[id];
         if (!data) {
@@ -1165,14 +1250,131 @@ function deleteContract(id) {
 }
 
 function openReminderModal() {
-    var template = document.getElementById('reminderTemplate');
-    var content = template ? template.innerHTML : '';
-    document.getElementById('reminderModalBody').innerHTML = content;
+    renderReminderList();
     document.getElementById('reminderModal').classList.add('active');
 }
 
 function closeReminderModal() {
     document.getElementById('reminderModal').classList.remove('active');
+}
+
+// 计算合同交付期限（servicePeriod 结束日期）
+function getContractDeadline(contract) {
+    if (!contract.servicePeriod) return null;
+    var parts = contract.servicePeriod.split('~');
+    if (parts.length < 2) return null;
+    var dateStr = parts[1].trim();
+    var d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+// 生成服务期限状态标签
+function getPeriodTag(servicePeriod, status) {
+    if (status === '已验收') return null;
+    var deadline = getContractDeadline({ servicePeriod: servicePeriod });
+    if (!deadline) return null;
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    deadline.setHours(0, 0, 0, 0);
+    var diffDays = Math.ceil((deadline - today) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) {
+        return { cls: 'red', text: '逾期 ' + Math.abs(diffDays) + ' 天' };
+    } else if (diffDays <= 1) {
+        return { cls: 'red', text: '剩 ' + diffDays + ' 天' };
+    } else if (diffDays <= 3) {
+        return { cls: 'orange', text: '剩 ' + diffDays + ' 天' };
+    } else if (diffDays <= 7) {
+        return { cls: 'green', text: '剩 ' + diffDays + ' 天' };
+    }
+    return null;
+}
+
+// 生成提醒列表：逾期 + 7天内 + 3天内 + 1天内
+function generateReminders() {
+    var reminders = [];
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    Object.keys(contractData).forEach(function(id) {
+        var c = contractData[id];
+        if (!c || c.status === '已验收') return;
+        var deadline = getContractDeadline(c);
+        if (!deadline) return;
+        deadline.setHours(0, 0, 0, 0);
+        var diffDays = Math.ceil((deadline - today) / (1000 * 60 * 60 * 24));
+        var item = {
+            orgName: c.orgName,
+            projectName: c.projectName,
+            deadline: c.servicePeriod.split('~')[1].trim(),
+            diffDays: diffDays
+        };
+        if (diffDays < 0) {
+            item.type = 'overdue';
+            item.dot = 'red';
+            item.desc = '报告已逾期 ' + Math.abs(diffDays) + ' 天';
+            reminders.push(item);
+        } else if (diffDays <= 1) {
+            item.type = 'urgent';
+            item.dot = 'red';
+            item.desc = '交付期限 ' + item.deadline + '（剩 ' + diffDays + ' 天）';
+            reminders.push(item);
+        } else if (diffDays <= 3) {
+            item.type = 'warning';
+            item.dot = 'orange';
+            item.desc = '交付期限 ' + item.deadline + '（剩 ' + diffDays + ' 天）';
+            reminders.push(item);
+        } else if (diffDays <= 7) {
+            item.type = 'notice';
+            item.dot = 'green';
+            item.desc = '交付期限 ' + item.deadline + '（剩 ' + diffDays + ' 天）';
+            reminders.push(item);
+        }
+    });
+    // 按紧急程度排序：逾期 > 1天 > 3天 > 7天
+    var order = { overdue: 0, urgent: 1, warning: 2, notice: 3 };
+    reminders.sort(function(a, b) { return order[a.type] - order[b.type]; });
+    return reminders;
+}
+
+function renderReminderList() {
+    var container = document.getElementById('reminderModalBody');
+    var reminders = generateReminders();
+    if (reminders.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:40px 20px; color:var(--text-secondary);"><i class="fas fa-check-circle" style="font-size:32px; color:#34a853; margin-bottom:12px;"></i><p>暂无交付提醒</p></div>';
+        return;
+    }
+    var html = '<div class="remind-list">';
+    reminders.forEach(function(r) {
+        html += '<div class="remind-item">' +
+            '<div class="remind-dot ' + r.dot + '"></div>' +
+            '<div class="remind-content">' +
+                '<div class="remind-title">' +
+                    '<span class="name">' + r.orgName + '</span>' +
+                    '<span class="sep">—</span>' +
+                    '<span class="desc">' + r.desc + '</span>' +
+                '</div>' +
+                '<div class="remind-meta">' + r.projectName + '</div>' +
+            '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// 渲染顶部统计卡片（含逾期/临期数）
+function renderStatCards() {
+    var total = 0, finished = 0, running = 0;
+    Object.keys(contractData).forEach(function(id) {
+        var c = contractData[id];
+        if (!c) return;
+        total++;
+        if (c.status === '已验收') finished++; else running++;
+    });
+    var reminders = generateReminders();
+    var overdueCount = reminders.filter(function(r) { return r.type === 'overdue' || r.type === 'urgent'; }).length;
+    document.getElementById('statTotalCount').textContent = total;
+    document.getElementById('statFinishedCount').textContent = finished;
+    document.getElementById('statRunningCount').textContent = running;
+    document.getElementById('statOverdueCount').textContent = overdueCount;
 }
 
 function initPage() {

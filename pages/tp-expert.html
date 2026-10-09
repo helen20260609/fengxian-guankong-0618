@@ -6,6 +6,7 @@
 <title>专家库管理 - 第三方服务机构</title>
 <link rel="stylesheet" href="./all.min.css">
 <link rel="stylesheet" href="./tp-common.css">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="../js/third-party-data.js"></script>
 <style>
 :root {
@@ -372,6 +373,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 <div class="filter-actions">
                     <button class="list-btn list-btn-primary" onclick="searchExpert()"><i class="fas fa-search"></i> 查询</button>
                     <button class="list-btn list-btn-outline" onclick="resetExpertFilter()"><i class="fas fa-undo"></i> 重置</button>
+                    <button class="list-btn list-btn-outline" style="color: var(--primary); border-color: var(--primary);" onclick="openImportExpertModal()"><i class="fas fa-file-import"></i> 批量导入</button>
                     <button class="list-btn list-btn-success" onclick="openExpertAdd()"><i class="fas fa-plus"></i> 新增</button>
                 </div>
             </div>
@@ -682,6 +684,186 @@ function auditExpert(name) {
             } catch(e) {}
         };
     }
+}
+
+// ================= 批量导入专家 =================
+var expertImportParsed = null;
+var EXPERT_DOMAIN_OPTIONS = ['建筑工地', '基坑', '交通', '玻璃幕墙', '燃气', '高空坠物', '城镇自建房', '农村自建房'];
+
+function openImportExpertModal() {
+    expertImportParsed = null;
+    var input = document.getElementById('expertImportFileInput');
+    if (input) input.value = '';
+    document.getElementById('expertImportFileName').textContent = '未选择文件';
+    document.getElementById('expertImportPreview').style.display = 'none';
+    setExpertImportConfirmState(false);
+    document.getElementById('importExpertModalOverlay').classList.add('active');
+}
+function closeImportExpertModal() {
+    document.getElementById('importExpertModalOverlay').classList.remove('active');
+}
+function setExpertImportConfirmState(enabled) {
+    var btn = document.getElementById('btnConfirmExpertImport');
+    btn.disabled = !enabled;
+    btn.style.opacity = enabled ? '1' : '0.5';
+}
+
+// 下载导入模板（字段与专家信息录入表单一致）
+function downloadExpertImportTemplate() {
+    if (typeof XLSX === 'undefined') { alert('Excel 组件未加载，请检查网络后刷新重试'); return; }
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        ['姓名*', '性别', '出生年月', '工作单位/所属机构', '专业领域', '专业', '所属行业专家组', '职称名称', '评定机构', '评定时间', '工作地点', '主要工作年限', '联系电话*', '电子邮箱', '应急管理职务', '原单位部门', '应急管理特长', '通讯地址', '主要项目/从业经历'],
+        ['王示例', '男', '1980-05', '上海示例检测技术有限公司', '建筑工地', '施工安全', '建筑施工安全专家组', '高级工程师', '上海市人力资源和社会保障局', '2018-06', '黄浦区', '15', '13800001111', 'wang@example.com', '', '', '', '上海市黄浦区示例路100号', '1. 参与XX项目安全评估（2020-2022）；\n2. 担任XX专家组组员。'],
+        ['刘示例', '女', '1985-11', '', '燃气', '应急咨询', '', '副教授', '', '', '奉贤区', '12', '13900002222', '', '', '', '', '上海市奉贤区示例路200号', '']
+    ]), '专家信息');
+    XLSX.writeFile(wb, '专家批量导入模板.xlsx');
+}
+
+function readExpertImportRows(wb, sheetName) {
+    var ws = wb.Sheets[sheetName];
+    if (!ws) return [];
+    return XLSX.utils.sheet_to_json(ws, { defval: '', raw: false }).map(function(r) {
+        var o = {};
+        Object.keys(r).forEach(function(k) {
+            o[k.replace(/\*$/, '').trim()] = (r[k] === undefined || r[k] === null) ? '' : String(r[k]).trim();
+        });
+        return o;
+    }).filter(function(o) {
+        return Object.keys(o).some(function(k) { return o[k] !== ''; });
+    });
+}
+
+function handleExpertImportFile(input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    if (typeof XLSX === 'undefined') { alert('Excel 组件未加载，请检查网络后刷新重试'); return; }
+    document.getElementById('expertImportFileName').textContent = file.name;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var wb = XLSX.read(e.target.result, { type: 'array' });
+            expertImportParsed = parseExpertImportWorkbook(wb);
+            renderExpertImportPreview();
+        } catch (err) {
+            alert('文件解析失败：' + (err.message || err));
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function parseExpertImportWorkbook(wb) {
+    var rows = readExpertImportRows(wb, '专家信息');
+    if (!rows.length && wb.SheetNames.length) rows = readExpertImportRows(wb, wb.SheetNames[0]);
+
+    var existing = {};
+    expertList.forEach(function(e) { if (e.name) existing[e.name] = true; });
+    var seen = {};
+    var items = [];
+    rows.forEach(function(r, idx) {
+        var errors = [];
+        var name = r['姓名'], phone = r['联系电话'];
+        if (!name) errors.push('缺少姓名');
+        if (!phone) errors.push('缺少联系电话');
+        if (name) {
+            if (seen[name]) errors.push('文件内姓名重复');
+            if (existing[name]) errors.push('该姓名已在专家库中');
+        }
+        var gender = r['性别'] || '男';
+        if (gender !== '男' && gender !== '女') { errors.push('性别只能填“男”或“女”'); gender = '男'; }
+        var domain = r['专业领域'];
+        if (domain && EXPERT_DOMAIN_OPTIONS.indexOf(domain) === -1) errors.push('专业领域须为：' + EXPERT_DOMAIN_OPTIONS.join('/'));
+        if (name && !errors.length) seen[name] = true;
+        items.push({
+            rowNo: idx + 2,
+            data: {
+                name: name,
+                gender: gender,
+                birth: normalizeDate(r['出生年月']),
+                org: r['工作单位/所属机构'],
+                expertType: r['工作单位/所属机构'] ? '机构专家' : '独立专家',
+                domain: domain || '建筑工地',
+                direction: r['专业'],
+                industryExpertGroup: r['所属行业专家组'],
+                title: r['职称名称'],
+                titleOrg: r['评定机构'],
+                titleTime: normalizeDate(r['评定时间']),
+                workplace: r['工作地点'],
+                years: r['主要工作年限'],
+                phone: phone,
+                email: r['电子邮箱'],
+                emergencyPosition: r['应急管理职务'],
+                originalDepartment: r['原单位部门'],
+                emergencySpecialty: r['应急管理特长'],
+                address: r['通讯地址'],
+                experience: r['主要项目/从业经历']
+            },
+            errors: errors
+        });
+    });
+    return { items: items };
+}
+
+function renderExpertImportPreview() {
+    var data = expertImportParsed;
+    var preview = document.getElementById('expertImportPreview');
+    var tbody = document.getElementById('expertImportPreviewBody');
+    preview.style.display = 'block';
+    if (!data || !data.items.length) {
+        document.getElementById('expertImportPreviewCount').textContent = '0';
+        tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-secondary);">未解析到有效数据，请检查文件内容</td></tr>';
+        setExpertImportConfirmState(false);
+        return;
+    }
+    var validCount = 0;
+    var html = '';
+    data.items.forEach(function(item) {
+        var ok = !item.errors.length;
+        if (ok) validCount++;
+        var badge = ok
+            ? '<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;background:rgba(30,142,62,0.12);color:var(--success);">通过</span>'
+            : '<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;background:rgba(217,48,37,0.12);color:var(--danger);">' + item.errors.join('；') + '</span>';
+        html += '<tr style="border-bottom: 1px solid var(--border);">' +
+            '<td style="padding: 8px 10px;">' + item.rowNo + '</td>' +
+            '<td style="padding: 8px 10px;">' + (item.data.name || '-') + '</td>' +
+            '<td style="padding: 8px 10px;">' + item.data.gender + '</td>' +
+            '<td style="padding: 8px 10px;">' + (item.data.org || '独立专家') + '</td>' +
+            '<td style="padding: 8px 10px;">' + item.data.domain + '</td>' +
+            '<td style="padding: 8px 10px;">' + (item.data.title || '-') + '</td>' +
+            '<td style="padding: 8px 10px;">' + (item.data.phone || '-') + '</td>' +
+            '<td style="padding: 8px 10px;">' + badge + '</td>' +
+        '</tr>';
+    });
+    tbody.innerHTML = html;
+    document.getElementById('expertImportPreviewCount').textContent = data.items.length;
+    setExpertImportConfirmState(validCount > 0);
+}
+
+function confirmExpertImport() {
+    if (!expertImportParsed) return;
+    var valid = expertImportParsed.items.filter(function(i) { return !i.errors.length; });
+    if (!valid.length) { alert('没有可导入的有效数据'); return; }
+    var now = formatNow();
+    var operator = getCurrentOperator();
+    valid.forEach(function(item) {
+        var newItem = Object.assign({}, item.data, {
+            status: '待审核',
+            history: [{
+                time: now,
+                action: '新增',
+                operator: operator,
+                remark: '通过批量导入功能录入，提交审核'
+            }]
+        });
+        expertList.unshift(newItem);
+    });
+    saveExpertData();
+    searchExpert();
+    var errCount = expertImportParsed.items.length - valid.length;
+    var msg = '成功导入 ' + valid.length + ' 名专家（状态：待审核）';
+    if (errCount) msg += '，' + errCount + ' 条因校验失败被跳过';
+    alert(msg);
+    closeImportExpertModal();
 }
 
 function openExpertAdd() {
@@ -1184,6 +1366,55 @@ function resetExpert() {
         </div>
         <div class="modal-body" style="padding: 0; overflow: hidden;">
             <iframe id="expertModalIframe" class="modal-iframe"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- 批量导入专家弹窗 -->
+<div class="modal-overlay" id="importExpertModalOverlay" onclick="if(event.target===this)closeImportExpertModal()">
+    <div class="modal-container modal-wide">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-file-import" style="color: var(--primary);"></i> 批量导入专家</div>
+            <button class="modal-close" onclick="closeImportExpertModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+            <div style="background: var(--primary-light); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: var(--primary); line-height: 1.9; margin-bottom: 16px;">
+                <div><i class="fas fa-info-circle"></i> <strong>操作步骤</strong></div>
+                <div>1. 下载导入模板，字段与「专家信息录入」表单一致；</div>
+                <div>2. 上传填写好的文件（.xlsx / .xls / .csv），系统校验后可预览，确认无误后导入；</div>
+                <div>3. 导入的专家状态为「待审核」，需在审核中心审核通过后正式启用。</div>
+                <div style="color: var(--warning);"><i class="fas fa-exclamation-triangle"></i> 职称证书、业绩证明等附件无法通过 Excel 导入，请在导入后通过「编辑」单独补充。</div>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <button class="btn btn-outline" onclick="downloadExpertImportTemplate()"><i class="fas fa-download"></i> 下载导入模板</button>
+                <button class="btn btn-primary" onclick="document.getElementById('expertImportFileInput').click()"><i class="fas fa-folder-open"></i> 选择文件</button>
+                <input type="file" id="expertImportFileInput" accept=".xlsx,.xls,.csv" style="display: none;" onchange="handleExpertImportFile(this)">
+                <span id="expertImportFileName" style="font-size: 13px; color: var(--text-secondary);">未选择文件</span>
+            </div>
+            <div id="expertImportPreview" style="display: none; margin-top: 16px;">
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">解析预览（共 <span id="expertImportPreviewCount">0</span> 条）</div>
+                <div style="max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        <thead>
+                            <tr style="background: var(--bg-hover); position: sticky; top: 0;">
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">行号</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">姓名</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">性别</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">工作单位</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">专业领域</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">职称</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">联系电话</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-secondary);">校验结果</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expertImportPreviewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeImportExpertModal()"><i class="fas fa-times"></i> 取消</button>
+            <button class="btn btn-primary" id="btnConfirmExpertImport" onclick="confirmExpertImport()" disabled style="opacity: 0.5;"><i class="fas fa-check"></i> 确认导入</button>
         </div>
     </div>
 </div>

@@ -49,6 +49,8 @@
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: var(--bg-dark); color: var(--text-primary); margin: 0; padding: 20px; }
+/* 嵌入模式：机构名录弹窗内打开时收紧边距 */
+body.tp-embed { padding: 12px !important; }
 
 /* 统计卡片 */
 .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
@@ -337,6 +339,11 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 <body>
 
 <!-- 统计卡片 -->
+<div id="orgContextBanner" style="display:none; align-items:center; gap:10px; background:var(--primary-light); border:1px solid var(--primary); border-radius:12px; padding:12px 16px; margin-bottom:20px; font-size:13px; color:var(--primary);">
+    <i class="fas fa-building" style="font-size:16px;"></i>
+    <span>当前机构：<strong id="orgContextName"></strong>，以下仅展示该机构的业绩数据</span>
+    <a href="tp-performance.html" style="margin-left:auto; color:var(--primary); text-decoration:none; font-size:12px; white-space:nowrap;"><i class="fas fa-times"></i> 清除筛选，查看全部</a>
+</div>
 <div class="stat-row">
     <div class="stat-item">
         <div class="stat-icon blue"><i class="fas fa-briefcase"></i></div>
@@ -375,6 +382,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         <div class="list-title"><i class="fas fa-chart-bar"></i> 业绩查询分析</div>
         <div style="display:flex;gap:10px;">
             <button class="list-btn list-btn-primary" onclick="openPerformanceFormModal()"><i class="fas fa-plus"></i> 业绩录入</button>
+            <button class="list-btn list-btn-primary" onclick="openPerformanceBatchModal()"><i class="fas fa-file-import"></i> 批量导入</button>
             <button class="list-btn list-btn-success" onclick="exportPerformance()"><i class="fas fa-file-export"></i> 导出业绩证明</button>
         </div>
     </div>
@@ -447,10 +455,10 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         </div>
 
         <div class="chart-tabs">
-            <button class="chart-tab" data-chart="list" onclick="switchChartTab('list')">
+            <button class="chart-tab active" data-chart="list" onclick="switchChartTab('list')">
                 <i class="fas fa-table icon" style="color: var(--primary);"></i> 业绩列表
             </button>
-            <button class="chart-tab active" data-chart="trend" onclick="switchChartTab('trend')">
+            <button class="chart-tab" data-chart="trend" onclick="switchChartTab('trend')">
                 <i class="fas fa-chart-line icon" style="color: var(--primary);"></i> 业绩增长趋势
             </button>
             <button class="chart-tab" data-chart="domain" onclick="switchChartTab('domain')">
@@ -675,6 +683,20 @@ var filteredData = allData.slice();
 var currentPage = 1;
 var pageSize = 5;
 
+// 机构名录跳转：展示当前机构提示横幅；嵌入模式收紧边距
+(function showOrgContextBanner() {
+    if (getTPUrlParam('embed') === '1') { document.body.classList.add('tp-embed'); }
+    if (!currentOrgId) return;
+    var org = getOrgById(currentOrgId);
+    if (!org) return;
+    var banner = document.getElementById('orgContextBanner');
+    var nameEl = document.getElementById('orgContextName');
+    if (banner && nameEl) {
+        nameEl.textContent = org.orgName;
+        banner.style.display = 'flex';
+    }
+})();
+
 // 当前待提交的证明材料（不上传服务器，以 Base64 缓存到 localStorage）
 var pendingProofFiles = [];
 
@@ -684,7 +706,7 @@ var modalMode = 'view';
 var modalPendingProofFiles = [];
 
 var trendChart, domainChart, clientChart;
-var currentChartTab = 'trend';
+var currentChartTab = 'list';
 
 function loadPerformanceData() {
     var list = currentOrgId ? getPerformancesByOrg(currentOrgId) : getAllPerformances();
@@ -1062,6 +1084,10 @@ function openPerformanceFormModal() {
     openIframeModal('tp-performance-entry.html', '业绩录入', '960px', '90vh');
 }
 
+function openPerformanceBatchModal() {
+    openIframeModal('tp-performance-batch-entry.html', '业绩批量导入', '760px', '430px');
+}
+
 function openIframeModal(url, title, width, height, showPdfButton) {
     var overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -1245,9 +1271,6 @@ function renderPerformanceView() {
             '<div class="info-item info-section"><div class="info-label">交付物</div><div class="info-value">' + escapeHtml(r.deliverable || '') + '</div></div>' +
             '<div class="info-item info-section"><div class="info-label">业绩说明</div><div class="info-value">' + escapeHtml(r.description || '') + '</div></div>' +
             '<div class="info-item info-section"><div class="info-label">证明材料</div><div class="info-value modal-proof">' + renderModalProofFiles(r.proofFiles, false) + '</div></div>' +
-        '</div>' +
-        '<div class="form-actions" style="justify-content:flex-end;margin-top:20px;">' +
-            '<button class="btn btn-primary" onclick="closePerformanceModal()"><i class="fas fa-check"></i> 关闭</button>' +
         '</div>';
     showPerformanceModal();
 }
@@ -1504,11 +1527,7 @@ function goPerformancePage(page) {
 
 function updateAll() {
     updateStats();
-    if (currentChartTab === 'list') {
-        renderTable();
-    } else {
-        switchChartTab(currentChartTab);
-    }
+    switchChartTab(currentChartTab);
 }
 
 function loadOrgInfo() {

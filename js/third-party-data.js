@@ -378,8 +378,97 @@ function promoteApplicationToOrg(app) {
         established: basic.establishDate || ''
     };
     data.orgs.push(newOrg);
+    // 将在线申请中填报的关联专家一并入库，并关联到新机构
+    if (app.relatedExperts && app.relatedExperts.length) {
+        if (!data.experts) data.experts = [];
+        app.relatedExperts.forEach(function(ex, idx) {
+            if (!ex || !ex.name) return;
+            var exists = data.experts.some(function(e) { return e.orgId === orgId && e.name === ex.name; });
+            if (exists) return;
+            data.experts.push({
+                expertId: 'EXP-' + Date.now() + '-' + idx,
+                name: ex.name || '',
+                title: ex.title || '',
+                domain: ex.domain || basic.field || '',
+                direction: ex.direction || '',
+                phone: ex.phone || '',
+                orgId: orgId,
+                orgName: newOrg.orgName,
+                workplace: newOrg.orgName,
+                status: '正常'
+            });
+        });
+    }
     saveTPData(data);
     return newOrg;
+}
+
+// ---------- 机构批量导入 ----------
+function genBatchOrgId(data) {
+    var seq = data.orgs.length + 1;
+    var id;
+    do {
+        id = 'ORG-' + String(seq).padStart(5, '0');
+        seq++;
+    } while (data.orgs.some(function(o) { return o.orgId === id; }));
+    return id;
+}
+
+// items: [{ basic: {...}, personnel: [], qualifications: [], equipment: [], experts: [] }]
+function addOrgsBatch(items) {
+    const data = getTPData();
+    const results = [];
+    items.forEach(function(item) {
+        const b = item.basic || {};
+        const orgId = genBatchOrgId(data);
+        const score = parseFloat(b.score) || 75;
+        const newOrg = {
+            orgId: orgId,
+            orgName: b.orgName || '',
+            orgCode: b.orgCode || '',
+            legalPerson: b.legalPerson || '',
+            phone: b.phone || '',
+            region: b.region || '',
+            field: b.field || '',
+            orgType: b.orgType || '服务机构',
+            qual: b.qual || '乙级',
+            status: '正常',
+            creditLevel: score >= 90 ? 'AAA' : (score >= 85 ? 'AA' : (score >= 75 ? 'A' : 'B')),
+            score: score,
+            established: b.established || '',
+            // 弹窗明细扩展字段
+            idCard: b.idCard || '',
+            capital: b.capital || '',
+            serviceArea: b.serviceArea || '',
+            industry: b.industry || '',
+            businessScope: b.businessScope || '',
+            personnel: item.personnel || [],
+            qualifications: item.qualifications || [],
+            equipment: item.equipment || []
+        };
+        data.orgs.push(newOrg);
+        // 关联专家一并入库
+        (item.experts || []).forEach(function(ex, idx) {
+            if (!ex || !ex.name) return;
+            var exists = data.experts.some(function(e) { return e.orgId === orgId && e.name === ex.name; });
+            if (exists) return;
+            data.experts.push({
+                expertId: 'EXP-' + Date.now() + '-' + idx + '-' + Math.floor(Math.random() * 1000),
+                name: ex.name || '',
+                title: ex.title || '',
+                domain: ex.domain || newOrg.field,
+                direction: ex.direction || '',
+                phone: ex.phone || '',
+                orgId: orgId,
+                orgName: newOrg.orgName,
+                workplace: newOrg.orgName,
+                status: '正常'
+            });
+        });
+        results.push(newOrg);
+    });
+    saveTPData(data);
+    return results;
 }
 
 // ---------- 项目组 ----------
