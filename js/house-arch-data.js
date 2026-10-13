@@ -310,7 +310,7 @@ const DEFAULT_HOUSE_STATUS = {
     manageRecords: [], projectRecords: [], qualityTrace: [], archiveRecords: [],
     closeStatus: '未申请', closeApplyTime: '', closeAuditTime: '', closeAuditor: '',
     closeAuditOpinion: '', closeRejectReason: '', isRemovedFromFocus: false,
-    lat: 30.92, lng: 121.47, year: 1990, category: '砖混', houseType: '农村自建房',
+    lat: 30.92, lng: 121.47, year: 1990, category: '砖混', houseType: '农村自建房', houseNature: '住宅',
     totalTask: 0, doneTask: 0, fundUsed: 0, fundTotal: 0, overdue: false,
     projectMeasure: 0, manageMeasure: 0, rectDeadline: '', completeDate: '',
     hazards: [], measures: [], eliminationInfo: {}, progress: 0, responsibleDept: '', responsiblePerson: '',
@@ -419,6 +419,12 @@ function normalizeHouseRecord(record) {
     if (!rec.riskClassification) rec.riskClassification = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskClassification));
     if (!rec.emergencyResponse) rec.emergencyResponse = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.emergencyResponse));
     if (!rec.closeInfo) rec.closeInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.closeInfo));
+
+    // 房屋性质：旧数据缺省时按使用类型派生（自住/出租/空置→住宅；自住兼经营/其他→非住宅）
+    if (!rec.houseNature) {
+        const ut = (rec.usage && rec.usage.usageType) || (rec.overview && rec.overview.usage) || '';
+        rec.houseNature = (ut === '自住兼经营' || ut === '其他') ? '非住宅' : '住宅';
+    }
 
     // 销号已通过：强制无风险/已治理，但保留原始风险等级用于统计
     if (rec.closeStatus === '已通过') {
@@ -1529,6 +1535,7 @@ function generateHouseSeed() {
             no, name, owner, street, community, address, village,
             category: struct,
             houseType: category,
+            houseNature: (usageType === '自住兼经营' || usageType === '其他') ? '非住宅' : '住宅',
             riskLevel: displayRiskLevel,
             risk: displayRisk,
             originalRisk,

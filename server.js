@@ -1184,6 +1184,10 @@ http.createServer(function(req, res) {
 
     var filePath = path.join(baseDir, urlPath);
     var contentType = mimeTypes[ext] || 'application/octet-stream';
+    // 文本类资源显式指定 UTF-8，避免浏览器按默认单字节编码（latin1）解码导致中文乱码
+    if (/^(text\/|application\/(javascript|json|xml))/.test(contentType) && contentType.indexOf('charset') === -1) {
+        contentType += '; charset=utf-8';
+    }
 
     // 兼容从 /css 或 /js 访问根目录静态资源（页面内 ../css/... 不能直接匹配 /pages/*）
     if ((urlPath.startsWith('/css/') || urlPath.startsWith('/js/')) && !fs.existsSync(filePath)) {

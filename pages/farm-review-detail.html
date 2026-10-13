@@ -301,6 +301,31 @@ body.mode-edit.rectify-mode #sec-photos .photo-item { cursor: zoom-in; }
     <div class="pv-btn pv-prev" id="pvPrev"><i class="fa-solid fa-chevron-left"></i></div>
     <div class="pv-btn pv-next" id="pvNext"><i class="fa-solid fa-chevron-right"></i></div>
     <div class="pv-counter" id="pvCounter">1 / 1</div>
+    <!-- 拍摄信息水印 -->
+    <div id="pvExif" style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent, rgba(0,0,0,.75));padding:40px 16px 16px;z-index:2;display:none;">
+        <div style="background:rgba(30,64,175,.88);border-radius:10px;padding:12px 14px;color:#fff;max-width:340px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.25);">
+                <span style="width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0;"></span>
+                <span style="font-size:15px;font-weight:600;letter-spacing:1px;">拍摄信息</span>
+            </div>
+            <div style="display:flex;font-size:13px;line-height:1.9;">
+                <span style="width:64px;flex-shrink:0;color:rgba(255,255,255,.75);">拍摄时间</span>
+                <span id="pvExifTime">—</span>
+            </div>
+            <div style="display:flex;font-size:13px;line-height:1.9;">
+                <span style="width:64px;flex-shrink:0;color:rgba(255,255,255,.75);">拍摄地址</span>
+                <span id="pvExifAddr">—</span>
+            </div>
+            <div style="display:flex;font-size:13px;line-height:1.9;">
+                <span style="width:64px;flex-shrink:0;color:rgba(255,255,255,.75);">经&nbsp;&nbsp;&nbsp;&nbsp;度</span>
+                <span id="pvExifLng">—</span>
+            </div>
+            <div style="display:flex;font-size:13px;line-height:1.9;">
+                <span style="width:64px;flex-shrink:0;color:rgba(255,255,255,.75);">纬&nbsp;&nbsp;&nbsp;&nbsp;度</span>
+                <span id="pvExifLat">—</span>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- 照片上传隐藏 file input（多选） -->
@@ -1020,6 +1045,34 @@ body.mode-edit.rectify-mode #sec-photos .photo-item { cursor: zoom-in; }
         var multi = pvList.length > 1;
         $('pvPrev').style.display = multi ? 'flex' : 'none';
         $('pvNext').style.display = multi ? 'flex' : 'none';
+        // 填充拍摄信息水印
+        renderViewerExif();
+    }
+    function renderViewerExif() {
+        var exifBox = $('pvExif');
+        if (!exifBox) return;
+        // 通过 src 反查当前照片对象
+        var photoMeta = null;
+        try {
+            var curList = (record && record.photos && record.photos.currentStatus) || [];
+            var src = pvList[pvIndex];
+            for (var i = 0; i < curList.length; i++) {
+                var p = curList[i];
+                if ((p.dataUrl || p.url || p) === src) { photoMeta = p; break; }
+            }
+        } catch (e) {}
+
+        var ck = (record && record.checkin) || {};
+        var time = (photoMeta && photoMeta.time) || ck.time || (record && record.submitTime) || '—';
+        var lat = (photoMeta && photoMeta.lat) || ck.lat || (record && record.lat) || '';
+        var lng = (photoMeta && photoMeta.lng) || ck.lng || (record && record.lng) || '';
+        var addr = (photoMeta && photoMeta.address) || ck.address || (record && record.houseAddress) || '—';
+
+        $('pvExifTime').textContent = time;
+        $('pvExifAddr').textContent = addr;
+        $('pvExifLng').textContent = lng !== '' ? Number(lng).toFixed(14) : '—';
+        $('pvExifLat').textContent = lat !== '' ? Number(lat).toFixed(14) : '—';
+        exifBox.style.display = 'block';
     }
     function pvStep(d) { pvIndex += d; renderViewer(); }
     function closePhotoViewer() { $('photoViewerMask').classList.remove('show'); }
