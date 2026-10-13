@@ -72,10 +72,10 @@
             if (typeof saveCurrentHouseArch === 'function' && typeof currentHouseArch !== 'undefined') {
                 saveCurrentHouseArch(currentHouseArch);
             }
-            if (!confirm('确认将当前草稿同步到房屋建筑档案？\n同步后房屋建筑档案将显示本记录的最新内容。')) return;
+            if (!confirm('确认将当前修改更新到房屋建筑档案？\n更新后房屋建筑档案将显示本记录的最新内容。')) return;
             const r = publishDraftRecord(no, 'user');
             if (r && r.ok) {
-                alert('✅ 已同步到房屋建筑档案');
+                alert('✅ 已更新到房屋建筑档案');
                 // 通知外层列表刷新状态
                 if (window.parent && window.parent !== window) {
                     window.parent.postMessage({ action: 'draftSynced', no: no }, '*');
@@ -212,23 +212,14 @@
             if (!Array.isArray(prj0.rectifyPhotos)) prj0.rectifyPhotos = [];
             // 农村专属页: 强制 houseType 为农村(路由/兜底以此为准, 不受表单房屋性质影响)
             rec.houseType = '农村自建房';
-            // ===== 轮次合并视图：把当前轮流程字段覆盖到根级 =====
-            // 先 dump 字段库（确保 _fieldsLibrary 存在，便于快照捕获流程部分）
+            // ===== 流程字段直接常驻根级（轮次模型已拆除）=====
+            // 先 dump 字段库（确保 _fieldsLibrary 存在）
             try { if (typeof dumpFieldsLibrary === 'function') rec._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
-            ensureRoundsStructure(rec);
-            const __round = getCurrentRound(rec);
-            if (__round && __round.data) {
-                // 首次迁移：若当前轮 data 为空快照但根级有数据，则先吸收根级数据
-                const __snapKeys = Object.keys(__round.data).filter(k => k !== '_lib');
-                const __rootHasFlow = ROUND_SCOPED_FIELDS.some(k => {
-                    const v = rec[k];
-                    return Array.isArray(v) ? v.length > 0 : (v && typeof v === 'object' ? Object.keys(v).length > 0 : v !== undefined && v !== '' && v !== null);
-                });
-                if (__snapKeys.length === 0 && __rootHasFlow) {
-                    __round.data = __extractRoundSnapshot(rec);
-                }
-                __applyRoundSnapshot(rec, __round.data);
-            }
+            // v2：风险记录自动派生 + 治理事件（幂等）
+            try { syncRiskRecords(rec); } catch (e) {}
+            try { ensureGovernanceEvents(rec); } catch (e) {}
+            // 方案B：把当前治理事件 ev.data 展开到根级（治理 TAB 渲染读）
+            try { __applyGovernanceEventView(rec); } catch (e) {}
             return rec;
         }
 
@@ -262,16 +253,15 @@
             const no = getCurrentHouseNo();
             // 同步字段库到根级字段
             status = syncLibToRootFields(status);
-            // ===== 轮次拆分：把流程字段从合并视图写回当前轮 =====
-            // 注意：保留根级流程字段作为缓存（normalizeHouseRecord mock 兜底依赖它们），
-            //       rounds[current].data 才是真实数据源；get 时用 round.data 覆盖根级。
-            ensureRoundsStructure(status);
-            const __round = getCurrentRound(status);
-            if (__round) {
-                // 保存前确保字段库已 dump 到 status._fieldsLibrary
-                try { if (typeof dumpFieldsLibrary === 'function') status._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
-                __round.data = __extractRoundSnapshot(status);
-            }
+            // 方案B/B1：先把根级治理字段写回"当前"治理事件 ev.data
+            // （必须在 syncRiskRecords/ensureGovernanceEvents 之前——它们可能新建事件改变 currentGovernanceEventId）
+            // B1：writeback 前 dump 字段库，确保 ev.data._lib 捕获模块级最新编辑
+            try { if (typeof dumpFieldsLibrary === 'function') status._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
+            try { __writeBackGovernanceEventView(status); } catch (e) {}
+            // ===== 流程字段直接以根级为准（轮次模型已拆除）=====
+            // v2：保存时同步派生风险记录 + 治理事件（幂等）
+            try { syncRiskRecords(status); } catch (e) {}
+            try { ensureGovernanceEvents(status); } catch (e) {}
             if (IS_DRAFT_MODE && typeof setDraftRecord === 'function') {
                 setDraftRecord(no, status); // 草稿区
             } else {
@@ -289,175 +279,322 @@
             return prefix + '-' + ts + '-' + Math.floor(Math.random()*900 + 100);
         }
 
-        /* ==================== 排查轮次 rounds[] 数据模型 ====================
-         * 方案 A1（彻底隔离）：每轮一套完整 9 流程 TAB 数据副本
-         * - rec.rounds[]          轮次数组（每轮独立流程数据 + 字段库快照）
-         * - rec.currentRoundId    当前轮 id
-         * - 基础档案保留 rec 根级（basic 字段库 + overview/homestead 等）
-         * - emergencyResponse 保留根级（独立事件列表，不属任何轮）
-         * 代理策略：getCurrentHouseArch() 返回 基础档案+当前轮 合并视图；
-         *          saveCurrentHouseArch() 把流程字段拆分写回 rounds[current]。
+        /* ==================== 流程字段（轮次模型已拆除，直接常驻根级）====================
+         * 发现类字段 inspectionRecords/patrolRecords/riskInfo/riskClassification/riskIdentification
+         * 与字段库 survey_RURAL 均直接读写根级，不再有轮次快照。
+         * 治理链字段由 governanceEvents 按第三类风险记录驱动（方案B）。
          * ==================================================================== */
-
-        // 归属于"轮次"的流程字段（9 流程 TAB 数据源；control 4 子tab 派生自这些）
-        const ROUND_SCOPED_FIELDS = [
-            // 排查(risk)
-            'riskInfo', 'riskClassification', 'riskIdentification',
-            // 排查记录(survey) / 巡查记录(patrol)
-            'inspectionRecords', 'appraisalReports', 'patrolRecords',
-            // 计划(plan)
-            'planMonitorTime',
-            // 措施(measure)
-            'rectifySituation', 'manageRecords', 'projectRecords',
-            // 管控(control) — addDanger 为根数据，其余子tab派生
-            'addDanger',
-            // 验收(accept) — 主读 projectRecords[0] + acceptAuditRecords
-            'acceptAuditRecords',
-            // 销号(close)
-            'closeInfo', 'closeHistoryRecords', 'closeAuditRecords', 'archiveRecords',
-            'closeStatus', 'closeApplyTime', 'closeAuditTime', 'closeAuditor',
-            'closeAuditOpinion', 'closeRejectReason', 'isRemovedFromFocus',
-            // 治理状态随轮次（每轮独立待整治/已治理/风险等级）
-            'governStatus', 'governance', 'rectDeadline', 'completeDate',
-            'totalTask', 'doneTask', 'fundUsed', 'fundTotal', 'overdue',
-            'projectMeasure', 'manageMeasure', 'progress', 'responsibleDept', 'responsiblePerson',
-            // 风险等级随轮次（每轮独立排查结论）
-            'risk', 'riskLevel', 'riskDisplayLevel', 'originalRisk', 'originalRiskLevel'
-        ];
-        // 字段库中属于轮次的 3 个分组（basic 留在根级）
-        const ROUND_SCOPED_LIB_KEYS = ['survey_RURAL', 'table_RURAL', 'measure_RURAL'];
-
-        // 生成新轮次 id
-        function generateRoundId() {
-            return 'R-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100);
-        }
 
         // 深拷贝工具（undefined 安全）
         function __deepClone(o) { return o === undefined ? undefined : JSON.parse(JSON.stringify(o)); }
 
-        // 从记录根级提取"当前轮流程字段"快照
-        function __extractRoundSnapshot(rec) {
-            const snap = {};
-            ROUND_SCOPED_FIELDS.forEach(k => {
-                if (rec[k] !== undefined) snap[k] = __deepClone(rec[k]);
-            });
-            // 流程字段库快照
-            const lib = rec._fieldsLibrary || {};
-            snap._lib = {};
-            ROUND_SCOPED_LIB_KEYS.forEach(k => {
-                if (lib[k] !== undefined) snap._lib[k] = __deepClone(lib[k]);
-            });
-            return snap;
+        /* ==================== 风险发现→风险信息记录→治理事件（v2 模型）====================
+         * 业务规则：
+         * - 风险发现 = 排查登记(inspectionRecords) + 动态巡查(patrolRecords)，两条独立途径，各自多次
+         * - 每次发现自动生成一条风险信息记录(riskRecords)，风险等级=当次结论（三类口径）
+         * - 仅第三类结论触发治理链；治理数据按"治理事件"(governanceEvents)挂载
+         * - 应急处置保留根级，独立多事件
+         * ==================================================================== */
+
+        // 结论三类枚举（排查/巡查统一）
+        const RISK_CONCLUSION_ENUMS = ['未发现安全隐患(第一类)', '存在一定安全隐患(第二类)', '存在严重安全隐患(第三类)'];
+        // 结论 → 风险等级
+        function conclusionToLevel(c) {
+            const s = String(c || '');
+            if (s.indexOf('第一类') >= 0) return '第一类';
+            if (s.indexOf('第二类') >= 0) return '第二类';
+            if (s.indexOf('第三类') >= 0) return '第三类';
+            // 兼容旧巡查结论口径
+            if (s === '发现隐患' || s === '需整改') return '第二类';
+            return '';
+        }
+        // 巡查结论归一化（旧值"正常/发现隐患/需整改"→ 三类口径）
+        function normalizePatrolConclusion(r) {
+            if (!r) return '';
+            if (r.conclusion) return r.conclusion;
+            const v = r.result || '';
+            if (v === '正常') return '未发现安全隐患(第一类)';
+            if (v === '发现隐患') return '存在一定安全隐患(第二类)';
+            if (v === '需整改') return '存在严重安全隐患(第三类)';
+            return v;
         }
 
-        // 把轮次快照写回记录根级（用于构造合并视图）
-        function __applyRoundSnapshot(rec, snap) {
-            if (!snap) return rec;
-            ROUND_SCOPED_FIELDS.forEach(k => {
-                if (snap[k] !== undefined) rec[k] = __deepClone(snap[k]);
-                else delete rec[k];
-            });
-            if (!rec._fieldsLibrary) rec._fieldsLibrary = {};
-            ROUND_SCOPED_LIB_KEYS.forEach(k => {
-                if (snap._lib && snap._lib[k] !== undefined) rec._fieldsLibrary[k] = __deepClone(snap._lib[k]);
-                else delete rec._fieldsLibrary[k];
-            });
-            return rec;
+        // 风险信息记录唯一编号
+        function generateRiskRecordId() {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return 'RR-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '-' + Math.floor(Math.random() * 900 + 100);
         }
 
-        // 确保记录具备 rounds[] 结构；若无则用现状初始化第 1 轮（数据迁移入口）
-        function ensureRoundsStructure(rec) {
-            if (!rec) return rec;
-            if (!Array.isArray(rec.rounds)) rec.rounds = [];
-            if (rec.rounds.length === 0) {
-                // 迁移：把现有流程字段整体归入"第 1 轮"
-                const snap = __extractRoundSnapshot(rec);
-                rec.rounds.push({
-                    roundId: generateRoundId(),
-                    roundNo: 1,
-                    title: '第 1 轮排查',
-                    startDate: (snap.inspectionRecords && snap.inspectionRecords[0] && snap.inspectionRecords[0].checkTime) || '',
-                    status: '进行中',
-                    data: snap
-                });
-            }
-            // 保证 roundNo 连续、字段齐备
-            rec.rounds.forEach((r, i) => {
-                if (!r.roundId) r.roundId = generateRoundId();
-                if (!r.roundNo) r.roundNo = i + 1;
-                if (!r.title) r.title = '第 ' + r.roundNo + ' 轮排查';
-                if (!r.status) r.status = '进行中';
-                if (!r.data) r.data = {};
-                if (!r.data._lib) r.data._lib = {};
-            });
-            if (!rec.currentRoundId || !rec.rounds.some(r => r.roundId === rec.currentRoundId)) {
-                rec.currentRoundId = rec.rounds[rec.rounds.length - 1].roundId;
-            }
-            return rec;
-        }
-
-        function getCurrentRound(rec) {
-            ensureRoundsStructure(rec);
-            return rec.rounds.find(r => r.roundId === rec.currentRoundId) || rec.rounds[rec.rounds.length - 1];
-        }
-
-        // 切换当前轮（持久化在 rec 上，由外层 save 写回存储）
-        function setCurrentRound(rec, roundId) {
-            ensureRoundsStructure(rec);
-            if (rec.rounds.some(r => r.roundId === roundId)) {
-                rec.currentRoundId = roundId;
-                return true;
-            }
-            return false;
-        }
-
-        // 新建一轮：把当前轮标记完结，复制一份"空白流程"作为新轮
-        // options: { name?, type?, startDate? }
-        function createNewRound(rec, options) {
-            options = options || {};
-            ensureRoundsStructure(rec);
-            const cur = getCurrentRound(rec);
-            if (cur) {
-                cur.status = '已完结';
-                // 老轮若无 endDate，补上一个（默认今天）
-                if (!cur.endDate) cur.endDate = new Date().toISOString().slice(0, 10);
-            }
-            const newNo = rec.rounds.length + 1;
-            // 空白快照：清空流程字段，但保留字段库结构（作为新轮模板）
-            const blankSnap = {};
-            // 新轮需继承根级的字段（房屋物理风险等级——跨轮延续，直到新轮重新排查）
-            const INHERIT_FIELDS = ['risk', 'riskLevel', 'riskDisplayLevel', 'originalRisk', 'originalRiskLevel'];
-            ROUND_SCOPED_FIELDS.forEach(k => {
-                const v = rec[k];
-                if (INHERIT_FIELDS.indexOf(k) >= 0) {
-                    blankSnap[k] = __deepClone(v !== undefined ? v : DEFAULT_HOUSE_STATUS[k]);
-                } else if (Array.isArray(v)) blankSnap[k] = [];
-                else if (v && typeof v === 'object') blankSnap[k] = __deepClone(DEFAULT_HOUSE_STATUS[k] || {});
-                // 标量状态字段重置为默认
-                else blankSnap[k] = __deepClone(DEFAULT_HOUSE_STATUS[k]);
-            });
-            blankSnap._lib = {};
-            const curLib = (cur && cur.data && cur.data._lib) || (rec._fieldsLibrary || {});
-            ROUND_SCOPED_LIB_KEYS.forEach(k => {
-                // 新轮字段库沿用上一轮结构，但清空输入值（保留表头/标签列）
-                if (curLib[k]) blankSnap._lib[k] = __deepClone(curLib[k]);
-            });
-            const newRound = {
-                roundId: generateRoundId(),
-                roundNo: newNo,
-                name: (options.name || '').trim() || ('第 ' + newNo + ' 轮排查'),
-                type: options.type || '常规',
-                title: (options.name || '').trim() || ('第 ' + newNo + ' 轮排查'),  // title 保留作为兼容别名
-                startDate: options.startDate || new Date().toISOString().slice(0, 10),
-                endDate: null,
-                status: '进行中',
-                data: blankSnap
+        // 由"排查登记"记录派生风险信息记录字段
+        function __riskRecordFromInspection(rec, r, roundNo) {
+            return {
+                id: generateRiskRecordId(),
+                sourceType: '排查',
+                sourceId: r.id || '',
+                roundNo: roundNo || 0,
+                date: (r.checkDate || r.inspectDate || r.reportTime || ''),
+                person: r.checker || r.inspectPerson || '',
+                org: r.town || r.checkOrg || '',
+                conclusion: r.preliminaryJudge || r.checkResult || r.inspectResult || '',
+                riskLevel: conclusionToLevel(r.preliminaryJudge || r.checkResult || r.inspectResult),
+                hazardDesc: r.otherRisk || r.hazardDesc || '',
+                location: r.location || '',
+                photos: r.photos || '',
+                createdAt: new Date().toISOString()
             };
-            rec.rounds.push(newRound);
-            rec.currentRoundId = newRound.roundId;
-            return newRound;
         }
-        /* ==================== 轮次模型 END ==================== */
+        // 由"动态巡查"记录派生风险信息记录字段
+        function __riskRecordFromPatrol(rec, r, roundNo) {
+            const conclusion = normalizePatrolConclusion(r);
+            return {
+                id: generateRiskRecordId(),
+                sourceType: '巡查',
+                sourceId: r.id || '',
+                roundNo: roundNo || 0,
+                date: (r.patrolDate || ''),
+                person: r.patrolPerson || '',
+                org: r.patrolOrg || '',
+                conclusion: conclusion,
+                riskLevel: conclusionToLevel(conclusion),
+                hazardDesc: r.foundProblems || r.hazardDesc || '',
+                location: r.patrolPointCoord || '',
+                photos: r.photos || '',
+                createdAt: new Date().toISOString()
+            };
+        }
+
+        // 确保 rec.riskRecords[] 与发现记录同步（每次发现=1条风险记录，幂等）
+        function syncRiskRecords(rec) {
+            if (!rec) return;
+            if (!Array.isArray(rec.riskRecords)) rec.riskRecords = [];
+            const roundNo = 1; // 轮次模型已拆除，统一记为 1
+            const seen = {};
+            rec.riskRecords.forEach(function(rr) { if (rr.sourceType && rr.sourceId) seen[rr.sourceType + '|' + rr.sourceId] = true; });
+            // 排查登记：无 id 的补 id
+            (rec.inspectionRecords || []).forEach(function(r, i) {
+                if (!r.id) r.id = 'INS-' + (rec.no || 'X') + '-' + String(i + 1).padStart(3, '0');
+                if (!seen['排查|' + r.id]) {
+                    rec.riskRecords.push(__riskRecordFromInspection(rec, r, roundNo));
+                    seen['排查|' + r.id] = true;
+                }
+            });
+            // 动态巡查：无 id 的补 id
+            (rec.patrolRecords || []).forEach(function(r, i) {
+                if (!r.id) r.id = 'PAT-' + (rec.no || 'X') + '-' + String(i + 1).padStart(2, '0');
+                if (!seen['巡查|' + r.id]) {
+                    rec.riskRecords.push(__riskRecordFromPatrol(rec, r, roundNo));
+                    seen['巡查|' + r.id] = true;
+                }
+            });
+        }
+
+        // 治理事件：仅第三类风险记录生成
+        function ensureGovernanceEvents(rec) {
+            if (!rec) return;
+            if (!Array.isArray(rec.governanceEvents)) rec.governanceEvents = [];
+            const third = (rec.riskRecords || []).filter(function(rr) { return rr.riskLevel === '第三类'; });
+            third.forEach(function(rr) {
+                const exists = rec.governanceEvents.some(function(ev) { return ev.riskRecordId === rr.id; });
+                if (!exists) {
+                    rec.governanceEvents.push({
+                        eventId: 'GE-' + rr.id,
+                        riskRecordId: rr.id,
+                        roundNo: rr.roundNo || 0,
+                        createdAt: new Date().toISOString(),
+                        status: '待治理',
+                        // 治理链数据（方案B：扁平结构，字段见 GOVERNANCE_EVENT_FIELDS；空表示尚未录入）
+                        data: {}
+                    });
+                }
+            });
+            // 当前治理事件 id（默认最新一条第三类）
+            if (!rec.currentGovernanceEventId && rec.governanceEvents.length) {
+                rec.currentGovernanceEventId = rec.governanceEvents[rec.governanceEvents.length - 1].eventId;
+            }
+        }
+
+        // 取当前生效的治理事件
+        function getCurrentGovernanceEvent(rec) {
+            if (!rec) return null;
+            ensureGovernanceEvents(rec);
+            const id = rec.currentGovernanceEventId;
+            const ev = (rec.governanceEvents || []).find(function(e) { return e.eventId === id; });
+            if (ev) return ev;
+            return (rec.governanceEvents || [])[rec.governanceEvents.length - 1] || null;
+        }
+        // 治理链是否应显示（存在第三类风险记录/事件）
+        function hasGovernanceAccess(rec) {
+            if (!rec) return false;
+            ensureGovernanceEvents(rec);
+            return (rec.governanceEvents || []).length > 0;
+        }
+
+        /* ==================== 治理事件视图存取层（方案B）====================
+         * 每个治理事件拥有独立的治理链数据（鉴定/计划/措施/动态/验收/销号）。
+         * 存储：ev.data 是该事件的唯一真实数据源。
+         * 视图：getCurrentHouseArch() 把当前事件 ev.data 展开到根级供现有渲染代码读取；
+         *      saveCurrentHouseArch() 把根级对应字段写回当前事件 ev.data。
+         * 切换事件：switchGovernanceEvent() 先回写旧事件 → 改 id → 应用新事件 → 持久化 → 重渲染。
+         * ==================================================================== */
+        // 事件内独立字段（不含跨事件汇总字段：governStatus/governance/risk 等）
+        const GOVERNANCE_EVENT_FIELDS = [
+            'appraisalReports', 'planMonitorTime',
+            'rectifySituation', 'manageRecords', 'projectRecords',
+            'addDanger', 'acceptAuditRecords',
+            'closeInfo', 'closeHistoryRecords', 'closeAuditRecords', 'archiveRecords',
+            'closeStatus', 'closeApplyTime', 'closeAuditTime', 'closeAuditor',
+            'closeAuditOpinion', 'closeRejectReason', 'isRemovedFromFocus'
+        ];
+
+        // 方案B1：事件级字段库键——治理链 TAB 的表格/措施字段库也按治理事件隔离
+        // （渲染层直接读模块级 tableData_RURAL/measureData_RURAL，仅靠根级字段代理无法隔离 UI）
+        const GOVERNANCE_EVENT_LIB_KEYS = ['table_RURAL', 'measure_RURAL'];
+
+        // 空白事件字段库：保留结构（columns/title/列定义），清空数据行——新事件不应看到旧事件的填报内容
+        function __blankEventTableLib() {
+            let t = {};
+            try { t = __deepClone(tableData_RURAL); } catch (e) { t = {}; }
+            Object.keys(t).forEach(k => {
+                const n = t[k];
+                if (!n || typeof n !== 'object') return;
+                if (Array.isArray(n.rows)) n.rows = [];
+                if (Array.isArray(n.auditList)) n.auditList = [];
+            });
+            return t;
+        }
+        function __blankEventMeasureLib() {
+            let m = {};
+            try { m = __deepClone(measureData_RURAL); } catch (e) { m = {}; }
+            if (m.manage) {
+                if (Array.isArray(m.manage.baseValues)) m.manage.baseValues = m.manage.baseValues.map(() => '');
+                if (m.manage.extraFields) Object.keys(m.manage.extraFields).forEach(tp => {
+                    const grp = m.manage.extraFields[tp];
+                    if (grp && typeof grp === 'object') Object.keys(grp).forEach(f => { grp[f] = ''; });
+                });
+                if (m.manage.reminder) { m.manage.reminder.enabled = false; m.manage.reminder.phone = ''; }
+                if (m.manage.changeFlow) { m.manage.changeFlow.current = null; m.manage.changeFlow.records = []; }
+            }
+            if (m.project) {
+                if (Array.isArray(m.project.rows)) m.project.rows = [];
+                m.project.orgId = ''; m.project.orgName = '';
+                if (m.project.orgInfo) Object.keys(m.project.orgInfo).forEach(f => { if (typeof m.project.orgInfo[f] === 'string') m.project.orgInfo[f] = ''; });
+                ['planFiles','designFiles','orgDesignFiles','safetyFiles','baseAcceptFiles','mainAcceptFiles','materialFiles','completeReportFiles','implementPhotos','completePhotos','rectifyPhotos','timeline'].forEach(k => { if (Array.isArray(m.project[k])) m.project[k] = []; });
+                m.project.isMajorProject = false;
+                if (m.project.expertOpinion) {
+                    Object.keys(m.project.expertOpinion).forEach(f => { if (typeof m.project.expertOpinion[f] === 'string') m.project.expertOpinion[f] = ''; });
+                    if (Array.isArray(m.project.expertOpinion.files)) m.project.expertOpinion.files = [];
+                }
+            }
+            return m;
+        }
+        function __blankEventLibKey(k) {
+            return k === 'measure_RURAL' ? __blankEventMeasureLib() : __blankEventTableLib();
+        }
+
+        // 存量事件首次隔离：用 ev.data.appraisalReports[0] 回填安全鉴定表行，保持 UI 连续性
+        function __seedAssessmentRowFromEvent(tableLib, evData) {
+            const a = evData && Array.isArray(evData.appraisalReports) && evData.appraisalReports[0];
+            if (!a) return;
+            const node = tableLib && tableLib.assessment;
+            if (!node || !Array.isArray(node.columns) || !node.columns.length) return;
+            if (Array.isArray(node.rows) && node.rows.length) return; // 已有数据不覆盖
+            const fieldMap = {
+                '鉴定机构名称': a.orgName || '',
+                '统一社会信用代码': a.orgCode || '',
+                '鉴定时间': a.appraisalDate || '',
+                '鉴定负责人': a.appraiser || '',
+                '鉴定结论': a.conclusion || a.level || '',
+                '阶段性标识': a.phaseTag || '',
+                '鉴定报告': a.reportFiles || '',
+                '备注': a.remark || '',
+                '填报人': a.reporter || '',
+                '填报时间': a.reportTime || ''
+            };
+            const row = node.columns.map(c => fieldMap[c] !== undefined ? fieldMap[c] : '');
+            if (row.some(v => v)) node.rows = [row];
+        }
+
+        // 把当前事件 ev.data 展开到根级（供治理 TAB 渲染读）
+        function __applyGovernanceEventView(rec) {
+            if (!rec) return rec;
+            const ev = getCurrentGovernanceEvent(rec);
+            if (!ev) return rec;
+            if (!ev.data || typeof ev.data !== 'object') ev.data = {};
+            GOVERNANCE_EVENT_FIELDS.forEach(k => {
+                if (ev.data[k] !== undefined) rec[k] = __deepClone(ev.data[k]);
+                else {
+                    // 事件内未设置该字段：给合理默认（避免现有代码读到 undefined）
+                    if (k === 'appraisalReports' || k === 'manageRecords' || k === 'projectRecords' ||
+                        k === 'acceptAuditRecords' || k === 'closeHistoryRecords' || k === 'closeAuditRecords' ||
+                        k === 'archiveRecords') rec[k] = [];
+                    else if (k === 'rectifySituation' || k === 'addDanger' || k === 'closeInfo') rec[k] = {};
+                    else if (k === 'closeStatus') rec[k] = '未申请';
+                    else delete rec[k];
+                }
+            });
+            // 方案B1：事件级字段库视图——table_RURAL/measure_RURAL 也按事件展开
+            if (!rec._fieldsLibrary || typeof rec._fieldsLibrary !== 'object') rec._fieldsLibrary = {};
+            if (!ev.data._lib || typeof ev.data._lib !== 'object') ev.data._lib = {};
+            GOVERNANCE_EVENT_LIB_KEYS.forEach(k => {
+                if (ev.data._lib[k] !== undefined) {
+                    rec._fieldsLibrary[k] = __deepClone(ev.data._lib[k]);
+                } else {
+                    const blank = __blankEventLibKey(k);
+                    if (k === 'table_RURAL') { try { __seedAssessmentRowFromEvent(blank, ev.data); } catch (e) {} }
+                    rec._fieldsLibrary[k] = blank;
+                    ev.data._lib[k] = __deepClone(blank); // 立即固化，保证事件数据自包含
+                }
+            });
+            // 渲染层直接读模块级字段库变量 → 同步过去（merge 语义，空白结构整表替换旧行）
+            try {
+                const part = {};
+                GOVERNANCE_EVENT_LIB_KEYS.forEach(k => { if (rec._fieldsLibrary[k]) part[k] = rec._fieldsLibrary[k]; });
+                if (typeof restoreFieldsLibrary === 'function' && Object.keys(part).length) restoreFieldsLibrary(part);
+            } catch (e) {}
+            return rec;
+        }
+
+        // 把根级字段写回当前事件 ev.data（治理 TAB 编辑后保存时）
+        function __writeBackGovernanceEventView(rec) {
+            if (!rec) return rec;
+            const ev = getCurrentGovernanceEvent(rec);
+            if (!ev) return rec;
+            if (!ev.data || typeof ev.data !== 'object') ev.data = {};
+            GOVERNANCE_EVENT_FIELDS.forEach(k => {
+                if (rec[k] !== undefined) ev.data[k] = __deepClone(rec[k]);
+                else delete ev.data[k];
+            });
+            // 方案B1：字段库写回——调用方须先把 dumpFieldsLibrary() 写入 rec._fieldsLibrary
+            const lib = rec._fieldsLibrary || {};
+            if (!ev.data._lib || typeof ev.data._lib !== 'object') ev.data._lib = {};
+            GOVERNANCE_EVENT_LIB_KEYS.forEach(k => {
+                if (lib[k] !== undefined) ev.data._lib[k] = __deepClone(lib[k]);
+            });
+            return rec;
+        }
+
+        // 切换治理事件（UI 下拉调用）
+        function switchGovernanceEvent(eventId) {
+            if (!currentHouseArch) return false;
+            ensureGovernanceEvents(currentHouseArch);
+            const exists = (currentHouseArch.governanceEvents || []).some(e => e.eventId === eventId);
+            if (!exists) return false;
+            // 1. 回写当前事件（先 dump 模块级字段库，确保捕获页面最新编辑状态）
+            try { currentHouseArch._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
+            __writeBackGovernanceEventView(currentHouseArch);
+            // 2. 切换 id（同时更新 window 供渲染读取）
+            currentHouseArch.currentGovernanceEventId = eventId;
+            window.currentGovEventId = eventId;
+            // 3. 应用新事件到根级
+            __applyGovernanceEventView(currentHouseArch);
+            // 4. 持久化
+            saveCurrentHouseArch(currentHouseArch);
+            // 5. 重渲染
+            renderContent();
+            return true;
+        }
+        /* ==================== v2 模型 END ==================== */
     </script>    <style>
         :root {
             --primary: #1a73e8;
@@ -524,7 +661,7 @@
 
         html.bs-theme .sidebar-item { color: var(--text-secondary); }
         html.bs-theme .sidebar-item:hover { background: var(--bg-hover) !important; color: var(--text-primary); }
-        html.bs-theme .sidebar-item.active { background: var(--primary-light) !important; color: var(--primary) !important; border-right-color: var(--primary); }
+        html.bs-theme .sidebar-item.active { background: transparent !important; color: var(--primary) !important; border-bottom-color: var(--primary); }
 
         html.bs-theme .content-tabs { background: var(--bg-card) !important; border-color: var(--border) !important; }
 
@@ -639,112 +776,28 @@
         .status-badge.safe { background: var(--primary-light); color: var(--primary); }
 
         /* 主内容区：左右布局 */
-        .main-body { display: flex; gap: 12px; align-items: flex-start; }
+        .main-body { display: block; }
+        /* 顶部横向 TAB 条（原左侧 sidebar 改为顶部切换） */
         .sidebar {
-            width: 230px; flex-shrink: 0; background: #fff; border-radius: 8px;
-            box-shadow: 0 2px 8px var(--shadow); overflow: hidden; position: sticky; top: 16px; align-self: flex-start;
+            width: 100%; background: #fff; border-radius: 8px;
+            box-shadow: 0 2px 8px var(--shadow); overflow: hidden;
+            margin-bottom: 12px; display: flex; align-items: stretch;
         }
         .sidebar-header {
-            padding: 14px 16px; font-size: 14px; font-weight: 600; color: var(--text-primary);
-            border-bottom: 1px solid var(--border); background: #fafbfc;
+            padding: 0 18px; font-size: 14px; font-weight: 600; color: var(--text-primary);
+            border-bottom: none; border-right: 1px solid var(--border); background: #fafbfc;
+            display: flex; align-items: center; flex-shrink: 0; white-space: nowrap;
         }
-        /* 轮次切换器 */
-        .round-switcher {
-            padding: 10px 12px; border-bottom: 1px solid var(--border); background: #f5f7fa;
-        }
-        .round-switcher-label {
-            font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;
-            display: flex; align-items: center; gap: 4px;
-        }
-        .round-switcher-row {
-            display: flex; align-items: center; gap: 6px;
-        }
-        .round-select {
-            flex: 1; min-width: 0; padding: 6px 8px; font-size: 12px;
-            border: 1px solid var(--border); border-radius: 4px; background: #fff;
-            color: var(--text-primary); cursor: pointer; outline: none;
-        }
-        .round-select:focus { border-color: var(--primary); }
-        .round-add-btn {
-            padding: 6px 10px; font-size: 12px; border: 1px solid var(--primary);
-            background: var(--primary); color: #fff; border-radius: 4px;
-            cursor: pointer; white-space: nowrap; transition: background 0.15s;
-        }
-        .round-add-btn:hover { background: var(--primary-dark); }
-        .round-status-tag {
-            display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 3px;
-            margin-left: 4px; font-weight: normal;
-        }
-        .round-status-tag.doing { background: #e6f4ff; color: #0958d9; }
-        .round-status-tag.done { background: #f6ffed; color: #389e0d; }
-
-        /* 当前轮紧凑卡片 */
-        .round-current-card {
-            margin-top: 8px; padding: 10px 12px; background: #fff;
-            border: 1px solid var(--border); border-radius: 6px;
-        }
-        .round-current-name {
-            font-size: 13px; font-weight: 600; color: var(--text-primary);
-            display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-        }
-        .round-current-name .round-type-tag {
-            display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 3px;
-            background: #f0f2f5; color: var(--text-secondary); font-weight: normal;
-        }
-        .round-current-name .round-type-tag.type-special { background: #fff7e6; color: #d46b08; }
-        .round-current-name .round-type-tag.type-emergency { background: #fff1f0; color: #cf1322; }
-        .round-current-meta {
-            font-size: 11px; color: var(--text-secondary); margin-top: 4px;
-            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-        }
-        .round-switch-actions {
-            margin-top: 10px; display: flex; gap: 6px;
-        }
-        .round-action-btn {
-            flex: 1; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border);
-            background: #fff; color: var(--text-primary); border-radius: 4px;
-            cursor: pointer; transition: all 0.15s; white-space: nowrap;
-            display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-        }
-        .round-action-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
-        .round-action-btn.primary {
-            background: var(--primary); border-color: var(--primary); color: #fff;
-        }
-        .round-action-btn.primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
-        /* 只读徽标 */
-        .round-readonly-banner {
-            margin-top: 8px; padding: 6px 10px; background: #fff7e6; border: 1px solid #ffd591;
-            border-radius: 4px; font-size: 11px; color: #d46b08;
-            display: flex; align-items: center; gap: 6px;
-        }
-
-        /* 轮次选择弹窗 */
-        .round-picker-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .round-picker-table th, .round-picker-table td {
-            padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
-        }
-        .round-picker-table thead th {
-            background: #fafbfc; font-weight: 600; color: var(--text-secondary);
-            font-size: 12px; position: sticky; top: 0;
-        }
-        .round-picker-table tbody tr { cursor: pointer; transition: background 0.12s; }
-        .round-picker-table tbody tr:hover { background: var(--primary-light); }
-        .round-picker-table tbody tr.current { background: #e6f4ff; }
-        .round-picker-table tbody tr.current:hover { background: #d6e9ff; }
-        .round-picker-table td .name-cell {
-            display: flex; align-items: center; gap: 6px; font-weight: 500;
-        }
-        .round-picker-empty {
-            padding: 40px; text-align: center; color: var(--text-secondary); font-size: 13px;
-        }
-        .sidebar-menu { padding: 8px; }
+        .sidebar-menu { padding: 0 8px; display: flex; align-items: stretch; flex: 1; }
         .sidebar-item {
-            display: flex; align-items: center; justify-content: space-between; gap: 8px;
-            padding: 10px 12px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
-            margin-bottom: 4px; font-size: 13px; color: var(--text-primary);
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 13px 18px; cursor: pointer; transition: all 0.15s;
+            margin-bottom: 0; font-size: 14px; color: var(--text-secondary);
+            border-radius: 0; border-bottom: 2px solid transparent; position: relative;
+            white-space: nowrap;
         }
         .sidebar-item:hover { background: var(--primary-light); color: var(--primary); }
-        .sidebar-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+        .sidebar-item.active { background: transparent; color: var(--primary); font-weight: 600; border-bottom-color: var(--primary); }
         .sidebar-item-left { display: flex; align-items: center; gap: 8px; }
         .sidebar-item i { width: 16px; text-align: center; color: inherit; }
         .sidebar-tag {
@@ -752,17 +805,6 @@
             background: #f0f2f5; color: var(--text-secondary);
         }
         .sidebar-item.active .sidebar-tag { background: rgba(26,115,232,0.12); color: var(--primary); }
-        .sidebar-static-badge {
-            font-size: 10px; padding: 1px 5px; border-radius: 3px; white-space: nowrap;
-            background: #e6f4ea; color: #188038; border: 1px solid #ceead6;
-            line-height: 1.2; flex-shrink: 0;
-        }
-        .sidebar-item.active .sidebar-static-badge {
-            background: rgba(24,128,56,0.12); color: #188038; border-color: rgba(24,128,56,0.3);
-        }
-        .sidebar-item:hover .sidebar-static-badge {
-            background: #ceead6; border-color: #a8d5b5;
-        }
 
         .content-area { flex: 1; min-width: 0; }
         .content-card {
@@ -911,8 +953,10 @@
         .bottom-info .readonly-tag { display: none; }
 
         @media (max-width: 900px) {
-            .main-body { flex-direction: column; }
-            .sidebar { width: 100%; position: static; }
+            .sidebar { flex-direction: column; }
+            .sidebar-header { border-right: none; border-bottom: 1px solid var(--border); padding: 12px 18px; }
+            .sidebar-menu { overflow-x: auto; }
+            .sidebar-item { padding: 12px 14px; }
             .info-grid { grid-template-columns: repeat(2, 1fr); }
         }
         .modal-overlay {
@@ -1538,7 +1582,7 @@
             </div>
             <div class="topbar-actions">
                 <span class="topbar-sub" id="topbarSub" style="margin-top:0;align-self:center;">所属街道：西渡街道</span>
-                <button class="topbar-btn" id="syncBtn" onclick="syncToPublish()" style="display:none;background:var(--safe);color:#fff;border-color:var(--safe);" title="把当前草稿推送到房屋建筑档案"><i class="fas fa-cloud-upload-alt"></i> 同步到档案</button>
+                <button class="topbar-btn" id="syncBtn" onclick="syncToPublish()" style="display:none;background:var(--safe);color:#fff;border-color:var(--safe);" title="把当前修改更新到房屋建筑档案"><i class="fas fa-cloud-upload-alt"></i> 同步到档案</button>
                 <button class="topbar-btn" onclick="goBackToList()" title="返回"><i class="fas fa-arrow-left"></i> 返回</button>
             </div>
         </div>
@@ -1550,7 +1594,6 @@
         <div class="main-body">
             <div class="sidebar" id="sidebar">
                 <div class="sidebar-header" id="sidebarHeader">自建房风险档案</div>
-                <div class="round-switcher" id="roundSwitcher"></div>
                 <div class="sidebar-menu" id="sidebarMenu"></div>
             </div>
             <div class="content-area" id="contentArea"></div>
@@ -1562,12 +1605,6 @@
             { key: 'basic', icon: 'fa-id-card', title: '房屋概况', tag: '静态档案' },
             { key: 'discovery', icon: 'fa-search', title: '风险发现', tag: '排查/巡查' },
             { key: 'risk', icon: 'fa-exclamation-triangle', title: '风险信息记录', tag: '风险辨识' },
-            { key: 'assessment', icon: 'fa-clipboard-check', title: '安全鉴定', tag: '动态录入' },
-            { key: 'plan', icon: 'fa-calendar-alt', title: '整治计划', tag: '方案制定' },
-            { key: 'measure', icon: 'fa-tools', title: '整治措施', tag: '措施实施' },
-            { key: 'control', icon: 'fa-shield-alt', title: '隐患动态', tag: '过程跟踪' },
-            { key: 'accept', icon: 'fa-clipboard-check', title: '阶段性验收', tag: '过程验收' },
-            { key: 'close', icon: 'fa-check-circle', title: '验收销项', tag: '闭环完成' },
             { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '预案演练', ruralOnly: true }
         ];
 
@@ -2022,6 +2059,16 @@
             return 'survey';
         })();
         let currentControlSubTab = 'situation'; // 隐患动态 子tab：situation/dynamic/quality/history
+        // 原型：风险信息详情内嵌治理链子tab（第三类才显示）
+        let currentRiskSubTab = 'assessment'; // assessment/plan/measure/control/accept/close
+        const RISK_GOV_TABS = [
+            { key: 'assessment', title: '安全鉴定', icon: 'fa-clipboard-check' },
+            { key: 'plan',       title: '整治计划', icon: 'fa-calendar-alt' },
+            { key: 'measure',    title: '整治措施', icon: 'fa-tools' },
+            { key: 'control',    title: '隐患动态', icon: 'fa-shield-alt' },
+            { key: 'accept',     title: '阶段性验收', icon: 'fa-clipboard-check' },
+            { key: 'close',      title: '验收销项', icon: 'fa-check-circle' }
+        ];
         let currentHouseArch = getCurrentHouseArch();
 
         // =========================================================
@@ -2060,21 +2107,10 @@
                 }
             });
         }
-        // 页面加载时恢复草稿里的字段库（如有）
+        // 页面加载时恢复草稿里的字段库（如有，含 basic/survey/table/measure 各分组）
         if (currentHouseArch && currentHouseArch._fieldsLibrary) {
             restoreFieldsLibrary(currentHouseArch._fieldsLibrary);
         }
-        // ===== 轮次：恢复当前轮的流程字段库（basic 留在根级 _fieldsLibrary）=====
-        (function restoreCurrentRoundLib() {
-            if (!currentHouseArch) return;
-            ensureRoundsStructure(currentHouseArch);
-            const r = getCurrentRound(currentHouseArch);
-            if (r && r.data && r.data._lib) {
-                const libPart = {};
-                ROUND_SCOPED_LIB_KEYS.forEach(k => { if (r.data._lib[k]) libPart[k] = r.data._lib[k]; });
-                if (Object.keys(libPart).length) restoreFieldsLibrary(libPart);
-            }
-        })();
 
         // ===== 兜底：旧草稿 jbxx 缺"常住人口"字段时，自动插入到"房屋类型"之后 =====
         (function ensureJbxxChangzhuRenkou() {
@@ -2172,67 +2208,6 @@
                 else rows.push(['改造年月', '']);
             });
         })();
-
-        // ===== 轮次切换（核心入口）=====
-        // 流程：dump 当前内存字段库 + 根级流程字段 → 写回旧轮 → 切换 → 应用新轮 → 持久化 → 重渲染
-        function switchRound(roundId) {
-            if (!currentHouseArch) return false;
-            ensureRoundsStructure(currentHouseArch);
-            const oldRound = getCurrentRound(currentHouseArch);
-            if (oldRound && oldRound.roundId === roundId) return true; // 已是当前轮
-            // 1. 把当前内存状态写回旧轮
-            if (oldRound) {
-                try { currentHouseArch._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
-                oldRound.data = __extractRoundSnapshot(currentHouseArch);
-                oldRound.status = oldRound.status || '进行中';
-            }
-            // 2. 切换
-            if (!setCurrentRound(currentHouseArch, roundId)) return false;
-            const newRound = getCurrentRound(currentHouseArch);
-            // 3. 应用新轮到根级 + 字段库
-            if (newRound && newRound.data) {
-                __applyRoundSnapshot(currentHouseArch, newRound.data);
-                if (newRound.data._lib) {
-                    const libPart = {};
-                    ROUND_SCOPED_LIB_KEYS.forEach(k => { if (newRound.data._lib[k]) libPart[k] = newRound.data._lib[k]; });
-                    if (Object.keys(libPart).length) restoreFieldsLibrary(libPart);
-                }
-            }
-            // 4. 持久化（saveCurrentHouseArch 会再次 dump+extract 写回新轮，幂等）
-            saveCurrentHouseArch(currentHouseArch);
-            // 5. 重置 UI 状态（recordViewState / measureFormState / closeHistoryFormState 等）
-            try { if (typeof recordViewState !== 'undefined') Object.keys(recordViewState).forEach(k => recordViewState[k] = 0); } catch (e) {}
-            // 6. 重渲染
-            renderSidebar();
-            renderContent();
-            return true;
-        }
-
-        // 新建一轮并切换
-        // options: { name?, type?, startDate? }（来自新建轮弹窗）
-        function addNewRound(options) {
-            if (!currentHouseArch) return;
-            // 先把当前内存写回旧轮
-            const oldRound = getCurrentRound(currentHouseArch);
-            if (oldRound) {
-                try { currentHouseArch._fieldsLibrary = dumpFieldsLibrary(); } catch (e) {}
-                oldRound.data = __extractRoundSnapshot(currentHouseArch);
-            }
-            const nr = createNewRound(currentHouseArch, options);
-            // 应用新轮（空白）到根级 + 字段库
-            if (nr && nr.data) {
-                __applyRoundSnapshot(currentHouseArch, nr.data);
-                if (nr.data._lib) {
-                    const libPart = {};
-                    ROUND_SCOPED_LIB_KEYS.forEach(k => { if (nr.data._lib[k]) libPart[k] = nr.data._lib[k]; });
-                    if (Object.keys(libPart).length) restoreFieldsLibrary(libPart);
-                }
-            }
-            saveCurrentHouseArch(currentHouseArch);
-            try { if (typeof recordViewState !== 'undefined') Object.keys(recordViewState).forEach(k => recordViewState[k] = 0); } catch (e) {}
-            renderSidebar();
-            renderContent();
-        }
         // 城镇基本信息分组兜底：restore 后若分组不是数组（旧草稿无此 key），重新用默认数组
         if (!Array.isArray(basicData_URBAN.jbxx_common)) basicData_URBAN.jbxx_common = JSON.parse(JSON.stringify(jbxx_URBAN_COMMON));
         if (!Array.isArray(basicData_URBAN.jbxx_residential)) basicData_URBAN.jbxx_residential = JSON.parse(JSON.stringify(jbxx_URBAN_RESIDENTIAL));
@@ -2486,10 +2461,8 @@
             const menu = document.getElementById('sidebarMenu');
             menu.innerHTML = getSidebarItems().map(item => {
                 const active = item.key === currentSidebar ? 'active' : '';
-                const staticBadge = item.tag === '静态档案' ? '<span class="sidebar-static-badge" title="静态档案数据，每轮排查仅偶尔修订">静态</span>' : '';
                 return '<div class="sidebar-item ' + active + '" data-key="' + item.key + '">' +
                     '<div class="sidebar-item-left"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div>' +
-                    staticBadge +
                     '</div>';
             }).join('');
             menu.querySelectorAll('.sidebar-item').forEach(el => {
@@ -2498,190 +2471,6 @@
                     renderSidebar();
                     renderContent();
                 });
-            });
-            // 渲染轮次切换器
-            renderRoundSwitcher();
-        }
-
-        // 渲染轮次切换器（紧凑卡片 + 弹窗选择）
-        function renderRoundSwitcher() {
-            const box = document.getElementById('roundSwitcher');
-            if (!box) return;
-            if (!currentHouseArch) { box.innerHTML = ''; return; }
-            ensureRoundsStructure(currentHouseArch);
-            const rounds = currentHouseArch.rounds;
-            const curId = currentHouseArch.currentRoundId;
-            const curRound = rounds.find(r => r.roundId === curId);
-            if (!curRound) { box.innerHTML = ''; return; }
-            const isCurDone = curRound.status === '已完结';
-            const typeCls = curRound.type === '专项' ? 'type-special' : (curRound.type === '应急' ? 'type-emergency' : '');
-            const statusTag = isCurDone
-                ? '<span class="round-status-tag done">已完结</span>'
-                : '<span class="round-status-tag doing">进行中</span>';
-            const typeTag = curRound.type
-                ? '<span class="round-type-tag ' + typeCls + '">' + curRound.type + '</span>'
-                : '';
-            const readonlyBanner = isCurDone
-                ? '<div class="round-readonly-banner"><i class="fas fa-lock"></i><span>当前轮已完结，流程数据为只读</span></div>'
-                : '';
-            box.innerHTML =
-                '<div class="round-switcher-label"><i class="fas fa-layer-group"></i> 风险治理轮次 <span style="margin-left:auto;color:var(--text-secondary);font-weight:normal;">共 ' + rounds.length + ' 轮</span></div>' +
-                '<div class="round-current-card">' +
-                    '<div class="round-current-name">' + (curRound.name || curRound.title) + typeTag + statusTag + '</div>' +
-                    '<div class="round-current-meta">' +
-                        '<span><i class="far fa-calendar"></i> ' + (curRound.startDate || '—') + '</span>' +
-                        (curRound.endDate ? '<span>→ ' + curRound.endDate + '</span>' : '') +
-                    '</div>' +
-                '</div>' +
-                readonlyBanner +
-                '<div class="round-switch-actions">' +
-                    '<button class="round-action-btn" id="roundPickerBtn" title="查看所有轮次"><i class="fas fa-list"></i> 切换轮次</button>' +
-                    '<button class="round-action-btn primary" id="roundAddBtn" title="新建一轮治理"><i class="fas fa-plus"></i> 新轮</button>' +
-                '</div>';
-            const pickerBtn = document.getElementById('roundPickerBtn');
-            const addBtn = document.getElementById('roundAddBtn');
-            if (pickerBtn) pickerBtn.addEventListener('click', openRoundPickerModal);
-            if (addBtn) addBtn.addEventListener('click', openNewRoundModal);
-        }
-
-        // ===== 轮次选择弹窗 =====
-        function openRoundPickerModal() {
-            if (!currentHouseArch) return;
-            ensureRoundsStructure(currentHouseArch);
-            const rounds = currentHouseArch.rounds.slice();
-            const curId = currentHouseArch.currentRoundId;
-            // 按开始日期倒序（最新在前）；无日期的排最后
-            rounds.sort((a, b) => {
-                const da = a.startDate || '';
-                const db = b.startDate || '';
-                if (da === db) return (b.roundNo || 0) - (a.roundNo || 0);
-                return db.localeCompare(da);
-            });
-            const rows = rounds.map(r => {
-                const isCur = r.roundId === curId;
-                const isDone = r.status === '已完结';
-                const statusTag = isDone
-                    ? '<span class="round-status-tag done">已完结</span>'
-                    : '<span class="round-status-tag doing">进行中</span>';
-                const typeTag = r.type ? '<span class="round-type-tag">' + r.type + '</span>' : '';
-                return '<tr data-round-id="' + r.roundId + '" class="' + (isCur ? 'current' : '') + '">' +
-                    '<td><div class="name-cell">' + (r.name || r.title) + (isCur ? ' <i class="fas fa-check-circle" style="color:var(--primary);font-size:12px;" title="当前轮"></i>' : '') + '</div></td>' +
-                    '<td>' + typeTag + '</td>' +
-                    '<td>' + (r.startDate || '—') + '</td>' +
-                    '<td>' + (r.endDate || '—') + '</td>' +
-                    '<td>' + statusTag + '</td>' +
-                '</tr>';
-            }).join('');
-            const tbody = rows || '<tr><td colspan="5"><div class="round-picker-empty">暂无轮次</div></td></tr>';
-
-            let modal = document.getElementById('roundPickerModal');
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'roundPickerModal';
-                modal.className = 'modal-overlay';
-                document.body.appendChild(modal);
-            }
-            modal.innerHTML =
-                '<div class="modal-box" style="max-width:880px;">' +
-                    '<div class="modal-header">' +
-                        '<div class="modal-title"><i class="fas fa-layer-group"></i> 选择治理轮次</div>' +
-                        '<button class="modal-close" data-act="close"><i class="fas fa-times"></i></button>' +
-                    '</div>' +
-                    '<div class="modal-body" style="padding:0;">' +
-                        '<table class="round-picker-table">' +
-                            '<thead><tr>' +
-                                '<th style="width:36%;">排查名称</th>' +
-                                '<th style="width:10%;">类型</th>' +
-                                '<th style="width:13%;">开始日期</th>' +
-                                '<th style="width:13%;">完结日期</th>' +
-                                '<th>状态</th>' +
-                            '</tr></thead>' +
-                            '<tbody>' + tbody + '</tbody>' +
-                        '</table>' +
-                    '</div>' +
-                    '<div class="modal-footer">' +
-                        '<button class="modal-btn" data-act="close">关闭</button>' +
-                    '</div>' +
-                '</div>';
-            modal.classList.add('open');
-            // 事件
-            modal.querySelectorAll('[data-act="close"]').forEach(el => {
-                el.addEventListener('click', () => modal.classList.remove('open'));
-            });
-            modal.addEventListener('click', function onBackdrop(e) {
-                if (e.target === modal) modal.classList.remove('open');
-            });
-            modal.querySelectorAll('tbody tr[data-round-id]').forEach(tr => {
-                tr.addEventListener('click', () => {
-                    const rid = tr.dataset.roundId;
-                    modal.classList.remove('open');
-                    if (rid && rid !== curId) switchRound(rid);
-                });
-            });
-        }
-
-        // ===== 新建轮次弹窗 =====
-        function openNewRoundModal() {
-            if (!currentHouseArch) return;
-            ensureRoundsStructure(currentHouseArch);
-            const newNo = currentHouseArch.rounds.length + 1;
-            const today = new Date().toISOString().slice(0, 10);
-            let modal = document.getElementById('newRoundModal');
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'newRoundModal';
-                modal.className = 'modal-overlay';
-                document.body.appendChild(modal);
-            }
-            modal.innerHTML =
-                '<div class="modal-box" style="max-width:520px;">' +
-                    '<div class="modal-header">' +
-                        '<div class="modal-title"><i class="fas fa-plus-circle"></i> 新建治理轮次</div>' +
-                        '<button class="modal-close" data-act="close"><i class="fas fa-times"></i></button>' +
-                    '</div>' +
-                    '<div class="modal-body">' +
-                        '<div class="form-grid" style="grid-template-columns:1fr;">' +
-                            '<div class="form-item">' +
-                                '<label class="form-label">轮次名称 <span style="color:var(--danger);">*</span></label>' +
-                                '<input type="text" class="form-input" id="newRoundName" placeholder="例如：2026 年汛期专项治理" value="第 ' + newNo + ' 轮">' +
-                            '</div>' +
-                            '<div class="form-item">' +
-                                '<label class="form-label">轮次类型</label>' +
-                                '<select class="form-select" id="newRoundType">' +
-                                    '<option value="常规" selected>常规</option>' +
-                                    '<option value="专项">专项</option>' +
-                                    '<option value="应急">应急</option>' +
-                                '</select>' +
-                            '</div>' +
-                            '<div class="form-item">' +
-                                '<label class="form-label">开始日期</label>' +
-                                '<input type="date" class="form-input" id="newRoundStartDate" value="' + today + '">' +
-                            '</div>' +
-                            '<div style="padding:8px 12px;background:#fff7e6;border:1px solid #ffd591;border-radius:4px;font-size:12px;color:#d46b08;">' +
-                                '<i class="fas fa-info-circle"></i> 新建后，当前轮将标记为"已完结"，新轮将复制字段库结构但清空流程数据。' +
-                            '</div>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="modal-footer">' +
-                        '<button class="modal-btn" data-act="close">取消</button>' +
-                        '<button class="modal-btn" data-act="ok" style="background:var(--primary);color:#fff;border-color:var(--primary);">确定新建</button>' +
-                    '</div>' +
-                '</div>';
-            modal.classList.add('open');
-            modal.querySelectorAll('[data-act="close"]').forEach(el => {
-                el.addEventListener('click', () => modal.classList.remove('open'));
-            });
-            modal.addEventListener('click', function onBackdrop(e) {
-                if (e.target === modal) modal.classList.remove('open');
-            });
-            modal.querySelector('[data-act="ok"]').addEventListener('click', () => {
-                const name = document.getElementById('newRoundName').value.trim();
-                const type = document.getElementById('newRoundType').value;
-                const startDate = document.getElementById('newRoundStartDate').value;
-                if (!name) { alert('请输入排查名称'); return; }
-                if (!startDate) { alert('请选择开始日期'); return; }
-                modal.classList.remove('open');
-                addNewRound({ name: name, type: type, startDate: startDate });
             });
         }
 
@@ -2692,35 +2481,22 @@
             if (titleEl) titleEl.textContent = s.no || '—';
             if (subEl) subEl.textContent = '所属街道：' + (s.street || '—');
 
-            // 根据房屋类别动态设置侧边栏标题（农村自建房 / 城镇自建房）
+            // 顶部 TAB 条左侧标题（农村自建房 / 城镇自建房）
             const sidebarHeaderEl = document.getElementById('sidebarHeader');
             if (sidebarHeaderEl) {
                 const houseType = '农村自建房';
                 sidebarHeaderEl.innerHTML = '<i class="fas fa-home" style="margin-right:8px;color:#202124;"></i>' + houseType + '风险档案';
-                sidebarHeaderEl.style.borderLeft = '3px solid #202124';
             }
-        }
-
-        // 已完结轮次只读：根据当前轮 status 切换 body.readonly-mode
-        // 注意：URL mode=publish 的强制只读优先级更高，不可被轮次逻辑覆盖
-        function applyRoundReadonlyMode() {
-            if (!IS_DRAFT_MODE) return; // publish 模式天然只读
-            if (!currentHouseArch) return;
-            try {
-                ensureRoundsStructure(currentHouseArch);
-                const cur = getCurrentRound(currentHouseArch);
-                const isDone = cur && cur.status === '已完结';
-                if (isDone) document.body.classList.add('readonly-mode');
-                else document.body.classList.remove('readonly-mode');
-            } catch (e) {}
         }
 
         function renderContent() {
             currentHouseArch = getCurrentHouseArch();
-            applyRoundReadonlyMode();
             syncTopbarFromHouseArch();
             renderStatusPanel();
             const area = document.getElementById('contentArea');
+            // 治理 6 项已收编进「风险信息记录」详情，兜底：非法 currentSidebar 归位到 risk
+            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'risk', 'emergency'];
+            if (__VALID_SIDEBARS.indexOf(currentSidebar) === -1) currentSidebar = 'risk';
             if (currentSidebar === 'basic') {
                 area.innerHTML = renderBasicContent();
                 bindSubTabs();
@@ -2759,6 +2535,8 @@
             } else {
                 area.innerHTML = renderTableContent(currentSidebar);
                 bindSubTabs(); // 绑定记录列表行点击（风险信息记录等模块）
+                // 风险详情内嵌治理链可能包含措施/销项上传组件
+                if (currentSidebar === 'risk') bindMeasureUploadDropzones(area);
             }
             // 只读模式：标记并隐藏“操作”表头列
             if (document.body.classList.contains('readonly-mode')) {
@@ -3205,10 +2983,14 @@
                     const scope = el.dataset.scope || '';
                     if (scope === 'discovery') {
                         currentDiscoveryTab = el.dataset.key;
+                    } else if (scope === 'risk') {
+                        // 风险详情治理子tab → 原地切换，仅渲染详情内嵌内容，不跳左侧导航
+                        currentRiskSubTab = el.dataset.key;
+                    } else if (scope === 'measure') {
+                        // 整治措施二级子tab（管理/工程/整治情况），可能处于侧栏入口或风险详情内嵌
+                        currentMeasureSubTab = el.dataset.key;
                     } else if (currentSidebar === 'basic') {
                         currentSubTab = el.dataset.key;
-                    } else if (currentSidebar === 'measure') {
-                        currentMeasureSubTab = el.dataset.key;
                     } else if (currentSidebar === 'survey' || (currentSidebar === 'discovery' && currentDiscoveryTab === 'survey')) {
                         currentSurveySubTab = el.dataset.key;
                     } else if (currentSidebar === 'control') {
@@ -3423,41 +3205,16 @@
             '</div>';
         }
 
-        function renderMeasureContent() {
-            const measureSubTabs = getMeasureSubTabs();
-            const measureData = getMeasureData();
-            const tabsHtml = measureSubTabs.map(tab => {
-                const active = tab.key === currentMeasureSubTab ? 'active' : '';
-                return '<div class="content-tab ' + active + '" data-key="' + tab.key + '" data-scope="measure">' +
-                    '<i class="fas ' + tab.icon + '"></i> ' + tab.title +
-                    '</div>';
-            }).join('');
+        // 整治情况纯内容（不含卡片壳/子tab条/bottom-bar），供 renderMeasureContent 与风险详情内嵌复用
+        function renderMeasureSituationBody() {
+            return renderRectifySituation(currentHouseArch);
+        }
 
+        // 管理/工程措施纯内容（记录标题+新增钮+历史折叠卡+填报表单），不含卡片壳/子tab条/bottom-bar
+        function renderMeasureRecordsBody() {
+            const measureSubTabs = getMeasureSubTabs();
             const s = currentHouseArch;
             const sub = measureSubTabs.find(t => t.key === currentMeasureSubTab) || measureSubTabs[0];
-            const item = getSidebarItems().find(i => i.key === 'measure') || { title: '整治措施', icon: 'fa-tools' };
-
-            // ===== 整治情况 TAB =====
-            if (currentMeasureSubTab === 'situation') {
-                const bodyHtml = renderRectifySituation(s);
-                return '<div class="content-card">' +
-                    '<div class="content-card-header">' +
-                        '<div class="content-card-title"><i class="fas ' + item.icon + '" style="width:16px;text-align:center;"></i> ' + item.title + '</div>' +
-                    '</div>' +
-                    '<div class="content-tabs">' + tabsHtml + '</div>' +
-                    '<div class="content-body">' + bodyHtml + '</div>' +
-                '</div>' +
-                '<div class="bottom-bar">' +
-                    '<div class="bottom-info">' +
-                        '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
-                        '当前节点：<span class="bottom-node">' + item.title + ' - ' + sub.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span>' +
-                    '</div>' +
-                    '<div class="bottom-actions">' +
-                        '<button class="bottom-btn primary" onclick="openRectifySituationEditModal()"><i class="fas fa-edit"></i> 编辑整治情况</button>' +
-                    '</div>' +
-                '</div>';
-            }
-
             const kind = (currentMeasureSubTab === 'project') ? 'project' : 'manage';
             const records = kind === 'manage' ? (s.manageRecords || []) : (s.projectRecords || []);
             // 历史记录折叠卡片列表
@@ -3477,13 +3234,64 @@
                 : '<button class="bottom-btn" style="padding:4px 12px;font-size:12px;" onclick="openMeasureForm(\'' + kind + '\')"><i class="fas fa-plus"></i> 新增填报</button>';
             const sectionTitle = (kind === 'manage' ? '管理措施记录' : '工程措施记录');
 
-            const mainBodyHtml =
-                '<div class="record-section-title" style="display:flex;justify-content:space-between;align-items:center;">' +
-                    '<span><i class="fas ' + (kind === 'manage' ? 'fa-shield-alt' : 'fa-hammer') + '"></i> ' + sectionTitle + '</span>' +
-                    addBtnHtml +
+            return '<div class="record-section-title" style="display:flex;justify-content:space-between;align-items:center;">' +
+                '<span><i class="fas ' + (kind === 'manage' ? 'fa-shield-alt' : 'fa-hammer') + '"></i> ' + sectionTitle + '</span>' +
+                addBtnHtml +
+            '</div>' +
+            historyHtml +
+            formBlockHtml;
+        }
+
+        function renderMeasureContent() {
+            const measureSubTabs = getMeasureSubTabs();
+            const measureData = getMeasureData();
+            // v2：治理链门禁——仅第三类风险可进入整治措施
+            const __s = currentHouseArch;
+            ensureGovernanceEvents(__s);
+            const __evs = __s.governanceEvents || [];
+            if (!__evs.length) {
+                return '<div class="content-card">' +
+                    '<div class="content-card-header"><div class="content-card-title"><i class="fas fa-tools"></i> 整治措施</div></div>' +
+                    '<div class="content-body"><div class="record-empty" style="padding:60px 20px;text-align:center;">' +
+                        '<i class="fas fa-lock" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
+                        '仅第三类风险需进入治理流程<br><span style="font-size:12px;color:#909399;">当前房屋暂无第三类结论的风险记录，无需进行整治措施</span>' +
+                    '</div></div>' +
+                '</div>';
+            }
+            const tabsHtml = measureSubTabs.map(tab => {
+                const active = tab.key === currentMeasureSubTab ? 'active' : '';
+                return '<div class="content-tab ' + active + '" data-key="' + tab.key + '" data-scope="measure">' +
+                    '<i class="fas ' + tab.icon + '"></i> ' + tab.title +
+                    '</div>';
+            }).join('');
+
+            const s = currentHouseArch;
+            const sub = measureSubTabs.find(t => t.key === currentMeasureSubTab) || measureSubTabs[0];
+            const item = getSidebarItems().find(i => i.key === 'measure') || { title: '整治措施', icon: 'fa-tools' };
+
+            // ===== 整治情况 TAB =====
+            if (currentMeasureSubTab === 'situation') {
+                const bodyHtml = renderMeasureSituationBody();
+                return '<div class="content-card">' +
+                    '<div class="content-card-header">' +
+                        '<div class="content-card-title"><i class="fas ' + item.icon + '" style="width:16px;text-align:center;"></i> ' + item.title + '</div>' +
+                    '</div>' +
+                    '<div class="content-tabs">' + tabsHtml + '</div>' +
+                    '<div class="content-body">' + bodyHtml + '</div>' +
                 '</div>' +
-                historyHtml +
-                formBlockHtml;
+                '<div class="bottom-bar">' +
+                    '<div class="bottom-info">' +
+                        '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                        '当前节点：<span class="bottom-node">' + item.title + ' - ' + sub.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span>' +
+                    '</div>' +
+                    '<div class="bottom-actions">' +
+                        '<button class="bottom-btn primary" onclick="openRectifySituationEditModal()"><i class="fas fa-edit"></i> 编辑整治情况</button>' +
+                    '</div>' +
+                '</div>';
+            }
+
+            const kind = (currentMeasureSubTab === 'project') ? 'project' : 'manage';
+            const mainBodyHtml = renderMeasureRecordsBody();
 
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
@@ -3780,14 +3588,16 @@
             const surveyData = getSurveyData();
             const s = currentHouseArch;
 
-            // 排查登记：一轮只登记一次，取 inspectionRecords[0]（或最新一条）作为唯一记录
+            // 排查登记：按当前轮次可多轮多条，列表+详情（激活索引 recordViewState.inspection）
             let list = (Array.isArray(s.inspectionRecords) ? s.inspectionRecords.slice() : []);
             list.sort(function(a, b) {
-                const ta = (a.reportTime || a.checkDate || '').toString();
-                const tb = (b.reportTime || b.checkDate || '').toString();
+                const ta = (a.checkDate || a.reportTime || '').toString();
+                const tb = (b.checkDate || b.reportTime || '').toString();
                 return tb.localeCompare(ta);
             });
-            const record = list[0] || { checkDate: '', checker: '', structureStatus: '', preliminaryJudge: '', reportTime: '', reporter: '' };
+            const inspActiveIdx = Math.min(recordViewState.inspection || 0, Math.max(list.length - 1, 0));
+            recordViewState.inspection = inspActiveIdx;
+            const record = list[inspActiveIdx] || { checkDate: '', checker: '', structureStatus: '', preliminaryJudge: '', reportTime: '', reporter: '' };
 
             const tabsHtml = surveySubTabs.map(tab => {
                 const active = tab.key === currentSurveySubTab ? 'active' : '';
@@ -3934,7 +3744,35 @@
 
             const sub = surveySubTabs.find(t => t.key === currentSurveySubTab);
 
+            // survey1：多条排查记录列表（点击切换详情，激活行高亮）
+            let listCardHtml = '';
+            if (currentSurveySubTab === 'survey1') {
+                const listHtml = recordListTable(
+                    ['排查日期', '排查单位', '排查人员', '排查结论', '结构状况', { title: '状态', tag: true, tagClass: function(v){ return v === '最新' ? 'primary' : 'info'; } }],
+                    list.map(function(r, i) {
+                        const town = r.town || r.townName || '';
+                        return [
+                            (r.checkDate || r.reportTime || '—'),
+                            (town ? town + '人民政府' : '—'),
+                            (r.checker || '—'),
+                            (r.preliminaryJudge || r.otherRisk || '—'),
+                            (r.structureStatus || '—'),
+                            (i === 0 ? '最新' : '历史')
+                        ];
+                    }),
+                    'inspection',
+                    inspActiveIdx,
+                    { showCrud: { edit: 'openCrudModal(\'survey\'', delete: 'deleteCrudRecord(\'survey\'' }, records: list }
+                );
+                listCardHtml = recordListWrapper('排查登记记录列表', listHtml, { icon: 'fa-search', showAdd: 'addCrudRecord(\'survey\')' }) +
+                    '<div class="record-detail-header">' +
+                        '<div class="title">排查登记详情（' + (list.length ? (inspActiveIdx + 1) + ' / ' + list.length : '0 / 0') + '）</div>' +
+                        '<div class="meta">记录编号：' + (record.id || '—') + '</div>' +
+                    '</div>';
+            }
+
             return '<div class="content-tabs" style="padding-left:0;padding-right:0;">' + tabsHtml + '</div>' +
+                listCardHtml +
                 '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + gridHtml + '</div>';
         }
 
@@ -3994,7 +3832,7 @@
                 ['巡查时间', '巡查点位坐标', '巡查单位', '巡查人员', '巡查结论', { title: '状态', tag: true, tagClass: v => v === '最新' ? 'primary' : 'info' }],
                 list.map(function(r, i) {
                     const status = i === 0 ? '最新' : '历史';
-                    return [r.patrolDate || '—', r.patrolPointCoord || '—', r.patrolOrg || '—', r.patrolPerson || '—', r.result || '—', status];
+                    return [r.patrolDate || '—', r.patrolPointCoord || '—', r.patrolOrg || '—', r.patrolPerson || '—', normalizePatrolConclusion(r) || '—', status];
                 }),
                 'patrol',
                 activeIndex,
@@ -4014,7 +3852,7 @@
                 kvP('巡查单位', r.patrolOrg),
                 kvP('巡查人员', r.patrolPerson),
                 kvP('问题描述', r.foundProblems || '无'),
-                kvP('巡查结论', r.result),
+                kvP('巡查结论', normalizePatrolConclusion(r)),
                 kvP('判定结果', r.decision),
                 kvP('处置建议', r.suggestion)
             ].join('');
@@ -4061,6 +3899,78 @@
         function renderTableContent(key) {
             const item = getSidebarItems().find(i => i.key === key);
             const s = currentHouseArch;
+            // v2：治理链 6 TAB（安全鉴定/整治计划/整治措施/隐患动态/阶段性验收/验收销项）仅第三类可进入
+            const GOVERNANCE_KEYS = ['assessment', 'plan', 'measure', 'control', 'accept', 'close'];
+            if (GOVERNANCE_KEYS.indexOf(key) !== -1) {
+                ensureGovernanceEvents(s);
+                const events = s.governanceEvents || [];
+                if (!events.length) {
+                    return '<div class="content-card">' +
+                        '<div class="content-card-header"><div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div></div>' +
+                        '<div class="content-body"><div class="record-empty" style="padding:60px 20px;text-align:center;">' +
+                            '<i class="fas fa-lock" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
+                            '仅第三类风险需进入治理流程<br><span style="font-size:12px;color:#909399;">当前房屋暂无第三类结论的风险记录，无需进行' + item.title + '</span>' +
+                        '</div></div>' +
+                    '</div>';
+                }
+                // 多事件：渲染事件切换器（存 window.currentGovEventId 供各模块读取）
+                if (!window.currentGovEventId || !events.some(function(e){ return e.eventId === window.currentGovEventId; })) {
+                    window.currentGovEventId = (s.currentGovernanceEventId && events.some(function(e){ return e.eventId === s.currentGovernanceEventId; }))
+                        ? s.currentGovernanceEventId
+                        : events[events.length - 1].eventId;
+                }
+                const curEv = events.find(function(e){ return e.eventId === window.currentGovEventId; });
+                const evOpts = events.map(function(e) {
+                    const rr = (s.riskRecords || []).find(function(r){ return r.id === e.riskRecordId; });
+                    const lbl = (rr ? (rr.date + ' ' + rr.sourceType + '·' + rr.conclusion) : e.eventId);
+                    return '<option value="' + e.eventId + '"' + (e.eventId === window.currentGovEventId ? ' selected' : '') + '>' + lbl + '</option>';
+                }).join('');
+                const evBar = '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;margin-bottom:14px;">' +
+                    '<i class="fas fa-link" style="color:var(--primary);"></i><span style="font-weight:500;">治理事件：</span>' +
+                    '<select class="form-input" style="flex:1;max-width:420px;" onchange="switchGovernanceEvent(this.value)">' + evOpts + '</select>' +
+                    '<span class="tag ' + (curEv && curEv.status === '已治理' ? 'safe' : 'warning') + '">' + ((curEv && curEv.status) || '待治理') + '</span>' +
+                    '</div>';
+                // 包一层：把事件切换器插到 content-body 前
+                const titleHint0 = (key === 'plan')
+                    ? '<span style="margin-left:12px;font-size:13px;font-weight:normal;color:#e6a23c;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-exclamation-circle"></i> 整治计划不是必须填报的，可根据需要填写!</span>'
+                    : '';
+                let html0 = '<div class="content-card">' +
+                    '<div class="content-card-header"><div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title + titleHint0 + '</div></div>' +
+                    '<div class="content-body">' + evBar;
+                // 治理链内容（拆出纯内容函数，复用）
+                html0 += renderGovernanceBody(key, s);
+                html0 += '</div></div>';
+                html0 += '<div class="bottom-bar">' +
+                    '<div class="bottom-info">' +
+                        '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                        '当前节点：<span class="bottom-node">' + item.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span><span class="readonly-tag">只读</span>' +
+                    '</div>' +
+                    '<div class="bottom-actions">';
+                if (key === 'close') {
+                    if (s.closeStatus === '未申请' || s.closeStatus === '已驳回') {
+                        html0 += '<button class="bottom-btn primary" onclick="openCloseApplyModal()"><i class="fas fa-paper-plane"></i> 提交销号申请</button>';
+                    }
+                    if (s.closeStatus === '待审核' || s.closeStatus === '审核中') {
+                        html0 += '<button class="bottom-btn" style="border-color:var(--safe);color:var(--safe);" onclick="openCloseAuditModal(true)"><i class="fas fa-check"></i> 通过</button>' +
+                            '<button class="bottom-btn" style="border-color:var(--danger);color:var(--danger);" onclick="openCloseAuditModal(false)"><i class="fas fa-times"></i> 驳回</button>';
+                    }
+                    html0 += '<button class="bottom-btn" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
+                } else if (key === 'plan') {
+                    html0 += '<button class="bottom-btn primary" onclick="openPlanEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
+                } else if (key === 'accept') {
+                    // 阶段性验收：填报卡片列表已含编辑/新增按钮，此处不再显示底部按钮
+                } else if (key === 'control') {
+                    if (currentControlSubTab === 'addDanger') {
+                        html0 += '<button class="bottom-btn primary" onclick="openAddDangerEditModal()"><i class="fas fa-edit"></i> 编辑新增隐患</button>';
+                    } else if (currentControlSubTab === 'situation' || currentControlSubTab === 'dynamic') {
+                        html0 += '<button class="bottom-btn primary" onclick="openControlEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
+                    }
+                } else {
+                    html0 += '<button class="bottom-btn primary" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
+                }
+                html0 += '</div></div>';
+                return html0;
+            }
             const titleHint = (key === 'plan')
                 ? '<span style="margin-left:12px;font-size:13px;font-weight:normal;color:#e6a23c;display:inline-flex;align-items:center;gap:4px;"><i class="fas fa-exclamation-circle"></i> 整治计划不是必须填报的，可根据需要填写!</span>'
                 : '';
@@ -4070,32 +3980,12 @@
                 '</div>' +
                 '<div class="content-body">';
 
-            if (key === 'measure') {
-                html += renderMeasureTable(s);
-            } else if (key === 'control') {
-                html += renderControlTable(s);
-            } else if (key === 'accept') {
-                html += renderAcceptTable(s);
-            } else if (key === 'close') {
-                html += renderCloseTable(s);
-            } else if (key === 'emergency') {
+            if (key === 'emergency') {
                 html += renderEmergencyContent(s);
             } else if (key === 'risk') {
                 html += renderRiskContent(s);
-            } else if (key === 'plan') {
-                html += renderPlanContent(s);
             } else {
-                const data = getTableData()[key];
-                let columns = data.columns;
-                let values = data.rows[0] || [];
-                // 安全鉴定：查看面板隐藏"隐患动态整治状态"列（保留原数据以兼容历史存档）
-                if (key === 'assessment') {
-                    const keepIdx = columns.map((c, i) => c === '隐患动态整治状态' ? -1 : i).filter(i => i >= 0);
-                    columns = keepIdx.map(i => columns[i]);
-                    values = keepIdx.map(i => values[i]);
-                }
-                const fwFields = (key === 'assessment') ? ['鉴定报告', '备注'] : [];
-                html += '<div class="info-grid info-grid-2col">' + renderKeyValueGrid(columns, values, fwFields) + '</div>';
+                html += renderGovernanceBody(key, s);
             }
 
             html += '</div></div>';
@@ -4115,7 +4005,8 @@
                 }
                 html += '<button class="bottom-btn" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             } else if (key === 'risk') {
-                html += '<button class="bottom-btn primary" onclick="openRiskEditModal()"><i class="fas fa-edit"></i> 编辑风险信息记录</button>';
+                // v2：风险信息记录由风险发现自动派生，不再手工编辑（在风险发现处增删改）
+                html += '<button class="bottom-btn" onclick="jumpToDiscoverySource(\'survey\',\'\')"><i class="fas fa-search"></i> 前往风险发现</button>';
             } else if (key === 'plan') {
                 html += '<button class="bottom-btn primary" onclick="openPlanEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             } else if (key === 'emergency') {
@@ -4135,6 +4026,37 @@
             html += '</div>' +
             '</div>';
             return html;
+        }
+
+        // 治理链/通用表格的纯内容渲染（不含 content-card 壳 / 事件切换器 / bottom-bar）
+        // 供 renderTableContent 与「风险信息详情内嵌治理子tab」复用
+        function renderGovernanceBody(key, s) {
+            // measure：完整内嵌（子tab条 + 整治情况/管理·工程措施记录本体），复用 renderMeasureContent 的主体
+            if (key === 'measure') {
+                const tabsHtml = getMeasureSubTabs().map(function(tab){
+                    const active = tab.key === currentMeasureSubTab ? 'active' : '';
+                    return '<div class="content-tab ' + active + '" data-key="' + tab.key + '" data-scope="measure">' +
+                        '<i class="fas ' + tab.icon + '"></i> ' + tab.title + '</div>';
+                }).join('');
+                const bodyHtml = (currentMeasureSubTab === 'situation') ? renderMeasureSituationBody() : renderMeasureRecordsBody();
+                return '<div class="content-tabs" style="margin-bottom:12px;">' + tabsHtml + '</div>' + bodyHtml;
+            }
+            if (key === 'control') return renderControlTable(s);
+            if (key === 'accept') return renderAcceptTable(s);
+            if (key === 'close') return renderCloseTable(s);
+            if (key === 'plan') return renderPlanContent(s);
+            const data = getTableData()[key];
+            if (!data) return '';
+            let columns = data.columns;
+            let values = data.rows[0] || [];
+            // 安全鉴定：查看面板隐藏"隐患动态整治状态"列（保留原数据以兼容历史存档）
+            if (key === 'assessment') {
+                const keepIdx = columns.map((c, i) => c === '隐患动态整治状态' ? -1 : i).filter(i => i >= 0);
+                columns = keepIdx.map(i => columns[i]);
+                values = keepIdx.map(i => values[i]);
+            }
+            const fwFields = (key === 'assessment') ? ['鉴定报告', '备注'] : [];
+            return '<div class="info-grid info-grid-2col">' + renderKeyValueGrid(columns, values, fwFields) + '</div>';
         }
 
         function renderKeyValueGrid(columns, values, fullWidthFields) {
@@ -4278,58 +4200,65 @@
                 '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + grid2colLast + '</div>';
         }
 
+        // 风险记录整治状态推导：
+        //   历史  = 关联治理事件已完成验收销号（ev.data.closeStatus === '已通过'）
+        //   已整治 = 事件内管理/工程措施均已完成，但尚未销号
+        //   整治中 = 事件内已有措施/鉴定等数据，但存在未完成项
+        //   未整治 = 无治理事件，或事件内尚未录入任何治理数据
+        function __riskRecordStatus(s, rr) {
+            if (!s || !rr) return { text: '—', cls: 'info' };
+            ensureGovernanceEvents(s);
+            const ev = (s.governanceEvents || []).find(function(e){ return e.riskRecordId === rr.id; });
+            if (!ev) return { text: '未整治', cls: 'info' };
+            const d = (ev.data && typeof ev.data === 'object') ? ev.data : {};
+            // 已销号 → 历史
+            if (d.closeStatus === '已通过') return { text: '历史', cls: 'info' };
+            const manage = Array.isArray(d.manageRecords) ? d.manageRecords : [];
+            const project = Array.isArray(d.projectRecords) ? d.projectRecords : [];
+            const hasMeasure = manage.length > 0 || project.length > 0;
+            const hasAppraisal = Array.isArray(d.appraisalReports) && d.appraisalReports.length > 0;
+            const hasAny = hasMeasure || hasAppraisal || (d.rectifySituation && Object.keys(d.rectifySituation).length > 0);
+            if (!hasAny) return { text: '未整治', cls: 'info' };
+            const manageDone = manage.length > 0 && manage.every(function(m){ return m.isDone === true || m.isDone === '是' || m.isDone === '已完成'; });
+            const projectDone = project.length > 0 && project.every(function(p){ return p.status === '已完成' || p.status === '是' || p.isDone === true; });
+            if (hasMeasure && manageDone && projectDone) return { text: '已整治', cls: 'safe' };
+            return { text: '整治中', cls: 'warning' };
+        }
+
         function renderRiskContent(s) {
-            const info = s.riskInfo || {};
-            const cls = s.riskClassification || {};
-            // 风险模块所有内容均为新增，非空值一律绿色显示
+            // v2：风险信息记录由"风险发现"自动派生（riskRecords），风险等级=当次结论，只读
+            const records = (s.riskRecords || []).slice().sort(function(a, b){ return String(b.date || '').localeCompare(String(a.date || '')); });
+            const activeIndex = Math.min(recordViewState.risk || 0, Math.max(records.length - 1, 0));
+            recordViewState.risk = activeIndex;
+            const r = records[activeIndex] || {};
+
             function kvR(label, value) {
                 const v = (value === undefined || value === null) ? '' : String(value);
                 const isEmpty = v === '' || v === '—';
                 const cls = isEmpty ? 'empty' : 'rural-only';
                 return '<div class="info-item"><div class="info-label">' + label + '</div><div class="info-value ' + cls + '">' + (isEmpty ? '—' : v) + '</div></div>';
             }
-            // 区块1：风险基础信息（左右各4）
-            const sec1 =
-                '<div class="info-section-title"><i class="fas fa-id-card"></i> 风险基础信息</div>' +
-                '<div class="info-grid info-grid-2col">' +
-                    kvR('风险编号', info.riskNo) + kvR('风险名称', info.riskName) +
-                    kvR('风险类型', info.riskType) + kvR('风险等级', info.riskLevel || s.riskLevel) +
-                    kvR('发现时间', info.discoveryTime) + kvR('发现方式', info.discoveryMethod) +
-                    kvR('发现人员', info.discoverer) + kvR('风险状态', info.riskStatus || s.governStatus) +
-                '</div>';
-            // 区块2：风险特征信息（左右各3）
-            const sec2 =
-                '<div class="info-section-title" style="margin-top:20px;"><i class="fas fa-map-marker-alt"></i> 风险特征信息</div>' +
-                '<div class="info-grid info-grid-2col">' +
-                    kvR('风险部位', info.riskPart) + kvR('空间位置', info.spatialLocation) +
-                    kvR('风险描述', info.riskDesc) + kvR('评定依据', cls.basis) +
-                    kvR('评定时间', cls.assessTime) + kvR('评定人', cls.assessor) +
-                '</div>';
-            // 区块3：风险关联信息（左4右3）
-            const sec3 =
-                '<div class="info-section-title" style="margin-top:20px;"><i class="fas fa-link"></i> 风险关联信息</div>' +
-                '<div class="info-grid info-grid-2col">' +
-                    kvR('关联房屋', info.relatedHouse) + kvR('关联户主', info.relatedOwner) +
-                    kvR('关联使用人', info.relatedUser) + kvR('关联排查记录', info.relatedInspectionId) +
-                    kvR('关联鉴定报告', info.relatedAppraisalId) + kvR('关联巡查记录', info.relatedPatrolId) +
-                    kvR('关联整治任务', info.relatedTaskId) +
-                '</div>';
-            // 区块4：风险辨识记录（列表 + 详情）
-            const records = s.riskIdentification || [];
-            const activeIndex = Math.min(recordViewState.risk || 0, Math.max(records.length - 1, 0));
-            recordViewState.risk = activeIndex;
+            const srcLabel = r.sourceType === '巡查' ? '动态巡查' : '排查登记';
+            const srcTab = r.sourceType === '巡查' ? 'patrol' : 'survey';
             const listHtml = recordListTable(
-                ['辨识编号', '辨识日期', '隐患类型', '隐患部位', '填报人'],
-                records.map(function(r) {
-                    return [r.id || '—', r.identifyDate || '—', r.hazardType || '—', r.hazardPart || '—', r.identifyPerson || '—'];
+                ['记录编号', '来源', '发现日期', '发现人', '结论', '风险等级', { title: '状态', tag: true, tagClass: function(v){ return v === '历史' ? 'info' : (v === '已整治' ? 'safe' : (v === '整治中' ? 'warning' : 'info')); } }],
+                records.map(function(it, i) {
+                    const st = __riskRecordStatus(s, it);
+                    return [
+                        it.id || '—',
+                        (it.sourceType || '—'),
+                        (String(it.date || '').slice(0, 10) || '—'),
+                        (it.person || '—'),
+                        (it.conclusion || '—'),
+                        (it.riskLevel || '—'),
+                        st.text
+                    ];
                 }),
                 'risk',
                 activeIndex,
-                { showCrud: { edit: 'openCrudModal(\'risk\'', delete: 'deleteCrudRecord(\'risk\'' } }
+                {} // 只读视图：不提供增删改
             );
-            const r = records[activeIndex] || {};
-            const photoVal = r.photos || '';
-            const photoUrls = photoVal.split(',').map(function(u) { return u.trim(); }).filter(function(u) {
+            const photoUrls = (r.photos || '').split(',').map(function(u){ return u.trim(); }).filter(function(u){
                 return u && (u.startsWith('data:image') || u.startsWith('http') || u.endsWith('.jpg') || u.endsWith('.jpeg') || u.endsWith('.png') || u.endsWith('.gif'));
             });
             const photoHtml = photoUrls.length
@@ -4337,21 +4266,122 @@
                     return '<img src="' + u + '" alt="现场照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">';
                   }).join('') + '</div>'
                 : '<div class="info-value empty">—</div>';
-            const sec4 =
-                '<div class="info-section-title" style="margin-top:20px;"><i class="fas fa-search"></i> 风险辨识记录</div>' +
-                recordListWrapper('风险辨识记录列表', listHtml, { icon: 'fa-list', showAdd: 'addCrudRecord(\'risk\')' }) +
+            return '<div class="info-section-title"><i class="fas fa-clipboard-list"></i> 风险信息记录（由风险发现自动派生）</div>' +
+                recordListWrapper('风险信息记录列表', listHtml, { icon: 'fa-list' }) +
                 '<div class="record-detail-header">' +
-                    '<div class="title">风险辨识详情（' + (records.length ? (activeIndex + 1) + ' / ' + records.length : '0 / 0') + '）</div>' +
-                    '<div class="meta">辨识编号：' + (r.id || '—') + '</div>' +
+                    '<div class="title">风险信息详情（' + (records.length ? (activeIndex + 1) + ' / ' + records.length : '0 / 0') + '）</div>' +
+                    '<div class="meta">记录编号：' + (r.id || '—') +
+                        '　<a class="view-link" href="javascript:void(0)" onclick="jumpToDiscoverySource(\'' + srcTab + '\',\'' + (r.sourceId || '') + '\')"><i class="fas fa-external-link-alt"></i> 查看来源（' + srcLabel + '）</a>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="info-grid info-grid-2col">' +
-                    kvR('辨识日期', r.identifyDate) + kvR('辨识人', r.identifyPerson) +
-                    kvR('隐患部位', r.hazardPart) + kvR('隐患类型', r.hazardType) +
-                    kvR('隐患描述', r.hazardDesc) + kvR('可能后果', r.possibleConsequence) +
-                    kvR('管控建议', r.controlSuggestion) +
+                    kvR('来源', srcLabel) + kvR('发现日期', r.date) +
+                    kvR('发现人', r.person) + kvR('排查/巡查单位', r.org) +
+                    kvR('结论', r.conclusion) + kvR('风险等级', r.riskLevel) +
+                    kvR('隐患描述', r.hazardDesc) +
                     '<div class="info-item full-width" style="grid-column:1 / -1;"><div class="info-label">现场照片</div>' + photoHtml + '</div>' +
-                '</div>';
-            return sec1 + sec2 + sec3 + sec4;
+                '</div>' +
+                renderRiskGovernanceTabs(s, r);
+        }
+
+        // 原型：风险信息详情内嵌治理链路子tab（仅第三类记录显示）
+        // 选中子tab即选中对应治理事件 → currentGovEventId 由该风险记录推导，复用 renderTableContent 的 B1 隔离数据
+        // 治理底栏编辑按钮（按模块/状态输出），供 renderTableContent 与风险详情内嵌复用
+        function governanceBottomActions(key, item) {
+            const s = currentHouseArch;
+            if (key === 'close') {
+                let btns = '';
+                if (s.closeStatus === '未申请' || s.closeStatus === '已驳回') {
+                    btns += '<button class="bottom-btn primary" onclick="openCloseApplyModal()"><i class="fas fa-paper-plane"></i> 提交销号申请</button>';
+                }
+                if (s.closeStatus === '待审核' || s.closeStatus === '审核中') {
+                    btns += '<button class="bottom-btn" style="border-color:var(--safe);color:var(--safe);" onclick="openCloseAuditModal(true)"><i class="fas fa-check"></i> 通过</button>' +
+                        '<button class="bottom-btn" style="border-color:var(--danger);color:var(--danger);" onclick="openCloseAuditModal(false)"><i class="fas fa-times"></i> 驳回</button>';
+                }
+                btns += '<button class="bottom-btn" onclick="openCommonEditModal(\'close\')"><i class="fas fa-edit"></i> 编辑验收销项</button>';
+                return btns;
+            }
+            if (key === 'plan') {
+                return '<button class="bottom-btn primary" onclick="openPlanEditModal()"><i class="fas fa-edit"></i> 编辑整治计划</button>';
+            }
+            if (key === 'measure') {
+                // 整治情况子tab有独立编辑；管理/工程措施靠记录卡内按钮/表单
+                return (currentMeasureSubTab === 'situation')
+                    ? '<button class="bottom-btn primary" onclick="openRectifySituationEditModal()"><i class="fas fa-edit"></i> 编辑整治情况</button>'
+                    : '';
+            }
+            if (key === 'accept') {
+                return ''; // 卡片内已有编辑/新增/批量审核
+            }
+            if (key === 'control') {
+                if (currentControlSubTab === 'addDanger') {
+                    return '<button class="bottom-btn primary" onclick="openAddDangerEditModal()"><i class="fas fa-edit"></i> 编辑新增隐患</button>';
+                }
+                if (currentControlSubTab === 'situation' || currentControlSubTab === 'dynamic') {
+                    return '<button class="bottom-btn primary" onclick="openControlEditModal()"><i class="fas fa-edit"></i> 编辑隐患动态</button>';
+                }
+                return '';
+            }
+            // assessment 等通用
+            return '<button class="bottom-btn primary" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
+        }
+
+        function renderRiskGovernanceTabs(s, r) {
+            if (!r || r.riskLevel !== '第三类') return '';
+            // 该风险记录对应的治理事件
+            const ev = (s.governanceEvents || []).find(function(e){ return e.riskRecordId === r.id; });
+            // 让治理TAB渲染时锁定到本事件（不走下拉切换器）
+            if (ev && window.currentGovEventId !== ev.eventId) {
+                try { switchGovernanceEvent(ev.eventId); } catch (e) { window.currentGovEventId = ev.eventId; }
+            }
+            const tabsHtml = RISK_GOV_TABS.map(function(t){
+                const active = currentRiskSubTab === t.key ? 'active' : '';
+                return '<div class="content-tab ' + active + '" data-scope="risk" data-key="' + t.key + '"><i class="fas ' + t.icon + '"></i> ' + t.title + '</div>';
+            }).join('');
+            const statusTag = ev ? ('<span class="tag ' + (ev.status === '已治理' ? 'safe' : 'warning') + '" style="margin-left:10px;">' + (ev.status || '待治理') + '</span>') : '';
+            let govBody = '';
+            try {
+                govBody = renderGovernanceBody(currentRiskSubTab, s);
+            } catch (e) {
+                govBody = '<div class="record-empty" style="padding:30px;">治理内容渲染失败：' + (e && e.message) + '</div>';
+            }
+            const curTab = RISK_GOV_TABS.find(function(t){ return t.key === currentRiskSubTab; }) || RISK_GOV_TABS[0];
+            const govActions = governanceBottomActions(currentRiskSubTab, curTab);
+            const govBar = '<div class="bottom-bar" style="margin-top:14px;">' +
+                '<div class="bottom-info">' +
+                    '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                    '治理节点：<span class="bottom-node">' + curTab.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span>' +
+                '</div>' +
+                '<div class="bottom-actions">' + govActions + '</div>' +
+            '</div>';
+            return '<div style="margin-top:18px;">' +
+                '<div class="info-section-title" style="border-top:1px solid var(--border);padding-top:16px;"><i class="fas fa-stream"></i> 治理链路' + statusTag + '</div>' +
+                '<div class="content-tabs">' + tabsHtml + '</div>' +
+                '<div class="risk-gov-body" style="padding-top:14px;">' + govBody + '</div>' +
+                govBar +
+            '</div>';
+        }
+
+        // 跳转到风险发现来源记录
+        function jumpToDiscoverySource(tab, sourceId) {
+            currentSidebar = 'discovery';
+            currentDiscoveryTab = (tab === 'patrol') ? 'patrol' : 'survey';
+            // 定位到对应记录
+            try {
+                const s = currentHouseArch;
+                if (tab === 'patrol') {
+                    const list = (s.patrolRecords || []).slice().sort(function(a,b){ return String(b.patrolDate || '').localeCompare(String(a.patrolDate || '')); });
+                    const idx = list.findIndex(function(x){ return x.id === sourceId; });
+                    if (idx >= 0) recordViewState.patrol = idx;
+                } else {
+                    const list = (s.inspectionRecords || []).slice().sort(function(a,b){ return String(b.checkDate || b.reportTime || '').localeCompare(String(a.checkDate || a.reportTime || '')); });
+                    const idx = list.findIndex(function(x){ return x.id === sourceId; });
+                    if (idx >= 0) recordViewState.inspection = idx;
+                    currentSurveySubTab = 'survey1';
+                }
+            } catch (e) {}
+            renderSidebar();
+            renderContent();
         }
 
         // 隐患动态：4 个子 tab（situation/dynamic/quality/history）
@@ -5941,14 +5971,23 @@
                 ]
             },
             survey: {
-                title: '排查记录',
+                title: '排查登记',
                 dataPath: 'inspectionRecords',
                 fields: [
-                    { key: 'inspectDate', label: '排查日期', type: 'text' },
-                    { key: 'inspectPerson', label: '排查人员', type: 'text' },
-                    { key: 'inspectResult', label: '排查结果', type: 'select', options: ['安全', '一般隐患', '重大隐患'] },
-                    { key: 'hazardDesc', label: '隐患描述', type: 'textarea' },
-                    { key: 'remark', label: '备注', type: 'textarea' }
+                    { key: 'checkDate', label: '排查日期', type: 'text' },
+                    { key: 'town', label: '排查单位（乡镇/街道）', type: 'text' },
+                    { key: 'checker', label: '排查人员', type: 'text' },
+                    { key: 'structureStatus', label: '结构状况', type: 'text' },
+                    { key: 'damagePart', label: '损伤具体部位', type: 'text' },
+                    { key: 'overload', label: '增加堆载（二层及以上堆放大量重物）', type: 'select', options: ['否', '是'] },
+                    { key: 'otherRisk', label: '其他使用安全隐患', type: 'textarea' },
+                    { key: 'preliminaryJudge', label: '初步判定（结论）', type: 'select', options: ['未发现安全隐患(第一类)', '存在一定安全隐患(第二类)', '存在严重安全隐患(第三类)'] },
+                    { key: 'location', label: '位置标注', type: 'text' },
+                    { key: 'dutyPerson', label: '房屋安全责任人', type: 'text' },
+                    { key: 'dutyPhone', label: '联系方式', type: 'text' },
+                    { key: 'preAppraisal', label: '安全鉴定：是否整治前鉴定', type: 'select', options: ['否', '是'] },
+                    { key: 'noAppraisalReason', label: '未进行鉴定房屋原因', type: 'text' },
+                    { key: 'remark', label: '排查备注', type: 'textarea' }
                 ]
             },
             patrol: {
@@ -5957,9 +5996,10 @@
                 fields: [
                     { key: 'patrolDate', label: '巡查日期', type: 'text' },
                     { key: 'patrolPointCoord', label: '巡查点位坐标', type: 'text' },
+                    { key: 'patrolOrg', label: '巡查单位', type: 'text' },
                     { key: 'patrolPerson', label: '巡查人员', type: 'text' },
                     { key: 'weather', label: '天气', type: 'text' },
-                    { key: 'result', label: '巡查结果', type: 'select', options: ['正常', '发现隐患', '需整改'] },
+                    { key: 'result', label: '巡查结论', type: 'select', options: ['未发现安全隐患(第一类)', '存在一定安全隐患(第二类)', '存在严重安全隐患(第三类)'] },
                     { key: 'foundProblems', label: '发现问题', type: 'textarea' },
                     { key: 'decision', label: '判定结果', type: 'select', options: ['经判定无隐患销号', '鉴定为AB级', '需专业人员复核'] },
                     { key: 'suggestion', label: '处置建议', type: 'textarea' },
@@ -6090,7 +6130,7 @@
             const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
             const newRec = {};
             cfg.fields.forEach(f => {
-                if (f.key === 'startTime' || f.key === 'patrolDate' || f.key === 'inspectDate' || f.key === 'identifyDate' || f.key === 'drillDate' || f.key === 'startDate') {
+                if (f.key === 'startTime' || f.key === 'patrolDate' || f.key === 'inspectDate' || f.key === 'checkDate' || f.key === 'identifyDate' || f.key === 'drillDate' || f.key === 'startDate') {
                     newRec[f.key] = ts;
                 } else if (f.type === 'select') {
                     newRec[f.key] = f.options[0];
@@ -8405,6 +8445,49 @@
                 row[utIdx] = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
             }
             currentSurveySubTab = surveyEditModalSubTab;
+            // v2：survey1（排查登记）编辑保存后，把字段库行同步回当前激活的 inspectionRecords 记录
+            try {
+                if (surveyEditModalSubTab === 'survey1' && Array.isArray(currentHouseArch.inspectionRecords) && currentHouseArch.inspectionRecords.length) {
+                    const cols = data.columns || [];
+                    const rowVals = (data.rows && data.rows[0]) || [];
+                    const get = function(label){ const i = cols.indexOf(label); return i !== -1 ? (rowVals[i] || '') : ''; };
+                    // 排序后索引
+                    const sorted = currentHouseArch.inspectionRecords.slice().sort(function(a,b){
+                        return String(b.checkDate || b.reportTime || '').localeCompare(String(a.checkDate || a.reportTime || ''));
+                    });
+                    const actIdx = Math.min(recordViewState.inspection || 0, Math.max(sorted.length - 1, 0));
+                    const rec = sorted[actIdx];
+                    if (rec) {
+                        rec.checkDate = get('排查时间') || rec.checkDate;
+                        rec.town = (get('排查单位') || '').replace(/人民政府$/, '') || rec.town;
+                        rec.checker = get('排查人员') || rec.checker;
+                        rec.structureStatus = get('结构状况') || rec.structureStatus;
+                        rec.damagePart = get('损伤具体部位') || rec.damagePart;
+                        rec.overload = get('增加堆载（二层及以上堆放大量重物）') || rec.overload;
+                        rec.otherRisk = get('其他使用安全隐患') || rec.otherRisk;
+                        rec.preliminaryJudge = get('初步判定') || rec.preliminaryJudge;
+                        rec.location = get('位置标注') || rec.location;
+                        rec.dutyPerson = get('房屋安全责任人') || rec.dutyPerson;
+                        rec.dutyPhone = get('联系方式') || rec.dutyPhone;
+                        rec.preAppraisal = get('安全鉴定：是否整治前鉴定') || rec.preAppraisal;
+                        rec.noAppraisalReason = get('未进行鉴定房屋原因') || rec.noAppraisalReason;
+                        rec.remark = (data.extraRows && data.extraRows[1] && data.extraRows[1][0] && data.extraRows[1][0].value) || rec.remark;
+                        rec.photos = (function(){
+                            if (!data.extraRows) return rec.photos;
+                            for (let r = 0; r < data.extraRows.length; r++) {
+                                const row = data.extraRows[r] || [];
+                                for (let c = 0; c < row.length; c++) {
+                                    if (row[c] && row[c].label === '排查照片') return row[c].value || rec.photos;
+                                }
+                            }
+                            return rec.photos;
+                        })();
+                        // 同步风险记录中对应条目（结论可能变了）
+                        try { syncRiskRecords(currentHouseArch); } catch (e) {}
+                        try { ensureGovernanceEvents(currentHouseArch); } catch (e) {}
+                    }
+                }
+            } catch (e) {}
             // 字段库改动持久化到草稿
             currentHouseArch._fieldsLibrary = dumpFieldsLibrary();
             delete currentHouseArch._syncedAt; // 编辑后标记为未同步
@@ -8446,6 +8529,13 @@
                     inputHtml = '<select class="form-input patrol-edit-input" data-field="' + f[1] + '">' +
                         '<option value="">请选择</option>' +
                         options.map(o => '<option value="' + o + '"' + (curVal === o ? ' selected' : '') + '>' + o + '</option>').join('') +
+                        '</select>';
+                } else if (f[1] === 'result') {
+                    // v2：巡查结论统一为三类口径（旧值"正常/发现隐患/需整改"自动归一）
+                    const curVal = normalizePatrolConclusion(r) || '';
+                    inputHtml = '<select class="form-input patrol-edit-input" data-field="' + f[1] + '">' +
+                        '<option value="">请选择</option>' +
+                        RISK_CONCLUSION_ENUMS.map(o => '<option value="' + o + '"' + (curVal === o ? ' selected' : '') + '>' + o + '</option>').join('') +
                         '</select>';
                 }
                 return '<div class="form-item">' +
@@ -9274,6 +9364,10 @@
         function saveCommonEdit() {
             const data = getTableData()[commonEditKey];
             const inputs = document.querySelectorAll('#commonEditForm .form-input:not(.audit-row .form-input)');
+            // 方案B1：事件字段库可能为空白（rows 为空），编辑时需先建行
+            if (!Array.isArray(data.rows) || !data.rows[0]) {
+                data.rows = [data.columns.map(() => '')];
+            }
             const row = data.rows[0];
             inputs.forEach(input => {
                 const idx = parseInt(input.dataset.idx, 10);

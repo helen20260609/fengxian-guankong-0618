@@ -848,7 +848,7 @@ body {
                     1. 建议先 <a href="javascript:void(0)" onclick="downloadImportTemplate()" style="color:var(--primary);font-weight:600">下载标准模板</a>，模板按 <b>基本信息 / 宅基地 / 建设情况 / 管理情况 / 结构信息 / 使用信息 / 设计施工记录 / 风险信息</b> 分 8 个 Sheet；其中“设计施工记录”一房多记录，同一唯一标识填多行即可；<br>
                     2. 也可直接上传您自己的台账表（支持 .xlsx / .xls / .csv），下一步会把您的列名智能匹配到档案字段，未匹配的可手动指定；<br>
                     3. <b>只有"基本信息"Sheet 必填</b>（至少含 唯一标识、产权人），其余 Sheet 按需填写、以"唯一标识"关联合并；<br>
-                    4. 导入的数据进入<b>草稿区</b>，需在列表点"同步"才正式发布到房屋建筑档案。
+                    4. 导入的数据<b>不会马上生效</b>，需在列表点"同步"才会更新到房屋建筑档案。
                 </div>
                 <div class="imp-upload-zone" id="impUploadZone" onclick="document.getElementById('importFileInput').click()">
                     <i class="fa-solid fa-cloud-arrow-up"></i>
@@ -1354,7 +1354,7 @@ body {
                     <div class="table-title"><i class="fa-solid fa-house-chimney" style="color:var(--primary)"></i> 农村自建房风险档案列表</div>
                     <div style="display:flex;gap:8px;">
                         <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;color:var(--primary);border-color:var(--primary);" onclick="openImportWizard()" title="从 Excel 批量导入农村自建房档案"><i class="fa-solid fa-file-import"></i> 导入</button>
-                        <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;color:var(--safe);border-color:var(--safe);" onclick="syncAllRecords()" title="把所有未同步草稿一次性推送到房屋建筑档案"><i class="fa-solid fa-cloud-upload-alt"></i> 全部同步到档案</button>
+                        <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;color:var(--safe);border-color:var(--safe);" onclick="syncAllRecords()" title="把所有改过的档案一次性更新到房屋建筑档案"><i class="fa-solid fa-cloud-upload-alt"></i> 全部同步到档案</button>
                     </div>
                 </div>
                 <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display:none">
@@ -1369,11 +1369,8 @@ body {
                             <th>房屋性质</th>
                             <th>结构类型</th>
                             <th>建筑年代</th>
-                            <th>房屋用途</th>
                             <th>风险等级</th>
-                            <th>隐患存量</th>
                             <th>最近巡查</th>
-                            <th>鉴定结论</th>
                             <th>同步状态</th><th class="sticky-col sticky-right">操作</th>
                         </tr>
                     </thead>
@@ -1439,10 +1436,7 @@ body {
                             <th>房屋性质</th>
                             <th>结构类型</th>
                             <th>建筑年代</th>
-                            <th>房屋用途</th>
-                            <th>隐患存量</th>
                             <th>最近巡查</th>
-                            <th>鉴定结论</th>
                             <th>同步状态</th><th class="sticky-col sticky-right">操作</th>
                         </tr>
                     </thead>
@@ -1508,10 +1502,7 @@ body {
                             <th>房屋性质</th>
                             <th>结构类型</th>
                             <th>建筑年代</th>
-                            <th>房屋用途</th>
-                            <th>隐患存量</th>
                             <th>最近巡查</th>
-                            <th>鉴定结论</th>
                             <th>同步状态</th><th class="sticky-col sticky-right">操作</th>
                         </tr>
                     </thead>
@@ -1577,10 +1568,7 @@ body {
                             <th>房屋性质</th>
                             <th>结构类型</th>
                             <th>建筑年代</th>
-                            <th>房屋用途</th>
-                            <th>隐患存量</th>
                             <th>最近巡查</th>
-                            <th>鉴定结论</th>
                             <th>同步状态</th><th class="sticky-col sticky-right">操作</th>
                         </tr>
                     </thead>
@@ -1675,34 +1663,6 @@ function formatRiskInfo(riskLevel) {
     return map[normalized] || { cls: 'blue', icon: 'fa-shield-halved', text: '第一类' };
 }
 
-function formatAppraisalStatus(record) {
-    // 第三类细分 D/C：originalRisk='danger' → D级，'major' → C级
-    if (!record) return { cls: 'blue', text: 'A级' };
-    const riskLevel = record.riskLevel || '';
-    const origRisk = record.originalRisk || record.risk || '';
-    if (riskLevel === '第三类') {
-        return origRisk === 'major' ? { cls: 'orange', text: 'C级' } : { cls: 'red', text: 'D级' };
-    }
-    if (riskLevel === '第二类') return { cls: 'yellow', text: 'B级' };
-    return { cls: 'blue', text: 'A级' };
-}
-
-function formatHazardStock(record) {
-    const total = record.totalTask || 0;
-    const done = record.doneTask || 0;
-    const pending = Math.max(0, total - done);
-    // 已销号：治理完成 + 销号已通过
-    const isClosed = record.governance === 'done' && record.closeStatus === '已通过';
-    if (isClosed) {
-        return '<span class="status-badge normal" style="font-size:12px">已销号</span>';
-    }
-    // 颜色统一用 riskLevel 决定，与 Tab 颜色保持一致
-    let color = 'var(--primary)';
-    if (record.riskLevel === '第三类') color = 'var(--danger)';
-    else if (record.riskLevel === '第二类') color = '#c78000';
-    return `<span style="color:${color};font-weight:600">${pending}</span> <span style="color:var(--text-secondary)">/ ${total}</span>`;
-}
-
 // 同步状态展示：调数据层 getSyncStatus
 function formatSyncStatus(no) {
     if (typeof getSyncStatus !== 'function') return { cls: 'blue', text: '未知', synced: false };
@@ -1716,12 +1676,12 @@ function formatSyncStatus(no) {
 function syncOneRecord(no) {
     if (typeof publishDraftRecord !== 'function') { alert('数据层未就绪'); return; }
     const s = typeof getSyncStatus === 'function' ? getSyncStatus(no) : 'new';
-    if (s === 'synced') { alert('该记录已是最新，无需同步'); return; }
-    if (s === 'new') { alert('该记录还未编辑过，无草稿可同步'); return; }
-    if (!confirm('确认将 ' + no + ' 的草稿同步到房屋建筑档案？')) return;
+    if (s === 'synced') { alert('该档案已是最新，无需同步'); return; }
+    if (s === 'new') { alert('该档案还没有修改过，无需同步'); return; }
+    if (!confirm('确认将 ' + no + ' 的最新修改更新到房屋建筑档案？')) return;
     const r = publishDraftRecord(no, 'user');
     if (r && r.ok) {
-        alert('✅ ' + no + ' 已同步到房屋建筑档案');
+        alert('✅ ' + no + ' 已更新到房屋建筑档案');
         refreshAllLists();
     } else {
         alert('❌ 同步失败：' + (r && r.msg ? r.msg : '未知错误'));
@@ -1733,10 +1693,10 @@ function syncAllRecords() {
     if (typeof getDraftedNos !== 'function' || typeof publishAllDrafts !== 'function') { alert('数据层未就绪'); return; }
     const drafted = getDraftedNos();
     const pending = drafted.filter(no => getSyncStatus(no) === 'pending');
-    if (!pending.length) { alert('当前没有未同步的草稿'); return; }
-    if (!confirm('确认同步 ' + pending.length + ' 条未同步草稿到房屋建筑档案？')) return;
+    if (!pending.length) { alert('当前没有待更新的档案'); return; }
+    if (!confirm('确认把 ' + pending.length + ' 条修改一次性更新到房屋建筑档案？')) return;
     const r = publishAllDrafts('user');
-    alert('✅ 批量同步完成：共 ' + r.total + ' 条，成功 ' + r.ok + ' 条，失败 ' + r.fail + ' 条');
+    alert('✅ 更新完成：共 ' + r.total + ' 条，成功 ' + r.ok + ' 条，失败 ' + r.fail + ' 条');
     refreshAllLists();
 }
 
@@ -1760,14 +1720,12 @@ function renderRuralRowsInto(pageRecords, tbody, hasRiskCol) {
     tbody.innerHTML = '';
     pageRecords.forEach(function(record, idx) {
         const risk = formatRiskInfo(record.riskLevel);
-        const status = formatAppraisalStatus(record);
         const sync = formatSyncStatus(record.no);
         let lastInspect = '2026-06-15';
         if (record.archiveRecords && record.archiveRecords.length) {
             const ar = record.archiveRecords[record.archiveRecords.length - 1];
             lastInspect = ar.archiveTime || ar.date || '2026-06-15';
         }
-        const usage = ['自住', '出租', '空置', '经营'][idx % 4];
         const riskCol = hasRiskCol
             ? `<td><span class="risk-tag ${risk.cls}">${risk.text}</span></td>`
             : '';
@@ -1781,14 +1739,11 @@ function renderRuralRowsInto(pageRecords, tbody, hasRiskCol) {
             <td>${record.houseNature || '住宅'}</td>
             <td>${record.category}结构</td>
             <td>${record.year}年</td>
-            <td>${usage}</td>
             ${riskCol}
-            <td>${formatHazardStock(record)}</td>
             <td>${lastInspect}</td>
-            <td><span class="risk-tag ${status.cls}">${status.text}</span></td>
             <td><span class="risk-tag ${sync.cls}">${sync.text}</span></td>
             <td class="sticky-col sticky-right">
-                <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="openDetailEmbed('${record.no}')">查看档案</button>
+                <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="openDetailEmbed('${record.no}')">查看</button>
                 <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px; margin-left:4px; ${sync.synced ? 'opacity:0.5;cursor:not-allowed;' : 'color:var(--safe);border-color:var(--safe);'}" ${sync.synced ? 'disabled' : ''} onclick="syncOneRecord('${record.no}')" title="${sync.synced ? '已是最新' : '同步到房屋建筑档案'}">同步</button>
             </td>
         `;
@@ -2391,28 +2346,49 @@ const IMPORT_SHEETS = [
         fields: [
             { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识', '档案编号', 'houseNo'] },
             { label: '房屋性质', path: 'overview.houseType', def: '住宅', alias: ['房屋性质', 'houseType'] },
+            { label: '异常标记', path: 'overview.abnormalMark', def: '正常', alias: ['异常标记', 'abnormalMark'] },
             { label: '所在区域', path: 'street', type: 'street', alias: ['所在区域', '镇', '街道', '乡镇', '所属镇', 'street'] },
             { label: '路号信息', path: 'address', alias: ['路号信息', '地址', '坐落', '门牌号', '路号', '详细地址', 'address'] },
-            { label: '不需要排查原因', path: 'overview.otherCrowdAround', alias: ['不需要排查原因', '不排查原因'] },
+            { label: '是否有产权人', path: 'overview.hasOwner', def: '有', alias: ['是否有产权人', 'hasOwner'] },
             { label: '产权人 / 使用人信息', path: 'owner', alias: ['产权人 / 使用人信息', '产权人', '使用人', '业主', '户主', '姓名', 'owner'] },
             { label: '身份证号码', path: 'overview.idCard', alias: ['身份证号码', '身份证', '证件号', 'idCard'] },
-            { label: '房屋类型', path: 'overview.usage', def: '仅自住', alias: ['房屋类型', '仅自住', 'usage'] },
-            { label: '房屋类型二级分类', path: 'overview.houseName', def: '独立住宅', alias: ['房屋类型二级分类', '二级分类', '独立住宅'] },
             { label: '房屋用途', path: 'usage.usageType', type: 'usage', def: '自住', alias: ['房屋用途', '用途', '使用用途', 'usageType'] },
-            { label: '是否同时自住', path: 'overview.isSelfLive', type: 'yesno', def: '是', alias: ['是否同时自住', '是否自住', 'isSelfLive'] },
-            { label: '具体用途', path: 'usage.specificUsage', alias: ['具体用途', '经营业态', 'specificUsage'] },
             { label: '人员聚集场所周边', path: 'usage.crowdAround', type: 'yesno', def: '否', alias: ['人员聚集场所周边', '周边人员密集', 'crowdAround'] },
-            { label: '其他人员密集场所周边', path: 'usage.otherCrowdAround', type: 'yesno', def: '否', alias: ['其他人员密集场所周边', 'otherCrowdAround'] },
             { label: '土地性质', path: 'homestead.landNature', def: '集体土地', alias: ['土地性质', '用地性质', 'landNature'] },
             { label: '集体土地', path: 'overview.landNature', def: '宅基地', alias: ['集体土地', '宅基地'] },
-            { label: '所在区域（区域类型）', path: 'overview.belongTo', def: '建制镇', alias: ['所在区域（区域类型）', '区域类型', '建制镇', 'belongTo'] },
+            { label: '所在区域类型', path: 'overview.belongTo', def: '建制镇', alias: ['所在区域（区域类型）', '区域类型', '建制镇', 'belongTo'] },
+            { label: '房屋类型', path: 'overview.usage', def: '仅自住', alias: ['房屋类型', '仅自住', 'usage'] },
+            { label: '常住人口', path: 'usage.occupancy', type: 'int', alias: ['常住人口', '居住人数', 'occupancy'] },
+            { label: '房屋类型二级分类', path: 'overview.houseName', def: '独立住宅', alias: ['房屋类型二级分类', '二级分类', '独立住宅'] },
+            { label: '楼栋号/名称', path: 'overview.buildingNo', alias: ['楼栋号/名称', '楼栋号', 'buildingNo'] },
+            { label: '住宅套数', path: 'overview.houseCount', type: 'int', alias: ['住宅套数', 'houseCount'] },
+            { label: '建筑（小区）名称', path: 'overview.communityName', alias: ['建筑（小区）名称', '小区名称', 'communityName'] },
+            { label: '自住+经营', path: 'usage.selfBusiness', alias: ['自住+经营', 'selfBusiness'] },
+            { label: '经营用房屋', path: 'usage.bizHouse', alias: ['经营用房屋', 'bizHouse'] },
+            { label: '经营用房屋其他内容', path: 'usage.bizHouseOther', alias: ['经营用房屋其他内容', 'bizHouseOther'] },
+            { label: '非营利性公共建筑', path: 'usage.npoBuilding', alias: ['非营利性公共建筑', 'npoBuilding'] },
+            { label: '非营利性公共建筑其他内容', path: 'usage.npoBuildingOther', alias: ['非营利性公共建筑其他内容', 'npoBuildingOther'] },
+            { label: '建造时间', path: 'overview.buildTime', alias: ['建造时间', 'buildTime'] },
+            { label: '建筑高度 (m)', path: 'structure.height', type: 'number', alias: ['建筑高度 (m)', '建筑高度', 'height'] },
+            { label: '建筑层数地下 (层)', path: 'structure.floorsUnderground', type: 'int', alias: ['建筑层数地下 (层)', '地下层数', 'floorsUnderground'] },
+            { label: '结构类型', path: 'category', type: 'struct', def: '砖混', alias: ['结构类型', '结构', '房屋结构', '结构形式', 'category'] },
+            { label: '结构类型其他内容', path: 'structure.structTypeOther', alias: ['结构类型其他内容', 'structTypeOther'] },
+            { label: '是否采用预制板', path: 'structure.prefab', type: 'yesno', def: '是', alias: ['是否采用预制板', 'prefab'] },
+            { label: '建筑面积 (㎡)', path: 'structure.buildingArea', type: 'number', alias: ['建筑面积 (㎡)', '建筑面积', '面积', 'buildingArea'] },
             { label: '建筑层数', path: 'structure.floors', type: 'int', alias: ['建筑层数', '层数', '房屋层数', 'floors'] },
-            { label: '建筑面积 (m²)', path: 'structure.buildingArea', type: 'number', alias: ['建筑面积 (m²)', '建筑面积', '面积', 'buildingArea'] },
+            { label: '建筑层数地上(层)', path: 'structure.floorsAbove', type: 'int', alias: ['建筑层数地上(层)', '地上层数', 'floorsAbove'] },
+            { label: '建造方式', path: 'designConstruction.buildMode', def: '有资质的施工队伍', alias: ['建造方式', '施工方式', 'buildMode'] },
+            { label: '建造方式其他内容', path: 'designConstruction.buildModeOther', alias: ['建造方式其他内容', 'buildModeOther'] },
+            { label: '是否人员聚集场所', path: 'overview.crowdPlace', type: 'yesno', def: '否', alias: ['是否人员聚集场所', 'crowdPlace'] },
             { label: '建成时间', path: 'year', type: 'year', alias: ['建成时间', '建成年份', '建造年代', '建筑年代', '年份', 'year'] },
+            { label: '具体年份', path: 'overview.actualYear', type: 'int', alias: ['具体年份', 'actualYear'] },
+            { label: '不需要排查原因', path: 'overview.otherCrowdAround', alias: ['不需要排查原因', '不排查原因'] },
+            { label: '是否同时自住', path: 'overview.isSelfLive', type: 'yesno', def: '是', alias: ['是否同时自住', '是否自住', 'isSelfLive'] },
+            { label: '具体用途', path: 'usage.specificUsage', alias: ['具体用途', '经营业态', 'specificUsage'] },
+            { label: '其他人员密集场所周边', path: 'usage.otherCrowdAround', type: 'yesno', def: '否', alias: ['其他人员密集场所周边', 'otherCrowdAround'] },
             { label: '户主联系方式', path: 'overview.phone', alias: ['户主联系方式', '电话', '手机', '联系方式', 'phone'] },
             { label: '家庭成员信息', path: 'familyMembers', alias: ['家庭成员信息', '家庭成员', 'familyMembers'] },
             { label: '村/居委', path: 'community', type: 'community', alias: ['村/居委', '村', '居委', '社区', '村委会', '所属村', 'community', 'village'] },
-            { label: '结构类型', path: 'category', type: 'struct', def: '砖混', alias: ['结构类型', '结构', '房屋结构', '结构形式', 'category'] },
             { label: '风险等级', path: 'riskLevel', type: 'risk', def: '第一类', alias: ['风险等级', '隐患等级', '等级', 'riskLevel'] },
             { label: '治理状态', path: 'governStatus', type: 'gov', def: '待整治', alias: ['治理状态', '整治状态', 'governStatus'] }
         ]
@@ -2954,12 +2930,125 @@ function doImport() {
     const box = document.getElementById('impResultBox');
     if (!failList.length) {
         box.innerHTML = '<i class="fa-solid fa-circle-check"></i><div style="font-size:16px;font-weight:600;color:var(--safe)">导入成功</div>' +
-            '<div style="color:var(--text-secondary);margin-top:6px">共导入 ' + okList.length + ' 条，已写入草稿区（未同步），请在列表点"同步"发布到房屋建筑档案。</div>';
+            '<div style="color:var(--text-secondary);margin-top:6px">共导入 ' + okList.length + ' 条，已保存（未生效），请在列表点"同步"更新到房屋建筑档案。</div>';
     } else {
         box.innerHTML = '<i class="fa-solid fa-circle-xmark"></i><div style="font-size:16px;font-weight:600;color:var(--warning)">部分导入</div>' +
             '<div style="color:var(--text-secondary);margin-top:6px">成功 ' + okList.length + ' 条，失败 ' + failList.length + ' 条</div>' +
             '<div class="imp-result-list"><table class="imp-table"><tbody>' + failList.map(n => '<tr class="row-error"><td>' + n + '</td></tr>').join('') + '</tbody></table></div>';
     }
+}
+
+// ---- 房屋概况 jbxx 平铺字段定义（与详情页 basicData_RURAL.jbxx 完全一致）----
+// label=jbxx 中文标签；path=嵌套结构路径；def=默认值；hidden=是否不在编辑表单显示（仅保留兼容）
+const JBXX_FIELDS = [
+    { label: '唯一标识', path: 'no' },
+    { label: '房屋性质', path: 'overview.houseType', def: '住宅' },
+    { label: '异常标记', path: 'overview.abnormalMark', def: '正常' },
+    { label: '所在区域', path: 'street', def: '' },
+    { label: '路号信息', path: 'address', def: '' },
+    { label: '是否有产权人', path: 'overview.hasOwner', def: '有' },
+    { label: '产权人 / 使用人信息', path: 'owner', def: '' },
+    { label: '身份证号码', path: 'overview.idCard', def: '' },
+    { label: '房屋用途', path: 'usage.usageType', def: '其他自建房' },
+    { label: '人员聚集场所周边', path: 'usage.crowdAround', def: '' },
+    { label: '土地性质', path: 'homestead.landNature', def: '集体土地' },
+    { label: '集体土地', path: 'overview.landNature', def: '宅基地' },
+    { label: '所在区域类型', path: 'overview.belongTo', def: '建制镇' },
+    { label: '房屋类型', path: 'overview.usage', def: '仅自住' },
+    { label: '常住人口', path: 'usage.occupancy', def: '' },
+    { label: '房屋类型二级分类', path: 'overview.houseName', def: '独立住宅' },
+    { label: '楼栋号/名称', path: 'overview.buildingNo', def: '' },
+    { label: '住宅套数', path: 'overview.houseCount', def: '' },
+    { label: '建筑（小区）名称', path: 'overview.communityName', def: '' },
+    { label: '自住+经营', path: 'usage.selfBusiness', def: '' },
+    { label: '经营用房屋', path: 'usage.bizHouse', def: '' },
+    { label: '经营用房屋其他内容', path: 'usage.bizHouseOther', def: '' },
+    { label: '非营利性公共建筑', path: 'usage.npoBuilding', def: '' },
+    { label: '非营利性公共建筑其他内容', path: 'usage.npoBuildingOther', def: '' },
+    { label: '建造时间', path: 'overview.buildTime', def: '' },
+    { label: '建筑高度 (m)', path: 'structure.height', def: '' },
+    { label: '建筑层数地下 (层)', path: 'structure.floorsUnderground', def: '' },
+    { label: '结构类型', path: 'category', def: '砖混' },
+    { label: '结构类型其他内容', path: 'structure.structTypeOther', def: '' },
+    { label: '是否采用预制板', path: 'structure.prefab', def: '是' },
+    { label: '建筑面积 (㎡)', path: 'structure.buildingArea', def: '' },
+    { label: '建筑层数', path: 'structure.floors', def: '' },
+    { label: '建筑层数地上(层)', path: 'structure.floorsAbove', def: '' },
+    { label: '建造方式', path: 'designConstruction.buildMode', def: '有资质的施工队伍' },
+    { label: '建造方式其他内容', path: 'designConstruction.buildModeOther', def: '' },
+    { label: '是否人员聚集场所', path: 'overview.crowdPlace', def: '否' },
+    { label: '建成时间', path: 'year', def: '' },
+    { label: '具体年份', path: 'overview.actualYear', def: '' },
+    // 以下字段不在编辑表单显示，但保留以便保存逻辑兼容
+    { label: '不需要排查原因', path: 'overview.otherCrowdAround', def: '—', hidden: true },
+    { label: '是否同时自住', path: 'overview.isSelfLive', def: '是', hidden: true },
+    { label: '具体用途', path: 'usage.specificUsage', def: '日常居住', hidden: true },
+    { label: '其他人员密集场所周边', path: 'usage.otherCrowdAround', def: '否', hidden: true },
+    { label: '户主联系方式', path: 'overview.phone', def: '', hidden: true },
+    { label: '家庭成员信息', path: 'familyMembers', def: '—', hidden: true }
+];
+
+// 从嵌套记录生成 jbxx 平铺数组（与详情页 basicData_RURAL.jbxx 结构一致）
+function buildJbxxRows(rec) {
+    return JBXX_FIELDS.map(function(f) {
+        const val = getDeep(rec, f.path);
+        const display = (val === undefined || val === null || val === '') ? (f.def || '') : String(val);
+        return f.hidden ? [f.label, display, true] : [f.label, display];
+    });
+}
+
+// 生成完整的 _fieldsLibrary（房屋概况 + 其他 Tab 默认空结构）
+function buildFieldsLibrary(rec) {
+    return {
+        basic_RURAL: {
+            jbxx: buildJbxxRows(rec),
+            zjd: [
+                ['宅基地面积', getDeep(rec, 'homestead.area') || ''],
+                ['审批情况', getDeep(rec, 'homestead.approvalStatus') || ''],
+                ['权属证明', getDeep(rec, 'homestead.certNo') || '']
+            ],
+            jsqk: [
+                ['常住或使用人数超过 10 人', getDeep(rec, 'usage.over10People') || '否'],
+                ['设计方式', getDeep(rec, 'designConstruction.designMode') || '有专业设计'],
+                ['建造方式', getDeep(rec, 'designConstruction.buildMode') || '有资质施工队伍'],
+                ['结构类型', getDeep(rec, 'category') || '砖混'],
+                ['楼屋盖', getDeep(rec, 'structure.roofType') || '现浇板'],
+                ['是否改扩建', getDeep(rec, 'structure.expansionStatus') || '否'],
+                ['是否装修', getDeep(rec, 'structure.decorationStatus') || '否']
+            ],
+            glqk: [
+                ['已取得的行政许可', getDeep(rec, 'overview.permit') || ''],
+                ['违法建设和违法审批', getDeep(rec, 'overview.illegalBuild') || '否']
+            ],
+            jgxx: [
+                ['墙体材料', getDeep(rec, 'structure.wallMaterial') || '', true],
+                ['基础形式', getDeep(rec, 'structure.foundationType') || '', true],
+                ['最大跨度', getDeep(rec, 'structure.maxSpan') || '', true],
+                ['装修情况', getDeep(rec, 'structure.decorationStatus') || '', true],
+                ['建筑层数', (getDeep(rec, 'structure.floors') || '') + (getDeep(rec, 'structure.floors') ? '层' : ''), true],
+                ['屋盖类型', getDeep(rec, 'structure.roofType') || '', true],
+                ['楼盖材料', getDeep(rec, 'structure.floorMaterial') || '', true],
+                ['抗震信息', getDeep(rec, 'structure.seismicInfo') || '', true],
+                ['改扩建情况', getDeep(rec, 'structure.expansionStatus') || '', true],
+                ['备注', getDeep(rec, 'structure.remark') || '—', true]
+            ],
+            syxx: [
+                ['使用用途', getDeep(rec, 'usage.usageType') || '', true],
+                ['具体用途', getDeep(rec, 'usage.specificUsage') || '—', true],
+                ['人员聚集场所周边', getDeep(rec, 'usage.crowdAround') || '—', true],
+                ['超10人使用', getDeep(rec, 'usage.over10People') || '—', true],
+                ['变更日期', getDeep(rec, 'usage.changeDate') || '', true],
+                ['变更内容', getDeep(rec, 'usage.changeContent') || '', true],
+                ['备注', getDeep(rec, 'usage.remark') || '—', true],
+                ['是否自住', getDeep(rec, 'usage.isSelfLive') || '—', true],
+                ['居住人数', (getDeep(rec, 'usage.occupancy') || '') + (getDeep(rec, 'usage.occupancy') ? '人' : ''), true],
+                ['其他人员密集场所周边', getDeep(rec, 'usage.otherCrowdAround') || '—', true],
+                ['使用变更历史', getDeep(rec, 'usage.changeHistory') || '—', true],
+                ['变更类型', getDeep(rec, 'usage.changeType') || '', true],
+                ['审批情况', getDeep(rec, 'usage.approvalStatus') || '', true]
+            ]
+        }
+    };
 }
 
 // 把校验后的扁平记录组装成完整 house 档案结构
@@ -2985,6 +3074,8 @@ function buildHouseRecord(rec) {
         if (rec[k]) { base[k] = Object.assign({}, base[k] || {}, rec[k]); }
     });
     if (base.riskInfo) { base.riskInfo.riskLevel = base.riskInfo.riskLevel || base.riskLevel; base.riskInfo.relatedHouse = base.no; base.riskInfo.relatedOwner = base.owner; }
+    // 生成字段库快照（详情页房屋概况等 Tab 直接读取）
+    base._fieldsLibrary = buildFieldsLibrary(rec);
     return base;
 }
 </script>
