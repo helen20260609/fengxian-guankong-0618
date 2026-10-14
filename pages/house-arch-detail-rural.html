@@ -220,6 +220,8 @@
             try { ensureGovernanceEvents(rec); } catch (e) {}
             // 隐患台账迁移（幂等）：治理事件 → 隐患记录
             try { migrateToHazardLedger(rec); } catch (e) {}
+            // 第二类治理链回补（幂等）：历史第二类风险记录补隐患+治理事件
+            try { backfillSecondClassHazards(rec); } catch (e) {}
             // 方案B：把当前治理事件 ev.data 展开到根级（治理 TAB 渲染读）
             try { __applyGovernanceEventView(rec); } catch (e) {}
             return rec;
@@ -284,7 +286,7 @@
         /* ==================== 流程字段（轮次模型已拆除，直接常驻根级）====================
          * 发现类字段 inspectionRecords/patrolRecords/riskInfo/riskClassification/riskIdentification
          * 与字段库 survey_RURAL 均直接读写根级，不再有轮次快照。
-         * 治理链字段由 governanceEvents 按第三类风险记录驱动（方案B）。
+         * 治理链字段由 governanceEvents 按第二类/第三类风险记录驱动（方案B；第二类不强制安全鉴定）。
          * ==================================================================== */
 
         // 深拷贝工具（undefined 安全）
@@ -294,7 +296,7 @@
          * 业务规则：
          * - 风险发现 = 排查登记(inspectionRecords) + 动态巡查(patrolRecords)，两条独立途径，各自多次
          * - 每次发现自动生成一条风险信息记录(riskRecords)，风险等级=当次结论（三类口径）
-         * - 仅第三类结论触发治理链；治理数据按"治理事件"(governanceEvents)挂载
+         * - 第二类/第三类结论触发治理链（第二类不强制安全鉴定）；治理数据按"治理事件"(governanceEvents)挂载
          * - 应急处置保留根级，独立多事件
          * ==================================================================== */
 
@@ -391,12 +393,12 @@
             });
         }
 
-        // 治理事件：仅第三类风险记录生成
+        // 治理事件：第二类/第三类风险记录生成（第二类不强制安全鉴定）
         function ensureGovernanceEvents(rec) {
             if (!rec) return;
             if (!Array.isArray(rec.governanceEvents)) rec.governanceEvents = [];
-            const third = (rec.riskRecords || []).filter(function(rr) { return rr.riskLevel === '第三类'; });
-            third.forEach(function(rr) {
+            const govRrs = (rec.riskRecords || []).filter(function(rr) { return rr.riskLevel === '第三类' || rr.riskLevel === '第二类'; });
+            govRrs.forEach(function(rr) {
                 const exists = rec.governanceEvents.some(function(ev) { return ev.riskRecordId === rr.id; });
                 if (!exists) {
                     rec.governanceEvents.push({
@@ -410,7 +412,7 @@
                     });
                 }
             });
-            // 当前治理事件 id（默认最新一条第三类）
+            // 当前治理事件 id（默认最新一条）
             if (!rec.currentGovernanceEventId && rec.governanceEvents.length) {
                 rec.currentGovernanceEventId = rec.governanceEvents[rec.governanceEvents.length - 1].eventId;
             }
@@ -577,6 +579,129 @@
             rec._hazardLedgerVersion = HAZARD_LEDGER_VERSION;
         }
 
+        // 治理链回补用：按 rr.sourceId 找排查/巡查源记录（与迁移内 findSourceRecord 口径一致）
+        function __findHazardSourceRecord(rec, rr) {
+            if (!rr || !rr.sourceId) return null;
+            const pool = rr.sourceType === '巡查' ? (rec.patrolRecords || []) : (rec.inspectionRecords || []);
+            return pool.find(function(x){ return x.id === rr.sourceId; }) || null;
+        }
+
+        /* ===== 第二类治理链回补（幂等，只增不删；2026-10-14 新规）=====
+         * 历史第二类风险记录不生成隐患/治理事件；新规要求第二、三类均进入治理链（第二类不强制安全鉴定）。
+         * 对尚无隐患关联的第二类风险记录：补一条隐患（初判第二类）+「登记」动态 + 治理事件 + hazardLinks 关联；
+         * 同部位（非空）+同类型+未销号已存在时，转写「复查」动态，不新建（与登记查重口径一致）。
+         */
+        function backfillSecondClassHazards(rec) {
+            if (!rec) return;
+            if (!Array.isArray(rec.hazardRecords)) rec.hazardRecords = [];
+            if (!Array.isArray(rec.hazardDynamics)) rec.hazardDynamics = [];
+            let seq = rec.hazardRecords.length;
+            (rec.riskRecords || []).forEach(function(rr) {
+                if (!rr || rr.riskLevel !== '第二类') return;
+                if (getHazardLinks(rr).length) return; // 已有关联隐患
+                if ((rec.governanceEvents || []).some(function(e){ return e.riskRecordId === rr.id && e.hazardId; })) return;
+                const src = __findHazardSourceRecord(rec, rr) || {};
+                const type = rr.hazardDesc || '安全隐患';
+                const loc = src.damagePart || src.damageLocation || '';
+                const actTime = rr.date || rr.createdAt || src.checkDate || src.patrolDate || '';
+                const operator = rr.person || src.checker || src.patrolPerson || '';
+                const org = src.checkOrg || src.patrolOrg || (src.town ? src.town + '人民政府' : '') || src.town || '';
+                // 查重：同部位（非空）+同类型+未销号 → 复查跟踪
+                const dup = loc ? rec.hazardRecords.find(function(h){
+                    return h.currentStatus !== HAZARD_STATUS.CLOSED && (h.location || '') === loc && (h.hazardType || '') === type;
+                }) : null;
+                if (dup) {
+                    const dynSeq0 = rec.hazardDynamics.filter(function(d){ return d.hazardId === dup.id; }).length + 1;
+                    rec.hazardDynamics.push({
+                        id: generateHazardDynId(dup.id, dynSeq0),
+                        hazardId: dup.id,
+                        actionType: '复查',
+                        actionTime: actTime,
+                        operator: operator,
+                        org: org,
+                        content: '[第二类回补转复查] ' + (rr.hazardDesc || type),
+                        conclusion: '该部位已有在管隐患，转为复查跟踪',
+                        levelAfter: dup.currentLevel || '第二类',
+                        photos: [],
+                        sourceType: rr.sourceType || '排查',
+                        sourceId: rr.sourceId || ''
+                    });
+                    rr.linkedHazardIds = rr.linkedHazardIds || [];
+                    if (rr.linkedHazardIds.indexOf(dup.id) === -1) rr.linkedHazardIds.push(dup.id);
+                    rr.hazardLinks = rr.hazardLinks || [];
+                    if (!rr.hazardLinks.some(function(l){ return l.hazardId === dup.id; })) {
+                        rr.hazardLinks.push({ hazardId: dup.id, role: '复查', dynamicId: generateHazardDynId(dup.id, dynSeq0) });
+                    }
+                    return;
+                }
+                seq += 1;
+                const hid = generateHazardId(rec, seq);
+                const hz = {
+                    id: hid,
+                    houseNo: rec.no || '',
+                    createdAt: actTime,
+                    createdBy: operator,
+                    sourceType: rr.sourceType || '排查',
+                    sourceId: rr.sourceId || '',
+                    // ===== 隐患主体字段 =====
+                    hazardType: type,
+                    hazardTypeOther: '',
+                    location: loc,
+                    description: rr.hazardDesc || src.otherRisk || src.foundProblem || '',
+                    photos: [],
+                    initialJudge: '第二类',
+                    currentLevel: '第二类',
+                    currentStatus: HAZARD_STATUS.RECTIFYING,
+                    controlMeasure: '',
+                    controlUpdatedAt: '',
+                    closedAt: '',
+                    closeAuditId: '',
+                    // ===== 源记录上下文（不丢字段，与迁移口径一致）=====
+                    structureStatus: src.structureStatus || '',
+                    overload: src.overload || '',
+                    checkConclusion: src.checkConclusion || src.conclusion || src.result || '',
+                    preliminaryJudge: src.preliminaryJudge || src.preliminary || '',
+                    coordinates: src.location || '',
+                    preAppraisal: src.preAppraisal || '',
+                    noAppraisalReason: src.noAppraisalReason || '',
+                    proofFiles: (typeof src.proofFiles === 'string' ? src.proofFiles.split('\n') : (src.proofFiles || [])).filter(Boolean),
+                    remark: src.remark || '',
+                    dutyPerson: src.dutyPerson || '', dutyPhone: src.dutyPhone || '',
+                    ownerName: src.ownerName || '', ownerPhone: src.ownerPhone || '',
+                    safetyName: src.safetyName || '', safetyPhone: src.safetyPhone || '',
+                    checkOrg: src.checkOrg || src.patrolOrg || '',
+                    town: src.town || '',
+                    reporter: src.reporter || '', reportTime: src.reportTime || '',
+                    sourceSnapshot: __deepClone(src)
+                };
+                rec.hazardRecords.push(hz);
+                // 领养/创建治理事件（ensureGovernanceEvents 可能已生成 rr 级空事件）
+                __adoptOrCreateGovernanceEvent(rec, rr, hid, new Date().toISOString());
+                // 「登记」动态流水
+                rec.hazardDynamics.push({
+                    id: generateHazardDynId(hid, 1),
+                    hazardId: hid,
+                    actionType: '登记',
+                    actionTime: actTime,
+                    operator: operator,
+                    org: org,
+                    content: hz.description || ('登记隐患：' + type),
+                    conclusion: hz.preliminaryJudge || '初判第二类',
+                    levelAfter: '第二类',
+                    photos: [],
+                    sourceType: hz.sourceType,
+                    sourceId: hz.sourceId
+                });
+                // 回填风险记录关联（旧字段双写 + hazardLinks 结构化）
+                rr.linkedHazardIds = (rr.linkedHazardIds || []).concat([hid]);
+                rr.newHazardIds = (rr.newHazardIds || []).concat([hid]);
+                rr.hazardLinks = rr.hazardLinks || [];
+                if (!rr.hazardLinks.some(function(l){ return l.hazardId === hid; })) {
+                    rr.hazardLinks.push({ hazardId: hid, role: '登记', dynamicId: generateHazardDynId(hid, 1) });
+                }
+            });
+        }
+
         // 读取 rr 的隐患关联（兼容新旧结构：hazardLinks 优先；缺项从 linkedHazardIds 补「登记」角色）
         function getHazardLinks(rr) {
             if (!rr) return [];
@@ -590,7 +715,7 @@
         /* ===== P3：排查/巡查表单「登记隐患」写入 =====
          * 在排查登记/动态巡查保存时调用：
          *   - newHazards[]：每条形似 { hazardType, hazardTypeOther, location, description, photos[], initialJudge }
-         *     → 生成 hazardRecord（全字段 + sourceSnapshot 兜底）+「登记」动态；第三类自动挂治理事件
+         *     → 生成 hazardRecord（全字段 + sourceSnapshot 兜底）+「登记」动态；第二类/第三类自动挂治理事件
          *   - reviews[]：每条形似 { hazardId, conclusion, levelAfter, content }
          *     → 对既有隐患追加「复查」动态，按需调整 currentLevel（允许调低）
          * 旧字段一律保留不删（源记录照旧、rr 照旧，仅追加关联）。
@@ -711,8 +836,8 @@
                     sourceSnapshot: snapshot
                 };
                 rec.hazardRecords.push(hz);
-                // 第三类隐患 → 领养/创建治理事件（单轮治理链）
-                if (hz.initialJudge === '第三类') {
+                // 第二类/第三类隐患 → 领养/创建治理事件（单轮治理链；第二类不强制安全鉴定）
+                if (hz.initialJudge === '第三类' || hz.initialJudge === '第二类') {
                     __adoptOrCreateGovernanceEvent(rec, rr, hid, new Date().toISOString());
                 }
                 // 「登记」动态流水
@@ -819,11 +944,24 @@
             if (ev) return ev;
             return (rec.governanceEvents || [])[rec.governanceEvents.length - 1] || null;
         }
-        // 治理链是否应显示（存在第三类风险记录/事件）
+        // 治理链是否应显示（存在第二类/第三类风险记录的治理事件）
         function hasGovernanceAccess(rec) {
             if (!rec) return false;
             ensureGovernanceEvents(rec);
             return (rec.governanceEvents || []).length > 0;
+        }
+
+        // 治理事件是否需要安全鉴定：第二类隐患不强制鉴定（治理链隐藏「安全鉴定」节点）
+        function govNeedAppraisal(s, ev) {
+            if (!ev) return true;
+            const hz = (s.hazardRecords || []).find(function(h){ return h.id === ev.hazardId; });
+            if (!hz) return true; // rr 级孤儿事件/旧数据：保留鉴定节点
+            return (hz.currentLevel || hz.initialJudge) !== '第二类';
+        }
+        // 按事件过滤治理链子 TAB（第二类去掉「安全鉴定」）
+        function govTabsForEvent(s, ev) {
+            if (govNeedAppraisal(s, ev)) return RISK_GOV_TABS;
+            return RISK_GOV_TABS.filter(function(t){ return t.key !== 'assessment'; });
         }
 
         /* ==================== 治理事件视图存取层（方案B）====================
@@ -3684,7 +3822,7 @@
         function renderMeasureContent() {
             const measureSubTabs = getMeasureSubTabs();
             const measureData = getMeasureData();
-            // v2：治理链门禁——仅第三类风险可进入整治措施
+            // v2：治理链门禁——第二类/第三类风险可进入整治措施
             const __s = currentHouseArch;
             ensureGovernanceEvents(__s);
             const __evs = __s.governanceEvents || [];
@@ -3693,7 +3831,7 @@
                     '<div class="content-card-header"><div class="content-card-title"><i class="fas fa-tools"></i> 整治措施</div></div>' +
                     '<div class="content-body"><div class="record-empty" style="padding:60px 20px;text-align:center;">' +
                         '<i class="fas fa-lock" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
-                        '仅第三类风险需进入治理流程<br><span style="font-size:12px;color:#909399;">当前房屋暂无第三类结论的风险记录，无需进行整治措施</span>' +
+                        '第二类/第三类风险需进入治理流程<br><span style="font-size:12px;color:#909399;">当前房屋暂无第二类/第三类结论的风险记录，无需进行整治措施</span>' +
                     '</div></div>' +
                 '</div>';
             }
@@ -4358,6 +4496,7 @@
         function renderHazardLedgerContent() {
             const s = currentHouseArch;
             migrateToHazardLedger(s); // 兜底（正常已在 getCurrentHouseArch 执行过）
+            try { backfillSecondClassHazards(s); } catch (e) {} // 第二类回补兜底
             const hazards = s.hazardRecords || [];
             const item = getSidebarItems().find(function(i){ return i.key === 'hazard'; }) || { icon:'fa-list-ul', title:'隐患台账' };
 
@@ -4425,20 +4564,19 @@
             const hz = hazards.find(function(h){ return h.id === currentHazardId; });
             const dyns = (s.hazardDynamics || []).filter(function(d){ return d.hazardId === currentHazardId; })
                 .sort(function(a,b){ return (b.actionTime || '').localeCompare(a.actionTime || ''); });
-            // 本隐患对应的治理事件（第三类才有）
+            // 本隐患对应的治理事件（第二类/第三类有）
             const hzEvent = (s.governanceEvents || []).find(function(e){ return e.hazardId === hz.id; });
             // D：轮次锚点兜底（旧数据缺 hazardRoundNo 时按同 rr 下事件序补齐）
             if (hzEvent && hzEvent.hazardRoundNo === undefined) {
                 const sameRr = (s.governanceEvents || []).filter(function(e){ return e.riskRecordId === hzEvent.riskRecordId && e.hazardId; });
                 hzEvent.hazardRoundNo = Math.max(sameRr.findIndex(function(e){ return e.eventId === hzEvent.eventId; }) + 1, 1);
             }
-            const isThird = hz.initialJudge === '第三类';
             const HAZ_TABS = [
                 { key: 'basic',   title: '基本信息' },
                 { key: 'control', title: '隐患控制情况' },
                 { key: 'dynamic', title: '隐患动态记录' }
             ];
-            if (isThird && hzEvent) HAZ_TABS.push({ key: 'governance', title: '治理链路' });
+            if (hzEvent) HAZ_TABS.push({ key: 'governance', title: '治理链路' }); // 有治理事件即显示（第二/三类均进入治理链）
             const tabsHtml = '<div class="content-tabs">' + HAZ_TABS.map(function(t){
                 const cnt = (t.key === 'dynamic' && dyns.length) ? '<span class="content-tab-count">' + dyns.length + '</span>' : '';
                 return '<div class="content-tab' + (currentHazardTab === t.key ? ' active' : '') + '" data-hazard-tab="' + t.key + '">' + t.title + cnt + '</div>';
@@ -4483,7 +4621,7 @@
             } else if (currentHazardTab === 'governance') {
                 // 治理链路：锁定到本隐患对应事件，复用现有 6 子TAB 渲染
                 if (!hzEvent) {
-                    bodyHtml = '<div class="record-empty" style="padding:40px 20px;text-align:center;">本隐患无治理事件（仅第三类隐患进入治理流程）</div>';
+                    bodyHtml = '<div class="record-empty" style="padding:40px 20px;text-align:center;">本隐患无治理事件（第二类/第三类隐患进入治理流程）</div>';
                 } else {
                     // 锁定 currentGovEventId 到本隐患事件（方案B 数据隔离依赖它）
                     if (window.currentGovEventId !== hzEvent.eventId) {
@@ -4495,22 +4633,27 @@
                     const roundAnchor = anchorRr
                         ? '<a href="javascript:void(0)" class="gov-round-anchor" data-rr-id="' + anchorRr.id + '" style="margin-left:12px;font-size:12px;color:var(--primary);font-weight:400;" title="回跳风险记录详情">源于第 ' + (hzEvent.hazardRoundNo || 1) + ' 轮' + (anchorRr.sourceType || '排查') + '（' + anchorRr.id + '）</a>'
                         : '';
-                    const govTabsHtml = RISK_GOV_TABS.map(function(t){
-                        const active = currentRiskSubTab === t.key ? 'active' : '';
+                    // 第二类隐患不强制安全鉴定：隐藏「安全鉴定」子TAB，当前停留则回退到整治计划
+                    const govTabs = govTabsForEvent(s, hzEvent);
+                    const effSub = (govTabs.some(function(t){ return t.key === currentRiskSubTab; })) ? currentRiskSubTab : 'plan';
+                    const noAppraisalHint = (govTabs.length < RISK_GOV_TABS.length)
+                        ? '<span style="margin-left:10px;font-size:12px;color:#909399;font-weight:400;">第二类隐患无需安全鉴定</span>' : '';
+                    const govTabsHtml = govTabs.map(function(t){
+                        const active = effSub === t.key ? 'active' : '';
                         return '<div class="content-tab ' + active + '" data-scope="risk" data-key="' + t.key + '"><i class="fas ' + t.icon + '"></i> ' + t.title + '</div>';
                     }).join('');
                     let govBody = '';
-                    try { govBody = renderGovernanceBody(currentRiskSubTab, s); }
+                    try { govBody = renderGovernanceBody(effSub, s); }
                     catch (e) { govBody = '<div class="record-empty" style="padding:30px;">治理内容渲染失败：' + (e && e.message) + '</div>'; }
-                    const curTab = RISK_GOV_TABS.find(function(t){ return t.key === currentRiskSubTab; }) || RISK_GOV_TABS[0];
-                    const govActions = governanceBottomActions(currentRiskSubTab, curTab);
+                    const curTab = RISK_GOV_TABS.find(function(t){ return t.key === effSub; }) || govTabs[0];
+                    const govActions = governanceBottomActions(effSub, curTab);
                     const govBar = '<div class="bottom-bar" style="margin-top:14px;">' +
                         '<div class="bottom-info"><i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
                             '治理节点：<span class="bottom-node">' + curTab.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span></div>' +
                         '<div class="bottom-actions">' + govActions + '</div></div>';
                     bodyHtml = '<div style="margin-top:4px;">' +
                         '<div style="display:flex;align-items:center;font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;">' +
-                            '<i class="fas fa-stream" style="color:var(--primary);margin-right:6px;"></i>治理链路' + statusTag + roundAnchor + '</div>' +
+                            '<i class="fas fa-stream" style="color:var(--primary);margin-right:6px;"></i>治理链路' + statusTag + roundAnchor + noAppraisalHint + '</div>' +
                         '<div class="content-tabs">' + govTabsHtml + '</div>' +
                         '<div class="risk-gov-body" style="padding-top:14px;">' + govBody + '</div>' +
                         govBar +
@@ -4645,7 +4788,7 @@
         function renderTableContent(key) {
             const item = getSidebarItems().find(i => i.key === key);
             const s = currentHouseArch;
-            // v2：治理链 6 TAB（安全鉴定/整治计划/整治措施/隐患动态/阶段性验收/验收销项）仅第三类可进入
+            // v2：治理链 6 TAB（安全鉴定/整治计划/整治措施/隐患动态/阶段性验收/验收销项）第二类/第三类可进入（第二类不强制安全鉴定）
             const GOVERNANCE_KEYS = ['assessment', 'plan', 'measure', 'control', 'accept', 'close'];
             if (GOVERNANCE_KEYS.indexOf(key) !== -1) {
                 ensureGovernanceEvents(s);
@@ -4655,7 +4798,7 @@
                         '<div class="content-card-header"><div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div></div>' +
                         '<div class="content-body"><div class="record-empty" style="padding:60px 20px;text-align:center;">' +
                             '<i class="fas fa-lock" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
-                            '仅第三类风险需进入治理流程<br><span style="font-size:12px;color:#909399;">当前房屋暂无第三类结论的风险记录，无需进行' + item.title + '</span>' +
+                            '第二类/第三类风险需进入治理流程<br><span style="font-size:12px;color:#909399;">当前房屋暂无第二类/第三类结论的风险记录，无需进行' + item.title + '</span>' +
                         '</div></div>' +
                     '</div>';
                 }
@@ -4683,8 +4826,13 @@
                 let html0 = '<div class="content-card">' +
                     '<div class="content-card-header"><div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title + titleHint0 + '</div></div>' +
                     '<div class="content-body">' + evBar;
-                // 治理链内容（拆出纯内容函数，复用）
-                html0 += renderGovernanceBody(key, s);
+                // 治理链内容（拆出纯内容函数，复用）；第二类隐患不强制安全鉴定
+                if (key === 'assessment' && !govNeedAppraisal(s, curEv)) {
+                    html0 += '<div class="record-empty" style="padding:40px 20px;text-align:center;">' +
+                        '<i class="fas fa-info-circle" style="color:var(--primary);margin-right:6px;"></i>第二类隐患无需进行安全鉴定，可直接进入整治计划/措施环节</div>';
+                } else {
+                    html0 += renderGovernanceBody(key, s);
+                }
                 html0 += '</div></div>';
                 html0 += '<div class="bottom-bar">' +
                     '<div class="bottom-info">' +
