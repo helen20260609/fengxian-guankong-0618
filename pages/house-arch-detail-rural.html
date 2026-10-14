@@ -218,6 +218,8 @@
             // v2：风险记录自动派生 + 治理事件（幂等）
             try { syncRiskRecords(rec); } catch (e) {}
             try { ensureGovernanceEvents(rec); } catch (e) {}
+            // 隐患台账迁移（幂等）：治理事件 → 隐患记录
+            try { migrateToHazardLedger(rec); } catch (e) {}
             // 方案B：把当前治理事件 ev.data 展开到根级（治理 TAB 渲染读）
             try { __applyGovernanceEventView(rec); } catch (e) {}
             return rec;
@@ -412,6 +414,400 @@
             if (!rec.currentGovernanceEventId && rec.governanceEvents.length) {
                 rec.currentGovernanceEventId = rec.governanceEvents[rec.governanceEvents.length - 1].eventId;
             }
+        }
+
+        /* ==================== 隐患台账（hazard ledger）====================
+         * 隐患是一等公民：挂房屋，不挂排查；每条隐患独立 ID/状态/动态流水。
+         * 排查是跟踪动作：通过 linkedHazardIds 关联既有隐患，不再每次重建快照。
+         * 治理事件挂 hazardId（不再挂 riskRecordId）。
+         * ==================================================================== */
+
+        // 隐患编号：HZ-{房屋编号}-{3位序号}
+        function generateHazardId(rec, seq) {
+            const no = (rec && rec.no) || 'X';
+            return 'HZ-' + no + '-' + String(seq || 1).padStart(3, '0');
+        }
+        // 动态流水编号：DYN-{隐患编号}-{3位序号}
+        function generateHazardDynId(hazardId, seq) {
+            return 'DYN-' + hazardId + '-' + String(seq || 1).padStart(3, '0');
+        }
+
+        // 隐患状态枚举：未管控/管控中/整治中/已销号
+        const HAZARD_STATUS = {
+            UNCONTROLLED: '未管控',
+            CONTROLLED: '管控中',
+            RECTIFYING: '整治中',
+            CLOSED: '已销号'
+        };
+
+        // 从旧数据迁移到隐患台账（幂等，版本化：_hazardLedgerVersion 低于当前版本时重跑补齐字段）
+        // 规则：
+        //   - 每个挂 riskRecordId 的治理事件 → 一条 hazardRecord（initialJudge=第三类）
+        //   - ev.data.addDanger.types[] 每个类型 → 一条独立 hazardRecord
+        //   - 为每条隐患生成"登记"动态流水
+        //   - riskRecords[i].linkedHazardIds 回填
+        // 版本历史：v1 初版；v2 补齐源记录全量字段（sourceSnapshot/责任人/证明材料等）
+        const HAZARD_LEDGER_VERSION = 2;
+        function migrateToHazardLedger(rec) {
+            if (!rec) return;
+            const curVer = rec._hazardLedgerVersion || (rec._hazardLedgerMigrated ? 1 : 0);
+            if (curVer >= HAZARD_LEDGER_VERSION) return; // 已是最新
+            // 低于当前版本：清掉旧迁移产物重跑（治理事件 hazardId 关联一并重置）
+            if (curVer > 0) {
+                rec.hazardRecords = [];
+                rec.hazardDynamics = [];
+                (rec.governanceEvents || []).forEach(function(ev){ delete ev.hazardId; });
+                (rec.riskRecords || []).forEach(function(rr){ delete rr.linkedHazardIds; delete rr.newHazardIds; });
+            }
+            if (!Array.isArray(rec.hazardRecords)) rec.hazardRecords = [];
+            if (!Array.isArray(rec.hazardDynamics)) rec.hazardDynamics = [];
+
+            const events = rec.governanceEvents || [];
+            const riskRecords = rec.riskRecords || [];
+            const inspections = rec.inspectionRecords || [];
+            const patrols = rec.patrolRecords || [];
+            let seq = rec.hazardRecords.length;
+
+            // 辅助：根据 rr.sourceId 找到排查/巡查记录
+            function findSourceRecord(rr) {
+                if (!rr || !rr.sourceId) return null;
+                const pool = rr.sourceType === '巡查' ? patrols : inspections;
+                return pool.find(function(x){ return x.id === rr.sourceId; }) || null;
+            }
+
+            events.forEach(function(ev) {
+                const rr = riskRecords.find(function(r){ return r.id === ev.riskRecordId; });
+                if (!rr) return;
+                const src = findSourceRecord(rr) || {};
+                const addDanger = (ev.data && ev.data.addDanger) || {};
+                const types = Array.isArray(addDanger.types) && addDanger.types.length
+                    ? addDanger.types
+                    : [rr.hazardDesc || '安全隐患']; // 无明细类型时兜底一条
+
+                const linkedIds = [];
+                types.forEach(function(type) {
+                    seq += 1;
+                    const hid = generateHazardId(rec, seq);
+                    linkedIds.push(hid);
+                    const photosByType = (addDanger.photosByType && addDanger.photosByType[type]) || '';
+                    const photosArr = (typeof photosByType === 'string' ? photosByType.split('\n') : (Array.isArray(photosByType) ? photosByType : [])).filter(Boolean);
+                    // 源记录全量字段快照（排查/巡查字段名不一，统一收进 sourceSnapshot，不丢字段）
+                    const snapshot = __deepClone(src);
+                    const hz = {
+                        id: hid,
+                        houseNo: rec.no || '',
+                        createdAt: rr.date || rr.createdAt || src.checkDate || src.patrolDate || '',
+                        createdBy: rr.person || src.checker || src.patrolPerson || '',
+                        sourceType: rr.sourceType || '排查',
+                        sourceId: rr.sourceId || '',
+                        // ===== 隐患主体字段 =====
+                        hazardType: type,
+                        hazardTypeOther: (type === '其他安全问题' ? (addDanger.typesOther || '') : ''),
+                        location: src.damagePart || src.damageLocation || '',
+                        description: rr.hazardDesc || src.otherRisk || src.foundProblem || src.hazardDesc || '',
+                        photos: photosArr,
+                        initialJudge: rr.riskLevel || '第三类',
+                        currentLevel: rr.riskLevel || '第三类',
+                        currentStatus: (ev.data && ev.data.closeStatus === '已通过') ? HAZARD_STATUS.CLOSED : HAZARD_STATUS.RECTIFYING,
+                        controlMeasure: '',
+                        controlUpdatedAt: '',
+                        closedAt: (ev.data && ev.data.closeStatus === '已通过') ? (ev.data.closeAuditTime || '') : '',
+                        closeAuditId: '',
+                        // ===== 源记录上下文（不丢字段：结构状况/堆载/鉴定安排/责任人等）=====
+                        structureStatus: src.structureStatus || '',        // 结构状况
+                        overload: src.overload || '',                      // 增加堆载
+                        checkConclusion: src.checkConclusion || src.conclusion || '', // 排查结论原文
+                        preliminaryJudge: src.preliminaryJudge || src.preliminary || '', // 初步判定
+                        coordinates: src.location || '',                   // 坐标（非损伤部位）
+                        preAppraisal: src.preAppraisal || '',              // 是否整治前鉴定
+                        noAppraisalReason: src.noAppraisalReason || '',    // 未鉴定原因
+                        proofFiles: (typeof src.proofFiles === 'string' ? src.proofFiles.split('\n') : (src.proofFiles || [])).filter(Boolean), // 证明材料
+                        remark: src.remark || '',                          // 备注
+                        dutyPerson: src.dutyPerson || '', dutyPhone: src.dutyPhone || '',     // 安全责任人
+                        ownerName: src.ownerName || '', ownerPhone: src.ownerPhone || '',     // 产权人
+                        safetyName: src.safetyName || '', safetyPhone: src.safetyPhone || '', // 安全监管责任人
+                        checkOrg: src.checkOrg || src.patrolOrg || '',     // 排查/巡查单位
+                        town: src.town || '',                              // 街镇
+                        reporter: src.reporter || '', reportTime: src.reportTime || '', // 填报
+                        sourceSnapshot: snapshot,                          // 源记录完整快照（兜底）
+                        _legacyEventId: ev.eventId // 迁移期保留旧事件引用
+                    };
+                    rec.hazardRecords.push(hz);
+                    // 治理事件改挂 hazardId（保留 riskRecordId 作兼容）
+                    ev.hazardId = hid;
+                    // 登记动态流水
+                    rec.hazardDynamics.push({
+                        id: generateHazardDynId(hid, 1),
+                        hazardId: hid,
+                        actionType: '登记',
+                        actionTime: hz.createdAt,
+                        operator: hz.createdBy,
+                        org: hz.checkOrg || hz.town || '',
+                        content: hz.description || ('登记隐患：' + type),
+                        conclusion: hz.preliminaryJudge || '确认安全隐患',
+                        levelAfter: hz.initialJudge,
+                        photos: photosArr.slice(),
+                        sourceType: hz.sourceType,
+                        sourceId: hz.sourceId
+                    });
+                });
+                // 回填 riskRecord 的关联隐患（linkedHazardIds 旧字段保留 + hazardLinks 结构化关联）
+                if (linkedIds.length) {
+                    rr.linkedHazardIds = (rr.linkedHazardIds || []).concat(linkedIds);
+                    rr.newHazardIds = (rr.newHazardIds || []).concat(linkedIds);
+                    rr.hazardLinks = rr.hazardLinks || [];
+                    linkedIds.forEach(function(hid) {
+                        if (!rr.hazardLinks.some(function(l){ return l.hazardId === hid; })) {
+                            rr.hazardLinks.push({ hazardId: hid, role: '登记', dynamicId: generateHazardDynId(hid, 1) });
+                        }
+                    });
+                }
+            });
+
+            // D：治理事件轮次锚点回填（同 rr 下第几条隐患 → 第几轮）
+            const rrSeen = {};
+            events.forEach(function(ev) {
+                if (!ev.hazardId) return;
+                const key = ev.riskRecordId || '';
+                rrSeen[key] = (rrSeen[key] || 0) + 1;
+                if (ev.hazardRoundNo === undefined) ev.hazardRoundNo = rrSeen[key];
+            });
+
+            rec._hazardLedgerMigrated = true;
+            rec._hazardLedgerVersion = HAZARD_LEDGER_VERSION;
+        }
+
+        // 读取 rr 的隐患关联（兼容新旧结构：hazardLinks 优先；缺项从 linkedHazardIds 补「登记」角色）
+        function getHazardLinks(rr) {
+            if (!rr) return [];
+            const links = Array.isArray(rr.hazardLinks) && rr.hazardLinks.length ? rr.hazardLinks.slice() : [];
+            (rr.linkedHazardIds || []).forEach(function(hid){
+                if (!links.some(function(l){ return l.hazardId === hid; })) links.push({ hazardId: hid, role: '登记', dynamicId: '' });
+            });
+            return links;
+        }
+
+        /* ===== P3：排查/巡查表单「登记隐患」写入 =====
+         * 在排查登记/动态巡查保存时调用：
+         *   - newHazards[]：每条形似 { hazardType, hazardTypeOther, location, description, photos[], initialJudge }
+         *     → 生成 hazardRecord（全字段 + sourceSnapshot 兜底）+「登记」动态；第三类自动挂治理事件
+         *   - reviews[]：每条形似 { hazardId, conclusion, levelAfter, content }
+         *     → 对既有隐患追加「复查」动态，按需调整 currentLevel（允许调低）
+         * 旧字段一律保留不删（源记录照旧、rr 照旧，仅追加关联）。
+         */
+        // D：计算隐患轮次号（同一 rr 触发的第几条隐患 = 第几轮）
+        function __hazardRoundNo(rec, rr) {
+            if (!rr) return 1;
+            return (rec.governanceEvents || []).filter(function(e){ return e.riskRecordId === rr.id && e.hazardId; }).length + 1;
+        }
+
+        function __adoptOrCreateGovernanceEvent(rec, rr, hid, createdAt) {
+            if (!Array.isArray(rec.governanceEvents)) rec.governanceEvents = [];
+            // 优先领养 ensureGovernanceEvents 生成的 rr 级空事件（无 hazardId），避免孤儿事件
+            let ev = null;
+            if (rr) {
+                ev = rec.governanceEvents.find(function(e){ return e.riskRecordId === rr.id && !e.hazardId; }) || null;
+            }
+            if (ev) { ev.hazardId = hid; if (ev.hazardRoundNo === undefined) ev.hazardRoundNo = __hazardRoundNo(rec, rr) - 1 || 1; return ev; }
+            ev = {
+                eventId: 'GE-' + hid,
+                hazardId: hid,
+                riskRecordId: rr ? rr.id : '',
+                roundNo: 1,
+                hazardRoundNo: __hazardRoundNo(rec, rr),
+                createdAt: createdAt || new Date().toISOString(),
+                status: '待治理',
+                data: {}
+            };
+            rec.governanceEvents.push(ev);
+            return ev;
+        }
+
+        function registerDiscoveryHazards(rec, sourceType, srcRecord, newHazards, reviews) {
+            if (!rec || !srcRecord || !srcRecord.id) return;
+            if (!Array.isArray(rec.hazardRecords)) rec.hazardRecords = [];
+            if (!Array.isArray(rec.hazardDynamics)) rec.hazardDynamics = [];
+            try { syncRiskRecords(rec); } catch (e) {}
+            const rr = (rec.riskRecords || []).find(function(r){ return r.sourceType === sourceType && r.sourceId === srcRecord.id; }) || null;
+            const actTime = srcRecord.checkDate || srcRecord.patrolDate || srcRecord.reportTime || '';
+            const operator = srcRecord.checker || srcRecord.patrolPerson || srcRecord.reporter || '';
+            const org = srcRecord.checkOrg || srcRecord.patrolOrg || (srcRecord.town ? srcRecord.town + '人民政府' : '') || srcRecord.town || '';
+            let seq = rec.hazardRecords.length;
+
+            (Array.isArray(newHazards) ? newHazards : []).forEach(function(nh) {
+                if (!nh || !nh.hazardType) return;
+                // B：一处一条查重——同部位（部位需非空）+同类型+未销号 → 不新建，转为复查跟踪
+                const dup = nh.location ? rec.hazardRecords.find(function(h){
+                    return h.currentStatus !== HAZARD_STATUS.CLOSED &&
+                        (h.location || '') === (nh.location || '') &&
+                        (h.hazardType || '') === (nh.hazardType || '');
+                }) : null;
+                if (dup) {
+                    const dynSeq0 = rec.hazardDynamics.filter(function(d){ return d.hazardId === dup.id; }).length + 1;
+                    rec.hazardDynamics.push({
+                        id: generateHazardDynId(dup.id, dynSeq0),
+                        hazardId: dup.id,
+                        actionType: '复查',
+                        actionTime: actTime,
+                        operator: operator,
+                        org: org,
+                        content: '[重复登记转复查] ' + (nh.description || nh.hazardType),
+                        conclusion: '该部位已有在管隐患，转为复查跟踪',
+                        levelAfter: dup.currentLevel || nh.initialJudge || '',
+                        photos: (Array.isArray(nh.photos) ? nh.photos : []).filter(Boolean),
+                        sourceType: sourceType,
+                        sourceId: srcRecord.id
+                    });
+                    if (rr) {
+                        rr.linkedHazardIds = rr.linkedHazardIds || [];
+                        if (rr.linkedHazardIds.indexOf(dup.id) === -1) rr.linkedHazardIds.push(dup.id);
+                        rr.hazardLinks = rr.hazardLinks || [];
+                        if (!rr.hazardLinks.some(function(l){ return l.hazardId === dup.id; })) {
+                            rr.hazardLinks.push({ hazardId: dup.id, role: '复查', dynamicId: generateHazardDynId(dup.id, dynSeq0) });
+                        }
+                    }
+                    return; // 不新建
+                }
+                seq += 1;
+                const hid = generateHazardId(rec, seq);
+                const photosArr = (Array.isArray(nh.photos) ? nh.photos : []).filter(Boolean);
+                const snapshot = __deepClone(srcRecord);
+                const hz = {
+                    id: hid,
+                    houseNo: rec.no || '',
+                    createdAt: actTime,
+                    createdBy: operator,
+                    sourceType: sourceType,
+                    sourceId: srcRecord.id,
+                    // ===== 隐患主体字段 =====
+                    hazardType: nh.hazardType,
+                    hazardTypeOther: (nh.hazardType === '其他安全问题' ? (nh.hazardTypeOther || '') : ''),
+                    location: nh.location || '',
+                    description: nh.description || nh.hazardType,
+                    photos: photosArr,
+                    initialJudge: nh.initialJudge || '第三类',
+                    currentLevel: nh.initialJudge || '第三类',
+                    currentStatus: HAZARD_STATUS.UNCONTROLLED,
+                    controlMeasure: '',
+                    controlUpdatedAt: '',
+                    closedAt: '',
+                    closeAuditId: '',
+                    // ===== 源记录上下文（不丢字段，与迁移口径一致）=====
+                    structureStatus: srcRecord.structureStatus || '',
+                    overload: srcRecord.overload || '',
+                    checkConclusion: srcRecord.checkConclusion || srcRecord.conclusion || srcRecord.result || '',
+                    preliminaryJudge: srcRecord.preliminaryJudge || srcRecord.preliminary || '',
+                    coordinates: srcRecord.location || srcRecord.patrolPointCoord || '',
+                    preAppraisal: srcRecord.preAppraisal || '',
+                    noAppraisalReason: srcRecord.noAppraisalReason || '',
+                    proofFiles: (typeof srcRecord.proofFiles === 'string' ? srcRecord.proofFiles.split('\n') : (srcRecord.proofFiles || [])).filter(Boolean),
+                    remark: srcRecord.remark || '',
+                    dutyPerson: srcRecord.dutyPerson || '', dutyPhone: srcRecord.dutyPhone || '',
+                    ownerName: srcRecord.ownerName || '', ownerPhone: srcRecord.ownerPhone || '',
+                    safetyName: srcRecord.safetyName || '', safetyPhone: srcRecord.safetyPhone || '',
+                    checkOrg: srcRecord.checkOrg || srcRecord.patrolOrg || '',
+                    town: srcRecord.town || '',
+                    reporter: srcRecord.reporter || '', reportTime: srcRecord.reportTime || '',
+                    sourceSnapshot: snapshot
+                };
+                rec.hazardRecords.push(hz);
+                // 第三类隐患 → 领养/创建治理事件（单轮治理链）
+                if (hz.initialJudge === '第三类') {
+                    __adoptOrCreateGovernanceEvent(rec, rr, hid, new Date().toISOString());
+                }
+                // 「登记」动态流水
+                rec.hazardDynamics.push({
+                    id: generateHazardDynId(hid, 1),
+                    hazardId: hid,
+                    actionType: '登记',
+                    actionTime: actTime,
+                    operator: operator,
+                    org: org,
+                    content: hz.description || ('登记隐患：' + hz.hazardType),
+                    conclusion: hz.preliminaryJudge || ('初判' + hz.initialJudge),
+                    levelAfter: hz.initialJudge,
+                    photos: photosArr.slice(),
+                    sourceType: sourceType,
+                    sourceId: srcRecord.id
+                });
+                // 回填风险记录关联（旧字段双写 + hazardLinks 结构化）
+                if (rr) {
+                    rr.linkedHazardIds = (rr.linkedHazardIds || []).concat([hid]);
+                    rr.newHazardIds = (rr.newHazardIds || []).concat([hid]);
+                    rr.hazardLinks = rr.hazardLinks || [];
+                    if (!rr.hazardLinks.some(function(l){ return l.hazardId === hid; })) {
+                        rr.hazardLinks.push({ hazardId: hid, role: '登记', dynamicId: generateHazardDynId(hid, 1) });
+                    }
+                }
+            });
+
+            (Array.isArray(reviews) ? reviews : []).forEach(function(ri) {
+                if (!ri || !ri.hazardId) return;
+                const hz = rec.hazardRecords.find(function(h){ return h.id === ri.hazardId; });
+                if (!hz) return;
+                const dynSeq = rec.hazardDynamics.filter(function(d){ return d.hazardId === ri.hazardId; }).length + 1;
+                rec.hazardDynamics.push({
+                    id: generateHazardDynId(ri.hazardId, dynSeq),
+                    hazardId: ri.hazardId,
+                    actionType: '复查',
+                    actionTime: actTime,
+                    operator: operator,
+                    org: org,
+                    content: ri.content || ('复查隐患：' + (hz.hazardType || '')),
+                    conclusion: ri.conclusion || '',
+                    levelAfter: ri.levelAfter || hz.currentLevel || '',
+                    photos: [],
+                    sourceType: sourceType,
+                    sourceId: srcRecord.id
+                });
+                // 等级调整（允许调低，第一类视为隐患消除前的观察结论，不自动销号）
+                if (ri.levelAfter && ri.levelAfter !== hz.currentLevel) hz.currentLevel = ri.levelAfter;
+                // 复查关联回填（旧字段去重 + hazardLinks 结构化）
+                if (rr) {
+                    rr.linkedHazardIds = rr.linkedHazardIds || [];
+                    if (rr.linkedHazardIds.indexOf(ri.hazardId) === -1) rr.linkedHazardIds.push(ri.hazardId);
+                    rr.hazardLinks = rr.hazardLinks || [];
+                    if (!rr.hazardLinks.some(function(l){ return l.hazardId === ri.hazardId; })) {
+                        rr.hazardLinks.push({ hazardId: ri.hazardId, role: '复查', dynamicId: generateHazardDynId(ri.hazardId, dynSeq) });
+                    }
+                }
+            });
+        }
+
+        /* ===== C：隐患独立销号（单一入口，治理链验收与台账直销共用）=====
+         * payload: { auditor, auditTime, opinion, files, source }
+         * 幂等：已销号则跳过；销号后写「销号」动态 + 回填 closedAt；
+         * 若有关联治理事件，事件状态同步「已治理」。
+         */
+        function closeHazard(rec, hazardId, payload) {
+            if (!rec) return false;
+            const hz = (rec.hazardRecords || []).find(function(h){ return h.id === hazardId; });
+            if (!hz || hz.currentStatus === HAZARD_STATUS.CLOSED) return false;
+            payload = payload || {};
+            const auditTime = payload.auditTime || formatDateTime(new Date());
+            hz.currentStatus = HAZARD_STATUS.CLOSED;
+            hz.closedAt = auditTime;
+            hz.closeAuditId = payload.auditId || hz.closeAuditId || '';
+            const dynSeq = (rec.hazardDynamics || []).filter(function(d){ return d.hazardId === hazardId; }).length + 1;
+            rec.hazardDynamics = rec.hazardDynamics || [];
+            rec.hazardDynamics.push({
+                id: generateHazardDynId(hazardId, dynSeq),
+                hazardId: hazardId,
+                actionType: '销号',
+                actionTime: auditTime,
+                operator: payload.auditor || '',
+                org: payload.org || '',
+                content: payload.opinion || '隐患验收通过，予以销号',
+                conclusion: '验收销号',
+                levelAfter: hz.currentLevel || '',
+                photos: (Array.isArray(payload.files) ? payload.files : (payload.files ? [payload.files] : [])).filter(Boolean),
+                sourceType: payload.source || '销号',
+                sourceId: payload.auditId || ''
+            });
+            // 关联治理事件同步办结
+            const ev = (rec.governanceEvents || []).find(function(e){ return e.hazardId === hazardId; });
+            if (ev && ev.status !== '已治理') ev.status = '已治理';
+            return true;
         }
 
         // 取当前生效的治理事件
@@ -1623,6 +2019,7 @@
             { key: 'basic', icon: 'fa-id-card', title: '房屋概况', tag: '静态档案' },
             { key: 'discovery', icon: 'fa-search', title: '风险发现', tag: '排查/巡查' },
             { key: 'risk', icon: 'fa-exclamation-triangle', title: '风险信息记录', tag: '风险辨识' },
+            { key: 'hazard', icon: 'fa-list-ul', title: '隐患台账', tag: '动态跟踪', ruralOnly: true },
             { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '预案演练', ruralOnly: true }
         ];
 
@@ -2065,6 +2462,9 @@
             if (t === 'survey' || t === 'patrol') return 'discovery';
             return t ? t : 'basic';
         })();
+        // 隐患台账：当前选中的隐患 + 详情内嵌 TAB
+        let currentHazardId = null;
+        let currentHazardTab = 'basic'; // basic/control/dynamic
         let currentSubTab = 'jbxx';
         let currentMeasureSubTab = 'manage';
         let currentSurveySubTab = 'survey1';
@@ -2513,7 +2913,7 @@
             renderStatusPanel();
             const area = document.getElementById('contentArea');
             // 治理 6 项已收编进「风险信息记录」详情，兜底：非法 currentSidebar 归位到 risk
-            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'risk', 'emergency'];
+            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'risk', 'hazard', 'emergency'];
             if (__VALID_SIDEBARS.indexOf(currentSidebar) === -1) currentSidebar = 'risk';
             if (currentSidebar === 'basic') {
                 area.innerHTML = renderBasicContent();
@@ -2550,11 +2950,26 @@
                 currentDiscoveryTab = 'patrol';
                 area.innerHTML = renderDiscoveryContent();
                 bindSubTabs();
+            } else if (currentSidebar === 'hazard') {
+                area.innerHTML = renderHazardLedgerContent();
+                bindHazardLedgerEvents(area);
             } else {
                 area.innerHTML = renderTableContent(currentSidebar);
                 bindSubTabs(); // 绑定记录列表行点击（风险信息记录等模块）
                 // 风险详情内嵌治理链可能包含措施/销项上传组件
-                if (currentSidebar === 'risk') bindMeasureUploadDropzones(area);
+                if (currentSidebar === 'risk') {
+                    bindMeasureUploadDropzones(area);
+                    // 风险详情底部隐患清单 → 跳转台账详情
+                    area.querySelectorAll('.hazard-link-row[data-hazard-id]').forEach(function(tr){
+                        tr.addEventListener('click', function(){
+                            currentHazardId = this.dataset.hazardId;
+                            currentHazardTab = 'basic';
+                            currentSidebar = 'hazard';
+                            renderSidebar();
+                            renderContent();
+                        });
+                    });
+                }
             }
             // 只读模式：标记并隐藏“操作”表头列
             if (document.body.classList.contains('readonly-mode')) {
@@ -3007,6 +3422,9 @@
                     } else if (scope === 'measure') {
                         // 整治措施二级子tab（管理/工程/整治情况），可能处于侧栏入口或风险详情内嵌
                         currentMeasureSubTab = el.dataset.key;
+                    } else if (scope === 'control') {
+                        // 隐患动态子tab（新增隐患/控制情况/动态记录/质检/历史），治理链内嵌于风险详情或隐患台账
+                        currentControlSubTab = el.dataset.key;
                     } else if (currentSidebar === 'basic') {
                         currentSubTab = el.dataset.key;
                     } else if (currentSidebar === 'survey' || (currentSidebar === 'discovery' && currentDiscoveryTab === 'survey')) {
@@ -3018,6 +3436,9 @@
                 });
             });
             // 记录列表行点击切换激活记录（设计施工信息等）
+            document.querySelectorAll('.discovery-hazard-row[data-hazard-id]').forEach(function(el){
+                el.addEventListener('click', function(){ jumpToHazardDetail(this.dataset.hazardId); });
+            });
             document.querySelectorAll('.record-list-row[data-module]').forEach(el => {
                 el.addEventListener('click', function() {
                     const module = el.dataset.module;
@@ -3791,7 +4212,8 @@
 
             return '<div class="content-tabs" style="padding-left:0;padding-right:0;">' + tabsHtml + '</div>' +
                 listCardHtml +
-                '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + gridHtml + '</div>';
+                '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + gridHtml + '</div>' +
+                (currentSurveySubTab === 'survey1' ? renderDiscoveryLinkedHazards(s, '排查', record.id) : '');
         }
 
         // ========== 风险发现（合并 排查信息 + 动态巡查）==========
@@ -3886,7 +4308,8 @@
                     '<div class="title">巡查详情（' + (activeIndex + 1) + ' / ' + list.length + '）</div>' +
                     '<div class="meta">记录编号：' + (r.id || '—') + '</div>' +
                 '</div>' +
-                '<div class="info-grid info-grid-2col">' + grid + photoItem + '</div>';
+                '<div class="info-grid info-grid-2col">' + grid + photoItem + '</div>' +
+                renderDiscoveryLinkedHazards(s, '巡查', r.id);
         }
 
         function renderAuditRows(list, showSeq) {
@@ -3912,6 +4335,311 @@
                     '<td class="actions"><a class="view-link" href="javascript:void(0)" onclick="openCloseAuditEditModal(' + idx + ')">编辑</a><a class="view-link" href="javascript:void(0)" onclick="deleteCloseAudit(' + idx + ')" style="color:var(--danger);">删除</a></td>' +
                     '</tr>';
             }).join('');
+        }
+
+        /* ==================== 隐患台账页（P1）====================
+         * 列表态：隐患表格（编号/类型/部位/初判等级/当前状态/管控措施/登记时间/操作）
+         * 详情态：基本信息 / 隐患控制情况 / 隐患动态记录 三个二级胶囊 TAB
+         * ============================================================ */
+
+        // 隐患状态徽章样式映射
+        function hazardStatusBadge(status) {
+            const map = {
+                '未管控':   { cls: 'info',    color: '#909399', bg: '#f4f4f5' },
+                '管控中':   { cls: 'warning', color: '#e6a23c', bg: '#fdf6ec' },
+                '整治中':   { cls: 'primary', color: '#1a73e8', bg: '#e8f0fe' },
+                '已销号':   { cls: 'safe',    color: '#52c41a', bg: '#f6ffed' }
+            };
+            const m = map[status] || map['未管控'];
+            return '<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:500;color:' + m.color + ';background:' + m.bg + ';">' + (status || '未管控') + '</span>';
+        }
+
+        // 隐患台账主渲染
+        function renderHazardLedgerContent() {
+            const s = currentHouseArch;
+            migrateToHazardLedger(s); // 兜底（正常已在 getCurrentHouseArch 执行过）
+            const hazards = s.hazardRecords || [];
+            const item = getSidebarItems().find(function(i){ return i.key === 'hazard'; }) || { icon:'fa-list-ul', title:'隐患台账' };
+
+            // ===== 列表态 =====
+            if (!currentHazardId || !hazards.some(function(h){ return h.id === currentHazardId; })) {
+                if (!hazards.length) {
+                    return '<div class="content-card">' +
+                        '<div class="content-card-header"><div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title + '</div></div>' +
+                        '<div class="content-body"><div class="record-empty" style="padding:60px 20px;text-align:center;">' +
+                            '<i class="fas fa-check-circle" style="font-size:28px;color:#52c41a;display:block;margin-bottom:14px;"></i>' +
+                            '当前房屋暂无登记隐患<br><span style="font-size:12px;color:#909399;">排查/巡查中发现隐患后，将在此建立台账跟踪</span>' +
+                        '</div></div>' +
+                    '</div>';
+                }
+                // E：状态筛选 chip（默认全部）
+                if (typeof window.hazardStatusFilter === 'undefined') window.hazardStatusFilter = '';
+                const openCnt = hazards.filter(function(h){ return h.currentStatus !== '已销号'; }).length;
+                const closedCnt = hazards.length - openCnt;
+                const chips = [
+                    { v: '',     t: '全部（' + hazards.length + '）' },
+                    { v: 'open', t: '在管（' + openCnt + '）' },
+                    { v: '已销号', t: '已销号（' + closedCnt + '）' }
+                ];
+                const chipsHtml = chips.map(function(c){
+                    const active = window.hazardStatusFilter === c.v;
+                    return '<span class="hazard-filter-chip" data-filter="' + c.v + '" style="display:inline-block;padding:3px 12px;margin-right:8px;border-radius:12px;font-size:12px;cursor:pointer;border:1px solid ' + (active ? 'var(--primary);color:var(--primary);background:var(--primary-light)' : 'var(--border);color:var(--text-secondary);background:#fff') + ';">' + c.t + '</span>';
+                }).join('');
+                const shown = hazards.filter(function(h){
+                    if (window.hazardStatusFilter === 'open') return h.currentStatus !== '已销号';
+                    if (window.hazardStatusFilter === '已销号') return h.currentStatus === '已销号';
+                    return true;
+                });
+                const rows = shown.map(function(h, idx) {
+                    // E：跟踪轮次 = 全部风险记录 hazardLinks/linkedHazardIds 中关联本隐患的次数
+                    let trackCnt = 0;
+                    (s.riskRecords || []).forEach(function(rr){
+                        getHazardLinks(rr).forEach(function(l){ if (l.hazardId === h.id) trackCnt += 1; });
+                    });
+                    return '<tr class="record-row" data-hazard-id="' + h.id + '" style="cursor:pointer;">' +
+                        '<td style="font-family:Consolas,monospace;font-size:12px;">' + h.id + '</td>' +
+                        '<td>' + (h.hazardType || '—') + (h.hazardTypeOther ? '<span style="color:#909399;font-size:11px;">（' + h.hazardTypeOther + '）</span>' : '') + '</td>' +
+                        '<td>' + (h.location || '—') + '</td>' +
+                        '<td><span class="tag ' + (h.initialJudge === '第三类' ? 'danger' : (h.initialJudge === '第二类' ? 'warning' : 'info')) + '">' + (h.initialJudge || '—') + '</span></td>' +
+                        '<td>' + hazardStatusBadge(h.currentStatus) + '</td>' +
+                        '<td>' + (trackCnt ? '<span class="tag info" style="font-size:11px;">' + trackCnt + ' 轮</span>' : '—') + '</td>' +
+                        '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (h.controlMeasure || '') + '">' + (h.controlMeasure || '—') + '</td>' +
+                        '<td>' + (h.createdAt || '—') + '</td>' +
+                        '<td class="actions"><a class="view-link" href="javascript:void(0)">查看</a></td>' +
+                    '</tr>';
+                }).join('');
+                return '<div class="content-card">' +
+                    '<div class="content-card-header"><div class="content-card-title"><i class="fas ' + item.icon + '"></i> ' + item.title +
+                        '<span class="content-card-count">' + hazards.length + '</span></div></div>' +
+                    '<div class="content-body">' +
+                        '<div style="margin-bottom:12px;">' + chipsHtml + '</div>' +
+                        '<table class="data-table record-table"><thead><tr>' +
+                            '<th style="width:150px;">隐患编号</th><th>隐患类型</th><th>损伤部位</th><th style="width:70px;">初判等级</th>' +
+                            '<th style="width:80px;">当前状态</th><th style="width:70px;">跟踪轮次</th><th>管控措施</th><th style="width:100px;">登记时间</th><th style="width:50px;">操作</th>' +
+                        '</tr></thead><tbody>' + rows + '</tbody></table>' +
+                    '</div>' +
+                '</div>';
+            }
+
+            // ===== 详情态 =====
+            const hz = hazards.find(function(h){ return h.id === currentHazardId; });
+            const dyns = (s.hazardDynamics || []).filter(function(d){ return d.hazardId === currentHazardId; })
+                .sort(function(a,b){ return (b.actionTime || '').localeCompare(a.actionTime || ''); });
+            // 本隐患对应的治理事件（第三类才有）
+            const hzEvent = (s.governanceEvents || []).find(function(e){ return e.hazardId === hz.id; });
+            // D：轮次锚点兜底（旧数据缺 hazardRoundNo 时按同 rr 下事件序补齐）
+            if (hzEvent && hzEvent.hazardRoundNo === undefined) {
+                const sameRr = (s.governanceEvents || []).filter(function(e){ return e.riskRecordId === hzEvent.riskRecordId && e.hazardId; });
+                hzEvent.hazardRoundNo = Math.max(sameRr.findIndex(function(e){ return e.eventId === hzEvent.eventId; }) + 1, 1);
+            }
+            const isThird = hz.initialJudge === '第三类';
+            const HAZ_TABS = [
+                { key: 'basic',   title: '基本信息' },
+                { key: 'control', title: '隐患控制情况' },
+                { key: 'dynamic', title: '隐患动态记录' }
+            ];
+            if (isThird && hzEvent) HAZ_TABS.push({ key: 'governance', title: '治理链路' });
+            const tabsHtml = '<div class="content-tabs">' + HAZ_TABS.map(function(t){
+                const cnt = (t.key === 'dynamic' && dyns.length) ? '<span class="content-tab-count">' + dyns.length + '</span>' : '';
+                return '<div class="content-tab' + (currentHazardTab === t.key ? ' active' : '') + '" data-hazard-tab="' + t.key + '">' + t.title + cnt + '</div>';
+            }).join('') + '</div>';
+
+            let bodyHtml = '';
+            if (currentHazardTab === 'basic') {
+                const fields = [
+                    ['隐患编号', hz.id], ['隐患类型', hz.hazardType + (hz.hazardTypeOther ? '（' + hz.hazardTypeOther + '）' : '')],
+                    ['损伤部位', hz.location || '—'], ['隐患描述', hz.description || '—'],
+                    ['初判等级', hz.initialJudge || '—'], ['当前等级', hz.currentLevel || '—'],
+                    ['当前状态', hz.currentStatus || '—'], ['登记来源', (hz.sourceType || '—') + ' ' + (hz.sourceId || '')],
+                    ['登记时间', hz.createdAt || '—'], ['登记人', hz.createdBy || '—'],
+                    ['销号时间', hz.closedAt || '—'], ['销号验收单', hz.closeAuditId || '—']
+                ];
+                bodyHtml = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px 24px;padding:4px 0;">' +
+                    fields.map(function(f){
+                        return '<div style="display:flex;gap:8px;font-size:13px;">' +
+                            '<span style="flex-shrink:0;width:80px;color:#909399;">' + f[0] + '</span>' +
+                            '<span style="flex:1;color:#303133;word-break:break-all;">' + f[1] + '</span></div>';
+                    }).join('') + '</div>' +
+                    ((hz.photos && hz.photos.length) ? '<div style="margin-top:14px;"><div style="font-size:13px;color:#909399;margin-bottom:6px;">现场影像（' + hz.photos.length + '）</div>' +
+                        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + hz.photos.map(function(p){
+                            return '<span style="font-size:12px;color:var(--primary);background:var(--primary-light);padding:4px 10px;border-radius:4px;"><i class="fas fa-image"></i> ' + p + '</span>';
+                        }).join('') + '</div></div>' : '');
+            } else if (currentHazardTab === 'control') {
+                const ctrl = [
+                    ['当前状态', hazardStatusBadge(hz.currentStatus)],
+                    ['当前等级', hz.currentLevel || '—'],
+                    ['管控措施', hz.controlMeasure || '<span style="color:#c0c4cc;">暂未落实管控措施</span>'],
+                    ['措施更新时间', hz.controlUpdatedAt || '—']
+                ];
+                bodyHtml = '<div style="padding:4px 0;">' +
+                    ctrl.map(function(f){
+                        return '<div style="display:flex;gap:8px;font-size:13px;margin-bottom:12px;">' +
+                            '<span style="flex-shrink:0;width:96px;color:#909399;">' + f[0] + '</span>' +
+                            '<span style="flex:1;color:#303133;">' + f[1] + '</span></div>';
+                    }).join('') + '</div>' +
+                    '<div style="padding:10px 14px;background:#fdf6ec;border:1px solid #faecd8;border-radius:4px;font-size:12px;color:#b88230;">' +
+                        '<i class="fas fa-info-circle"></i> 第三类隐患管控口径：人屋分离 / 停止使用 / 围挡封控 / 设置警示标示；第二类：书面告知 / 观察使用 / 限制用途' +
+                    '</div>';
+            } else if (currentHazardTab === 'governance') {
+                // 治理链路：锁定到本隐患对应事件，复用现有 6 子TAB 渲染
+                if (!hzEvent) {
+                    bodyHtml = '<div class="record-empty" style="padding:40px 20px;text-align:center;">本隐患无治理事件（仅第三类隐患进入治理流程）</div>';
+                } else {
+                    // 锁定 currentGovEventId 到本隐患事件（方案B 数据隔离依赖它）
+                    if (window.currentGovEventId !== hzEvent.eventId) {
+                        try { switchGovernanceEvent(hzEvent.eventId); } catch (e) { window.currentGovEventId = hzEvent.eventId; }
+                    }
+                    const statusTag = '<span class="tag ' + (hzEvent.status === '已治理' ? 'safe' : 'warning') + '" style="margin-left:10px;">' + (hzEvent.status || '待治理') + '</span>';
+                    // D：轮次锚点——本事件源于第 N 轮排查/巡查，点击回跳风险记录详情
+                    const anchorRr = (s.riskRecords || []).find(function(r){ return r.id === hzEvent.riskRecordId; });
+                    const roundAnchor = anchorRr
+                        ? '<a href="javascript:void(0)" class="gov-round-anchor" data-rr-id="' + anchorRr.id + '" style="margin-left:12px;font-size:12px;color:var(--primary);font-weight:400;" title="回跳风险记录详情">源于第 ' + (hzEvent.hazardRoundNo || 1) + ' 轮' + (anchorRr.sourceType || '排查') + '（' + anchorRr.id + '）</a>'
+                        : '';
+                    const govTabsHtml = RISK_GOV_TABS.map(function(t){
+                        const active = currentRiskSubTab === t.key ? 'active' : '';
+                        return '<div class="content-tab ' + active + '" data-scope="risk" data-key="' + t.key + '"><i class="fas ' + t.icon + '"></i> ' + t.title + '</div>';
+                    }).join('');
+                    let govBody = '';
+                    try { govBody = renderGovernanceBody(currentRiskSubTab, s); }
+                    catch (e) { govBody = '<div class="record-empty" style="padding:30px;">治理内容渲染失败：' + (e && e.message) + '</div>'; }
+                    const curTab = RISK_GOV_TABS.find(function(t){ return t.key === currentRiskSubTab; }) || RISK_GOV_TABS[0];
+                    const govActions = governanceBottomActions(currentRiskSubTab, curTab);
+                    const govBar = '<div class="bottom-bar" style="margin-top:14px;">' +
+                        '<div class="bottom-info"><i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                            '治理节点：<span class="bottom-node">' + curTab.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span></div>' +
+                        '<div class="bottom-actions">' + govActions + '</div></div>';
+                    bodyHtml = '<div style="margin-top:4px;">' +
+                        '<div style="display:flex;align-items:center;font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;">' +
+                            '<i class="fas fa-stream" style="color:var(--primary);margin-right:6px;"></i>治理链路' + statusTag + roundAnchor + '</div>' +
+                        '<div class="content-tabs">' + govTabsHtml + '</div>' +
+                        '<div class="risk-gov-body" style="padding-top:14px;">' + govBody + '</div>' +
+                        govBar +
+                    '</div>';
+                }
+            } else { // dynamic
+                if (!dyns.length) {
+                    bodyHtml = '<div class="record-empty" style="padding:40px 20px;text-align:center;">暂无动态记录</div>';
+                } else {
+                    const ACT_COLOR = { '登记':'#909399','管控落实':'#e6a23c','鉴定':'#1a73e8','工程整治':'#1a73e8','复查':'#52c41a','销号':'#52c41a' };
+                    bodyHtml = '<div style="padding:4px 0 4px 12px;border-left:2px solid var(--border);">' + dyns.map(function(d){
+                        const c = ACT_COLOR[d.actionType] || '#909399';
+                        return '<div style="position:relative;padding:0 0 18px 16px;">' +
+                            '<span style="position:absolute;left:-19px;top:3px;width:10px;height:10px;border-radius:50%;background:' + c + ';border:2px solid #fff;"></span>' +
+                            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+                                '<span style="font-weight:500;color:' + c + ';">' + d.actionType + '</span>' +
+                                '<span style="font-size:12px;color:#909399;">' + (d.actionTime || '—') + '</span>' +
+                                (d.levelAfter ? '<span class="tag ' + (d.levelAfter === '第三类' ? 'danger' : (d.levelAfter === '第二类' ? 'warning' : 'info')) + '" style="font-size:11px;">' + d.levelAfter + '</span>' : '') +
+                            '</div>' +
+                            '<div style="font-size:13px;color:#303133;">' + (d.content || '') + '</div>' +
+                            '<div style="font-size:12px;color:#909399;margin-top:2px;">' +
+                                (d.operator ? d.operator : '') + (d.org ? ' · ' + d.org : '') + (d.conclusion ? ' · 结论：' + d.conclusion : '') +
+                            '</div>' +
+                        '</div>';
+                    }).join('') + '</div>';
+                }
+            }
+
+            return '<div class="content-card">' +
+                '<div class="content-card-header"><div class="content-card-title">' +
+                    '<a href="javascript:void(0)" class="hazard-back-link" style="color:var(--primary);margin-right:10px;" title="返回列表"><i class="fas fa-arrow-left"></i></a>' +
+                    '<i class="fas ' + item.icon + '"></i> 隐患详情 <span style="font-family:Consolas,monospace;font-size:12px;color:#909399;margin-left:8px;">' + hz.id + '</span>' +
+                '</div></div>' +
+                '<div class="content-body">' + tabsHtml + bodyHtml + '</div>' +
+                // C：独立销号操作栏（未销号时可申请；已销号展示状态）
+                '<div class="bottom-bar" style="margin-top:0;border-top:1px solid var(--border);">' +
+                    '<div class="bottom-info"><i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                        '当前状态：' + (hz.currentStatus || '未管控') + (hz.closedAt ? ' | 销号时间：' + hz.closedAt : '') + '</div>' +
+                    '<div class="bottom-actions">' +
+                        (hz.currentStatus !== '已销号'
+                            ? '<button class="bottom-btn primary" onclick="openHazardCloseModal()"><i class="fas fa-check-circle"></i> 申请销号</button>'
+                            : '<span class="tag safe" style="font-size:13px;"><i class="fas fa-check-circle"></i> 已销号</span>') +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        // 台账页事件绑定
+        function bindHazardLedgerEvents(area) {
+            // 行点击 → 详情
+            area.querySelectorAll('.record-row[data-hazard-id]').forEach(function(tr){
+                tr.addEventListener('click', function(){
+                    currentHazardId = this.dataset.hazardId;
+                    currentHazardTab = 'basic';
+                    renderContent();
+                });
+            });
+            // E：状态筛选 chip
+            area.querySelectorAll('.hazard-filter-chip').forEach(function(el){
+                el.addEventListener('click', function(){
+                    window.hazardStatusFilter = this.dataset.filter;
+                    renderContent();
+                });
+            });
+            // 返回列表
+            const back = area.querySelector('.hazard-back-link');
+            if (back) back.addEventListener('click', function(){ currentHazardId = null; renderContent(); });
+            // 详情内嵌一级 TAB（基本信息/控制情况/动态记录/治理链路）
+            area.querySelectorAll('.content-tab[data-hazard-tab]').forEach(function(el){
+                el.addEventListener('click', function(){
+                    currentHazardTab = this.dataset.hazardTab;
+                    renderContent();
+                });
+            });
+            // 治理链路内嵌子 TAB（data-scope="risk"，复用 currentRiskSubTab）
+            area.querySelectorAll('.content-tab[data-scope="risk"]').forEach(function(el){
+                el.addEventListener('click', function(){
+                    currentRiskSubTab = this.dataset.key;
+                    renderContent();
+                });
+            });
+            // 治理链深层内嵌：隐患动态/整治措施子 TAB
+            area.querySelectorAll('.content-tab[data-scope="control"]').forEach(function(el){
+                el.addEventListener('click', function(){ currentControlSubTab = this.dataset.key; renderContent(); });
+            });
+            area.querySelectorAll('.content-tab[data-scope="measure"]').forEach(function(el){
+                el.addEventListener('click', function(){ currentMeasureSubTab = this.dataset.key; renderContent(); });
+            });
+            // 治理链可能含措施/销项上传组件
+            bindMeasureUploadDropzones(area);
+            // D：轮次锚点回跳风险记录详情
+            area.querySelectorAll('.gov-round-anchor[data-rr-id]').forEach(function(el){
+                el.addEventListener('click', function(){
+                    const rrId = this.dataset.rrId;
+                    const records = (currentHouseArch.riskRecords || []).slice().sort(function(a, b){ return String(b.date || '').localeCompare(String(a.date || '')); });
+                    const idx = records.findIndex(function(r){ return r.id === rrId; });
+                    if (idx !== -1) {
+                        recordViewState.risk = idx;
+                        currentSidebar = 'risk';
+                        currentHazardId = null;
+                        renderSidebar();
+                        renderContent();
+                    }
+                });
+            });
+        }
+
+        /* ===== C：台账详情独立销号（简化弹窗：审核人+意见，调 closeHazard 单一入口）===== */
+        function openHazardCloseModal() {
+            if (!currentHazardId) return;
+            const auditor = prompt('销号审核人：', '王建国');
+            if (auditor === null) return;
+            const opinion = prompt('销号意见 / 验收说明：', '隐患已整治完成，验收合格，予以销号。');
+            if (opinion === null) return;
+            submitHazardClose(auditor || '王建国', opinion || '验收销号');
+        }
+        function submitHazardClose(auditor, opinion) {
+            const s = currentHouseArch;
+            const ok = closeHazard(s, currentHazardId, {
+                auditor: auditor,
+                auditTime: formatDateTime(new Date()),
+                opinion: opinion,
+                source: '台账直销'
+            });
+            if (!ok) { alert('销号失败：隐患不存在或已销号。'); return; }
+            saveCurrentHouseArch(s);
+            renderSidebar();
+            renderContent();
+            alert('隐患 ' + currentHazardId + ' 已销号。');
         }
 
         function renderTableContent(key) {
@@ -4218,29 +4946,24 @@
                 '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + grid2colLast + '</div>';
         }
 
-        // 风险记录整治状态推导：
-        //   历史  = 关联治理事件已完成验收销号（ev.data.closeStatus === '已通过'）
-        //   已整治 = 事件内管理/工程措施均已完成，但尚未销号
-        //   整治中 = 事件内已有措施/鉴定等数据，但存在未完成项
-        //   未整治 = 无治理事件，或事件内尚未录入任何治理数据
+        // 风险记录状态推导（P4 新语义，按隐患闭环推导）：
+        //   无隐患 = 本次排查/巡查未登记任何隐患（第一类）
+        //   未闭环 = 关联隐患中存在未销号的
+        //   已闭环 = 关联隐患全部已销号
+        // 旧口径（治理事件措施完成度）废弃，但旧数据字段一律保留不删。
         function __riskRecordStatus(s, rr) {
             if (!s || !rr) return { text: '—', cls: 'info' };
-            ensureGovernanceEvents(s);
-            const ev = (s.governanceEvents || []).find(function(e){ return e.riskRecordId === rr.id; });
-            if (!ev) return { text: '未整治', cls: 'info' };
-            const d = (ev.data && typeof ev.data === 'object') ? ev.data : {};
-            // 已销号 → 历史
-            if (d.closeStatus === '已通过') return { text: '历史', cls: 'info' };
-            const manage = Array.isArray(d.manageRecords) ? d.manageRecords : [];
-            const project = Array.isArray(d.projectRecords) ? d.projectRecords : [];
-            const hasMeasure = manage.length > 0 || project.length > 0;
-            const hasAppraisal = Array.isArray(d.appraisalReports) && d.appraisalReports.length > 0;
-            const hasAny = hasMeasure || hasAppraisal || (d.rectifySituation && Object.keys(d.rectifySituation).length > 0);
-            if (!hasAny) return { text: '未整治', cls: 'info' };
-            const manageDone = manage.length > 0 && manage.every(function(m){ return m.isDone === true || m.isDone === '是' || m.isDone === '已完成'; });
-            const projectDone = project.length > 0 && project.every(function(p){ return p.status === '已完成' || p.status === '是' || p.isDone === true; });
-            if (hasMeasure && manageDone && projectDone) return { text: '已整治', cls: 'safe' };
-            return { text: '整治中', cls: 'warning' };
+            let hzIds = Array.isArray(rr.linkedHazardIds) ? rr.linkedHazardIds.slice() : [];
+            // 兜底：按来源字段匹配（迁移前数据/关联缺失时不误判）
+            (s.hazardRecords || []).forEach(function(h){
+                if (h.sourceType === rr.sourceType && h.sourceId === rr.sourceId && hzIds.indexOf(h.id) === -1) hzIds.push(h.id);
+            });
+            if (!hzIds.length) return { text: '无隐患', cls: 'info' };
+            const hasOpen = hzIds.some(function(id){
+                const hz = (s.hazardRecords || []).find(function(h){ return h.id === id; });
+                return hz && hz.currentStatus !== HAZARD_STATUS.CLOSED;
+            });
+            return hasOpen ? { text: '未闭环', cls: 'warning' } : { text: '已闭环', cls: 'safe' };
         }
 
         function renderRiskContent(s) {
@@ -4259,7 +4982,7 @@
             const srcLabel = r.sourceType === '巡查' ? '动态巡查' : '排查登记';
             const srcTab = r.sourceType === '巡查' ? 'patrol' : 'survey';
             const listHtml = recordListTable(
-                ['记录编号', '来源', '发现日期', '发现人', '结论', '风险等级', { title: '状态', tag: true, tagClass: function(v){ return v === '历史' ? 'info' : (v === '已整治' ? 'safe' : (v === '整治中' ? 'warning' : 'info')); } }],
+                ['记录编号', '来源', '发现日期', '发现人', '结论', '风险等级', { title: '状态', tag: true, tagClass: function(v){ return v === '已闭环' ? 'safe' : (v === '未闭环' ? 'warning' : 'info'); } }],
                 records.map(function(it, i) {
                     const st = __riskRecordStatus(s, it);
                     return [
@@ -4299,10 +5022,39 @@
                     kvR('隐患描述', r.hazardDesc) +
                     '<div class="info-item full-width" style="grid-column:1 / -1;"><div class="info-label">现场照片</div>' + photoHtml + '</div>' +
                 '</div>' +
-                renderRiskGovernanceTabs(s, r);
+                renderRiskLinkedHazards(s, r);
         }
 
-        // 原型：风险信息详情内嵌治理链路子tab（仅第三类记录显示）
+        // 风险信息详情底部：本次排查关联的隐患清单（替代原内嵌治理链——治理链已迁至隐患台账）
+        function renderRiskLinkedHazards(s, r) {
+            if (!r) return '';
+            const hzIds = (r.linkedHazardIds || []);
+            const hazards = (s.hazardRecords || []).filter(function(h){ return hzIds.indexOf(h.id) !== -1; });
+            if (!hazards.length) {
+                // 第一类/第二类无隐患
+                return '<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:16px;">' +
+                    '<div class="info-section-title"><i class="fas fa-list-ul"></i> 关联隐患</div>' +
+                    '<div style="padding:16px;text-align:center;color:#909399;font-size:13px;">本次' + (r.sourceType || '排查') + '未登记隐患</div>' +
+                '</div>';
+            }
+            const rows = hazards.map(function(h){
+                return '<tr class="hazard-link-row" data-hazard-id="' + h.id + '" style="cursor:pointer;">' +
+                    '<td style="font-family:Consolas,monospace;font-size:12px;">' + h.id + '</td>' +
+                    '<td>' + (h.hazardType || '—') + '</td>' +
+                    '<td>' + (h.location || '—') + '</td>' +
+                    '<td>' + hazardStatusBadge(h.currentStatus) + '</td>' +
+                    '<td><a class="view-link" href="javascript:void(0)">查看台账 <i class="fas fa-arrow-right" style="font-size:10px;"></i></a></td>' +
+                '</tr>';
+            }).join('');
+            return '<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:16px;">' +
+                '<div class="info-section-title"><i class="fas fa-list-ul"></i> 关联隐患（' + hazards.length + '）<span style="font-size:12px;font-weight:normal;color:#909399;margin-left:8px;">治理链路已移至「隐患台账」</span></div>' +
+                '<table class="data-table"><thead><tr>' +
+                    '<th style="width:160px;">隐患编号</th><th>隐患类型</th><th>损伤部位</th><th style="width:80px;">当前状态</th><th style="width:90px;">操作</th>' +
+                '</tr></thead><tbody>' + rows + '</tbody></table>' +
+            '</div>';
+        }
+
+        // 原型：风险信息详情内嵌治理链路子tab（仅第三类记录显示）——已迁至隐患台账，保留函数防外部引用
         // 选中子tab即选中对应治理事件 → currentGovEventId 由该风险记录推导，复用 renderTableContent 的 B1 隔离数据
         // 治理底栏编辑按钮（按模块/状态输出），供 renderTableContent 与风险详情内嵌复用
         function governanceBottomActions(key, item) {
@@ -4344,6 +5096,8 @@
             return '<button class="bottom-btn primary" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
         }
 
+        // 【已废弃 P5】治理链已迁至「隐患台账」详情第4TAB（renderHazardLedgerContent → governance 分支）。
+        // 本函数不再被引用，保留仅为兼容历史外链；内部读取的治理事件字段（ev.data.*）全部保留不删。
         function renderRiskGovernanceTabs(s, r) {
             if (!r || r.riskLevel !== '第三类') return '';
             // 该风险记录对应的治理事件
@@ -4402,6 +5156,46 @@
             renderContent();
         }
 
+        // 跳转到隐患台账详情（风险记录/发现详情 关联隐患清单共用）
+        function jumpToHazardDetail(hid) {
+            if (!hid) return;
+            currentHazardId = hid;
+            currentHazardTab = 'basic';
+            currentSidebar = 'hazard';
+            renderSidebar();
+            renderContent();
+        }
+
+        // 风险发现详情底部：本次排查/巡查 登记/复查 的隐患清单（点击跳隐患台账）
+        function renderDiscoveryLinkedHazards(s, sourceType, sourceId) {
+            if (!s || !sourceId) return '';
+            const rr = (s.riskRecords || []).find(function(r){ return r.sourceType === sourceType && r.sourceId === sourceId; });
+            let hzIds = (rr && Array.isArray(rr.linkedHazardIds)) ? rr.linkedHazardIds.slice() : [];
+            // 兜底：按来源字段直接匹配（rr 尚未生成/关联缺失时不漏显）
+            (s.hazardRecords || []).forEach(function(h){
+                if (h.sourceType === sourceType && h.sourceId === sourceId && hzIds.indexOf(h.id) === -1) hzIds.push(h.id);
+            });
+            const hazards = (s.hazardRecords || []).filter(function(h){ return hzIds.indexOf(h.id) !== -1; });
+            if (!hazards.length) return '';
+            const rows = hazards.map(function(h){
+                return '<tr class="discovery-hazard-row" data-hazard-id="' + h.id + '" style="cursor:pointer;">' +
+                    '<td style="font-family:Consolas,monospace;font-size:12px;">' + h.id + '</td>' +
+                    '<td>' + (h.hazardType || '—') + (h.hazardTypeOther ? '<span style="color:#909399;font-size:11px;">（' + h.hazardTypeOther + '）</span>' : '') + '</td>' +
+                    '<td>' + (h.location || '—') + '</td>' +
+                    '<td><span class="tag ' + (h.currentLevel === '第三类' ? 'danger' : (h.currentLevel === '第二类' ? 'warning' : 'info')) + '">' + (h.currentLevel || '—') + '</span></td>' +
+                    '<td>' + hazardStatusBadge(h.currentStatus) + '</td>' +
+                    '<td><a class="view-link" href="javascript:void(0)">查看台账 <i class="fas fa-arrow-right"></i></a></td>' +
+                '</tr>';
+            }).join('');
+            return '<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:16px;">' +
+                '<div class="info-section-title"><i class="fas fa-list-ul"></i> 本次' + (sourceType === '巡查' ? '巡查' : '排查') + '登记/复查的隐患（' + hazards.length + '）' +
+                    '<span style="font-weight:normal;color:#909399;font-size:12px;margin-left:8px;">台账跟踪见「隐患台账」</span></div>' +
+                '<table class="data-table record-table"><thead><tr>' +
+                    '<th style="width:150px;">隐患编号</th><th>隐患类型</th><th>损伤部位</th><th style="width:80px;">当前等级</th><th style="width:80px;">当前状态</th><th style="width:90px;">操作</th>' +
+                '</tr></thead><tbody>' + rows + '</tbody></table>' +
+            '</div>';
+        }
+
         // 隐患动态：4 个子 tab（situation/dynamic/quality/history）
         function renderControlTable(s) {
             const tabsHtml = [
@@ -4410,7 +5204,7 @@
                 { key: 'dynamic', title: '隐患动态记录', icon: 'fa-exchange-alt' },
                 { key: 'quality', title: '最新质检信息', icon: 'fa-check-circle' },
                 { key: 'history', title: '历史整改信息', icon: 'fa-history' }
-            ].map(t => '<div class="content-tab ' + (currentControlSubTab === t.key ? 'active' : '') + '" data-key="' + t.key + '"><i class="fas ' + t.icon + '"></i> ' + t.title + '</div>').join('');
+            ].map(t => '<div class="content-tab ' + (currentControlSubTab === t.key ? 'active' : '') + '" data-scope="control" data-key="' + t.key + '"><i class="fas ' + t.icon + '"></i> ' + t.title + '</div>').join('');
 
             let body = '';
             if (currentControlSubTab === 'addDanger') body = renderControlAddDanger(s);
@@ -8046,8 +8840,170 @@
             renderContent();
         }
 
+        // ========== P3 排查/巡查表单「登记隐患」区块 ==========
+        // 草稿状态：window.__discoveryHazardDraft = { newHazards:[], reviews:[] }
+        // 打开排查/巡查编辑弹窗时初始化；保存时由 collectDiscoveryHazardDraft() 收集，
+        // 经 registerDiscoveryHazards() 写入隐患台账。本区块只追加新数据，不修改/删除任何原有字段。
+        function initDiscoveryHazardDraft() {
+            window.__discoveryHazardDraft = { newHazards: [], reviews: [] };
+        }
+
+        const DISCOVERY_HAZARD_TYPES = ['场地周边安全风险', '房屋整体沉降倾斜', '房屋塌陷变形', '使用不当隐患', '墙体开裂变形', '楼面开裂变形', '梁柱开裂变形', '楼梯损伤变形', '阳台开裂变形', '其他安全问题'];
+        const DISCOVERY_HAZARD_LEVELS = ['第三类', '第二类', '第一类'];
+        const DISCOVERY_REVIEW_CONCLUSIONS = ['隐患仍存在，继续管控', '隐患加重', '隐患减轻', '隐患已消除'];
+
+        function __hzEsc(v) { return String(v === undefined || v === null ? '' : v).replace(/"/g, '&quot;'); }
+
+        function renderDiscoveryHazardBlockInner(s) {
+            const draft = window.__discoveryHazardDraft || { newHazards: [], reviews: [] };
+            const openHazards = (s.hazardRecords || []).filter(function(h){ return h.currentStatus !== '已销号'; });
+            const inputSt = 'width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:#fff;';
+            const labelSt = 'display:block;font-size:12px;color:#909399;margin-bottom:4px;';
+            const cell = function(label, inner, flex) {
+                return '<div style="flex:' + (flex || 1) + ';min-width:140px;"><span style="' + labelSt + '">' + label + '</span>' + inner + '</div>';
+            };
+            // ===== 新增隐患行 =====
+            const newRows = draft.newHazards.map(function(h, i) {
+                const typeOpts = '<option value="">请选择隐患类型</option>' + DISCOVERY_HAZARD_TYPES.map(function(t){
+                    return '<option value="' + t + '"' + (h.hazardType === t ? ' selected' : '') + '>' + t + '</option>';
+                }).join('');
+                const levelOpts = DISCOVERY_HAZARD_LEVELS.map(function(t){
+                    return '<option value="' + t + '"' + ((h.initialJudge || '第三类') === t ? ' selected' : '') + '>' + t + '</option>';
+                }).join('');
+                const otherInput = (h.hazardType === '其他安全问题')
+                    ? cell('其他说明', '<input type="text" style="' + inputSt + '" value="' + __hzEsc(h.hazardTypeOther) + '" placeholder="请说明其他安全问题" onchange="__updDiscoveryHazardDraft(\'new\',' + i + ',\'hazardTypeOther\',this.value)">')
+                    : '';
+                const photoChips = (h.photos || []).map(function(u, pi) {
+                    return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--primary);background:var(--primary-light);padding:3px 8px;border-radius:4px;">' +
+                        '<i class="fas fa-image"></i> 照片' + (pi + 1) +
+                        '<a href="javascript:void(0)" onclick="__delDiscoveryHazardPhoto(' + i + ',' + pi + ')" style="color:#c0c4cc;margin-left:2px;" title="移除"><i class="fas fa-times"></i></a></span>';
+                }).join('');
+                return '<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:#fafafa;">' +
+                    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">' +
+                        cell('隐患类型 *', '<select style="' + inputSt + '" onchange="__updDiscoveryHazardDraft(\'new\',' + i + ',\'hazardType\',this.value);rerenderDiscoveryHazardBlock()">' + typeOpts + '</select>') +
+                        otherInput +
+                        cell('损伤部位', '<input type="text" style="' + inputSt + '" value="' + __hzEsc(h.location) + '" placeholder="如：东侧承重墙" onchange="__updDiscoveryHazardDraft(\'new\',' + i + ',\'location\',this.value)">') +
+                        cell('初判等级', '<select style="' + inputSt + '" onchange="__updDiscoveryHazardDraft(\'new\',' + i + ',\'initialJudge\',this.value)">' + levelOpts + '</select>', '0 0 110px') +
+                        '<a href="javascript:void(0)" onclick="__delDiscoveryHazardRow(\'new\',' + i + ')" style="color:#c0c4cc;padding:6px;" title="删除本条"><i class="fas fa-trash-alt"></i></a>' +
+                    '</div>' +
+                    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">' +
+                        cell('隐患描述', '<input type="text" style="' + inputSt + '" value="' + __hzEsc(h.description) + '" placeholder="隐患情况简述" onchange="__updDiscoveryHazardDraft(\'new\',' + i + ',\'description\',this.value)">', '1 1 100%') +
+                    '</div>' +
+                    '<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                        '<label class="bottom-btn" style="cursor:pointer;margin:0;"><i class="fas fa-cloud-upload-alt"></i> 上传照片' +
+                            '<input type="file" accept="image/*" multiple style="display:none;" onchange="handleDiscoveryHazardPhotoUpload(this,' + i + ')"></label>' +
+                        photoChips +
+                    '</div>' +
+                '</div>';
+            }).join('');
+            // ===== 复查既有隐患行 =====
+            const hzOpts = function(cur) {
+                return '<option value="">请选择既有隐患（未销号）</option>' + openHazards.map(function(hz){
+                    const lbl = hz.id + ' ' + (hz.hazardType || '') + (hz.location ? '·' + hz.location : '') + '（' + (hz.currentLevel || '—') + '/' + (hz.currentStatus || '—') + '）';
+                    return '<option value="' + hz.id + '"' + (cur === hz.id ? ' selected' : '') + '>' + lbl + '</option>';
+                }).join('');
+            };
+            const reviewRows = draft.reviews.map(function(r, i) {
+                const lvOpts = '<option value="">等级不变</option>' + DISCOVERY_HAZARD_LEVELS.map(function(t){
+                    return '<option value="' + t + '"' + (r.levelAfter === t ? ' selected' : '') + '>调整为' + t + '</option>';
+                }).join('');
+                const ccOpts = '<option value="">请选择复查结论</option>' + DISCOVERY_REVIEW_CONCLUSIONS.map(function(t){
+                    return '<option value="' + t + '"' + (r.conclusion === t ? ' selected' : '') + '>' + t + '</option>';
+                }).join('');
+                return '<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:#f0f7ff;">' +
+                    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">' +
+                        cell('复查隐患 *', '<select style="' + inputSt + '" onchange="__updDiscoveryHazardDraft(\'review\',' + i + ',\'hazardId\',this.value)">' + hzOpts(r.hazardId) + '</select>', '1 1 260px') +
+                        cell('复查结论', '<select style="' + inputSt + '" onchange="__updDiscoveryHazardDraft(\'review\',' + i + ',\'conclusion\',this.value)">' + ccOpts + '</select>', '0 0 180px') +
+                        cell('等级调整', '<select style="' + inputSt + '" onchange="__updDiscoveryHazardDraft(\'review\',' + i + ',\'levelAfter\',this.value)">' + lvOpts + '</select>', '0 0 130px') +
+                        '<a href="javascript:void(0)" onclick="__delDiscoveryHazardRow(\'review\',' + i + ')" style="color:#c0c4cc;padding:6px;" title="删除本条"><i class="fas fa-trash-alt"></i></a>' +
+                    '</div>' +
+                    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">' +
+                        cell('情况说明', '<input type="text" style="' + inputSt + '" value="' + __hzEsc(r.content) + '" placeholder="本次复查情况" onchange="__updDiscoveryHazardDraft(\'review\',' + i + ',\'content\',this.value)">', '1 1 100%') +
+                    '</div>' +
+                '</div>';
+            }).join('');
+            const emptyNew = '<div style="font-size:12px;color:#c0c4cc;padding:4px 0 8px;">本次未发现新隐患可不填</div>';
+            const emptyReview = openHazards.length
+                ? '<div style="font-size:12px;color:#c0c4cc;padding:4px 0 8px;">如需跟踪既有隐患，点击「添加复查」</div>'
+                : '<div style="font-size:12px;color:#c0c4cc;padding:4px 0 8px;">当前房屋暂无未销号隐患可复查</div>';
+            return '<div style="border-top:1px dashed var(--border);padding-top:14px;margin-top:2px;">' +
+                '<div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:8px;">' +
+                    '<i class="fas fa-list-ul" style="color:var(--primary);margin-right:4px;"></i>登记隐患' +
+                    '<span style="font-weight:normal;color:#909399;font-size:12px;margin-left:6px;">本次新发现的隐患，保存后进入「隐患台账」跟踪</span></div>' +
+                (newRows || emptyNew) +
+                '<button type="button" class="bottom-btn" onclick="__addDiscoveryHazardRow(\'new\')"><i class="fas fa-plus"></i> 添加隐患</button>' +
+                '<div style="font-size:13px;font-weight:500;color:var(--text-primary);margin:16px 0 8px;">' +
+                    '<i class="fas fa-redo" style="color:var(--safe);margin-right:4px;"></i>复查既有隐患' +
+                    '<span style="font-weight:normal;color:#909399;font-size:12px;margin-left:6px;">对本房屋既有未销号隐患的跟踪复查，结论计入隐患动态</span></div>' +
+                (reviewRows || emptyReview) +
+                (openHazards.length ? '<button type="button" class="bottom-btn" onclick="__addDiscoveryHazardRow(\'review\')"><i class="fas fa-plus"></i> 添加复查</button>' : '') +
+            '</div>';
+        }
+
+        function rerenderDiscoveryHazardBlock() {
+            const box = document.getElementById('discoveryHazardBlock');
+            if (box) box.innerHTML = renderDiscoveryHazardBlockInner(currentHouseArch);
+        }
+
+        function __addDiscoveryHazardRow(kind) {
+            const d = window.__discoveryHazardDraft || (window.__discoveryHazardDraft = { newHazards: [], reviews: [] });
+            if (kind === 'review') d.reviews.push({ hazardId: '', conclusion: '', levelAfter: '', content: '' });
+            else d.newHazards.push({ hazardType: '', hazardTypeOther: '', location: '', description: '', initialJudge: '第三类', photos: [] });
+            rerenderDiscoveryHazardBlock();
+        }
+
+        function __delDiscoveryHazardRow(kind, i) {
+            const d = window.__discoveryHazardDraft;
+            if (!d) return;
+            if (kind === 'review') d.reviews.splice(i, 1);
+            else d.newHazards.splice(i, 1);
+            rerenderDiscoveryHazardBlock();
+        }
+
+        function __updDiscoveryHazardDraft(kind, i, field, val) {
+            const d = window.__discoveryHazardDraft;
+            if (!d) return;
+            const arr = (kind === 'review') ? d.reviews : d.newHazards;
+            if (arr[i]) arr[i][field] = val;
+        }
+
+        function __delDiscoveryHazardPhoto(rowIdx, photoIdx) {
+            const d = window.__discoveryHazardDraft;
+            if (!d || !d.newHazards[rowIdx]) return;
+            d.newHazards[rowIdx].photos.splice(photoIdx, 1);
+            rerenderDiscoveryHazardBlock();
+        }
+
+        function handleDiscoveryHazardPhotoUpload(input, rowIdx) {
+            const d = window.__discoveryHazardDraft;
+            if (!d || !d.newHazards[rowIdx]) return;
+            const files = Array.from(input.files || []);
+            if (!files.length) return;
+            const invalid = files.find(function(f){ return !f.type.startsWith('image/'); });
+            if (invalid) { alert('请上传图片文件'); return; }
+            Promise.all(files.map(function(file) {
+                return new Promise(function(resolve) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) { resolve(e.target.result); };
+                    reader.readAsDataURL(file);
+                });
+            })).then(function(urls) {
+                d.newHazards[rowIdx].photos = (d.newHazards[rowIdx].photos || []).concat(urls);
+                rerenderDiscoveryHazardBlock();
+            });
+        }
+
+        function collectDiscoveryHazardDraft() {
+            const d = window.__discoveryHazardDraft || { newHazards: [], reviews: [] };
+            return {
+                newHazards: (d.newHazards || []).filter(function(h){ return h && h.hazardType; }),
+                reviews: (d.reviews || []).filter(function(r){ return r && r.hazardId; })
+            };
+        }
+
         function openSurveyEditModal() {
             surveyEditModalSubTab = currentSurveySubTab;
+            initDiscoveryHazardDraft(); // P3：登记隐患区块草稿初始化
             renderSurveyEditModalTabs();
             renderSurveyEditModalForm();
             document.getElementById('surveyEditModal').classList.add('open');
@@ -8268,7 +9224,11 @@
                     '<input class="form-input" type="text" data-idx="' + updateTimeIndex + '" value="' + updateTimeValue.replace(/"/g, '&quot;') + '" readonly style="background:#f5f6f8;color:#888;cursor:not-allowed;">' +
                     '</div>';
             }
-            document.getElementById('surveyEditModalForm').innerHTML = '<div class="form-grid">' + gridHtml + '</div>';
+            // P3：survey1（排查登记）表单末尾追加「登记隐患 / 复查既有隐患」区块（独立容器，只重渲自身不丢表单输入）
+            const discoveryHazardBlockHtml = (surveyEditModalSubTab === 'survey1')
+                ? '<div id="discoveryHazardBlock" style="grid-column:1 / -1;">' + renderDiscoveryHazardBlockInner(currentHouseArch) + '</div>'
+                : '';
+            document.getElementById('surveyEditModalForm').innerHTML = '<div class="form-grid">' + gridHtml + discoveryHazardBlockHtml + '</div>';
             bindSurveyPhotoDropzones();
             // 初步判定 radio 同步到 hidden input
             document.querySelectorAll('#surveyEditModalForm .survey-judge-radio').forEach(function(radio) {
@@ -8503,6 +9463,13 @@
                         // 同步风险记录中对应条目（结论可能变了）
                         try { syncRiskRecords(currentHouseArch); } catch (e) {}
                         try { ensureGovernanceEvents(currentHouseArch); } catch (e) {}
+                        // P3：登记隐患区块（新增隐患 + 复查既有隐患，只追加不删改原字段）
+                        try {
+                            const hzDraft = collectDiscoveryHazardDraft();
+                            if (hzDraft.newHazards.length || hzDraft.reviews.length) {
+                                registerDiscoveryHazards(currentHouseArch, '排查', rec, hzDraft.newHazards, hzDraft.reviews);
+                            }
+                        } catch (e) { console.warn('登记隐患写入失败', e); }
                     }
                 }
             } catch (e) {}
@@ -8517,6 +9484,7 @@
 
         // ========== 动态巡查编辑 ==========
         function openPatrolEditModal() {
+            initDiscoveryHazardDraft(); // P3：登记隐患区块草稿初始化
             const s = currentHouseArch;
             const list = (s.patrolRecords || []).slice().sort((a, b) => (b.patrolDate || '').localeCompare(a.patrolDate || ''));
             const idx = Math.min(recordViewState.patrol || 0, Math.max(list.length - 1, 0));
@@ -8568,7 +9536,9 @@
                     '<input class="file-upload-input" type="file" accept="image/*" multiple onchange="handlePatrolPhotoUpload(this)">' +
                     '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传图片</div>' +
                 '</div>' +
-            '</div></div>';
+            '</div>' +
+            '<div id="discoveryHazardBlock" style="grid-column:1 / -1;">' + renderDiscoveryHazardBlockInner(s) + '</div>' +
+            '</div>';
             document.getElementById('patrolEditForm').innerHTML = html;
             bindPatrolPhotoDropzones();
             // 初始化已有照片的文件列表
@@ -8636,6 +9606,13 @@
             document.querySelectorAll('#patrolEditForm .patrol-edit-input').forEach(function(input) {
                 dest[input.dataset.field] = input.value;
             });
+            // P3：登记隐患区块（新增隐患 + 复查既有隐患，只追加不删改原字段）
+            try {
+                const hzDraft = collectDiscoveryHazardDraft();
+                if (hzDraft.newHazards.length || hzDraft.reviews.length) {
+                    registerDiscoveryHazards(s, '巡查', dest, hzDraft.newHazards, hzDraft.reviews);
+                }
+            } catch (e) { console.warn('登记隐患写入失败', e); }
             delete s._syncedAt;
             saveCurrentHouseArch(s);
             closePatrolEditModal();
@@ -10418,6 +11395,13 @@
                 s.riskLevel = '无风险';
                 s.risk = 'safe';
                 s.isRemovedFromFocus = true;
+                // C：隐患独立销号（单一入口）——当前治理事件关联的隐患走 closeHazard，写销号动态+同步事件
+                try {
+                    const curEv = (s.governanceEvents || []).find(function(e){ return e.eventId === (window.currentGovEventId || s.currentGovernanceEventId); });
+                    if (curEv && curEv.hazardId) {
+                        closeHazard(s, curEv.hazardId, { auditor: auditor, auditTime: auditTime, opinion: opinion || '验收销项审核通过', source: '验收销项', auditId: curEv.eventId });
+                    }
+                } catch (e) { console.warn('隐患销号同步失败', e); }
             } else {
                 s.risk = s.risk === 'safe' ? 'safe' : (RISK_LABEL_MAP_INV[s.riskLevel] || s.risk || 'warning');
                 s.riskLevel = s.risk === 'safe' ? '第一类' : RISK_LABEL_MAP[s.risk] || s.riskLevel;
