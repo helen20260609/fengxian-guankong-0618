@@ -1700,9 +1700,9 @@ function syncAllRecords() {
     refreshAllLists();
 }
 
-// 统一刷新所有列表
+// 统一刷新所有列表（编辑/同步后调用，保留当前页码避免列表乱跳）
 function refreshAllLists() {
-    if (typeof renderRuralArchiveRows === 'function') renderRuralArchiveRows();
+    if (typeof renderRuralArchiveRows === 'function') renderRuralArchiveRows(true);
 }
 
 // 地址转路号信息：去掉"上海市奉贤区"、镇/街道、村/居委，仅保留"X组Y号"
@@ -1834,7 +1834,8 @@ function renderRuralArchivePage(tabKey, page) {
     renderRuralPaginationFor(tabKey, totalPages, total);
 }
 
-function renderRuralArchiveRows() {
+// 渲染档案列表；preservePage=true 时保留各 Tab 当前页码（服务端异步合并完成后刷新用，避免用户被拉回第 1 页）
+function renderRuralArchiveRows(preservePage) {
     if (typeof initHouseArchSeed !== 'function' || typeof getAllHouseRecords !== 'function') return;
     initHouseArchSeed();
     // 统一将历史风险等级归一化为 3 类口径
@@ -1861,13 +1862,16 @@ function renderRuralArchiveRows() {
     RISK_TAB_STATE.general.records = all.filter(r => r.riskLevel === '第二类');
     RISK_TAB_STATE.low.records = all.filter(r => r.riskLevel === '第一类');
 
-    RURAL_ALL_PAGER.page = 1;
-    Object.keys(RISK_TAB_STATE).forEach(k => { RISK_TAB_STATE[k].page = 1; });
+    if (!preservePage) {
+        RURAL_ALL_PAGER.page = 1;
+        Object.keys(RISK_TAB_STATE).forEach(k => { RISK_TAB_STATE[k].page = 1; });
+    }
 
-    renderRuralArchivePage('all', 1);
-    renderRuralArchivePage('major', 1);
-    renderRuralArchivePage('general', 1);
-    renderRuralArchivePage('low', 1);
+    // renderRuralArchivePage 内部会对页码越界自动 clamp，保留页码也安全
+    renderRuralArchivePage('all', RURAL_ALL_PAGER.page);
+    renderRuralArchivePage('major', RISK_TAB_STATE.major.page);
+    renderRuralArchivePage('general', RISK_TAB_STATE.general.page);
+    renderRuralArchivePage('low', RISK_TAB_STATE.low.page);
     // 更新 Tab 计数
     updateTabCounts();
 }
@@ -2033,6 +2037,13 @@ function resetFilter(tabKey, panel) {
     // 重新加载完整数据
     renderRuralArchiveRows();
 }
+
+// 服务端异步合并完成后重新渲染列表（修复：首屏同步渲染时本地数据不全，合并完成后列表未刷新）
+// 保留当前页码，避免用户在翻页/浏览时被拉回第 1 页
+// 注意：initHouseArchSeed 内的服务端同步每个页面会话只发起一次，本事件不会反复触发
+document.addEventListener('house-arch-synced', function() {
+    if (typeof renderRuralArchiveRows === 'function') renderRuralArchiveRows(true);
+});
 
 // ===== 占位提示浅灰色：value="" 时加 class，选中实际值时移除 =====
 function updateSelectPlaceholderColor(sel) {

@@ -1564,14 +1564,18 @@ function generateHouseSeed() {
 }
 
 // 初始化种子Storage 为空则写入 85 条数据；否则规范化已有数据
+// 服务端同步 Promise 缓存：每个页面会话只发起一次，
+// 避免「渲染 → initHouseArchSeed → fetch → house-arch-synced → 渲染」无限循环导致列表乱跳
+let __serverSyncPromise = null;
 function initHouseArchSeed() {
     // 异步从服务端拉取最新档案合并（服务端数据优先）
     // 合并后触发一次 hashchange/自定义事件，让使用方刷新
-    if (typeof syncHouseArchFromServer === 'function') {
-        syncHouseArchFromServer().then(function(merged) {
+    if (typeof syncHouseArchFromServer === 'function' && !__serverSyncPromise) {
+        __serverSyncPromise = syncHouseArchFromServer().then(function(merged) {
             if (merged) {
                 try { document.dispatchEvent(new CustomEvent('house-arch-synced')); } catch (e) {}
             }
+            return merged;
         });
     }
 
@@ -1582,6 +1586,8 @@ function initHouseArchSeed() {
         __seedGenerated = true;
         // 同步生成 closeApplyData，确保 hidden-close-apply 页面可展示
         syncCloseApplyData(seed);
+        // 注入演示记录（见下）
+        __injectDemoRecords(seed);
         return seed;
     }
     // 规范化已存在的数据，确保各页面读取一致
@@ -1591,7 +1597,40 @@ function initHouseArchSeed() {
     if (getCloseApplyStorage().length === 0) {
         syncCloseApplyData(all);
     }
+    // 演示记录兜底：本地缺失时从服务端 json 拉取注入（保证演示效果可重建）
+    __injectDemoRecords(all);
     return all;
+}
+
+// ============================================================
+// 演示记录（种子级）：清空 localStorage 后仍可从服务端 json 重建
+// 数据本体在 data/house-arch.json，此处只登记编号；缺失时自动拉取注入。
+// ============================================================
+const DEMO_HOUSE_NOS = ['NF-2025-00018'];
+let __demoInjecting = false;
+function __injectDemoRecords(currentAll) {
+    if (typeof fetch !== 'function') return;
+    if (__demoInjecting) return;
+    const missing = DEMO_HOUSE_NOS.filter(no => !(currentAll && currentAll[no]));
+    if (missing.length === 0) return;
+    __demoInjecting = true;
+    fetch('/api/house-arch').then(function (r) { return r.ok ? r.json() : null; }).then(function (serverData) {
+        if (!serverData || typeof serverData !== 'object') return;
+        const all = getHouseArchStorage();
+        let changed = false;
+        missing.forEach(no => {
+            if (!all[no] && serverData[no]) {
+                all[no] = serverData[no];
+                if (typeof normalizeHouseRecord === 'function') normalizeHouseRecord(all[no]);
+                changed = true;
+            }
+        });
+        if (changed) {
+            __syncToServerEnabled = false; // 注入来自服务端，无需回写
+            try { setHouseArchStorage(all); } finally { __syncToServerEnabled = true; }
+            try { document.dispatchEvent(new CustomEvent('house-arch-synced')); } catch (e) {}
+        }
+    }).catch(function () { /* 离线静默 */ }).finally(function () { __demoInjecting = false; });
 }
 
 // 根据 houseArchData 同步 closeApplyData（与房屋状态保持一致）
