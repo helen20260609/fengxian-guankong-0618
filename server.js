@@ -35,10 +35,12 @@ function logRequest(req, statusCode, filePath) {
 }
 
 function readJsonBody(req, callback) {
-    var body = '';
-    req.on('data', function(chunk) { body += chunk; });
+    // 用 Buffer 数组接收，最后统一 toString('utf8')，避免 chunk 边界切断多字节字符导致  乱码
+    var chunks = [];
+    req.on('data', function(chunk) { chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, 'binary')); });
     req.on('end', function() {
         try {
+            var body = chunks.length ? Buffer.concat(chunks).toString('utf8') : '';
             callback(null, body ? JSON.parse(body) : null);
         } catch(e) {
             callback(e, null);

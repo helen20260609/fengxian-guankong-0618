@@ -67,12 +67,13 @@ const HAZARD_TO_RISK_LEVEL = {
     '无风险': '第一类'
 };
 const STATUS_LABEL_MAP = {
-    'pending': '待整治',
+    'pending': '未整治',
     'doing': '整治中',
-    'done': '已治理',
+    'done': '已整治',
     'overdue': '逾期未整治'
 };
 const STATUS_LABEL_MAP_INV = {
+    '未整治': 'pending',
     '待整治': 'pending',
     '整治中': 'doing',
     '已治理': 'done',
@@ -305,7 +306,7 @@ function generateArchId(prefix) {
 // 默认单条房屋结构（兼容 house-arch-detail 的 DEFAULT_HOUSE_STATUS）
 const DEFAULT_HOUSE_STATUS = {
     no: '', name: '', owner: '', street: '', address: '', community: '', village: '',
-    riskLevel: '第二类', governStatus: '待整治', currentMeasure: '',
+    riskLevel: '第二类', governStatus: '未整治', currentMeasure: '',
     managerName: '', managerPhone: '',
     manageRecords: [], projectRecords: [], qualityTrace: [], archiveRecords: [],
     closeStatus: '未申请', closeApplyTime: '', closeAuditTime: '', closeAuditor: '',
@@ -1387,8 +1388,8 @@ function generateHouseSeed() {
             note: closeStatus === '已通过' ? '已销号' : (closeStatus === '已驳回' ? rejectReason : '尚未提交销号申请')
         };
 
-        // 治理完成（done）的房屋统一展示为"已治理"；其余按状态映射
-        const governStatus = governance === 'done' ? '已治理' : STATUS_LABEL_MAP[governance];
+        // 治理完成（done）的房屋统一展示为"已整治"；其余按状态映射
+        const governStatus = governance === 'done' ? '已整治' : STATUS_LABEL_MAP[governance];
         const riskLevel = RISK_LABEL_MAP[risk];
 
         // 已销号且治理完成：展示用安全，但保留原始风险用于统计/追溯
