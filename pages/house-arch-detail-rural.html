@@ -310,6 +310,20 @@
         // 深拷贝工具（undefined 安全）
         function __deepClone(o) { return o === undefined ? undefined : JSON.parse(JSON.stringify(o)); }
 
+        // 2026-10-17 全局转义工具：用户输入拼接进 HTML/属性/onclick 前使用
+        function escapeHtml(v) {
+            return String(v === undefined || v === null ? '' : v)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        // 用于拼进单引号包裹的 JS 字符串实参（如 onclick="fn('...')"）：转义反斜杠、单双引号、换行、< 防脚本标签闭合
+        function escapeJsStr(v) {
+            return String(v === undefined || v === null ? '' : v)
+                .replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"')
+                .replace(/\r?\n/g, '\\n').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
+                .replace(/</g, '\\x3c');
+        }
+
         /* ==================== 风险发现→风险信息记录→治理事件（v2 模型）====================
          * 业务规则：
          * - 风险发现 = 排查登记(inspectionRecords) + 动态巡查(patrolRecords)，两条独立途径，各自多次
@@ -1757,6 +1771,8 @@
         .op-btn.edit:hover { background: #faad14; color: #fff; }
         .op-btn.outline { background: #fff; border-color: #ffd591; color: #d48806; }
         .op-btn.outline:hover { background: #faad14; border-color: #faad14; color: #fff; }
+        .op-btn.danger { color: var(--danger); background: #fff1f0; }
+        .op-btn.danger:hover { background: var(--danger); color: #fff; }
         .op-btn + .op-btn { margin-left: 6px; }
 
         .bottom-bar {
@@ -4012,7 +4028,7 @@
                     if (urls.length) {
                         photosHtml = '<div style="display:flex;flex-wrap:wrap;gap:12px;">' +
                             urls.map(u => '<div style="position:relative;width:180px;height:130px;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fafafa;">' +
-                                '<img src="' + u + '" alt="' + label + '" onclick="viewPhotoOnline(\'' + u + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                                '<img src="' + escapeHtml(u) + '" alt="' + escapeHtml(label) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
                             '</div>').join('') +
                         '</div>';
                     } else {
@@ -4223,7 +4239,7 @@
                 const raw = (value || '').trim();
                 const urls = raw ? raw.split(',').map(x => x.trim()).filter(u => u && u !== '—' && u !== '-') : [];
                 const photoHtml = urls.length
-                    ? '<div class="info-value photo-value" style="display:flex;flex-wrap:wrap;gap:12px;">' + urls.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:320px;height:240px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
+                    ? '<div class="info-value photo-value" style="display:flex;flex-wrap:wrap;gap:12px;">' + urls.map(u => '<img src="' + escapeHtml(u) + '" alt="照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:320px;height:240px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
                     : '<div class="info-value empty">—</div>';
                 return '<div class="info-item full-width" style="flex-wrap:wrap;">' +
                     '<div style="width:100%;color:#d93025;font-size:12px;margin-bottom:2px;">需使用移动端现场实地拍摄照片，带地址时间水印！</div>' +
@@ -4818,12 +4834,12 @@
                 const name = m.name || (isImg ? '图片 ' + (idx + 1) : '附件 ' + (idx + 1));
                 const sizeStr = m.size ? formatFileSize(m.size) : '';
                 const thumb = isImg
-                    ? '<img src="' + u + '" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;" onclick="viewPhotoOnline(\'' + u + '\')">'
+                    ? '<img src="' + escapeHtml(u) + '" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">'
                     : '<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#f5f6f7;border-radius:4px;border:1px solid var(--border);color:var(--text-secondary);flex-shrink:0;"><i class="fas ' + icon + '" style="font-size:18px;"></i></div>';
                 return '<div class="measure-file-item" data-idx="' + idx + '" style="display:flex;align-items:center;gap:10px;padding:6px 8px;background:#f9fafb;border:1px solid var(--border);border-radius:4px;">' +
                     thumb +
                     '<div style="flex:1;min-width:0;">' +
-                        '<div style="font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + name + '">' + name + '</div>' +
+                        '<div style="font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</div>' +
                         (sizeStr ? '<div style="font-size:11px;color:var(--text-secondary);">' + sizeStr + '</div>' : '') +
                     '</div>' +
                     '<button type="button" class="measure-file-btn" title="预览" onclick="previewMeasureFile(' + idx + ', this)" style="background:none;border:none;color:var(--primary);cursor:pointer;padding:4px 6px;font-size:13px;"><i class="fas fa-eye"></i></button>' +
@@ -4847,7 +4863,7 @@
                 viewPhotoOnline(url);
             } else if (url.startsWith('data:')) {
                 const w = window.open();
-                if (w) { w.document.write('<iframe src="' + url + '" style="width:100%;height:100%;border:0;"></iframe>'); }
+                if (w) { w.document.write('<iframe src="' + escapeHtml(url) + '" style="width:100%;height:100%;border:0;"></iframe>'); }
             } else {
                 window.open(url, '_blank');
             }
@@ -4894,12 +4910,7 @@
             renderMeasureFileList(wrap, urls);
         }
 
-        function formatFileSize(bytes) {
-            if (!bytes && bytes !== 0) return '';
-            if (bytes < 1024) return bytes + ' B';
-            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-        }
+        // formatFileSize 统一定义见文件后部（约12690行），此处不再重复声明
 
         function bindMeasureUploadDropzones(rootEl) {
             const root = rootEl || document;
@@ -5034,7 +5045,7 @@
                 if (i === appraisalColIndex && photoExtraItem) {
                     let pv = '<div class="info-value ' + (photoExtraItem.value ? '' : 'empty') + '">' + (photoExtraItem.value || '—') + '</div>';
                     if (photoExtraItem.isPhoto && photoExtraItem.value && photoExtraItem.value !== '—' && photoExtraItem.value !== '-') {
-                        pv = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + photoExtraItem.value + '\')">查看文件</button></div>';
+                        pv = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + escapeJsStr(photoExtraItem.value) + '\')">查看文件</button></div>';
                     }
                     prefixHtml = '<div class="info-item full-width">' +
                         '<div class="info-label">排查照片</div>' + pv + '</div>';
@@ -5045,10 +5056,10 @@
                 const cls = (rows[i] ? '' : 'empty') + (isRuralOnly && rows[i] && rows[i] !== '—' && rows[i] !== '-' ? ' rural-only' : '');
                 let valueHtml = '<div class="info-value ' + cls.trim() + '">' + (rows[i] || '—') + '</div>';
                 if (i === locationIndex && rows[i] && rows[i] !== '—' && rows[i] !== '-') {
-                    valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewLocationOnMap(\'' + rows[i] + '\')"><i class="fas fa-map-marker-alt"></i> 在地图中查看</button></div>';
+                    valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewLocationOnMap(\'' + escapeJsStr(rows[i]) + '\')"><i class="fas fa-map-marker-alt"></i> 在地图中查看</button></div>';
                 }
                 if ((i === photoIndex || i === proofIndex) && rows[i] && rows[i] !== '—' && rows[i] !== '-') {
-                    valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + rows[i] + '\')">查看文件</button></div>';
+                    valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + escapeJsStr(rows[i]) + '\')">查看文件</button></div>';
                 }
                 const isFullWidth = viewFullWidthCols.indexOf(c) !== -1;
                 return prefixHtml + '<div class="info-item' + (isFullWidth ? ' full-width' : '') + '">' +
@@ -5062,7 +5073,7 @@
                     return row.map(function(item) {
                         let valueHtml = '<div class="info-value ' + (item.value ? '' : 'empty') + '">' + (item.value || '—') + '</div>';
                         if (item.isPhoto && item.value && item.value !== '—' && item.value !== '-') {
-                            valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + item.value + '\')">查看文件</button></div>';
+                            valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + escapeJsStr(item.value) + '\')">查看文件</button></div>';
                         }
                         return '<div class="info-item full-width">' +
                             '<div class="info-label">' + (item.label || '') + '</div>' +
@@ -5189,7 +5200,7 @@
             const urls = String(photoVal).split(',').map(function(x){ return x.trim(); }).filter(isImageUrl);
             let photoHtml;
             if (urls.length) {
-                photoHtml = '<div class="info-value photo-value photo-grid">' + urls.map(function(u){ return '<img src="' + u + '" alt="建房现场照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">'; }).join('') + '</div>';
+                photoHtml = '<div class="info-value photo-value photo-grid">' + urls.map(function(u){ return '<img src="' + escapeHtml(u) + '" alt="建房现场照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">'; }).join('') + '</div>';
             } else {
                 photoHtml = '<div class="info-value empty">—</div>';
             }
@@ -5292,7 +5303,7 @@
             const isImageUrl = (v) => v && v !== '—' && v !== '-' && (v.startsWith('data:image') || v.startsWith('http') || v.endsWith('.jpg') || v.endsWith('.jpeg') || v.endsWith('.png') || v.endsWith('.gif'));
             const photoUrls = (r.photos || '').split(',').map(s => s.trim()).filter(isImageUrl);
             const photoHtml = photoUrls.length
-                ? '<div class="info-value photo-value photo-grid">' + photoUrls.map(u => '<img src="' + u + '" alt="现场照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
+                ? '<div class="info-value photo-value photo-grid">' + photoUrls.map(u => '<img src="' + escapeHtml(u) + '" alt="现场照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
                 : '<div class="info-value empty">—</div>';
             const photoItem = '<div class="info-item full-width"><div class="info-label">现场照片</div>' + photoHtml + '</div>';
             // 记录级「房屋用途现场情况」区块（填报人/填报时间继承当次巡查）
@@ -5331,9 +5342,9 @@
                     '<td>' + (item.auditor || '-') + '</td>' +
                     '<td>' + (item.conclusion || '-') + '</td>' +
                     '<td style="text-align:left;max-width:200px;">' + linked + '</td>' +
-                    '<td>' + (hasFile ? '<button class="photo-btn" onclick="viewPhotoOnline(\'' + reportVal.split(',')[0].trim() + '\')">查看报告</button>' : (reportVal || '—')) + '</td>' +
+                    '<td>' + (hasFile ? '<button class="photo-btn" onclick="viewPhotoOnline(\'' + escapeJsStr(reportVal.split(',')[0].trim()) + '\')">查看报告</button>' : (reportVal || '—')) + '</td>' +
                     '<td>' + (item.remark || '-') + '</td>' +
-                    '<td class="actions"><a class="view-link" href="javascript:void(0)" onclick="openCloseAuditEditModal(' + idx + ')">编辑</a><a class="view-link" href="javascript:void(0)" onclick="deleteCloseAudit(' + idx + ')" style="color:var(--danger);">删除</a></td>' +
+                    '<td class="actions"><a class="op-btn edit" href="javascript:void(0)" onclick="openCloseAuditEditModal(' + idx + ')"><i class="fas fa-edit"></i> 编辑</a><a class="op-btn danger" href="javascript:void(0)" onclick="deleteCloseAudit(' + idx + ')"><i class="fas fa-trash-alt"></i> 删除</a></td>' +
                     '</tr>';
             }).join('');
         }
@@ -5371,7 +5382,7 @@
                 });
                 const thumbs = photos.length
                     ? '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + photos.map(function(u){
-                        return '<img src="' + u + '" alt="隐患照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in;">';
+                        return '<img src="' + escapeHtml(u) + '" alt="隐患照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in;">';
                     }).join('') + '</div>'
                     : '<span style="color:#c0c4cc;">—</span>';
                 return '<tr>' +
@@ -5618,7 +5629,7 @@
                 if (isPhoto && val) {
                     const urls = val.split(',').map(s => s.trim()).filter(isImageUrl);
                     valueHtml = urls.length
-                        ? '<div class="info-value photo-value photo-grid">' + urls.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
+                        ? '<div class="info-value photo-value photo-grid">' + urls.map(u => '<img src="' + escapeHtml(u) + '" alt="照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
                         : '<div class="info-value empty">—</div>';
                 } else if (isAttach && val && val !== '—' && val !== '-') {
                     const files = projectFilesFromString(val);
@@ -5626,7 +5637,7 @@
                         ? '<div class="info-value attach-list">' + files.map(f => {
                             const isImage = f.url && (f.url.startsWith('data:image') || (f.url.startsWith('http') && /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(f.url)));
                             const icon = isImage ? 'fa-image' : 'fa-file';
-                            const clickAttr = isImage ? ' onclick="viewPhotoOnline(\'' + f.url + '\')" style="cursor:pointer;color:var(--primary);"' : ' style="color:var(--text-primary);"';
+                            const clickAttr = isImage ? ' onclick="viewPhotoOnline(\'' + escapeJsStr(f.url) + '\')" style="cursor:pointer;color:var(--primary);"' : ' style="color:var(--text-primary);"';
                             return '<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;margin:2px 6px 2px 0;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;font-size:13px;">' +
                                 '<i class="fas ' + icon + '" style="color:var(--primary);"></i>' +
                                 '<span' + clickAttr + '>' + (f.name || '附件') + '</span>' +
@@ -5663,9 +5674,9 @@
             }
             const fwFields = isAssess ? ['鉴定报告', '备注'] : ['评估报告', '备注'];
             // 2026-10-17：去除鉴定/评估互斥提示，用户按实际情况自由填报
-            // 顶部：新增填报按钮 + 记录总数
+            // 顶部：标题 + 新增填报按钮
             const headerHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;">' +
-                '<span style="font-size:13px;color:#606266;"><i class="fas fa-list-ol" style="color:var(--primary);margin-right:6px;"></i>' + title + '记录 <b style="color:#303133;">' + records.length + '</b> 条</span>' +
+                '<span style="font-size:13px;color:#606266;"><i class="fas fa-list-ol" style="color:var(--primary);margin-right:6px;"></i>' + title + '记录</span>' +
                 '<button class="bottom-btn primary" style="padding:6px 14px;font-size:13px;" onclick="openAppraisalEditModal(\'' + kind + '\')"><i class="fas fa-plus"></i> 新增填报</button>' +
             '</div>';
             if (!records.length) {
@@ -5811,7 +5822,7 @@
                     }
                     if (!urls.length && fallback && fallback.length) urls = fallback;
                     const inner = urls.length
-                        ? '<div class="info-value photo-value photo-grid" style="display:flex;align-items:center;gap:12px;flex:1;">' + urls.map(u => '<img src="' + u + '" alt="' + label + '" onclick="viewPhotoOnline(\'' + u + '\')" style="width:200px;height:150px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
+                        ? '<div class="info-value photo-value photo-grid" style="display:flex;align-items:center;gap:12px;flex:1;">' + urls.map(u => '<img src="' + escapeHtml(u) + '" alt="' + escapeHtml(label) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:200px;height:150px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
                         : '<div class="info-value empty" style="flex:1;">—</div>';
                     return '<div class="info-item full-width" style="margin-top:12px;display:flex;flex-direction:row;align-items:center;gap:12px;"><div class="info-label" style="width:140px;flex-shrink:0;text-align:left;display:flex;align-items:center;justify-content:flex-start;height:150px;">' + starHtml + label + '</div>' + inner + '</div>';
                 }
@@ -5868,9 +5879,9 @@
             '</div>';
 
             // ===== 多条记录渲染 =====
-            // 顶部：新增填报按钮 + 记录总数
+            // 顶部：标题 + 新增填报按钮
             const headerHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;">' +
-                '<span style="font-size:13px;color:#606266;"><i class="fas fa-list-ol" style="color:var(--primary);margin-right:6px;"></i>整治计划记录 <b style="color:#303133;">' + list.length + '</b> 条</span>' +
+                '<span style="font-size:13px;color:#606266;"><i class="fas fa-list-ol" style="color:var(--primary);margin-right:6px;"></i>整治计划记录</span>' +
                 '<button class="bottom-btn primary" style="padding:6px 14px;font-size:13px;" onclick="openPlanEditModal(-1)"><i class="fas fa-plus"></i> 新增填报</button>' +
             '</div>';
             if (!list.length) {
@@ -6046,7 +6057,7 @@
             });
             const photoHtml = photoUrls.length
                 ? '<div class="info-value photo-value photo-grid">' + photoUrls.map(function(u) {
-                    return '<img src="' + u + '" alt="现场照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">';
+                    return '<img src="' + escapeHtml(u) + '" alt="现场照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">';
                   }).join('') + '</div>'
                 : '<div class="info-value empty">—</div>';
             const activeIndex = records.findIndex(function(it){ return riskRecordKeyOf(it) === currentRiskRecordKey; });
@@ -6057,7 +6068,7 @@
                         ' <span class="tag ' + st.cls + '" style="margin-left:8px;">' + st.text + '</span>' +
                     '</div>' +
                     '<div class="meta">' +
-                        '<a class="view-link" href="javascript:void(0)" onclick="jumpToDiscoverySource(\'' + srcTab + '\',\'' + (r.sourceId || '') + '\')"><i class="fas fa-external-link-alt"></i> 查看来源（' + srcLabel + '）</a>' +
+                        '<a class="view-link" href="javascript:void(0)" onclick="jumpToDiscoverySource(\'' + escapeJsStr(srcTab) + '\',\'' + escapeJsStr(r.sourceId || '') + '\')"><i class="fas fa-external-link-alt"></i> 查看来源（' + srcLabel + '）</a>' +
                     '</div>' +
                 '</div>' +
                 '<div class="info-grid info-grid-2col">' +
@@ -6089,7 +6100,7 @@
                 });
                 const thumbs = photos.length
                     ? '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + photos.map(function(u){
-                        return '<img src="' + u + '" alt="隐患照片" onclick="event.stopPropagation();viewPhotoOnline(\'' + u + '\')" style="width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in;">';
+                        return '<img src="' + escapeHtml(u) + '" alt="隐患照片" onclick="event.stopPropagation();viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in;">';
                     }).join('') + '</div>'
                     : '<span style="color:#c0c4cc;">—</span>';
                 return '<tr>' +
@@ -6221,7 +6232,7 @@
                 });
                 const thumbs = photos.length
                     ? '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + photos.map(function(u){
-                        return '<img src="' + u + '" alt="隐患照片" onclick="event.stopPropagation();viewPhotoOnline(\'' + u + '\')" style="width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in;">';
+                        return '<img src="' + escapeHtml(u) + '" alt="隐患照片" onclick="event.stopPropagation();viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in;">';
                     }).join('') + '</div>'
                     : '<span style="color:#c0c4cc;">—</span>';
                 return '<tr>' +
@@ -6303,7 +6314,7 @@
                     const photos = getAddDangerPhotos(t);
                     const photoHtml = photos.length
                         ? '<div style="display:flex;flex-wrap:wrap;gap:10px;">' + photos.map(u =>
-                            '<img src="' + u + '" onclick="viewPhotoOnline(\'' + u.replace(/'/g, "\\'") + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border);">'
+                            '<img src="' + escapeHtml(u) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border);">'
                           ).join('') + '</div>'
                         : '<div class="info-value empty">暂未上传照片</div>';
                     return '<div class="info-item" style="grid-column:1 / -1;align-items:flex-start;">' +
@@ -6358,7 +6369,7 @@
                     const photos = getRecordAddDangerPhotos(ad, t);
                     const photoHtml = photos.length
                         ? '<div style="display:flex;flex-wrap:wrap;gap:10px;">' + photos.map(function(u) {
-                            return '<img src="' + u + '" onclick="viewPhotoOnline(\'' + String(u).replace(/'/g, "\\'") + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border);">';
+                            return '<img src="' + escapeHtml(u) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border);">';
                           }).join('') + '</div>'
                         : '<div class="info-value empty">暂未上传照片</div>';
                     return '<div class="info-item" style="grid-column:1 / -1;align-items:flex-start;">' +
@@ -6393,9 +6404,9 @@
                     list = [];
                 }
             }
-            // 顶部：记录总数 + 新增填报按钮
+            // 顶部：标题 + 新增填报按钮
             const headerHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;">' +
-                '<span style="font-size:13px;color:#606266;"><i class="fas fa-list-ol" style="color:var(--primary);margin-right:6px;"></i>隐患控制情况记录 <b style="color:#303133;">' + list.length + '</b> 条</span>' +
+                '<span style="font-size:13px;color:#606266;"><i class="fas fa-list-ol" style="color:var(--primary);margin-right:6px;"></i>隐患控制情况记录</span>' +
                 '<button class="bottom-btn primary" style="padding:6px 14px;font-size:13px;" onclick="openControlEditModal(-1)"><i class="fas fa-plus"></i> 新增填报</button>' +
             '</div>';
             if (!list.length) {
@@ -6819,7 +6830,7 @@
             const renderPhotos = (arr, label) => {
                 if (!arr || !arr.length) return '<div class="info-value empty">—</div>';
                 return '<div class="info-value photo-value photo-grid">' + arr.map(u =>
-                    '<img src="' + u + '" alt="' + label + '" onclick="viewPhotoOnline(\'' + u + '\')" style="width:200px;height:150px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;margin-right:8px;">'
+                    '<img src="' + escapeHtml(u) + '" alt="' + escapeHtml(label) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:200px;height:150px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;margin-right:8px;">'
                 ).join('') + '</div>';
             };
 
@@ -7264,12 +7275,12 @@
                 const name = m.name || (isImg ? '图片 ' + (idx + 1) : '附件 ' + (idx + 1));
                 const sizeStr = m.size ? formatFileSize(m.size) : '';
                 const thumb = isImg
-                    ? '<img src="' + u + '" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;" onclick="viewPhotoOnline(\'' + u + '\')">'
+                    ? '<img src="' + escapeHtml(u) + '" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;flex-shrink:0;" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">'
                     : '<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#f5f6f7;border-radius:4px;border:1px solid var(--border);color:var(--text-secondary);flex-shrink:0;"><i class="fas ' + icon + '" style="font-size:18px;"></i></div>';
                 return '<div class="accept-file-item" data-idx="' + idx + '" style="display:flex;align-items:center;gap:10px;padding:6px 8px;background:#f9fafb;border:1px solid var(--border);border-radius:4px;">' +
                     thumb +
                     '<div style="flex:1;min-width:0;">' +
-                        '<div style="font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + name + '">' + name + '</div>' +
+                        '<div style="font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</div>' +
                         (sizeStr ? '<div style="font-size:11px;color:var(--text-secondary);">' + sizeStr + '</div>' : '') +
                     '</div>' +
                     '<button type="button" class="accept-file-btn" title="预览" onclick="previewAcceptFile(' + idx + ', this)" style="background:none;border:none;color:var(--primary);cursor:pointer;padding:4px 6px;font-size:13px;"><i class="fas fa-eye"></i></button>' +
@@ -7293,7 +7304,7 @@
                 viewPhotoOnline(url);
             } else if (url.startsWith('data:')) {
                 const w = window.open();
-                if (w) { w.document.write('<iframe src="' + url + '" style="width:100%;height:100%;border:0;"></iframe>'); }
+                if (w) { w.document.write('<iframe src="' + escapeHtml(url) + '" style="width:100%;height:100%;border:0;"></iframe>'); }
             } else {
                 window.open(url, '_blank');
             }
@@ -7701,7 +7712,7 @@
                 const list = Array.isArray(arr) ? arr : (arr ? [arr] : []);
                 const hintHtml = waterHint ? '<div style="width:100%;color:#d93025;font-size:12px;margin-bottom:2px;">需使用移动端现场实地拍摄照片，带地址时间水印！</div>' : '';
                 const imgs = list.length
-                    ? '<div class="info-value photo-value" style="display:flex;flex-wrap:wrap;gap:8px;">' + list.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')" style="width:160px;height:110px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
+                    ? '<div class="info-value photo-value" style="display:flex;flex-wrap:wrap;gap:8px;">' + list.map(u => '<img src="' + escapeHtml(u) + '" alt="照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:160px;height:110px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
                     : '<div class="info-value empty">—</div>';
                 return '<div class="info-item full-width" style="flex-wrap:wrap;">' + hintHtml + '<div class="info-label">' + label + '</div>' + imgs + '</div>';
             };
@@ -7710,7 +7721,7 @@
                 const filesHtml = list.length
                     ? '<div class="info-value">' + list.map(u => {
                         const name = (u.split('/').pop() || '附件').substring(0, 30);
-                        return '<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--border);border-radius:4px;margin-right:8px;margin-bottom:6px;"><i class="fas fa-file-pdf" style="color:#d93025;"></i><span>' + name + '</span><a href="javascript:void(0)" onclick="viewPhotoOnline(\'' + u + '\')" style="color:var(--primary);"><i class="fas fa-eye"></i></a></div>';
+                        return '<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--border);border-radius:4px;margin-right:8px;margin-bottom:6px;"><i class="fas fa-file-pdf" style="color:#d93025;"></i><span>' + escapeHtml(name) + '</span><a href="javascript:void(0)" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="color:var(--primary);"><i class="fas fa-eye"></i></a></div>';
                     }).join('') + '</div>'
                     : '<div class="info-value empty">—</div>';
                 return '<div class="info-item full-width" style="flex-wrap:wrap;"><div class="info-label">' + label + '</div>' + filesHtml + '</div>';
@@ -8198,7 +8209,7 @@
                     inputHtml = '<textarea class="form-input" data-crud-key="' + f.key + '" rows="2">' + (val || '') + '</textarea>';
                 } else if (f.type === 'photo') {
                     const arr = Array.isArray(val) ? val : (val ? String(val).split(',').map(s => s.trim()).filter(Boolean) : []);
-                    const thumbHtml = arr.length ? '<div class="file-thumb-preview">' + arr.map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>' : '';
+                    const thumbHtml = arr.length ? '<div class="file-thumb-preview">' + arr.map(u => '<img src="' + escapeHtml(u) + '" alt="预览" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">').join('') + '</div>' : '';
                     inputHtml = '<input class="form-input" type="text" data-crud-key="' + f.key + '" data-crud-type="photo" value="' + arr.join(',').replace(/"/g, '&quot;') + '" placeholder="图片 URL，逗号分隔">' + thumbHtml;
                 } else if (f.key === 'patrolPointCoord' || f.key === 'location') {
                     // 巡查点位坐标/位置标注由 H5 现场打卡自动回传，PC 端只读展示，不提供地图选点
@@ -8265,7 +8276,7 @@
                     const photos = getPhotos(t);
                     const photoItemsHtml = photos.map(function(u, i) {
                         return '<div class="crud-add-danger-photo-item" style="position:relative;width:160px;height:120px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">' +
-                            '<img src="' + u + '" onclick="viewPhotoOnline(\'' + String(u).replace(/'/g, "\\'") + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                            '<img src="' + escapeHtml(u) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
                             '<button type="button" class="crud-add-danger-photo-remove" data-type="' + t.replace(/"/g, '&quot;') + '" data-photo-idx="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:#dc3545;color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>' +
                         '</div>';
                     }).join('');
@@ -8797,7 +8808,7 @@
                     const photos = getAddDangerPhotos(t);
                     const photoItemsHtml = photos.map((u, i) =>
                         '<div class="add-danger-photo-item" style="position:relative;width:160px;height:120px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">' +
-                            '<img src="' + u + '" onclick="viewPhotoOnline(\'' + u.replace(/'/g, "\\'") + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                            '<img src="' + escapeHtml(u) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
                             '<button type="button" class="add-danger-photo-remove" data-type="' + t.replace(/"/g, '&quot;') + '" data-photo-idx="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:#dc3545;color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>' +
                         '</div>'
                     ).join('');
@@ -8991,13 +9002,8 @@
             const completedNo = rs.completed === '否' ? ' checked' : '';
 
             const html =
-                // 标题（带出当前阶段）
-                '<div style="text-align:center;font-size:15px;font-weight:600;color:var(--text-primary);margin:-20px -20px 18px -20px;padding:12px 20px;border-bottom:1px solid var(--border);background:#f8f9fa;border-radius:6px 6px 0 0;box-sizing:border-box;width:auto;">整治情况' + (function(){
-                    try {
-                        const st = (currentHouseArch.measureStages || []).find(function(x){ return x.id === window.__rectifyEditStageId; });
-                        return st ? '<span style="font-size:12px;font-weight:normal;color:#909399;margin-left:8px;">第' + st.no + '阶段</span>' : '';
-                    } catch (e) { return ''; }
-                })() + '</div>' +
+                // 标题
+                '<div style="text-align:center;font-size:15px;font-weight:600;color:var(--text-primary);margin:-20px -20px 18px -20px;padding:12px 20px;border-bottom:1px solid var(--border);background:#f8f9fa;border-radius:6px 6px 0 0;box-sizing:border-box;width:auto;">整治情况</div>' +
                 // 整治措施
                 '<div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px;margin-bottom:18px;align-items:start;">' +
                     '<div style="font-size:13px;color:var(--text-secondary);padding-top:8px;text-align:right;background:#f8f9fa;padding:12px 14px;border-radius:4px;">整治措施</div>' +
@@ -9656,7 +9662,7 @@
                 const urls = (val || '').split('\n').map(s => s.trim()).filter(Boolean);
                 const thumbsHtml = urls.map((u, i) =>
                     '<div class="safe-photo-item" style="position:relative;width:160px;height:120px;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fafafa;">' +
-                        '<img src="' + esc(u) + '" alt="' + label + (i + 1) + '" onclick="viewPhotoOnline(\'' + esc(u) + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
+                        '<img src="' + esc(u) + '" alt="' + esc(label) + (i + 1) + '" onclick="viewPhotoOnline(\'' + escJs(u) + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
                         '<button type="button" class="safe-photo-remove" data-idx="' + idx + '" data-photo-idx="' + i + '" title="删除" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:#f5222d;color:#fff;border:none;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 1px 3px rgba(0,0,0,0.2);">×</button>' +
                     '</div>'
                 ).join('');
@@ -10933,7 +10939,7 @@
                 thumb.className = 'file-thumb-preview';
                 wrap.appendChild(thumb);
             }
-            thumb.innerHTML = urls.filter(u => u && u !== '—' && u !== '-').map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('');
+            thumb.innerHTML = urls.filter(u => u && u !== '—' && u !== '-').map(u => '<img src="' + escapeHtml(u) + '" alt="预览" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">').join('');
         }
 
         function renderSurveyPdfThumb(wrap) {
@@ -11426,7 +11432,7 @@
                 urlInput.dispatchEvent(new Event('input'));
                 let thumb = wrap.querySelector('.file-thumb-preview');
                 if (!thumb) { thumb = document.createElement('div'); thumb.className = 'file-thumb-preview'; wrap.appendChild(thumb); }
-                thumb.innerHTML = all.map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('');
+                thumb.innerHTML = all.map(u => '<img src="' + escapeHtml(u) + '" alt="预览" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">').join('');
             });
         }
 
@@ -12110,7 +12116,7 @@
                 thumb.className = 'file-thumb-preview';
                 wrap.appendChild(thumb);
             }
-            thumb.innerHTML = urls.filter(u => u && u !== '—' && u !== '-').map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('');
+            thumb.innerHTML = urls.filter(u => u && u !== '—' && u !== '-').map(u => '<img src="' + escapeHtml(u) + '" alt="预览" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">').join('');
         }
 
         // 通用附件上传（用于"鉴定报告"等字段，支持图片/PDF）
@@ -12157,10 +12163,10 @@
             list.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">已上传 ' + files.length + ' 个附件</div>' + files.map((f, idx) => {
                 const isImage = f.url && (f.url.startsWith('data:image') || f.url.startsWith('http') && /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(f.url));
                 const icon = isImage ? 'fa-image' : 'fa-file';
-                const preview = isImage ? ' onclick="viewPhotoOnline(\'' + f.url + '\')" style="cursor:pointer;color:var(--primary);"' : ' style="color:var(--text-secondary);"';
+                const preview = isImage ? ' onclick="viewPhotoOnline(\'' + escapeJsStr(f.url) + '\')" style="cursor:pointer;color:var(--primary);"' : ' style="color:var(--text-secondary);"';
                 return '<div class="project-file-item">' +
                     '<i class="fas ' + icon + '"></i> ' +
-                    '<span' + preview + '>' + (f.name || '附件') + ' <span style="color:#999;">(' + (f.size || '-') + ')</span></span>' +
+                    '<span' + preview + '>' + escapeHtml(f.name || '附件') + ' <span style="color:#999;">(' + (f.size || '-') + ')</span></span>' +
                     '<button type="button" class="project-file-remove" onclick="removeCommonFile(this, ' + idx + ')" title="删除"><i class="fas fa-times"></i></button>' +
                     '</div>';
             }).join('');
@@ -12319,7 +12325,7 @@
                     '<label class="form-label">现场照片</label>' +
                     '<div class="file-upload-wrap">' +
                         '<input class="form-input risk-edit-input" id="riskEditPhotos" type="text" data-scope="record" data-field="photos" value="' + ((rec.photos || '') + '').replace(/"/g, '&quot;') + '" placeholder="图片 URL，多个用英文逗号分隔">' +
-                        '<div class="file-thumb-preview">' + (rec.photos || '').split(',').map(function(u) { return u.trim(); }).filter(function(u) { return u && (u.startsWith('data:image') || u.startsWith('http')); }).map(function(u) { return '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">'; }).join('') + '</div>' +
+                        '<div class="file-thumb-preview">' + (rec.photos || '').split(',').map(function(u) { return u.trim(); }).filter(function(u) { return u && (u.startsWith('data:image') || u.startsWith('http')); }).map(function(u) { return '<img src="' + escapeHtml(u) + '" alt="预览" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">'; }).join('') + '</div>' +
                     '</div>' +
                 '</div></div>';
             document.getElementById('riskEditForm').innerHTML = html;
@@ -12481,10 +12487,10 @@
             if (!list.length) return '<div class="info-value empty">—</div>';
             if (list.length > 1 || (list[0] + '').indexOf('data:image') === 0) {
                 return '<div class="info-value photo-value"><div class="photo-grid">' +
-                    list.map(u => '<img src="' + u + '" alt="' + (label || '照片') + '" onclick="viewPhotoOnline(\'' + u + '\')" style="width:200px;height:150px;object-fit:cover;cursor:pointer;border-radius:4px;margin-right:8px;">').join('') +
+                    list.map(u => '<img src="' + escapeHtml(u) + '" alt="' + escapeHtml(label || '照片') + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:200px;height:150px;object-fit:cover;cursor:pointer;border-radius:4px;margin-right:8px;">').join('') +
                     '</div></div>';
             }
-            return '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + list[0] + '\')">' + (btnText || '查看文件') + '</button></div>';
+            return '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + escapeJsStr(list[0]) + '\')">' + (btnText || '查看文件') + '</button></div>';
         }
 
         // 生成 SVG 占位照片（用于整治计划等模块的示例图）
@@ -12758,10 +12764,10 @@
             list.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">已上传 ' + files.length + ' 个文件</div>' + files.map((f, idx) => {
                 const isImage = f.url && (f.url.startsWith('data:image') || f.url.startsWith('http') && /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(f.url));
                 const icon = isImage ? 'fa-image' : 'fa-file';
-                const preview = isImage ? ' onclick="viewPhotoOnline(\'' + f.url + '\')" style="cursor:pointer;color:var(--primary);"' : ' style="color:var(--text-secondary);"';
+                const preview = isImage ? ' onclick="viewPhotoOnline(\'' + escapeJsStr(f.url) + '\')" style="cursor:pointer;color:var(--primary);"' : ' style="color:var(--text-secondary);"';
                 return '<div class="project-file-item">' +
                     '<i class="fas ' + icon + '"></i> ' +
-                    '<span' + preview + '>' + (f.name || '附件') + ' <span style="color:#999;">(' + (f.size || '-') + ')</span></span>' +
+                    '<span' + preview + '>' + escapeHtml(f.name || '附件') + ' <span style="color:#999;">(' + (f.size || '-') + ')</span></span>' +
                     '<button type="button" class="project-file-remove" onclick="removeProjectFile(this, \'' + fieldKey + '\', ' + idx + ')" title="删除"><i class="fas fa-times"></i></button>' +
                     '</div>';
             }).join('');
@@ -12806,7 +12812,7 @@
                 const score = credit.score != null ? credit.score : org.score;
                 const level = credit.creditLevel || org.creditLevel;
                 const selected = org.orgId === selectedOrgId ? 'selected' : '';
-                return '<div class="org-card-item ' + selected + '" data-org-id="' + org.orgId + '" onclick="selectOrgForProject(\'' + org.orgId + '\')">' +
+                return '<div class="org-card-item ' + selected + '" data-org-id="' + escapeHtml(org.orgId) + '" onclick="selectOrgForProject(\'' + escapeJsStr(org.orgId) + '\')">' +
                     '<div class="org-card-name"><i class="fas fa-building"></i> ' + org.orgName + ' <span style="color:var(--text-secondary);font-weight:400;">(' + (org.orgType || '-') + ')</span></div>' +
                     '<div class="org-card-meta">' +
                         '<span><i class="fas fa-certificate"></i> 资质：' + (org.qual || '-') + '</span>' +
@@ -12979,7 +12985,7 @@
             }
             list.innerHTML = experts.map(e => {
                 const selected = e.expertId === selectedExpertId ? 'selected' : '';
-                return '<div class="org-card-item ' + selected + '" data-expert-id="' + e.expertId + '" onclick="selectExpertForProject(\'' + e.expertId + '\')">' +
+                return '<div class="org-card-item ' + selected + '" data-expert-id="' + escapeHtml(e.expertId) + '" onclick="selectExpertForProject(\'' + escapeJsStr(e.expertId) + '\')">' +
                     '<div class="org-card-name"><i class="fas fa-user-tie"></i> ' + e.name + ' <span style="color:var(--text-secondary);font-weight:400;">(' + (e.title || '-') + ')</span></div>' +
                     '<div class="org-card-meta">' +
                         '<span><i class="fas fa-building"></i> ' + (e.orgName || e.workplace || '-') + '</span>' +
@@ -13036,19 +13042,19 @@
             container.innerHTML = data.map(node => {
                 const photos = (node.photos || []).filter(u => u && u !== '—' && u !== '-');
                 const photoHtml = photos.length
-                    ? '<div class="photo-grid">' + photos.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>'
+                    ? '<div class="photo-grid">' + photos.map(u => '<img src="' + escapeHtml(u) + '" alt="照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">').join('') + '</div>'
                     : '';
                 const accept = node.acceptRecord || {};
                 const acceptHtml = accept.conclusion
-                    ? '<div style="margin-top:8px;"><strong>验收结论：</strong>' + accept.conclusion +
-                        ' | <strong>验收人：</strong>' + (accept.checker || '-') +
-                        ' | <strong>验收日期：</strong>' + (accept.checkDate || '-') + '</div>'
+                    ? '<div style="margin-top:8px;"><strong>验收结论：</strong>' + escapeHtml(accept.conclusion) +
+                        ' | <strong>验收人：</strong>' + escapeHtml(accept.checker || '-') +
+                        ' | <strong>验收日期：</strong>' + escapeHtml(accept.checkDate || '-') + '</div>'
                     : '';
-                return '<div class="ct-node" data-node-id="' + (node.nodeId || '') + '">' +
+                return '<div class="ct-node" data-node-id="' + escapeHtml(node.nodeId || '') + '">' +
                     '<div class="ct-node-dot"></div>' +
                     '<div class="ct-node-header">' +
-                        '<span class="ct-node-date">' + (node.nodeDate || '-') + '</span>' +
-                        '<span class="ct-node-title">' + (node.title || '-') + '</span>' +
+                        '<span class="ct-node-date">' + escapeHtml(node.nodeDate || '-') + '</span>' +
+                        '<span class="ct-node-title">' + escapeHtml(node.title || '-') + '</span>' +
                     '</div>' +
                     '<div class="ct-node-body">' +
                         '<div>' + (node.description || '-') + '</div>' +
@@ -13070,21 +13076,21 @@
             container.innerHTML = data.map((node, idx) => {
                 const photos = (node.photos || []).filter(u => u && u !== '—' && u !== '-');
                 const photoHtml = photos.length
-                    ? '<div class="photo-grid">' + photos.map(u => '<img src="' + u + '" alt="照片" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>'
+                    ? '<div class="photo-grid">' + photos.map(u => '<img src="' + escapeHtml(u) + '" alt="照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">').join('') + '</div>'
                     : '';
                 const accept = node.acceptRecord || {};
                 const acceptHtml = accept.conclusion
-                    ? '<div style="margin-top:8px;"><strong>验收结论：</strong>' + accept.conclusion +
-                        ' | <strong>验收人：</strong>' + (accept.checker || '-') +
-                        ' | <strong>验收日期：</strong>' + (accept.checkDate || '-') + '</div>'
+                    ? '<div style="margin-top:8px;"><strong>验收结论：</strong>' + escapeHtml(accept.conclusion) +
+                        ' | <strong>验收人：</strong>' + escapeHtml(accept.checker || '-') +
+                        ' | <strong>验收日期：</strong>' + escapeHtml(accept.checkDate || '-') + '</div>'
                     : '';
-                return '<div class="ct-node" data-node-id="' + (node.nodeId || '') + '">' +
+                return '<div class="ct-node" data-node-id="' + escapeHtml(node.nodeId || '') + '">' +
                     '<div class="ct-node-dot"></div>' +
                     '<div class="ct-node-header">' +
-                        '<span class="ct-node-date">' + (node.nodeDate || '-') + '</span>' +
-                        '<span class="ct-node-title">' + (node.title || '-') + '</span>' +
-                        '<button type="button" class="photo-btn" style="margin-left:auto;" onclick="openProjectTimelineNodeModal(\'' + (node.nodeId || '') + '\')">编辑</button>' +
-                        '<button type="button" class="photo-btn" style="margin-left:6px;border-color:var(--danger);color:var(--danger);" onclick="deleteProjectTimelineNode(\'' + (node.nodeId || '') + '\')">删除</button>' +
+                        '<span class="ct-node-date">' + escapeHtml(node.nodeDate || '-') + '</span>' +
+                        '<span class="ct-node-title">' + escapeHtml(node.title || '-') + '</span>' +
+                        '<button type="button" class="photo-btn" style="margin-left:auto;" onclick="openProjectTimelineNodeModal(\'' + escapeJsStr(node.nodeId || '') + '\')">编辑</button>' +
+                        '<button type="button" class="photo-btn" style="margin-left:6px;border-color:var(--danger);color:var(--danger);" onclick="deleteProjectTimelineNode(\'' + escapeJsStr(node.nodeId || '') + '\')">删除</button>' +
                     '</div>' +
                     '<div class="ct-node-body">' +
                         '<div>' + (node.description || '-') + '</div>' +
@@ -13191,7 +13197,7 @@
                 thumb.className = 'file-thumb-preview';
                 document.getElementById('timelineNodePhotosWrap').appendChild(thumb);
             }
-            thumb.innerHTML = urls.map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('');
+            thumb.innerHTML = urls.map(u => '<img src="' + escapeHtml(u) + '" alt="预览" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">').join('');
         }
 
         function renderTimelineNodeFileList() {
