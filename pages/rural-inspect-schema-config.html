@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>排查表单配置 - 农村自建房</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../h5/assets/css/tokens.css">
+<style>
+:root { --pri: #1677ff; --pri-light: #e8f0fe; --bd: #e5e7eb; --tx: #1f2329; --tx2: #646a73; --bg: #f5f6f8; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--tx); font-size: 14px; }
+
+/* ===== 顶部 ===== */
+.topbar { height: 52px; background: #fff; border-bottom: 1px solid var(--bd); display: flex; align-items: center; padding: 0 20px; gap: 14px; position: sticky; top: 0; z-index: 50; }
+.topbar h1 { font-size: 16px; font-weight: 600; }
+.topbar .sub { font-size: 12px; color: var(--tx2); }
+.topbar .spacer { flex: 1; }
+.dirty-dot { display: none; width: 8px; height: 8px; border-radius: 50%; background: #fa8c16; }
+.dirty-dot.on { display: inline-block; }
+.btn { padding: 7px 18px; border-radius: 6px; border: 1px solid var(--bd); background: #fff; cursor: pointer; font-size: 13px; color: var(--tx); }
+.btn:hover { border-color: var(--pri); color: var(--pri); }
+.btn.pri { background: var(--pri); border-color: var(--pri); color: #fff; }
+.btn.pri:hover { opacity: .9; color: #fff; }
+.btn.sm { padding: 3px 10px; font-size: 12px; }
+
+/* ===== 三栏 ===== */
+.layout { display: flex; height: calc(100vh - 52px); }
+.col-rounds { width: 230px; background: #fff; border-right: 1px solid var(--bd); overflow-y: auto; flex-shrink: 0; }
+.col-editor { flex: 1; overflow-y: auto; padding: 16px; min-width: 420px; }
+.col-preview { width: 400px; background: #eceef1; border-left: 1px solid var(--bd); overflow-y: auto; flex-shrink: 0; padding: 16px; display: flex; flex-direction: column; align-items: center; }
+
+/* ===== 左栏：轮次 ===== */
+.round-list-head { padding: 14px 14px 8px; font-size: 13px; font-weight: 600; color: var(--tx2); display: flex; justify-content: space-between; align-items: center; }
+.round-item { margin: 4px 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+.round-item:hover { background: var(--bg); }
+.round-item.active { background: var(--pri-light); border-color: var(--pri); }
+.round-item .ri-name { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.round-item .ri-id { font-size: 11px; color: var(--tx2); margin-top: 3px; font-family: Consolas, monospace; }
+.round-item .ri-actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+.tag.cur { background: #e6f4ea; color: #1e8e3e; }
+.tag.arc { background: #f1f3f4; color: #80868b; }
+.ri-link { font-size: 11px; color: var(--pri); cursor: pointer; }
+.ri-link:hover { text-decoration: underline; }
+.ri-link.danger { color: #d93025; }
+
+/* ===== 中栏：分区/字段 ===== */
+.round-meta { background: #fff; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; border: 1px solid var(--bd); }
+.round-meta .rm-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.round-meta .rm-row:last-child { margin-bottom: 0; }
+.round-meta label { font-size: 12px; color: var(--tx2); width: 70px; flex-shrink: 0; }
+.round-meta input[type=text] { flex: 1; padding: 6px 10px; border: 1px solid var(--bd); border-radius: 6px; font-size: 13px; }
+
+.section-card { background: #fff; border-radius: 10px; border: 1px solid var(--bd); margin-bottom: 14px; overflow: hidden; }
+.sec-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fafbfc; border-bottom: 1px solid var(--bd); }
+.sec-head .sec-no { width: 22px; height: 22px; border-radius: 50%; background: var(--pri); color: #fff; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sec-head .sec-title-input { border: none; background: transparent; font-size: 14px; font-weight: 600; flex: 1; min-width: 0; border-bottom: 1px dashed transparent; }
+.sec-head .sec-title-input:focus { outline: none; border-bottom-color: var(--pri); }
+.sec-head .sec-mode { font-size: 12px; color: var(--tx2); display: flex; align-items: center; gap: 4px; white-space: nowrap; cursor: pointer; }
+.icon-btn { width: 24px; height: 24px; border: none; background: transparent; color: var(--tx2); cursor: pointer; border-radius: 4px; font-size: 13px; }
+.icon-btn:hover { background: #eceef1; color: var(--pri); }
+.icon-btn.danger:hover { color: #d93025; }
+
+.field-row { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid #f2f3f5; cursor: pointer; }
+.field-row:hover { background: #f8faff; }
+.field-row:last-child { border-bottom: none; }
+.field-row .f-label { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field-row .f-label .req { color: #d93025; margin-left: 2px; }
+.field-row .f-key { font-size: 11px; color: var(--tx2); font-family: Consolas, monospace; }
+.field-row .f-widget { font-size: 11px; background: var(--pri-light); color: var(--pri); padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.field-row .f-arch { font-size: 11px; color: #1e8e3e; font-family: Consolas, monospace; white-space: nowrap; }
+.field-empty { padding: 18px; text-align: center; color: var(--tx2); font-size: 12px; }
+.add-line { padding: 8px 14px; }
+.add-btn { width: 100%; padding: 7px; border: 1px dashed var(--bd); border-radius: 6px; background: transparent; color: var(--pri); cursor: pointer; font-size: 12px; }
+.add-btn:hover { border-color: var(--pri); background: var(--pri-light); }
+
+/* ===== 右栏：预览 ===== */
+.preview-head { width: 100%; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.preview-head .ph-title { font-size: 13px; font-weight: 600; color: var(--tx2); }
+.preview-head select { flex: 1; padding: 5px 8px; border: 1px solid var(--bd); border-radius: 6px; font-size: 12px; min-width: 0; }
+.phone-sim { width: 375px; background: #fff; border-radius: 28px; border: 8px solid #202124; box-shadow: 0 8px 30px rgba(0,0,0,.18); overflow: hidden; flex-shrink: 0; }
+.phone-sim .ps-screen { height: 640px; overflow-y: auto; background: #f5f6f8; padding: 12px 10px 30px; }
+.phone-sim .ps-bar { height: 26px; background: #202124; display: flex; align-items: center; justify-content: center; }
+.phone-sim .ps-bar i { width: 90px; height: 16px; background: #202124; border-radius: 0 0 10px 10px; display: block; }
+
+/* 预览区控件样式（与 H5 demo 页一致） */
+.ps-screen .section { background: #fff; border-radius: 12px; padding: 14px 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.ps-screen .sec-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.ps-screen .section-num { color: var(--pri); font-weight: 700; }
+.ps-screen .bi-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f1f3; font-size: 12px; }
+.ps-screen .bi-row:last-child { border-bottom: none; }
+.ps-screen .bi-label { color: #646a73; }
+.ps-screen .bi-value { color: #1f2329; font-weight: 500; max-width: 60%; text-align: right; }
+.ps-screen .check-item { margin-bottom: 12px; }
+.ps-screen .ci-label { font-size: 12px; color: #646a73; margin-bottom: 7px; line-height: 1.5; }
+.ps-screen .req-star { color: #e02020; margin-left: 2px; }
+.ps-screen .form-input, .ps-screen .form-textarea { width: 100%; padding: 9px 10px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: inherit; background: #fff; }
+.ps-screen .radio-row, .ps-screen .checkbox-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.ps-screen .radio-pill, .ps-screen .checkbox-pill { padding: 6px 14px; border: 1px solid #e5e7eb; border-radius: 15px; font-size: 12px; color: #646a73; cursor: pointer; user-select: none; background: #fff; }
+.ps-screen .radio-pill.active, .ps-screen .checkbox-pill.active { border-color: var(--pri); color: var(--pri); background: var(--pri-light); font-weight: 500; }
+.ps-screen .hazard-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; margin-bottom: 9px; background: #fafbfc; }
+.ps-screen .hc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ps-screen .hc-title { font-size: 12px; font-weight: 600; }
+.ps-screen .hc-del { width: 22px; height: 22px; border-radius: 50%; background: #fee; color: #e02020; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
+.ps-screen .hazard-add { border: 1px dashed #e5e7eb; border-radius: 8px; padding: 9px; text-align: center; color: var(--pri); font-size: 12px; cursor: pointer; }
+.ps-screen .view-text { font-size: 13px; padding: 3px 0; }
+.ps-screen .view-empty { color: #9aa0a6; }
+.ps-screen .check-item:last-child { margin-bottom: 0; }
+
+/* ===== Modal ===== */
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100; display: none; align-items: center; justify-content: center; }
+.modal-mask.show { display: flex; }
+.modal { width: 560px; max-width: 92vw; max-height: 86vh; background: #fff; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
+.modal-head { padding: 14px 18px; border-bottom: 1px solid var(--bd); display: flex; justify-content: space-between; align-items: center; }
+.modal-head .mh-title { font-size: 15px; font-weight: 600; }
+.modal-body { padding: 16px 18px; overflow-y: auto; }
+.modal-foot { padding: 12px 18px; border-top: 1px solid var(--bd); display: flex; justify-content: flex-end; gap: 10px; }
+.fg { margin-bottom: 13px; }
+.fg > label { display: block; font-size: 12px; color: var(--tx2); margin-bottom: 5px; }
+.fg input[type=text], .fg select, .fg textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--bd); border-radius: 6px; font-size: 13px; font-family: inherit; }
+.fg textarea { resize: vertical; }
+.fg .hint { font-size: 11px; color: #9aa0a6; margin-top: 4px; }
+.fg-check { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.fg-row { display: flex; gap: 12px; }
+.fg-row .fg { flex: 1; }
+.sub-field-list { border: 1px solid var(--bd); border-radius: 8px; }
+.sub-field-row { display: grid; grid-template-columns: 1fr 1fr 100px 1fr 28px; gap: 6px; padding: 6px 8px; border-bottom: 1px solid #f2f3f5; align-items: center; }
+.sub-field-row:last-child { border-bottom: none; }
+.sub-field-row input, .sub-field-row select { padding: 5px 7px; border: 1px solid var(--bd); border-radius: 5px; font-size: 12px; width: 100%; }
+.sub-field-row .sfr-head { font-size: 11px; color: var(--tx2); }
+
+.toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.78); color: #fff; padding: 10px 22px; border-radius: 22px; font-size: 13px; z-index: 200; display: none; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+    <h1>排查表单配置</h1>
+    <span class="sub">农村自建房 · Schema 驱动 · 配置即推送 H5</span>
+    <span class="dirty-dot" id="dirtyDot" title="有未保存修改"></span>
+    <span class="spacer"></span>
+    <button class="btn" id="btnReload"><i class="fa-solid fa-rotate"></i> 重新加载</button>
+    <button class="btn pri" id="btnSave"><i class="fa-solid fa-paper-plane"></i> 保存并推送 H5</button>
+</div>
+
+<div class="layout">
+    <!-- 左栏：轮次 -->
+    <div class="col-rounds">
+        <div class="round-list-head">排查轮次 <span class="ri-link" id="btnAddRound">+ 新建轮次</span></div>
+        <div id="roundList"></div>
+    </div>
+
+    <!-- 中栏：编辑 -->
+    <div class="col-editor" id="editorCol"></div>
+
+    <!-- 右栏：预览 -->
+    <div class="col-preview">
+        <div class="preview-head">
+            <span class="ph-title"><i class="fa-solid fa-mobile-screen"></i> H5 实时预览</span>
+            <select id="previewHouseSelect"><option value="">（加载档案…）</option></select>
+        </div>
+        <div class="phone-sim">
+            <div class="ps-bar"><i></i></div>
+            <div class="ps-screen" id="previewRoot"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 字段属性 Modal -->
+<div class="modal-mask" id="fieldModal">
+    <div class="modal">
+        <div class="modal-head"><span class="mh-title">字段属性</span><button class="icon-btn" id="fieldModalClose"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="modal-body">
+            <div class="fg-row">
+                <div class="fg"><label>字段标识 key（英文，提交数据的属性名）</label><input type="text" id="fmKey" placeholder="如 checkFindTime"></div>
+                <div class="fg"><label>显示名称 label</label><input type="text" id="fmLabel" placeholder="如 排查发现时间"></div>
+            </div>
+            <div class="fg-row">
+                <div class="fg"><label>控件类型</label><select id="fmWidget"></select></div>
+                <div class="fg"><label>占位提示 placeholder</label><input type="text" id="fmPlaceholder"></div>
+            </div>
+            <div class="fg" id="fgOptions"><label>选项（每行一个）</label><textarea id="fmOptions" rows="4" placeholder="未发现&#10;一般&#10;严重"></textarea></div>
+            <div class="fg-row" id="fgChecks">
+                <div class="fg"><label class="fg-check"><input type="checkbox" id="fmRequired"> 必填</label></div>
+                <div class="fg" id="fgAllowCustom"><label class="fg-check"><input type="checkbox" id="fmAllowCustom"> 允许自定义输入</label></div>
+                <div class="fg" id="fgAllowOther"><label class="fg-check"><input type="checkbox" id="fmAllowOther"> 允许「其他」项</label></div>
+            </div>
+            <div class="fg">
+                <label>档案取值来源 archSource（风险档案 = 数据仓库，字段值从此预填）</label>
+                <input type="text" id="fmArchSource" list="archFieldList" placeholder="如 overview.floors，留空则不预填">
+                <datalist id="archFieldList"></datalist>
+                <div class="hint">从档案字段选，或手动输入点路径；选「可编辑」时排查员可在档案值基础上修改</div>
+            </div>
+            <div class="fg-row">
+                <div class="fg"><label>单位后缀 suffix（预填时拼接，如 层 / m²）</label><input type="text" id="fmSuffix"></div>
+                <div class="fg"><label>多行文本行数 rows</label><input type="text" id="fmRows" placeholder="默认 2"></div>
+            </div>
+            <div class="fg" id="fgItemFields">
+                <label>隐患明细子字段（每行一条：key / 名称 / 控件 / 选项(逗号分隔)）</label>
+                <div class="sub-field-list" id="fmItemFields"></div>
+                <button class="add-btn" style="margin-top:8px" id="fmAddSubField">+ 添加子字段</button>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn" id="fieldModalCancel">取消</button>
+            <button class="btn pri" id="fieldModalOk">确定</button>
+        </div>
+    </div>
+</div>
+
+<!-- 新建轮次 Modal -->
+<div class="modal-mask" id="roundModal">
+    <div class="modal" style="width:440px">
+        <div class="modal-head"><span class="mh-title">新建排查轮次</span><button class="icon-btn" id="roundModalClose"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="modal-body">
+            <div class="fg"><label>轮次标识 roundId（英文，如 review-2026）</label><input type="text" id="rmRoundId" placeholder="review-2026"></div>
+            <div class="fg"><label>轮次名称</label><input type="text" id="rmName" placeholder="2026年常态化监测"></div>
+            <div class="fg"><label>基于哪个轮次复制字段（可选）</label><select id="rmBase"><option value="">（空白开始）</option></select></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn" id="roundModalCancel">取消</button>
+            <button class="btn pri" id="roundModalOk">创建</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="../h5/assets/js/schema-renderer.js"></script>
+<script>
+(function() {
+    'use strict';
+
+    // ============ 常量 ============
+    var WIDGETS = [
+        { value: 'text',        label: '单行文本' },
+        { value: 'month',       label: '月份选择' },
+        { value: 'date',        label: '日期选择' },
+        { value: 'select',      label: '下拉选择' },
+        { value: 'radio',       label: '单选（平铺）' },
+        { value: 'checkbox',    label: '多选（平铺）' },
+        { value: 'textarea',    label: '多行文本' },
+        { value: 'hazard-list', label: '隐患明细列表' }
+    ];
+    // 风险档案可用字段（数据仓库字段目录）
+    var ARCH_FIELDS = [
+        { path: 'district',               label: '所在区' },
+        { path: 'street',                 label: '街镇' },
+        { path: 'village',                label: '村居委' },
+        { path: 'groupName',              label: '组' },
+        { path: 'roadName',               label: '路' },
+        { path: 'buildingNo',             label: '号栋' },
+        { path: 'owner',                  label: '产权人' },
+        { path: 'no',                     label: '唯一标识（房屋编号）' },
+        { path: 'address',                label: '地址' },
+        { path: 'preliminaryJudge',       label: '初步判定' },
+        { path: 'appraisalConclusion',    label: '鉴定结论' },
+        { path: 'overview.usage',         label: '房屋用途' },
+        { path: 'overview.specificUsage', label: '具体用途' },
+        { path: 'overview.otherUsage',    label: '其他用途' },
+        { path: 'overview.floors',        label: '建筑层数' },
+        { path: 'overview.buildingArea',  label: '建筑面积' },
+        { path: 'overview.builtYear',     label: '建成时间' }
+    ];
+
+    // ============ 状态 ============
+    var state = {
+        schemas: { currentRoundId: '', rounds: [] },
+        activeRoundId: '',
+        dirty: false,
+        houses: [],          // 预览用档案 [{no, label, data}]
+        previewHouseNo: ''
+    };
+    var editing = null;      // { secIdx, fieldIdx } 当前 modal 编辑目标
+
+    // ============ 工具 ============
+    function $(id) { return document.getElementById(id); }
+    function esc(s) {
+        return String(s === null || s === undefined ? '' : s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+    function toast(msg, ms) {
+        var t = $('toast'); t.textContent = msg; t.style.display = 'block';
+        clearTimeout(t._tm); t._tm = setTimeout(function(){ t.style.display = 'none'; }, ms || 2000);
+    }
+    function markDirty() { state.dirty = true; $('dirtyDot').classList.add('on'); }
+    function widgetLabel(w) { var f = WIDGETS.find(function(x){return x.value===w;}); return f ? f.label : w; }
+    function activeRound() {
+        return state.schemas.rounds.find(function(r){ return r.roundId === state.activeRoundId; }) || null;
+    }
+
+    // ============ 数据加载 / 保存 ============
+    function loadSchemas() {
+        return fetch('/api/round-schemas').then(function(r){ return r.ok ? r.json() : null; }).then(function(s) {
+            if (!s) { toast('配置加载失败'); return; }
+            state.schemas = s;
+            if (!state.activeRoundId || !state.schemas.rounds.some(function(r){return r.roundId===state.activeRoundId;})) {
+                state.activeRoundId = s.currentRoundId || (s.rounds[0] && s.rounds[0].roundId) || '';
+            }
+            state.dirty = false; $('dirtyDot').classList.remove('on');
+            renderAll();
+        });
+    }
+
+    function loadHouses() {
+        return fetch('/api/rural-house-arch-draft').then(function(r){ return r.ok ? r.json() : {}; }).then(function(obj) {
+            var list = [];
+            Object.keys(obj || {}).forEach(function(no) {
+                var h = obj[no];
+                list.push({ no: no, label: no + ' · ' + (h.owner || '') + '（' + (h.village || h.street || '') + '）', data: h });
+            });
+            state.houses = list;
+            if (!state.previewHouseNo && list.length) state.previewHouseNo = list[0].no;
+            renderHouseSelect();
+            renderPreview();
+        }).catch(function(){ /* 预览数据失败不阻塞 */ });
+    }
+
+    function saveAndPush() {
+        fetch('/api/round-schemas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(state.schemas)
+        }).then(function(r){ return r.json(); }).then(function(res) {
+            if (res && res.success) {
+                state.dirty = false; $('dirtyDot').classList.remove('on');
+                toast('✅ 已保存并推送，H5 下次进入自动生效', 2600);
+            } else {
+                toast('保存失败：' + ((res && res.error) || '未知错误'));
+            }
+        }).catch(function(){ toast('服务不可用'); });
+    }
+
+    // ============ 左栏：轮次 ============
+    function renderRoundList() {
+        var box = $('roundList');
+        box.innerHTML = state.schemas.rounds.map(function(r) {
+            var isCur = r.roundId === state.schemas.currentRoundId;
+            var isActive = r.roundId === state.activeRoundId;
+            var h = '<div class="round-item' + (isActive ? ' active' : '') + '" data-rid="' + esc(r.roundId) + '">';
+            h += '<div class="ri-name">' + esc(r.name);
+            if (isCur) h += ' <span class="tag cur">当前轮次</span>';
+            if (r.status === 'archived') h += ' <span class="tag arc">已归档</span>';
+            h += '</div><div class="ri-id">' + esc(r.roundId) + ' · v' + (r.version || 1) + '</div>';
+            if (isActive) {
+                h += '<div class="ri-actions">';
+                if (!isCur) h += '<span class="ri-link" data-act="setcur">设为当前</span>';
+                h += '<span class="ri-link" data-act="toggle">' + (r.status === 'archived' ? '重新激活' : '归档') + '</span>';
+                if (r.status === 'archived' && !isCur) h += '<span class="ri-link danger" data-act="del">删除</span>';
+                h += '</div>';
+            }
+            return h + '</div>';
+        }).join('') || '<div class="field-empty">暂无轮次，点击上方「新建轮次」</div>';
+    }
+
+    // ============ 中栏：分区/字段 ============
+    function renderEditor() {
+        var col = $('editorCol');
+        var round = activeRound();
+        if (!round) { col.innerHTML = '<div class="field-empty">请先在左侧选择或新建轮次</div>'; return; }
+
+        var h = '<div class="round-meta">';
+        h += '<div class="rm-row"><label>轮次名称</label><input type="text" id="rmNameEdit" value="' + esc(round.name) + '"></div>';
+        h += '<div class="rm-row"><label>roundId</label><input type="text" value="' + esc(round.roundId) + '" disabled style="background:#f5f6f8"></div>';
+        h += '</div>';
+
+        (round.sections || []).forEach(function(sec, si) {
+            h += '<div class="section-card" data-sec="' + si + '">';
+            h += '<div class="sec-head">';
+            h += '<span class="sec-no">' + (si + 1) + '</span>';
+            h += '<input type="text" class="sec-title-input" data-sec-title value="' + esc(sec.title) + '">';
+            h += '<label class="sec-mode"><input type="checkbox" data-sec-mode ' + (sec.mode === 'readonly-prefill' ? 'checked' : '') + '> 档案只读底数</label>';
+            h += '<button class="icon-btn" data-sec-move="-1" title="上移"><i class="fa-solid fa-arrow-up"></i></button>';
+            h += '<button class="icon-btn" data-sec-move="1" title="下移"><i class="fa-solid fa-arrow-down"></i></button>';
+            h += '<button class="icon-btn danger" data-sec-del title="删除分区"><i class="fa-solid fa-trash"></i></button>';
+            h += '</div>';
+
+            (sec.fields || []).forEach(function(f, fi) {
+                h += '<div class="field-row" data-field="' + fi + '">';
+                h += '<span class="f-label">' + esc(f.label || '(未命名)') + (f.required ? '<span class="req">*</span>' : '') + '</span>';
+                h += '<span class="f-key">' + esc(f.key) + '</span>';
+                if (f.archSource) h += '<span class="f-arch" title="档案预填来源">⇠ ' + esc(f.archSource) + '</span>';
+                h += '<span class="f-widget">' + widgetLabel(f.widget) + '</span>';
+                h += '<button class="icon-btn" data-field-move="-1" title="上移"><i class="fa-solid fa-arrow-up"></i></button>';
+                h += '<button class="icon-btn" data-field-move="1" title="下移"><i class="fa-solid fa-arrow-down"></i></button>';
+                h += '<button class="icon-btn danger" data-field-del title="删除"><i class="fa-solid fa-trash"></i></button>';
+                h += '</div>';
+            });
+            if (!(sec.fields || []).length) h += '<div class="field-empty">暂无字段</div>';
+            h += '<div class="add-line"><button class="add-btn" data-field-add>+ 添加字段</button></div>';
+            h += '</div>';
+        });
+        h += '<button class="add-btn" data-sec-add style="padding:12px;font-size:13px">+ 添加分区</button>';
+        col.innerHTML = h;
+
+        $('rmNameEdit').addEventListener('change', function() { round.name = this.value.trim() || round.name; markDirty(); renderRoundList(); renderPreview(); });
+    }
+
+    // ============ 右栏：预览 ============
+    function renderHouseSelect() {
+        var sel = $('previewHouseSelect');
+        sel.innerHTML = state.houses.map(function(hh) {
+            return '<option value="' + esc(hh.no) + '"' + (hh.no === state.previewHouseNo ? ' selected' : '') + '>' + esc(hh.label) + '</option>';
+        }).join('') || '<option value="">（无档案数据）</option>';
+    }
+
+    function renderPreview() {
+        var round = activeRound();
+        var root = $('previewRoot');
+        if (!round) { root.innerHTML = '<div class="field-empty">无轮次</div>'; return; }
+        var hh = state.houses.find(function(x){ return x.no === state.previewHouseNo; });
+        try {
+            SchemaRenderer.render(root, round, { house: hh ? hh.data : null });
+        } catch (e) {
+            root.innerHTML = '<div class="field-empty">预览渲染失败：' + esc(e.message) + '</div>';
+        }
+    }
+
+    function renderAll() { renderRoundList(); renderEditor(); renderPreview(); }
+
+    // ============ 字段 Modal ============
+    function openFieldModal(secIdx, fieldIdx) {
+        editing = { secIdx: secIdx, fieldIdx: fieldIdx };
+        var round = activeRound();
+        var f = (fieldIdx === null || fieldIdx === undefined) ? null : round.sections[secIdx].fields[fieldIdx];
+        var isNew = !f;
+        f = f || { key: '', label: '', widget: 'text' };
+
+        $('fmKey').value = f.key || '';
+        $('fmKey').disabled = !isNew;
+        $('fmLabel').value = f.label || '';
+        $('fmWidget').value = f.widget || 'text';
+        $('fmPlaceholder').value = f.placeholder || '';
+        $('fmOptions').value = (f.options || []).join('\n');
+        $('fmRequired').checked = !!f.required;
+        $('fmAllowCustom').checked = !!f.allowCustom;
+        $('fmAllowOther').checked = !!f.allowOther;
+        $('fmArchSource').value = f.archSource || '';
+        $('fmSuffix').value = f.suffix || '';
+        $('fmRows').value = f.rows || '';
+        syncWidgetFields();
+        renderSubFields(f.itemFields || []);
+        $('fieldModal').classList.add('show');
+    }
+
+    function syncWidgetFields() {
+        var w = $('fmWidget').value;
+        var needOptions = ['select', 'radio', 'checkbox'].indexOf(w) > -1;
+        $('fgOptions').style.display = needOptions ? '' : 'none';
+        $('fgAllowCustom').style.display = w === 'radio' ? '' : 'none';
+        $('fgAllowOther').style.display = w === 'checkbox' ? '' : 'none';
+        $('fgItemFields').style.display = w === 'hazard-list' ? '' : 'none';
+    }
+
+    function renderSubFields(items) {
+        var box = $('fmItemFields');
+        var h = '<div class="sub-field-row sfr-head"><span>key</span><span>名称</span><span>控件</span><span>选项(逗号分隔)</span><span></span></div>';
+        items.forEach(function(sf, i) {
+            h += '<div class="sub-field-row" data-sf="' + i + '">';
+            h += '<input type="text" data-sf-key value="' + esc(sf.key) + '">';
+            h += '<input type="text" data-sf-label value="' + esc(sf.label || '') + '">';
+            h += '<select data-sf-widget>' + ['text','radio','select','textarea','date','month'].map(function(w) {
+                return '<option value="' + w + '"' + (sf.widget === w ? ' selected' : '') + '>' + widgetLabel(w) + '</option>';
+            }).join('') + '</select>';
+            h += '<input type="text" data-sf-options value="' + esc((sf.options || []).join(',')) + '" placeholder="radio/select 填">';
+            h += '<button class="icon-btn danger" data-sf-del><i class="fa-solid fa-trash"></i></button>';
+            h += '</div>';
+        });
+        box.innerHTML = h;
+    }
+
+    function collectSubFields() {
+        var out = [];
+        $('fmItemFields').querySelectorAll('.sub-field-row[data-sf]').forEach(function(row) {
+            var key = row.querySelector('[data-sf-key]').value.trim();
+            if (!key) return;
+            var sf = {
+                key: key,
+                label: row.querySelector('[data-sf-label]').value.trim(),
+                widget: row.querySelector('[data-sf-widget]').value
+            };
+            var opts = row.querySelector('[data-sf-options]').value.trim();
+            if (opts) sf.options = opts.split(/[,，]/).map(function(s){ return s.trim(); }).filter(Boolean);
+            if (sf.widget === 'radio' && sf.options && sf.options.length) sf.allowCustom = true;
+            if (sf.widget === 'textarea') sf.rows = 2;
+            out.push(sf);
+        });
+        return out;
+    }
+
+    function saveFieldModal() {
+        var round = activeRound();
+        var sec = round.sections[editing.secIdx];
+        var isNew = editing.fieldIdx === null || editing.fieldIdx === undefined;
+        var key = $('fmKey').value.trim();
+        var label = $('fmLabel').value.trim();
+        if (!key || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(key)) { toast('key 须为英文开头标识'); return; }
+        if (!label) { toast('请填写显示名称'); return; }
+        if (isNew && sec.fields.some(function(f){ return f.key === key; })) { toast('该分区内 key 已存在'); return; }
+
+        var f = isNew ? { key: key } : sec.fields[editing.fieldIdx];
+        f.label = label;
+        f.widget = $('fmWidget').value;
+        var ph = $('fmPlaceholder').value.trim();
+        if (ph) f.placeholder = ph; else delete f.placeholder;
+        if (['select','radio','checkbox'].indexOf(f.widget) > -1) {
+            f.options = $('fmOptions').value.split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+            if (!f.options.length) { toast('请至少填写一个选项'); return; }
+        } else delete f.options;
+        if ($('fmRequired').checked) f.required = true; else delete f.required;
+        if (f.widget === 'radio' && $('fmAllowCustom').checked) f.allowCustom = true; else delete f.allowCustom;
+        if (f.widget === 'checkbox' && $('fmAllowOther').checked) f.allowOther = true; else delete f.allowOther;
+        var arch = $('fmArchSource').value.trim();
+        if (arch) f.archSource = arch; else delete f.archSource;
+        var suffix = $('fmSuffix').value.trim();
+        if (suffix) f.suffix = suffix; else delete f.suffix;
+        var rows = parseInt($('fmRows').value, 10);
+        if (f.widget === 'textarea' && rows > 0) f.rows = rows; else if (f.widget === 'textarea') f.rows = 2; else delete f.rows;
+        if (f.widget === 'hazard-list') {
+            f.itemFields = collectSubFields();
+            if (!f.itemFields.length) { toast('隐患明细至少一个子字段'); return; }
+        } else delete f.itemFields;
+
+        if (isNew) sec.fields.push(f);
+        markDirty();
+        $('fieldModal').classList.remove('show');
+        renderEditor(); renderPreview();
+    }
+
+    // ============ 事件 ============
+    // 左栏
+    $('roundList').addEventListener('click', function(e) {
+        var link = e.target.closest('.ri-link');
+        var item = e.target.closest('.round-item');
+        if (!item) return;
+        var rid = item.dataset.rid;
+        var round = state.schemas.rounds.find(function(r){ return r.roundId === rid; });
+        if (link) {
+            var act = link.dataset.act;
+            if (act === 'setcur') { state.schemas.currentRoundId = rid; markDirty(); toast('已将「' + round.name + '」设为当前轮次（保存推送后 H5 生效）'); }
+            if (act === 'toggle') { round.status = round.status === 'archived' ? 'active' : 'archived'; markDirty(); }
+            if (act === 'del') {
+                if (!confirm('删除轮次「' + round.name + '」？历史排查记录回放将找不到该轮次配置。')) return;
+                state.schemas.rounds = state.schemas.rounds.filter(function(r){ return r.roundId !== rid; });
+                if (state.activeRoundId === rid) state.activeRoundId = state.schemas.currentRoundId || (state.schemas.rounds[0] || {}).roundId || '';
+                markDirty();
+            }
+            renderAll();
+            return;
+        }
+        state.activeRoundId = rid;
+        renderAll();
+    });
+
+    // 中栏（事件委托）
+    $('editorCol').addEventListener('click', function(e) {
+        var round = activeRound();
+        if (!round) return;
+        var secCard = e.target.closest('.section-card');
+        var secIdx = secCard ? +secCard.dataset.sec : -1;
+
+        if (e.target.closest('[data-sec-add]')) {
+            round.sections.push({ key: 'sec-' + Date.now(), title: '新分区', fields: [] });
+            markDirty(); renderEditor(); renderPreview(); return;
+        }
+        if (e.target.closest('[data-sec-del]')) {
+            if (!confirm('删除分区「' + round.sections[secIdx].title + '」及其中全部字段？')) return;
+            round.sections.splice(secIdx, 1); markDirty(); renderEditor(); renderPreview(); return;
+        }
+        var secMove = e.target.closest('[data-sec-move]');
+        if (secMove) {
+            var d = +secMove.dataset.secMove, ni = secIdx + d;
+            if (ni < 0 || ni >= round.sections.length) return;
+            var s = round.sections.splice(secIdx, 1)[0]; round.sections.splice(ni, 0, s);
+            markDirty(); renderEditor(); renderPreview(); return;
+        }
+        if (e.target.closest('[data-field-add]')) { openFieldModal(secIdx, null); return; }
+        var fieldDel = e.target.closest('[data-field-del]');
+        if (fieldDel) {
+            var fi0 = +fieldDel.closest('.field-row').dataset.field;
+            round.sections[secIdx].fields.splice(fi0, 1); markDirty(); renderEditor(); renderPreview(); return;
+        }
+        var fieldMove = e.target.closest('[data-field-move]');
+        if (fieldMove) {
+            var fi1 = +fieldMove.closest('.field-row').dataset.field, d2 = +fieldMove.dataset.fieldMove, ni2 = fi1 + d2;
+            var arr = round.sections[secIdx].fields;
+            if (ni2 < 0 || ni2 >= arr.length) return;
+            var f0 = arr.splice(fi1, 1)[0]; arr.splice(ni2, 0, f0);
+            markDirty(); renderEditor(); renderPreview(); return;
+        }
+        var fieldRow = e.target.closest('.field-row');
+        if (fieldRow) { openFieldModal(secIdx, +fieldRow.dataset.field); }
+    });
+    $('editorCol').addEventListener('change', function(e) {
+        var round = activeRound();
+        if (!round) return;
+        var secCard = e.target.closest('.section-card');
+        if (!secCard) return;
+        var secIdx = +secCard.dataset.sec;
+        if (e.target.matches('[data-sec-title]')) {
+            round.sections[secIdx].title = e.target.value.trim() || round.sections[secIdx].title;
+            markDirty(); renderPreview();
+        }
+        if (e.target.matches('[data-sec-mode]')) {
+            if (e.target.checked) round.sections[secIdx].mode = 'readonly-prefill';
+            else delete round.sections[secIdx].mode;
+            markDirty(); renderPreview();
+        }
+    });
+
+    // Modal
+    $('fmWidget').addEventListener('change', syncWidgetFields);
+    $('fieldModalOk').addEventListener('click', saveFieldModal);
+    $('fieldModalCancel').addEventListener('click', function(){ $('fieldModal').classList.remove('show'); });
+    $('fieldModalClose').addEventListener('click', function(){ $('fieldModal').classList.remove('show'); });
+    $('fmAddSubField').addEventListener('click', function() {
+        var items = collectSubFields();
+        items.push({ key: '', label: '', widget: 'text', options: [] });
+        renderSubFields(items);
+    });
+    $('fmItemFields').addEventListener('click', function(e) {
+        var del = e.target.closest('[data-sf-del]');
+        if (!del) return;
+        var items = collectSubFields();
+        items.splice(+del.closest('.sub-field-row').dataset.sf, 1);
+        renderSubFields(items);
+    });
+
+    // 新建轮次
+    $('btnAddRound').addEventListener('click', function() {
+        $('rmBase').innerHTML = '<option value="">（空白开始）</option>' + state.schemas.rounds.map(function(r) {
+            return '<option value="' + esc(r.roundId) + '">' + esc(r.name) + '</option>';
+        }).join('');
+        $('rmRoundId').value = ''; $('rmName').value = '';
+        $('roundModal').classList.add('show');
+    });
+    $('roundModalOk').addEventListener('click', function() {
+        var rid = $('rmRoundId').value.trim(), name = $('rmName').value.trim();
+        if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(rid)) { toast('roundId 须为英文开头标识'); return; }
+        if (!name) { toast('请填写轮次名称'); return; }
+        if (state.schemas.rounds.some(function(r){ return r.roundId === rid; })) { toast('roundId 已存在'); return; }
+        var base = $('rmBase').value;
+        var sections = [];
+        if (base) {
+            var b = state.schemas.rounds.find(function(r){ return r.roundId === base; });
+            sections = JSON.parse(JSON.stringify(b.sections || []));
+        } else {
+            sections = [
+                { key: 'basic', title: '房屋底数', mode: 'readonly-prefill', fields: [] },
+                { key: 'checklist', title: '排查问题清单', fields: [] }
+            ];
+        }
+        state.schemas.rounds.push({ roundId: rid, name: name, status: 'active', version: 1, policyFile: '', sections: sections });
+        state.activeRoundId = rid;
+        if (!state.schemas.currentRoundId) state.schemas.currentRoundId = rid;
+        markDirty();
+        $('roundModal').classList.remove('show');
+        renderAll();
+        toast('轮次已创建，记得保存推送');
+    });
+    $('roundModalCancel').addEventListener('click', function(){ $('roundModal').classList.remove('show'); });
+    $('roundModalClose').addEventListener('click', function(){ $('roundModal').classList.remove('show'); });
+
+    // 顶栏
+    $('btnSave').addEventListener('click', saveAndPush);
+    $('btnReload').addEventListener('click', function() {
+        if (state.dirty && !confirm('有未保存修改，确定丢弃并重新加载？')) return;
+        loadSchemas();
+    });
+    $('previewHouseSelect').addEventListener('change', function() { state.previewHouseNo = this.value; renderPreview(); });
+
+    // archSource 候选
+    $('archFieldList').innerHTML = ARCH_FIELDS.map(function(a) {
+        return '<option value="' + a.path + '">' + a.label + '（' + a.path + '）</option>';
+    }).join('');
+    // widget 候选
+    $('fmWidget').innerHTML = WIDGETS.map(function(w) {
+        return '<option value="' + w.value + '">' + w.label + '</option>';
+    }).join('');
+
+    // 离开提醒
+    window.addEventListener('beforeunload', function(e) {
+        if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    // ============ 启动 ============
+    loadSchemas();
+    loadHouses();
+})();
+</script>
+</body>
+</html>
