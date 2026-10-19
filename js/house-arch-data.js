@@ -420,6 +420,8 @@ function normalizeHouseRecord(record) {
     if (!rec.riskClassification) rec.riskClassification = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskClassification));
     if (!rec.emergencyResponse) rec.emergencyResponse = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.emergencyResponse));
     if (!rec.closeInfo) rec.closeInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.closeInfo));
+    // 静态数据修改留痕（2026-10-19 新增，三层档案改造）
+    if (!Array.isArray(rec.changeLog)) rec.changeLog = [];
 
     // 房屋性质：旧数据缺省时按使用类型派生（自住/出租/空置→住宅；自住兼经营/其他→非住宅）
     if (!rec.houseNature) {
@@ -1231,6 +1233,95 @@ function syncRectifyRecordToHouse(record, sourceTag) {
         }
     });
     return res;
+}
+
+// ============ 静态数据修改留痕（2026-10-19 三层档案改造） ============
+
+// 留痕的静态区块及其字段标签映射
+var CHANGE_LOG_SECTIONS = {
+    overview: {
+        label: '房屋概况',
+        fields: {
+            floors: '房屋层数', area: '建筑面积', buildYear: '建造年份',
+            usage: '使用用途', structure: '结构类型', address: '房屋地址',
+            owner: '产权人', belongTo: '所属街镇村居'
+        }
+    },
+    homestead: {
+        label: '宅基地信息',
+        fields: {
+            area: '宅基地面积', certNo: '宅基地证号', approveDate: '批准日期',
+            usage: '宅基地用途', ownership: '权属情况'
+        }
+    },
+    structure: {
+        label: '结构信息',
+        fields: {
+            type: '结构类型', floors: '结构层数', height: '房屋高度',
+            span: '跨度', foundation: '基础形式'
+        }
+    },
+    usage: {
+        label: '使用情况',
+        fields: {
+            usageType: '使用类型', specificUsage: '具体用途', occupants: '居住人数',
+            isRented: '是否出租', rentArea: '出租面积'
+        }
+    }
+};
+
+// 生成留痕记录 ID
+function generateChangeLogId(rec) {
+    var seq = (rec.changeLog || []).length + 1;
+    return 'CHG-' + (rec.no || 'UNK') + '-' + String(seq).padStart(3, '0');
+}
+
+// 添加一条留痕记录
+function addChangeLog(rec, fieldPath, fieldLabel, oldValue, newValue, source, sourceId, operator) {
+    if (!rec) return;
+    if (!Array.isArray(rec.changeLog)) rec.changeLog = [];
+    rec.changeLog.push({
+        id: generateChangeLogId(rec),
+        fieldPath: fieldPath,
+        fieldLabel: fieldLabel || fieldPath,
+        oldValue: oldValue !== undefined ? String(oldValue) : '',
+        newValue: newValue !== undefined ? String(newValue) : '',
+        changedAt: new Date().toLocaleString('sv-SE').slice(0, 16),
+        changedBy: operator || '',
+        source: source || 'manual',
+        sourceId: sourceId || ''
+    });
+}
+
+// 对比静态区块差异，自动生成留痕记录
+// oldRec / newRec：完整房屋记录；返回追加的留痕条数
+function diffStaticFields(oldRec, newRec, source, sourceId, operator) {
+    if (!oldRec || !newRec) return 0;
+    var count = 0;
+    Object.keys(CHANGE_LOG_SECTIONS).forEach(function(sectionKey) {
+        var sectionConf = CHANGE_LOG_SECTIONS[sectionKey];
+        var oldSec = oldRec[sectionKey] || {};
+        var newSec = newRec[sectionKey] || {};
+        // 收集所有出现过的字段
+        var allFields = {};
+        Object.keys(oldSec).forEach(function(k){ allFields[k] = true; });
+        Object.keys(newSec).forEach(function(k){ allFields[k] = true; });
+        Object.keys(allFields).forEach(function(fieldKey) {
+            var oldVal = oldSec[fieldKey];
+            var newVal = newSec[fieldKey];
+            // 跳过数组/对象（如 photos），只做标量对比
+            if (typeof oldVal === 'object' || typeof newVal === 'object') return;
+            var oldStr = (oldVal !== undefined && oldVal !== null) ? String(oldVal) : '';
+            var newStr = (newVal !== undefined && newVal !== null) ? String(newVal) : '';
+            if (oldStr !== newStr) {
+                var fieldLabel = (sectionConf.fields && sectionConf.fields[fieldKey]) || fieldKey;
+                addChangeLog(newRec, sectionKey + '.' + fieldKey, sectionConf.label + '-' + fieldLabel,
+                    oldStr, newStr, source, sourceId, operator);
+                count++;
+            }
+        });
+    });
+    return count;
 }
 
 // 根据房屋状态生成销号申请记录

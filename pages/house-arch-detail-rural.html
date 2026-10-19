@@ -586,6 +586,7 @@
                         town: src.town || '',                              // 街镇
                         reporter: src.reporter || '', reportTime: src.reportTime || '', // 填报
                         sourceSnapshot: snapshot,                          // 源记录完整快照（兜底）
+                        taskFlows: [],                                     // 任务索引（2026-10-19 三层档案改造新增）
                         _legacyEventId: ev.eventId // 迁移期保留旧事件引用
                     };
                     rec.hazardRecords.push(hz);
@@ -726,7 +727,8 @@
                     checkOrg: src.checkOrg || src.patrolOrg || '',
                     town: src.town || '',
                     reporter: src.reporter || '', reportTime: src.reportTime || '',
-                    sourceSnapshot: __deepClone(src)
+                    sourceSnapshot: __deepClone(src),
+                    taskFlows: []  // 任务索引（2026-10-19 三层档案改造新增）
                 };
                 rec.hazardRecords.push(hz);
                 // 领养/创建治理事件（ensureGovernanceEvents 可能已生成 rr 级空事件）
@@ -2498,7 +2500,9 @@
             { key: 'accept', icon: 'fa-clipboard-check', title: '阶段性验收', tag: '节点验收', ruralOnly: true },
             { key: 'close', icon: 'fa-check-circle', title: '验收销项', tag: '节点验收', ruralOnly: true },
             { key: 'quality', icon: 'fa-check-circle', title: '最新质检信息', tag: '质量检查', ruralOnly: true },
-            { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '事件记录', ruralOnly: true }
+            { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '事件记录', ruralOnly: true },
+            { key: 'taskFlow', icon: 'fa-tasks', title: '任务记录', tag: '排查任务', ruralOnly: true },
+            { key: 'changeLog', icon: 'fa-history', title: '留痕记录', tag: '修改留痕', ruralOnly: true }
         ];
 
         const basicSubTabs_RURAL = [
@@ -3492,7 +3496,7 @@
             renderStatusPanel();
             const area = document.getElementById('contentArea');
             // 治理节点已收编进「隐患台账」详情与侧栏一级入口，兜底：非法 currentSidebar 归位到 risk
-            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'risk', 'hazard', 'assessment', 'evaluation', 'plan', 'measure', 'controlSituation', 'accept', 'close', 'quality', 'emergency'];
+            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'risk', 'hazard', 'assessment', 'evaluation', 'plan', 'measure', 'controlSituation', 'accept', 'close', 'quality', 'emergency', 'taskFlow', 'changeLog'];
             if (__VALID_SIDEBARS.indexOf(currentSidebar) === -1) currentSidebar = 'risk';
             if (currentSidebar === 'basic') {
                 area.innerHTML = renderBasicContent();
@@ -5440,6 +5444,12 @@
 
         /* ===== 隐患详情页已移除（2026-10-17）：台账列表即全部，行不再可点击，照片缩略图直接放大 ===== */
 
+        // HTML 转义（2026-10-19 三层档案改造新增）
+        function esc(str) {
+            if (str == null) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
         function renderTableContent(key) {
             const item = getSidebarItems().find(i => i.key === key);
             const s = currentHouseArch;
@@ -5548,6 +5558,10 @@
                 html += renderEmergencyContent(s);
             } else if (key === 'risk') {
                 html += renderRiskContent(s);
+            } else if (key === 'taskFlow') {
+                html += renderTaskFlowContent(s);
+            } else if (key === 'changeLog') {
+                html += renderChangeLogContent(s);
             } else {
                 html += renderGovernanceBody(key, s);
             }
@@ -5587,6 +5601,71 @@
             html += '</div>' +
             '</div>';
             return html;
+        }
+
+        // ===== 任务记录（taskFlows 索引展示，2026-10-19 三层档案改造） =====
+        function renderTaskFlowContent(s) {
+            const hazards = s.hazardRecords || [];
+            if (!hazards.length) {
+                return '<div class="record-empty" style="padding:60px 20px;text-align:center;">' +
+                    '<i class="fas fa-inbox" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
+                    '暂无隐患记录<br><span style="font-size:12px;color:#909399;">当前房屋尚未登记任何隐患，无任务参与记录</span>' +
+                '</div>';
+            }
+            // 汇总所有隐患的 taskFlows
+            let rows = '';
+            let hasAny = false;
+            hazards.forEach(function(hz) {
+                const flows = hz.taskFlows || [];
+                if (!flows.length) return;
+                hasAny = true;
+                flows.forEach(function(tf, i) {
+                    rows += '<tr>' +
+                        '<td>' + esc(hz.id) + '</td>' +
+                        '<td>' + esc(hz.hazardType || '') + (hz.location ? '<br><span style="font-size:12px;color:#909399;">' + esc(hz.location) + '</span>' : '') + '</td>' +
+                        '<td>' + esc(tf.taskName || tf.taskType) + '</td>' +
+                        '<td>' + esc(tf.joinedAt || '') + '</td>' +
+                        '<td><span class="tag ' + (tf.action === '登记' ? 'danger' : 'warning') + '">' + esc(tf.action || '') + '</span></td>' +
+                        '<td>' + esc(tf.result || '') + '</td>' +
+                    '</tr>';
+                });
+            });
+            if (!hasAny) {
+                return '<div class="record-empty" style="padding:60px 20px;text-align:center;">' +
+                    '<i class="fas fa-inbox" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
+                    '暂无任务参与记录<br><span style="font-size:12px;color:#909399;">已有隐患尚未关联任何排查任务</span>' +
+                '</div>';
+            }
+            return '<div class="table-wrap"><table class="arch-table">' +
+                '<thead><tr><th>隐患编号</th><th>隐患类型/部位</th><th>排查任务</th><th>排查时间</th><th>动作</th><th>排查结论</th></tr></thead>' +
+                '<tbody>' + rows + '</tbody></table></div>';
+        }
+
+        // ===== 留痕记录（changeLog 展示，2026-10-19 三层档案改造） =====
+        function renderChangeLogContent(s) {
+            const logs = s.changeLog || [];
+            if (!logs.length) {
+                return '<div class="record-empty" style="padding:60px 20px;text-align:center;">' +
+                    '<i class="fas fa-history" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
+                    '暂无留痕记录<br><span style="font-size:12px;color:#909399;">静态数据（房屋概况/宅基地/结构/使用）尚未发生修改</span>' +
+                '</div>';
+            }
+            // 按时间倒序
+            const sorted = logs.slice().sort(function(a, b){ return (b.changedAt || '').localeCompare(a.changedAt || ''); });
+            const rows = sorted.map(function(log) {
+                const srcMap = { manual: '手动编辑', import: '批量导入', task: '任务同步' };
+                return '<tr>' +
+                    '<td>' + esc(log.changedAt || '') + '</td>' +
+                    '<td>' + esc(log.fieldLabel || log.fieldPath) + '</td>' +
+                    '<td style="max-width:200px;word-break:break-all;">' + esc(log.oldValue || '(空)') + '</td>' +
+                    '<td style="max-width:200px;word-break:break-all;">' + esc(log.newValue || '(空)') + '</td>' +
+                    '<td>' + esc(log.changedBy || '') + '</td>' +
+                    '<td><span class="tag">' + esc(srcMap[log.source] || log.source || '') + '</span></td>' +
+                '</tr>';
+            }).join('');
+            return '<div class="table-wrap"><table class="arch-table">' +
+                '<thead><tr><th>修改时间</th><th>修改字段</th><th>改前值</th><th>改后值</th><th>操作人</th><th>来源</th></tr></thead>' +
+                '<tbody>' + rows + '</tbody></table></div>';
         }
 
         // 治理链/通用表格的纯内容渲染（不含 content-card 壳 / 事件切换器 / bottom-bar）

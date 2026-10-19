@@ -1193,6 +1193,8 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
         var houseNo = r.houseNo;
         // 隐患等级 → 风险等级映射
         var riskLevel = r.hazardLevel === '严重' ? '第三类' : (r.hazardLevel === '一般' ? '第二类' : '第一类');
+        // 先读旧记录用于静态字段 diff 留痕（2026-10-19 三层档案改造）
+        var oldRec = (typeof getHouseRecord === 'function') ? JSON.parse(JSON.stringify(getHouseRecord(houseNo) || {})) : {};
         patchHouseRecord(houseNo, function(rec) {
             rec.no = houseNo;
             rec.name = r.owner || rec.name || houseNo;
@@ -1223,6 +1225,92 @@ table.grid tbody tr:hover { background: var(--bg-hover); }
             rec.reviewSource = '农房回头看';
             rec.reviewTime = r.inspectTime || r.submitTime || '';
             rec.reviewInspector = r.inspector || '';
+
+            // ===== 2026-10-19 三层档案改造：留痕 + 隐患关联 + taskFlows 索引 =====
+            // 1. 静态字段 diff → changeLog[]
+            if (typeof diffStaticFields === 'function') {
+                diffStaticFields(oldRec, rec, 'task', r.id || r.houseNo, r.inspector || '');
+            }
+            // 2. 隐患关联：一般/严重 才生成隐患
+            if (r.hazardLevel === '一般' || r.hazardLevel === '严重') {
+                if (!Array.isArray(rec.hazardRecords)) rec.hazardRecords = [];
+                if (!Array.isArray(rec.hazardDynamics)) rec.hazardDynamics = [];
+                var hazardType = r.checkRemark || '安全隐患';
+                var loc = r.address || r.houseAddress || '';
+                // 查重：同部位+同类型+未销号
+                var dup = loc ? rec.hazardRecords.find(function(h){
+                    return h.currentStatus !== '已销号' && (h.location || '') === loc && (h.hazardType || '') === hazardType;
+                }) : null;
+                var taskFlowEntry = {
+                    taskType: 'farm-review',
+                    taskName: '农房回头看',
+                    recordId: r.id || r.houseNo,
+                    round: 1,
+                    joinedAt: r.submitTime || r.inspectTime || new Date().toLocaleString('sv-SE').slice(0, 16),
+                    result: r.hazardLevel + '隐患',
+                    action: dup ? '复查' : '登记'
+                };
+                if (dup) {
+                    // 复查：追加动态 + 更新 taskFlows
+                    if (!Array.isArray(dup.taskFlows)) dup.taskFlows = [];
+                    dup.taskFlows.push(taskFlowEntry);
+                    var dynSeq = rec.hazardDynamics.filter(function(d){ return d.hazardId === dup.id; }).length + 1;
+                    rec.hazardDynamics.push({
+                        id: 'DYN-' + dup.id + '-' + String(dynSeq).padStart(2, '0'),
+                        hazardId: dup.id,
+                        actionType: '复查',
+                        actionTime: taskFlowEntry.joinedAt,
+                        operator: r.inspector || '',
+                        org: r.town || '',
+                        content: '[农房回头看复查] ' + (r.checkRemark || hazardType),
+                        conclusion: r.checkRemark || '复查确认',
+                        levelAfter: riskLevel,
+                        photos: [],
+                        sourceType: '排查',
+                        sourceId: r.id || ''
+                    });
+                } else {
+                    // 登记：新建隐患 + 动态 + taskFlows
+                    var seq = rec.hazardRecords.length + 1;
+                    var hid = 'HZ-' + houseNo + '-' + String(seq).padStart(3, '0');
+                    var hz = {
+                        id: hid,
+                        houseNo: houseNo,
+                        createdAt: taskFlowEntry.joinedAt,
+                        createdBy: r.inspector || '',
+                        sourceType: '排查',
+                        sourceId: r.id || '',
+                        hazardType: hazardType,
+                        hazardTypeOther: '',
+                        location: loc,
+                        description: r.checkRemark || '',
+                        photos: [],
+                        initialJudge: riskLevel,
+                        currentLevel: riskLevel,
+                        currentStatus: '管控中',
+                        controlMeasure: '',
+                        controlUpdatedAt: '',
+                        closedAt: '',
+                        closeAuditId: '',
+                        taskFlows: [taskFlowEntry]
+                    };
+                    rec.hazardRecords.push(hz);
+                    rec.hazardDynamics.push({
+                        id: 'DYN-' + hid + '-01',
+                        hazardId: hid,
+                        actionType: '登记',
+                        actionTime: taskFlowEntry.joinedAt,
+                        operator: r.inspector || '',
+                        org: r.town || '',
+                        content: '[农房回头看登记] ' + (r.checkRemark || hazardType),
+                        conclusion: r.checkRemark || '确认安全隐患',
+                        levelAfter: riskLevel,
+                        photos: [],
+                        sourceType: '排查',
+                        sourceId: r.id || ''
+                    });
+                }
+            }
         });
     }
 

@@ -1,0 +1,3114 @@
+<html lang="zh-CN" data-theme="light"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>农村自建房排查（2022年）</title>
+<link rel="stylesheet" href="./all.min.css">
+<script src="../js/house-arch-data.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+/* ===== Theme Variables ===== */
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+    --tree-group-bg: rgba(26,115,232,0.06); --tree-row-hover: rgba(0,0,0,0.04);
+    --dot-red: #d93025; --dot-yellow: #f9c846; --dot-blue: #1a73e8;
+    --sidebar-tree-width: 240px;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+    --tree-group-bg: rgba(30,111,219,0.08); --tree-row-hover: rgba(255,255,255,0.06);
+    --dot-red: #ef4444; --dot-yellow: #facc15; --dot-blue: #3b82f6;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    padding: 20px;
+    min-height: 100vh;
+}
+
+/* ===== KPI Dashboard: 6 Cards Row ===== */
+.kpi-wrapper {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    transition: all 0.3s;
+    box-shadow: 0 1px 3px var(--shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    min-height: 64px;
+    position: relative;
+    overflow: hidden;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+
+/* 各卡片顶部色条 */
+.kpi-card.red-top    { border-top: 3px solid var(--danger); }
+.kpi-card.orange-top { border-top: 3px solid var(--warning); }
+.kpi-card.yellow-top { border-top: 3px solid #c78000; }
+.kpi-card.blue-top   { border-top: 3px solid var(--primary); }
+
+.kpi-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.kpi-card-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+.kpi-card-label.red    { color: var(--danger); }
+.kpi-card-label.orange { color: var(--warning); }
+.kpi-card-label.yellow { color: #c78000; }
+.kpi-card-label.blue   { color: var(--primary); }
+
+.kpi-card-icon {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0;
+}
+.kpi-card-icon.red    { background: rgba(217,48,37,0.12); color: var(--danger); }
+.kpi-card-icon.orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+.kpi-card-icon.yellow { background: rgba(249,200,70,0.12); color: #c78000; }
+.kpi-card-icon.blue   { background: rgba(26,115,232,0.12); color: var(--primary); }
+
+.kpi-card-main {
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+}
+.kpi-card-total {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-primary);
+}
+.kpi-card-total.red    { color: var(--danger); }
+.kpi-card-total.orange { color: var(--warning); }
+.kpi-card-total.yellow { color: #c78000; }
+.kpi-card-total.blue   { color: var(--primary); }
+.kpi-card-total-unit {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-left: 2px;
+}
+
+.kpi-card-trend {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+.kpi-card-trend.red    { color: var(--danger); background: rgba(217,48,37,0.1); }
+.kpi-card-trend.orange { color: var(--warning); background: rgba(227,116,0,0.1); }
+
+/* 底数台账：堆叠进度条 */
+.kpi-stacked-bar {
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    display: flex;
+    background: var(--bg-dark);
+    margin: 1px 0;
+}
+.kpi-stacked-segment {
+    height: 100%;
+    min-width: 4px;
+    transition: width 0.4s ease;
+}
+.kpi-stacked-segment.red    { background: var(--danger); }
+.kpi-stacked-segment.orange { background: var(--warning); }
+.kpi-stacked-segment.yellow { background: #f9c846; }
+.kpi-stacked-segment.blue   { background: var(--primary); }
+.kpi-risk-legend {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: auto;
+    flex-wrap: wrap;
+}
+.kpi-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.kpi-legend-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+}
+.kpi-legend-dot.red    { background: var(--danger); }
+.kpi-legend-dot.orange { background: var(--warning); }
+.kpi-legend-dot.yellow { background: #f9c846; }
+.kpi-legend-dot.blue   { background: var(--primary); }
+.kpi-legend-count {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-left: 1px;
+}
+
+/* 现存总量：3 列横排 */
+.hazard-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: auto;
+}
+.hazard-grid-item {
+    background: var(--bg-dark);
+    border-radius: 6px;
+    padding: 8px 4px 6px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-top: 2px solid transparent;
+}
+.hazard-grid-item.red    { border-top-color: var(--danger);  background: rgba(217,48,37,0.06); }
+.hazard-grid-item.yellow { border-top-color: #c78000;        background: rgba(199,128,0,0.06); }
+.hazard-grid-item.blue   { border-top-color: var(--primary); background: rgba(26,115,232,0.06); }
+.hazard-grid-value {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+.hazard-grid-value.red    { color: var(--danger); }
+.hazard-grid-value.orange { color: var(--warning); }
+.hazard-grid-value.yellow { color: #c78000; }
+.hazard-grid-value.blue   { color: var(--primary); }
+.hazard-grid-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* ===== Main Content Area ===== */
+.content-panel {
+    width: 100%;
+    min-width: 0;
+}
+
+/* ===== Tabs ===== */
+.tab-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px;
+    box-shadow: 0 1px 3px var(--shadow);
+}
+.tab-item {
+    flex: 1;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.25s;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    position: relative;
+}
+.tab-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.tab-item.active {
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(26,115,232,0.3);
+}
+/* 3个风险等级TAB选中态：全部/第三类(红)/第二类(黄)/第一类(蓝) */
+.tab-item[data-tab="all"].active { background: #5f6b7a; box-shadow: 0 2px 8px rgba(95,107,122,0.35); }
+.tab-item[data-tab="major"].active { background: #d93025; box-shadow: 0 2px 8px rgba(217,48,37,0.35); }
+.tab-item[data-tab="general"].active { background: #f9ab00; box-shadow: 0 2px 8px rgba(249,171,0,0.35); }
+.tab-item[data-tab="low"].active { background: #1a73e8; box-shadow: 0 2px 8px rgba(26,115,232,0.35); }
+.tab-item .tab-count {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.2);
+}
+.tab-item.active .tab-count { background: rgba(255,255,255,0.25); }
+
+/* ===== Filter Bar ===== */
+.filter-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.filter-input, .filter-select {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.filter-input:focus, .filter-select:focus { border-color: var(--primary); }
+.filter-input { min-width: 200px; }
+.filter-select { min-width: 120px; cursor: pointer; }
+.filter-select:disabled {
+    cursor: not-allowed;
+    background: #f5f6f7;
+    color: #b0b3b8;
+    border-color: #e0e2e6;
+}
+
+/* 占位提示文字浅灰色：当 select 选中的是 value="" 的占位项时显示浅灰 */
+.filter-select:has(option[value=""]:checked),
+.filter-select.placeholder-active {
+    color: #9aa0a6;
+}
+/* 下拉展开时，占位项本身也显示浅灰（兼容不支持 :has 的场景由 JS 加 class）*/
+.filter-select option[value=""][disabled] {
+    color: #9aa0a6;
+}
+.filter-select option {
+    color: var(--text-primary);
+}
+
+/* ===== 高级折叠筛选区 ===== */
+.advanced-filter-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px var(--shadow);
+}
+.filter-quick-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed var(--border);
+            margin-bottom: 12px;
+        }
+        .filter-quick-row .filter-field { min-width: 120px; flex: 1; }
+        .filter-quick-row .filter-field .filter-select,
+        .filter-quick-row .filter-field .filter-input { width: 100%; }
+        .filter-toggle-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+        .filter-toggle-btn {
+            color: var(--primary);
+            font-size: 13px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            user-select: none;
+        }
+        .filter-toggle-btn:hover { text-decoration: underline; }
+        .filter-toggle-btn i { transition: transform 0.25s; }
+        .filter-toggle-btn.expanded i { transform: rotate(180deg); }
+        .filter-extra-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.35s ease, opacity 0.25s ease;
+            opacity: 0;
+        }
+        .filter-extra-content.expanded {
+            max-height: 3000px;
+            opacity: 1;
+            margin-top: 14px;
+        }
+        .filter-section {
+            margin-bottom: 14px;
+        }
+        .filter-section:last-child { margin-bottom: 0; }
+        .filter-section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            padding-left: 8px;
+            border-left: 3px solid var(--primary);
+        }
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(8, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: end;
+        }
+        .filter-row.has-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+        .filter-row:last-child { margin-bottom: 0; }
+        .filter-field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 0;
+        }
+        .filter-field.full-width { grid-column: 1 / -1; }
+        .filter-field.half-width { grid-column: span 4; }
+        .filter-field.two-thirds { grid-column: span 6; }
+        .filter-field.one-third { grid-column: span 2; }
+        .filter-field label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .filter-field .filter-input,
+        .filter-field .filter-select {
+            width: 100%;
+            min-width: 0;
+            padding: 7px 10px;
+            font-size: 13px;
+        }
+        .filter-range {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .filter-range .filter-input {
+            flex: 1;
+            min-width: 0;
+        }
+        .filter-range .range-separator {
+            color: var(--text-secondary);
+            font-size: 13px;
+            user-select: none;
+            flex-shrink: 0;
+        }
+        .filter-actions {
+            display: flex;
+            justify-content: flex-start;
+            gap: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed var(--border);
+        }
+
+        @media (max-width: 1400px) {
+            .advanced-filter-panel .filter-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+            .advanced-filter-panel .filter-row.has-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+            .advanced-filter-panel .filter-field.half-width { grid-column: span 3; }
+            .advanced-filter-panel .filter-field.two-thirds { grid-column: span 4; }
+            .advanced-filter-panel .filter-field.one-third { grid-column: span 2; }
+        }
+        @media (max-width: 992px) {
+            .advanced-filter-panel .filter-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .advanced-filter-panel .filter-row.has-6 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .advanced-filter-panel .filter-field.half-width,
+            .advanced-filter-panel .filter-field.two-thirds,
+            .advanced-filter-panel .filter-field.one-third { grid-column: span 4; }
+        }
+        @media (max-width: 576px) {
+            .advanced-filter-panel .filter-row { grid-template-columns: 1fr; }
+            .advanced-filter-panel .filter-row.has-6 { grid-template-columns: 1fr; }
+            .advanced-filter-panel .filter-field.half-width,
+            .advanced-filter-panel .filter-field.two-thirds,
+            .advanced-filter-panel .filter-field.one-third { grid-column: span 1; }
+        }
+.btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+}
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+}
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ===== Data Table ===== */
+.table-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: auto;
+    box-shadow: 0 1px 3px var(--shadow);
+    max-width: 100%;
+}
+.table-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.table-title {
+    font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+}
+.data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+.data-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-dark);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+.data-table td {
+    padding: 12px 16px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    background: var(--bg-card);
+    white-space: nowrap;
+}
+.data-table tr:hover td { background: var(--tree-row-hover); }
+.data-table tr:last-child td { border-bottom: none; }
+/* 占位空行：保持表格固定10行高度 */
+.data-table tr.filler-row td { color: transparent; pointer-events: none; user-select: none; }
+.data-table tr.filler-row:hover td { background: var(--bg-card); }
+
+/* 冻结列样式 */
+.data-table th.sticky-col,
+.data-table td.sticky-col {
+    position: sticky;
+    z-index: 20;
+    background: var(--bg-card);
+}
+.data-table th.sticky-col {
+    z-index: 30;
+    background: var(--bg-dark);
+}
+.data-table th.sticky-left,
+.data-table td.sticky-left {
+    left: 0;
+    border-right: 1px solid var(--border);
+}
+/* 第二层冻结列（序号列之后） */
+.data-table th.sticky-left-2,
+.data-table td.sticky-left-2 {
+    left: 56px;
+    border-right: 1px solid var(--border);
+}
+/* 序号列 */
+.data-table th.seq-col,
+.data-table td.seq-col {
+    width: 56px;
+    min-width: 56px;
+    text-align: center;
+}
+.data-table th.sticky-right,
+.data-table td.sticky-right {
+    right: 0;
+    border-left: 1px solid var(--border);
+}
+.data-table tr:hover td.sticky-col {
+    background: var(--bg-hover);
+}
+
+/* ===== Risk Tags ===== */
+.risk-tag {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+/* 红色 - 第三类 */
+.risk-tag.red {
+    background: rgba(217,48,37,0.15);
+    color: var(--danger);
+}
+/* 橙色 - 第三类 */
+.risk-tag.orange {
+    background: rgba(227,116,0,0.15);
+    color: var(--warning);
+}
+/* 黄色 - 第二类 */
+.risk-tag.yellow {
+    background: rgba(249,200,70,0.25);
+    color: #c78000;
+}
+/* 蓝色 - 第一类 */
+.risk-tag.blue {
+    background: rgba(26,115,232,0.15);
+    color: var(--primary);
+}
+/* 绿色 - 已同步 */
+.risk-tag.green {
+    background: rgba(30,142,62,0.15);
+    color: #1e8e3e;
+}
+
+/* 状态标签 */
+.status-badge {
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+}
+.status-badge.pending { background: rgba(148,163,184,0.15); color: var(--text-secondary); }
+.status-badge.verified { background: rgba(59,130,246,0.12); color: var(--primary); }
+.status-badge.processing { background: rgba(249,200,70,0.12); color: #c78000; }
+.status-badge.normal { background: rgba(30,142,62,0.12); color: var(--success); }
+
+/* 许可证超期标红 */
+.license-overdue {
+    color: var(--danger) !important;
+    font-weight: 600;
+}
+.license-overdue::after {
+    content: ' 已超期';
+    font-size: 11px;
+    color: var(--danger);
+    background: rgba(217,48,37,0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+}
+
+/* ===== Pagination ===== */
+.pagination {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    flex-wrap: nowrap;
+}
+.page-btn {
+    min-width: 32px; height: 32px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    padding: 0 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.page-btn:hover { border-color: var(--primary); color: var(--primary); }
+.page-btn.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+#pageNumbers,
+#allPageNumbers,
+#majorPageNumbers,
+#generalPageNumbers,
+#lowPageNumbers {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+.pagination > span {
+    flex-shrink: 0;
+}
+
+/* ===== Tab Content ===== */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.3s;
+    box-shadow: 0 1px 3px var(--shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    min-height: 86px;
+    position: relative;
+    overflow: hidden;
+}
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+
+/* 各卡片顶部色条 */
+.kpi-card.red-top    { border-top: 3px solid var(--danger); }
+.kpi-card.orange-top { border-top: 3px solid var(--warning); }
+.kpi-card.yellow-top { border-top: 3px solid #c78000; }
+.kpi-card.blue-top   { border-top: 3px solid var(--primary); }
+
+.kpi-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.kpi-card-label {
+    font-size: 15px;
+    font-weight: 700;
+}
+.kpi-card-label.red    { color: var(--danger); }
+.kpi-card-label.orange { color: var(--warning); }
+.kpi-card-label.yellow { color: #c78000; }
+.kpi-card-label.blue   { color: var(--primary); }
+
+.kpi-card-icon {
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; flex-shrink: 0;
+}
+.kpi-card-icon.red    { background: rgba(217,48,37,0.12); color: var(--danger); }
+.kpi-card-icon.orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+.kpi-card-icon.yellow { background: rgba(249,200,70,0.12); color: #c78000; }
+.kpi-card-icon.blue   { background: rgba(26,115,232,0.12); color: var(--primary); }
+
+.kpi-card-main {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.kpi-card-total {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+}
+.kpi-card-total.red    { color: var(--danger); }
+.kpi-card-total.orange { color: var(--warning); }
+.kpi-card-total.yellow { color: #c78000; }
+.kpi-card-total.blue   { color: var(--primary); }
+
+.kpi-card-trend {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.kpi-card-trend.red    { color: var(--danger); background: rgba(217,48,37,0.1); }
+.kpi-card-trend.orange { color: var(--warning); background: rgba(227,116,0,0.1); }
+
+/* 隐患分层 */
+.hazard-breakdown {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+}
+.hazard-level {
+    flex: 1;
+    text-align: center;
+    padding: 6px 2px;
+    border-radius: 6px;
+    background: var(--bg-dark);
+}
+.hazard-level-value {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.hazard-level-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+.hazard-level.red .hazard-level-value    { color: var(--danger); }
+.hazard-level.orange .hazard-level-value { color: var(--warning); }
+.hazard-level.yellow .hazard-level-value { color: #c78000; }
+.hazard-level.blue .hazard-level-value   { color: var(--primary); }
+
+/* ===== Tab Content ===== */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* 档案详情嵌入层 */
+.detail-embed-overlay { display: none; position: fixed; inset: 0; background: var(--bg-dark); z-index: 2000; flex-direction: column; }
+.detail-embed-overlay.active { display: flex; }
+.detail-embed-frame { flex: 1; border: none; width: 100%; background: var(--bg-card); }
+
+/* ===== 导入向导 ===== */
+.import-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:3000; align-items:center; justify-content:center; padding:24px; }
+.import-overlay.active { display:flex; }
+.import-modal { background:var(--bg-card); border-radius:10px; width:100%; max-width:960px; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 8px 30px rgba(0,0,0,0.25); overflow:hidden; }
+.import-modal-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.import-modal-header .imp-title { font-size:16px; font-weight:600; color:var(--text-primary); display:flex; align-items:center; gap:8px; }
+.import-close { background:none; border:none; font-size:20px; color:var(--text-secondary); cursor:pointer; line-height:1; padding:4px; }
+.import-steps { display:flex; padding:14px 20px 0; gap:4px; }
+.imp-step { flex:1; text-align:center; padding:8px 4px; font-size:13px; color:var(--text-secondary); border-bottom:2px solid var(--border); display:flex; align-items:center; justify-content:center; gap:6px; }
+.imp-step .num { width:20px; height:20px; border-radius:50%; background:var(--border); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:11px; }
+.imp-step.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
+.imp-step.active .num { background:var(--primary); }
+.imp-step.done { color:var(--safe); border-bottom-color:var(--safe); }
+.imp-step.done .num { background:var(--safe); }
+.import-body { flex:1; overflow:auto; padding:20px; min-height:300px; }
+.import-footer { padding:14px 20px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.imp-pane { display:none; }
+.imp-pane.active { display:block; }
+.imp-hint { background:var(--primary-light); border:1px solid var(--primary); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--text-primary); line-height:1.7; margin-bottom:16px; }
+.imp-hint b { color:var(--primary); }
+.imp-upload-zone { border:2px dashed var(--border); border-radius:10px; padding:40px 20px; text-align:center; color:var(--text-secondary); cursor:pointer; transition:all .2s; }
+.imp-upload-zone:hover, .imp-upload-zone.drag { border-color:var(--primary); background:var(--primary-light); color:var(--primary); }
+.imp-upload-zone i { font-size:40px; margin-bottom:12px; display:block; }
+.imp-file-name { margin-top:12px; font-size:13px; color:var(--safe); font-weight:600; }
+.imp-table { width:100%; border-collapse:collapse; font-size:12px; }
+.imp-table th, .imp-table td { border:1px solid var(--border); padding:6px 8px; text-align:left; white-space:nowrap; }
+.imp-table th { background:var(--bg-dark); position:sticky; top:0; font-weight:600; }
+.imp-table td input, .imp-table td select { width:100%; border:1px solid transparent; background:transparent; padding:3px 4px; font-size:12px; font-family:inherit; border-radius:4px; color:var(--text-primary); }
+.imp-table td input:focus, .imp-table td select:focus { outline:none; border-color:var(--primary); background:var(--input-bg); }
+.imp-table tr.row-error td { background:rgba(217,48,37,0.08); }
+.imp-table tr.row-error td.cell-error input, .imp-table tr.row-error td.cell-error select { border-color:var(--danger); background:#fff; color:var(--danger); font-weight:600; }
+.imp-err-tag { color:var(--danger); font-size:11px; display:block; }
+.imp-summary { display:flex; gap:16px; font-size:13px; margin-bottom:12px; flex-wrap:wrap; }
+.imp-summary .ok { color:var(--safe); font-weight:600; }
+.imp-summary .bad { color:var(--danger); font-weight:600; }
+.imp-summary .warn { color:var(--warning); font-weight:600; }
+.imp-map-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+.imp-map-item { display:flex; flex-direction:column; gap:4px; }
+.imp-map-item label { font-size:12px; color:var(--text-secondary); }
+.imp-map-item label .req { color:var(--danger); }
+.imp-map-item select { padding:6px 8px; border:1px solid var(--input-border); border-radius:6px; background:var(--input-bg); color:var(--text-primary); font-size:12px; }
+.imp-progress { text-align:center; padding:40px 20px; }
+.imp-progress i { font-size:44px; color:var(--primary); display:block; margin-bottom:14px; }
+.imp-progress .fa-circle-check { color:var(--safe); }
+.imp-progress .fa-circle-xmark { color:var(--danger); }
+.imp-result-list { max-height:220px; overflow:auto; margin-top:14px; text-align:left; }
+</style>
+</head>
+<body>
+
+<!-- 档案详情嵌入层 -->
+<div class="detail-embed-overlay" id="detailEmbedOverlay">
+    <iframe class="detail-embed-frame" id="detailEmbedFrame" src=""></iframe>
+</div>
+
+<!-- ===== 导入向导弹窗 ===== -->
+<div class="import-overlay" id="importOverlay">
+    <div class="import-modal">
+        <div class="import-modal-header">
+            <div class="imp-title"><i class="fa-solid fa-file-import" style="color:var(--primary)"></i> 农村自建房档案导入</div>
+            <button class="import-close" onclick="closeImportWizard()" title="关闭">&times;</button>
+        </div>
+        <div class="import-steps">
+            <div class="imp-step active" data-step="1"><span class="num">1</span> 上传文件</div>
+            <div class="imp-step" data-step="2"><span class="num">2</span> 字段映射</div>
+            <div class="imp-step" data-step="3"><span class="num">3</span> 校验预览</div>
+            <div class="imp-step" data-step="4"><span class="num">4</span> 导入完成</div>
+        </div>
+        <div class="import-body">
+            <!-- 步骤1：上传 -->
+            <div class="imp-pane active" id="impPane1">
+                <div class="imp-hint">
+                    <b>导入说明</b><br>
+                    1. 建议先 <a href="javascript:void(0)" onclick="downloadImportTemplate()" style="color:var(--primary);font-weight:600">下载标准模板</a>，模板按 <b>基本信息 / 宅基地 / 建设情况 / 管理情况 / 结构信息 / 使用信息 / 设计施工记录 / 风险信息</b> 分 8 个 Sheet；其中“设计施工记录”一房多记录，同一唯一标识填多行即可；<br>
+                    2. 也可直接上传您自己的台账表（支持 .xlsx / .xls / .csv），下一步会把您的列名智能匹配到档案字段，未匹配的可手动指定；<br>
+                    3. <b>只有"基本信息"Sheet 必填</b>（至少含 唯一标识、产权人），其余 Sheet 按需填写、以"唯一标识"关联合并；<br>
+                    4. 导入的数据<b>不会马上生效</b>，需在列表点"同步"才会更新到房屋建筑档案。
+                </div>
+                <div class="imp-upload-zone" id="impUploadZone" onclick="document.getElementById('importFileInput').click()">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    点击选择文件，或把 Excel 文件拖到此处
+                    <div style="font-size:12px;margin-top:8px">支持 .xlsx / .xls / .csv，单次不超过 10MB</div>
+                    <div class="imp-file-name" id="impFileName"></div>
+                </div>
+            </div>
+            <!-- 步骤2：字段映射 -->
+            <div class="imp-pane" id="impPane2">
+                <div class="imp-hint">系统已自动匹配列名（<span style="color:var(--safe)">绿色=已匹配</span>）。带 <span style="color:var(--danger)">*</span> 为必填字段，请确认识别正确；识别错误的可在右侧下拉手动更换。</div>
+                <div style="font-size:13px;font-weight:600;margin-bottom:8px">当前映射 Sheet：<span id="impMapSheetName" style="color:var(--primary)"></span></div>
+                <div class="imp-map-grid" id="impMapGrid"></div>
+            </div>
+            <!-- 步骤3：校验预览 -->
+            <div class="imp-pane" id="impPane3">
+                <div class="imp-summary" id="impSummary"></div>
+                <div style="overflow:auto;max-height:46vh;border:1px solid var(--border);border-radius:6px">
+                    <table class="imp-table" id="impPreviewTable"></table>
+                </div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:8px"><i class="fa-solid fa-circle-info"></i> 红色为校验不通过的单元格，可直接在表格里修改后再导入；只有全部行通过校验才能导入。</div>
+            </div>
+            <!-- 步骤4：结果 -->
+            <div class="imp-pane" id="impPane4">
+                <div class="imp-progress" id="impResultBox"></div>
+            </div>
+        </div>
+        <div class="import-footer">
+            <div style="font-size:12px;color:var(--text-secondary)" id="impFootTip"></div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-outline" id="impBtnPrev" onclick="importGoStep(-1)" style="display:none"><i class="fa-solid fa-chevron-left"></i> 上一步</button>
+                <button class="btn btn-primary" id="impBtnNext" onclick="importGoStep(1)" disabled>下一步 <i class="fa-solid fa-chevron-right"></i></button>
+                <button class="btn btn-primary" id="impBtnDoImport" onclick="doImport()" style="display:none"><i class="fa-solid fa-file-import"></i> 确认导入</button>
+                <button class="btn btn-outline" id="impBtnFinish" onclick="closeImportWizard(true)" style="display:none">完成</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Dashboard: 2 Cards -->
+<div class="kpi-wrapper" id="kpiBar">
+    <!-- 固有风险: 底数台账 -->
+    <div class="kpi-card">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label">固有风险 · 底数台账</span>
+            <div class="kpi-card-icon red"><i class="fa-solid fa-house-crack"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total" id="kpiBaseStock">1,205</span>
+            <span class="kpi-card-total-unit">处</span>
+        </div>
+        <div class="kpi-stacked-bar" id="kpiBaseBar">
+            <div class="kpi-stacked-segment red" id="kpiBaseBarMajor" style="width:1.5%"></div>
+            <div class="kpi-stacked-segment yellow" id="kpiBaseBarGeneral" style="width:13%"></div>
+            <div class="kpi-stacked-segment blue" id="kpiBaseBarLow" style="width:82%"></div>
+        </div>
+        <div class="kpi-risk-legend">
+            <div class="kpi-legend-item">
+                <div class="kpi-legend-dot red"></div>
+                <span>第三类</span>
+                <span class="kpi-legend-count" id="kpiBaseMajor">18</span>
+            </div>
+            <div class="kpi-legend-item">
+                <div class="kpi-legend-dot yellow"></div>
+                <span>第二类</span>
+                <span class="kpi-legend-count" id="kpiBaseGeneral">156</span>
+            </div>
+            <div class="kpi-legend-item">
+                <div class="kpi-legend-dot blue"></div>
+                <span>第一类</span>
+                <span class="kpi-legend-count" id="kpiBaseLow">989</span>
+            </div>
+        </div>
+    </div>
+    <!-- 动态隐患: 现存总量 -->
+    <div class="kpi-card">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label">动态隐患 · 现存总量</span>
+            <div class="kpi-card-icon orange"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-total" id="kpiHazardStock">174</span>
+            <span class="kpi-card-trend red"><i class="fa-solid fa-arrow-up" style="font-size:9px"></i> 3.2%</span>
+        </div>
+        <div class="hazard-grid">
+            <div class="hazard-grid-item red">
+                <div class="hazard-grid-value red" id="kpiHazardMajor">12</div>
+                <div class="hazard-grid-label">严重安全隐患</div>
+            </div>
+            <div class="hazard-grid-item yellow">
+                <div class="hazard-grid-value yellow" id="kpiHazardGeneral">89</div>
+                <div class="hazard-grid-label">一定安全隐患</div>
+            </div>
+            <div class="hazard-grid-item blue">
+                <div class="hazard-grid-value blue" id="kpiHazardClosed">0</div>
+                <div class="hazard-grid-label">已销号/已治理</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+    <div class="content-panel">
+        <!-- Tabs -->
+        <div class="tab-bar">
+            <div class="tab-item active" data-tab="all" onclick="switchTab('all')">
+                <i class="fa-solid fa-house-chimney"></i>
+                全部房屋
+                <span class="tab-count" id="countAll">0</span>
+            </div>
+            <div class="tab-item" data-tab="major" onclick="switchTab('major')">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                第三类
+                <span class="tab-count" id="countMajor">0</span>
+            </div>
+            <div class="tab-item" data-tab="general" onclick="switchTab('general')">
+                <i class="fa-solid fa-exclamation"></i>
+                第二类
+                <span class="tab-count" id="countGeneral">0</span>
+            </div>
+            <div class="tab-item" data-tab="low" onclick="switchTab('low')">
+                <i class="fa-solid fa-shield-halved"></i>
+                第一类
+                <span class="tab-count" id="countLow">0</span>
+            </div>
+        </div>
+
+        <!-- Tab: 全部房屋 -->
+        <div class="tab-content active" id="tab-all">
+            <div class="advanced-filter-panel" id="filter-panel">
+                <div class="filter-quick-row">
+                    <input type="text" class="filter-input" placeholder="搜索唯一标识/产权人/地址..." style="min-width:220px">
+                    <div class="filter-field" style="flex:1;min-width:120px">
+                        <select class="filter-select">
+                            <option value="">全部风险等级</option>
+                            <option style="color: #d93025;">第三类</option>
+                            <option style="color: #f9ab00;">第二类</option>
+                            <option style="color: #1a73e8;">第一类</option>
+                        </select>
+                    </div>
+                    <div class="filter-field" style="flex:1;min-width:120px">
+                        <select class="filter-select">
+                            <option value="">建筑年代</option>
+                            <option>1970年以前</option>
+                            <option>1970-1990年</option>
+                            <option>1990-2000年</option>
+                            <option>2000-2010年</option>
+                            <option>2010年以后</option>
+                        </select>
+                    </div>
+                    <div class="filter-field" style="flex:1;min-width:120px">
+                        <select class="filter-select">
+                            <option value="">结构类型</option>
+                            <option>砖混</option>
+                            <option>砖木</option>
+                            <option>钢结构</option>
+                            <option>混杂结构</option>
+                            <option>木结构</option>
+                            <option>其他</option>
+                        </select>
+                    </div>
+                    <div class="filter-field" style="flex:1;min-width:120px">
+                        <select class="filter-select">
+                            <option value="">房屋用途</option>
+                            <option>自住</option>
+                            <option>出租</option>
+                            <option>生产经营</option>
+                            <option>闲置</option>
+                            <option>其他</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary"><i class="fa-solid fa-search"></i> 搜索</button>
+                    <button class="btn btn-outline"><i class="fa-solid fa-rotate-right"></i> 重置</button>
+                </div>
+                <div class="filter-toggle-bar">
+                    <span class="filter-toggle-btn" data-toggle="filter-panel-extra">
+                        <span>展开高级筛选</span> <i class="fa-solid fa-chevron-down"></i>
+                    </span>
+                </div>
+                <div class="filter-extra-content" id="filter-panel-extra">
+                    <div class="filter-section">
+                        <div class="filter-section-title">数据类型</div>
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>排查情况</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择排查情况</option><option>未排查</option><option>排查中</option><option>已排查</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>整治状态</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择整治状态</option><option>未整治</option><option>整治中</option><option>已整治</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>阶段性验收审核状态</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择阶段性验收审核状态</option><option>待审核</option><option>审核通过</option><option>审核不通过</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>销项审核状态</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择销项审核状态</option><option>待审核</option><option>审核通过</option><option>审核不通过</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>是否关联图斑</label>
+                                <select class="filter-select"><option value="">全部记录</option><option>已关联图斑</option><option>未关联图斑</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>任务名称</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择任务名称</option><option>第一轮</option><option>第二轮</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>任务标记</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择任务标记</option><option>赋百12.1w底数</option><option>新增赋百</option><option>图斑补采</option><option>违章建筑纳入</option><option>12月启动</option><option>12月启动+新增补采</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>鉴定类型标签</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择鉴定类型标签</option><option>线下提交未鉴定说明</option><option>初判隐患调整</option><option>已签订协议待拆</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>根据市级质检核查更改初判</label>
+                                <select class="filter-select"><option>根据市级质检核查更改初判</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>不需要排查原因</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择不需要排查原因</option><option>非自建房</option><option>图斑为非房屋建筑</option><option>其他不在本次排查内情况</option><option>去除不需要排查原因</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>是否建房自查数据</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择是否建房自查数据</option><option>是</option><option>否</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>房屋用途现场情况</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择房屋用途现场情况</option><option>使用中</option><option>未使用</option></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <div class="filter-section-title">基本情况</div>
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>镇/街道</label>
+                                <select class="filter-select" id="townSelect">
+                                    <option value="">全部镇/街道</option>
+                                    <option>南桥镇</option>
+                                    <option>奉城镇</option>
+                                    <option>庄行镇</option>
+                                    <option>金汇镇</option>
+                                    <option>青村镇</option>
+                                    <option>柘林镇</option>
+                                    <option>四团镇</option>
+                                    <option>海湾镇</option>
+                                    <option>西渡街道</option>
+                                    <option>奉浦街道</option>
+                                    <option>金海街道</option>
+                                    <option>海湾旅游区</option>
+                                </select>
+                            </div>
+                            <div class="filter-field">
+                                <label>村/居委</label>
+                                <select class="filter-select" id="villageSelect">
+                                    <option value="">请选择村/居委</option>
+                                </select>
+                            </div>
+                            <div class="filter-field">
+                                <label>地址/路号信息</label>
+                                <input type="text" class="filter-input" placeholder="地址/路号信息">
+                            </div>
+                            <div class="filter-field">
+                                <label>图斑编号/唯一标识</label>
+                                <input type="text" class="filter-input" placeholder="图斑编号/唯一标识">
+                            </div>
+                            <div class="filter-field">
+                                <label>房屋性质</label>
+                                <select class="filter-select">
+                                    <option value="" disabled selected hidden>请选择房屋性质</option>
+                                    <option>住宅</option>
+                                    <option>非住宅</option>
+                                </select>
+                            </div>
+                            
+                        </div>
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>分级审核状态</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>分级审核状态</option><option>空</option><option>审核中</option><option>完成审核</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>房屋用途</label>
+                                <select class="filter-select" id="houseUsageSelect"><option value="" disabled selected hidden>请选择房屋用途</option><option>经营性自建房</option><option>其他自建房</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>具体用途</label>
+                                <select class="filter-select" id="specificUsageSelect" disabled><option value="" disabled selected hidden>请选择具体用途</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>土地性质</label>
+                                <select class="filter-select" id="landNatureSelect"><option value="" disabled selected hidden>请选择土地性质</option><option>国有土地</option><option>集体土地</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>二级土地性质</label>
+                                <select class="filter-select" id="landSubNatureSelect" disabled><option value="" disabled selected hidden>请选择</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>所在区域</label>
+                                <select class="filter-select" id="areaTypeSelect"><option value="" disabled selected hidden>请选择所在区域</option><option>城市建成区</option><option>建制镇</option><option>集镇（乡镇政府所在地）</option><option>其他</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>城市建成区</label>
+                                <select class="filter-select" id="cityAreaSelect" disabled><option value="" disabled selected hidden>请选择城市建成区</option><option>城乡结合部</option><option>城中村</option><option>拆迁安置区</option><option>工业园区</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>人员密集场所周边</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择</option><option>学校周边</option><option>医院周边</option><option>商贸市场周边</option><option>其他</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>是否城转农</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择</option><option>否</option><option>是</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>建筑层数</label>
+                                <div class="filter-range">
+                                    <input type="number" class="filter-input" placeholder="请输入" min="0">
+                                    <span class="range-separator">—</span>
+                                    <input type="number" class="filter-input" placeholder="请输入" min="0">
+                                </div>
+                            </div>
+                            <div class="filter-field">
+                                <label>建筑面积</label>
+                                <div class="filter-range">
+                                    <input type="number" class="filter-input" placeholder="请输入" min="0">
+                                    <span class="range-separator">—</span>
+                                    <input type="number" class="filter-input" placeholder="请输入" min="0">
+                                </div>
+                            </div>
+                            <div class="filter-field">
+                                <label>建成时间</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择建成时间</option><option>1980年及以前</option><option>1981-1990年</option><option>1991-2000年</option><option>2001-2010年</option><option>2011-2015年</option><option>2016年及以后</option></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <div class="filter-section-title">建设情况</div>
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>设计方式</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择设计方式</option><option>有专业设计(或采用标准图集)</option><option>无专业设计(未采用标准图集)</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>建造方式</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择建造方式</option><option>自行建造</option><option>建筑工匠建造</option><option>有资质的施工队伍建造</option><option>其他</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>结构类型</label>
+                                <select class="filter-select">
+                                    <option value="" disabled selected hidden>请选择结构类型</option>
+                                    <option>砌体结构</option>
+                                    <option>底部框架-上部砌体结构</option>
+                                    <option>钢筋混凝土结构</option>
+                                    <option>钢结构</option>
+                                    <option>木（竹）结构</option>
+                                    <option>窑洞</option>
+                                    <option>混杂结构</option>
+                                </select>
+                            </div>
+                            <div class="filter-field">
+                                <label>二级结构类型</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择结构类型</option><option>预制板</option><option>现浇板</option><option>木或轻钢楼屋盖</option><option>石板或石条</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>是否改扩建</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择是否改扩建</option><option>是</option><option>否</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>改扩建次数</label>
+                                <div class="filter-range">
+                                    <input type="number" class="filter-input" placeholder="请输入" min="0">
+                                    <span class="range-separator">—</span>
+                                    <input type="number" class="filter-input" placeholder="请输入" min="0">
+                                </div>
+                            </div>
+                            <div class="filter-field two-thirds">
+                                <label>改扩建内容</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择改扩建内容</option><option>加层</option><option>加夹层</option><option>加隔墙</option><option>减柱</option><option>减隔墙</option><option>建筑外扩</option><option>破墙开洞</option><option>其他</option></select>
+                            </div>
+                            <div class="filter-field one-third">
+                                <label>是否装修</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择是否装修</option><option>是</option><option>否</option></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <div class="filter-section-title">管理情况</div>
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>已取得的行政许可</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择已取得的行政许可</option><option>宅基地批准书</option><option>建设工程规划许可证</option><option>施工许可证</option><option>乡村建设规划许可证</option><option>不动产登记</option><option>市场主体登记（工商执照）</option><option>经营许可证</option><option>以上手续均无</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>是否违法建设和违法审批</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择</option><option>是</option><option>否</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>违法建设</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择违法建设</option><option>违法占地</option><option>违法新建</option><option>违法改扩建</option><option>违法改变用途</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>违法审批</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择违法审批</option><option>违法用地审批</option><option>违法规划审批</option><option>违法建设审批</option><option>违法经营许可</option></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <div class="filter-section-title">排查情况</div>
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>结构状况</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择结构状况</option><option>无变形损伤</option><option>有变形损伤</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>具体损伤部位</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择具体损伤部位</option><option>墙体</option><option>梁柱</option><option>地基</option><option>屋面</option><option>楼板</option><option>其他</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>初步判定</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择初步判定</option><option>第三类</option><option>第二类</option><option>第一类</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>是否安全鉴定</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择是否安全鉴定</option><option>是</option><option>否</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>阶段性标识</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择阶段性标识</option><option>整治前进行的安全鉴定</option><option>整治后进行的安全鉴定</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>鉴定结论</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择鉴定结论</option><option>A级</option><option>B级</option><option>C级</option><option>D级</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>有无鉴定报告</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择有无鉴定报告</option><option>有</option><option>无</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>未进行鉴定原因</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择未进行鉴定房屋原因</option><option>因房屋长期空置或荒废</option><option>因房屋已纳入拆除计划</option><option>根据市级质检核查更改初判</option><option>空</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>是否提交未鉴定说明</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择是否提交未鉴定说明</option><option>是</option><option>否</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>排查更新状态</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择排查更新状态</option><option>待审核</option><option>审核不通过</option><option>审核通过</option></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <div class="filter-section-title">整治情况</div>
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>管理措施</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择管理措施</option><option>停止使用</option><option>停止经营</option><option>封控警示</option><option>人员撤离</option><option>搭设防护措施</option><option>持续监控</option><option>其他</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>管理措施是否完成整治</label>
+                                <select class="filter-select" data-filter-key="manageDone"><option value="" disabled selected hidden>请选择管理措施是否完成整治</option><option>措施未完成整治</option><option>措施已完成整治</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>工程措施</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择工程措施</option><option>拆除重建</option><option>维修加固</option><option>拆除灭失</option><option>其他</option><option>空</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>工程措施是否完成整治</label>
+                                <select class="filter-select" data-filter-key="projectDone"><option value="" disabled selected hidden>请选择工程措施是否完成整治</option><option>措施未完成整治</option><option>措施已完成整治</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>违法建设查处</label>
+                                <select class="filter-select"><option value="" disabled selected hidden>请选择违法建设查处</option><option>全部拆除</option><option>部分拆除</option><option>补办手续</option><option>罚款</option><option>没收</option><option>其他</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>违法建设查处是否完成整治</label>
+                                <select class="filter-select" data-filter-key="illegalDone"><option value="" disabled selected hidden>请选择违法建设查处是否完成整治</option><option>措施未完成整治</option><option>措施已完成整治</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>安全隐患是否得到控制</label>
+                                <select class="filter-select" data-filter-key="riskControlled"><option value="" disabled selected hidden>请选择安全隐患是否得到控制</option><option>安全隐患已得到控制</option><option>安全隐患未得到控制</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>有无整治方案报告</label>
+                                <select class="filter-select" data-filter-key="hasPlanReport"><option value="" disabled selected hidden>请选择有无整治方案报告</option><option>有</option><option>无</option></select>
+                            </div>
+                            <div class="filter-field">
+                                <label>是否采用硬隔离</label>
+                                <select class="filter-select" data-filter-key="hardIsolation"><option value="" disabled selected hidden>请选择是否采用硬隔离</option><option>是</option><option>否</option><option>空</option></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn btn-primary"><i class="fa-solid fa-search"></i> 搜索</button>
+                        <button class="btn btn-outline"><i class="fa-solid fa-rotate-right"></i> 清空</button>
+                    </div>
+                </div>
+            </div>
+            <div class="table-card">
+                <div class="table-header">
+                    <div class="table-title"><i class="fa-solid fa-house-chimney" style="color:var(--primary)"></i> 农村自建房风险档案列表</div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;color:var(--primary);border-color:var(--primary);" onclick="openImportWizard()" title="从 Excel 批量导入农村自建房档案"><i class="fa-solid fa-file-import"></i> 导入</button>
+                        <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;color:var(--safe);border-color:var(--safe);" onclick="syncAllRecords()" title="把所有改过的档案一次性更新到房屋建筑档案"><i class="fa-solid fa-cloud-upload-alt"></i> 全部同步到档案</button>
+                    </div>
+                </div>
+                <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display:none">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="sticky-col sticky-left seq-col">序号</th>
+                            <th class="sticky-col sticky-left-2">唯一标识</th>
+                            <th>产权人/使用人</th>
+                            <th>镇/街道</th>
+                            <th>村/居委</th>
+                            <th>路号信息</th>
+                            <th>房屋性质</th>
+                            <th>结构类型</th>
+                            <th>建筑年代</th>
+                            <th>风险等级</th>
+                            <th>最近巡查</th>
+                            <th>同步状态</th><th class="sticky-col sticky-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="allTableBody">
+                        <!-- 农村自建房记录由脚本动态填充 -->
+                    </tbody>
+                </table>
+                <div class="pagination" id="allPagination">
+                    <button class="page-btn" id="allPrev" disabled=""><i class="fa-solid fa-chevron-left" style="font-size:11px"></i></button>
+                    <span id="allPageNumbers"></span>
+                    <button class="page-btn" id="allNext"><i class="fa-solid fa-chevron-right" style="font-size:11px"></i></button>
+                    <span style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;margin-left:8px" id="allTotalText">共 0 条</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: 第三类 -->
+        <div class="tab-content" id="tab-major">
+            <div class="filter-bar">
+                <input type="text" class="filter-input" placeholder="搜索唯一标识/产权人/地址..." style="min-width:260px">
+                <select class="filter-select">
+                    <option>全部房屋类型</option>
+                    <option>住宅</option>
+                    <option>商住混合</option>
+                    <option>生产仓储</option>
+                    <option>其他</option>
+                </select>
+                <select class="filter-select">
+                    <option>全部结构类型</option>
+                    <option>砖混</option>
+                    <option>砖木</option>
+                    <option>钢结构</option>
+                    <option>混杂结构</option>
+                    <option>木结构</option>
+                    <option>其他</option>
+                </select>
+                <select class="filter-select">
+                    <option>全部村/居委</option>
+                    <option>光明村</option>
+                    <option>杨王村</option>
+                    <option>沈陆村</option>
+                    <option>江海村</option>
+                    <option>张弄村</option>
+                    <option>吴塘村</option>
+                    <option>五星村</option>
+                    <option>八字村</option>
+                </select>
+                <button class="btn btn-primary"><i class="fa-solid fa-search"></i> 查询</button>
+                <button class="btn btn-outline"><i class="fa-solid fa-rotate-right"></i> 重置</button>
+            </div>
+            <div class="table-card">
+                <div class="table-header">
+                    <div class="table-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i> 第三类房屋档案列表</div>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="sticky-col sticky-left seq-col">序号</th>
+                            <th class="sticky-col sticky-left-2">唯一标识</th>
+                            <th>产权人/使用人</th>
+                            <th>镇/街道</th>
+                            <th>村/居委</th>
+                            <th>路号信息</th>
+                            <th>房屋性质</th>
+                            <th>结构类型</th>
+                            <th>建筑年代</th>
+                            <th>最近巡查</th>
+                            <th>同步状态</th><th class="sticky-col sticky-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="majorTableBody">
+                        <!-- 第三类记录由脚本动态填充 -->
+                    </tbody>
+                </table>
+                <div class="pagination" id="majorPagination">
+                    <button class="page-btn" id="majorPrev" disabled=""><i class="fa-solid fa-chevron-left" style="font-size:11px"></i></button>
+                    <span id="majorPageNumbers"></span>
+                    <button class="page-btn" id="majorNext"><i class="fa-solid fa-chevron-right" style="font-size:11px"></i></button>
+                    <span style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;margin-left:8px" id="majorTotalText">共 0 条</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: 第二类 -->
+        <div class="tab-content" id="tab-general">
+            <div class="filter-bar">
+                <input type="text" class="filter-input" placeholder="搜索唯一标识/产权人/地址..." style="min-width:260px">
+                <select class="filter-select">
+                    <option>全部房屋类型</option>
+                    <option>住宅</option>
+                    <option>商住混合</option>
+                    <option>生产仓储</option>
+                    <option>其他</option>
+                </select>
+                <select class="filter-select">
+                    <option>全部结构类型</option>
+                    <option>砖混</option>
+                    <option>砖木</option>
+                    <option>钢结构</option>
+                    <option>混杂结构</option>
+                    <option>木结构</option>
+                    <option>其他</option>
+                </select>
+                <select class="filter-select">
+                    <option>全部村/居委</option>
+                    <option>光明村</option>
+                    <option>杨王村</option>
+                    <option>沈陆村</option>
+                    <option>江海村</option>
+                    <option>张弄村</option>
+                    <option>吴塘村</option>
+                    <option>五星村</option>
+                    <option>八字村</option>
+                </select>
+                <button class="btn btn-primary"><i class="fa-solid fa-search"></i> 查询</button>
+                <button class="btn btn-outline"><i class="fa-solid fa-rotate-right"></i> 重置</button>
+            </div>
+            <div class="table-card">
+                <div class="table-header">
+                    <div class="table-title"><i class="fa-solid fa-exclamation" style="color:#c78000"></i> 第二类房屋档案列表</div>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="sticky-col sticky-left seq-col">序号</th>
+                            <th class="sticky-col sticky-left-2">唯一标识</th>
+                            <th>产权人/使用人</th>
+                            <th>镇/街道</th>
+                            <th>村/居委</th>
+                            <th>路号信息</th>
+                            <th>房屋性质</th>
+                            <th>结构类型</th>
+                            <th>建筑年代</th>
+                            <th>最近巡查</th>
+                            <th>同步状态</th><th class="sticky-col sticky-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="generalTableBody">
+                        <!-- 第二类记录由脚本动态填充 -->
+                    </tbody>
+                </table>
+                <div class="pagination" id="generalPagination">
+                    <button class="page-btn" id="generalPrev" disabled=""><i class="fa-solid fa-chevron-left" style="font-size:11px"></i></button>
+                    <span id="generalPageNumbers"></span>
+                    <button class="page-btn" id="generalNext"><i class="fa-solid fa-chevron-right" style="font-size:11px"></i></button>
+                    <span style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;margin-left:8px" id="generalTotalText">共 0 条</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: 第一类 -->
+        <div class="tab-content" id="tab-low">
+            <div class="filter-bar">
+                <input type="text" class="filter-input" placeholder="搜索唯一标识/产权人/地址..." style="min-width:260px">
+                <select class="filter-select">
+                    <option>全部房屋类型</option>
+                    <option>住宅</option>
+                    <option>商住混合</option>
+                    <option>生产仓储</option>
+                    <option>其他</option>
+                </select>
+                <select class="filter-select">
+                    <option>全部结构类型</option>
+                    <option>砖混</option>
+                    <option>砖木</option>
+                    <option>钢结构</option>
+                    <option>混杂结构</option>
+                    <option>木结构</option>
+                    <option>其他</option>
+                </select>
+                <select class="filter-select">
+                    <option>全部村/居委</option>
+                    <option>光明村</option>
+                    <option>杨王村</option>
+                    <option>沈陆村</option>
+                    <option>江海村</option>
+                    <option>张弄村</option>
+                    <option>吴塘村</option>
+                    <option>五星村</option>
+                    <option>八字村</option>
+                </select>
+                <button class="btn btn-primary"><i class="fa-solid fa-search"></i> 查询</button>
+                <button class="btn btn-outline"><i class="fa-solid fa-rotate-right"></i> 重置</button>
+            </div>
+            <div class="table-card">
+                <div class="table-header">
+                    <div class="table-title"><i class="fa-solid fa-shield-halved" style="color:var(--primary)"></i> 第一类房屋档案列表</div>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="sticky-col sticky-left seq-col">序号</th>
+                            <th class="sticky-col sticky-left-2">唯一标识</th>
+                            <th>产权人/使用人</th>
+                            <th>镇/街道</th>
+                            <th>村/居委</th>
+                            <th>路号信息</th>
+                            <th>房屋性质</th>
+                            <th>结构类型</th>
+                            <th>建筑年代</th>
+                            <th>最近巡查</th>
+                            <th>同步状态</th><th class="sticky-col sticky-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lowTableBody">
+                        <!-- 第一类记录由脚本动态填充 -->
+                    </tbody>
+                </table>
+                <div class="pagination" id="lowPagination">
+                    <button class="page-btn" id="lowPrev" disabled=""><i class="fa-solid fa-chevron-left" style="font-size:11px"></i></button>
+                    <span id="lowPageNumbers"></span>
+                    <button class="page-btn" id="lowNext"><i class="fa-solid fa-chevron-right" style="font-size:11px"></i></button>
+                    <span style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;margin-left:8px" id="lowTotalText">共 0 条</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+<script>
+// ===== Tab Switching =====
+let currentTab = 'all';
+function switchTab(tabId) {
+    currentTab = tabId;
+
+    // Update tab active state
+    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.tab-item[data-tab="${tabId}"]`).classList.add('active');
+
+    // Update tab content visibility
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+}
+
+// ===== Navigation =====
+function goHome() {
+    window.parent.postMessage({ action: 'navigate', topNav: 'workspace' }, '*');
+}
+function goParent() {
+    window.parent.postMessage({ action: 'navigate', topNav: 'risk-judgment', subNav: 'rural' }, '*');
+}
+
+// ===== Theme Sync =====
+(function() {
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') {
+        document.documentElement.setAttribute('data-theme', e.data.theme);
+        localStorage.setItem('theme', e.data.theme);
+    }
+    // 嵌入的详情页（草稿模式）点"返回"时，关闭嵌入层
+    if (e.data && e.data.action === 'closeDetailEmbed') {
+        closeDetailEmbed();
+        refreshAllLists(); // 可能编辑过，刷新同步状态
+    }
+    // 详情页同步成功，刷新列表
+    if (e.data && e.data.action === 'draftSynced') {
+        refreshAllLists();
+    }
+});
+
+// ===== 农村自建房风险档案列表渲染 =====
+// 从房屋建筑档案（house-arch-data.js）筛选出房屋类别为"农村自建房"的记录，覆盖到本页列表
+const RURAL_PAGE_SIZE = 10;
+const RURAL_ALL_PAGER = { page: 1 };
+let ruralFilteredRecords = [];
+
+// 各风险等级 Tab 的独立状态
+const RISK_TAB_STATE = {
+    major: { page: 1, records: [], riskLevel: '第三类' },
+    general: { page: 1, records: [], riskLevel: '第二类' },
+    low: { page: 1, records: [], riskLevel: '第一类' }
+};
+
+function formatRiskInfo(riskLevel) {
+    // 统一将历史风险等级映射为 3 类口径
+    const norm = {
+        '疑似危房': '第三类',
+        '严重损坏房': '第三类',
+        '一般损坏房': '第二类',
+        '完好房(基本完好房)': '第一类',
+        '安全': '第一类',
+        '无风险': '第一类'
+    };
+    const normalized = norm[riskLevel] || riskLevel || '第一类';
+    const map = {
+        '第三类': { cls: 'red', icon: '', text: '第三类' },
+        '第二类': { cls: 'yellow', icon: 'fa-exclamation', text: '第二类' },
+        '第一类': { cls: 'blue', icon: 'fa-shield-halved', text: '第一类' }
+    };
+    return map[normalized] || { cls: 'blue', icon: 'fa-shield-halved', text: '第一类' };
+}
+
+// 同步状态展示：调数据层 getSyncStatus
+function formatSyncStatus(no) {
+    if (typeof getSyncStatus !== 'function') return { cls: 'blue', text: '未知', synced: false };
+    const s = getSyncStatus(no);
+    if (s === 'synced') return { cls: 'green', text: '已同步', synced: true };
+    if (s === 'pending') return { cls: 'orange', text: '未同步', synced: false };
+    return { cls: 'blue', text: '未编辑', synced: false }; // new
+}
+
+// 单条同步：把某记录的草稿推送到发布区
+function syncOneRecord(no) {
+    if (typeof publishDraftRecord !== 'function') { alert('数据层未就绪'); return; }
+    const s = typeof getSyncStatus === 'function' ? getSyncStatus(no) : 'new';
+    if (s === 'synced') { alert('该档案已是最新，无需同步'); return; }
+    if (s === 'new') { alert('该档案还没有修改过，无需同步'); return; }
+    if (!confirm('确认将 ' + no + ' 的最新修改更新到房屋建筑档案？')) return;
+    const r = publishDraftRecord(no, 'user');
+    if (r && r.ok) {
+        alert('✅ ' + no + ' 已更新到房屋建筑档案');
+        refreshAllLists();
+    } else {
+        alert('❌ 同步失败：' + (r && r.msg ? r.msg : '未知错误'));
+    }
+}
+
+// 批量同步：把所有未同步草稿一次性推送
+function syncAllRecords() {
+    if (typeof getDraftedNos !== 'function' || typeof publishAllDrafts !== 'function') { alert('数据层未就绪'); return; }
+    const drafted = getDraftedNos();
+    const pending = drafted.filter(no => getSyncStatus(no) === 'pending');
+    if (!pending.length) { alert('当前没有待更新的档案'); return; }
+    if (!confirm('确认把 ' + pending.length + ' 条修改一次性更新到房屋建筑档案？')) return;
+    const r = publishAllDrafts('user');
+    alert('✅ 更新完成：共 ' + r.total + ' 条，成功 ' + r.ok + ' 条，失败 ' + r.fail + ' 条');
+    refreshAllLists();
+}
+
+// 统一刷新所有列表（编辑/同步后调用，保留当前页码避免列表乱跳）
+function refreshAllLists() {
+    if (typeof renderRuralArchiveRows === 'function') renderRuralArchiveRows(true);
+}
+
+// 地址转路号信息：去掉"上海市奉贤区"、镇/街道、村/居委，仅保留"X组Y号"
+function formatRoadNoInfo(record) {
+    const raw = record.address || '';
+    const numMatch = raw.match(/(\d+)号/);
+    const houseNo = numMatch ? numMatch[0] : raw.replace(/^上海市奉贤区/, '').replace(/^\S*(镇|街道|旅游区)/, '').replace(/^\S*(村|社区|居委)/, '');
+    const seqNo = parseInt((record.no || '').replace(/\D/g, ''), 10);
+    const groupNo = isNaN(seqNo) ? 1 : (1 + (seqNo % 12));
+    return groupNo + '组' + houseNo;
+}
+
+// 通用行渲染：target: { tbodyId, hasRiskCol:true/false }；startOffset 为本页首条在全部记录中的下标，用于连续序号
+function renderRuralRowsInto(pageRecords, tbody, hasRiskCol, startOffset) {
+    tbody.innerHTML = '';
+    startOffset = startOffset || 0;
+    pageRecords.forEach(function(record, idx) {
+        const risk = formatRiskInfo(record.riskLevel);
+        const sync = formatSyncStatus(record.no);
+        let lastInspect = '2026-06-15';
+        if (record.archiveRecords && record.archiveRecords.length) {
+            const ar = record.archiveRecords[record.archiveRecords.length - 1];
+            lastInspect = ar.archiveTime || ar.date || '2026-06-15';
+        }
+        const riskCol = hasRiskCol
+            ? `<td><span class="risk-tag ${risk.cls}">${risk.text}</span></td>`
+            : '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="sticky-col sticky-left seq-col">${startOffset + idx + 1}</td>
+            <td class="sticky-col sticky-left-2">${record.no}</td>
+            <td>${record.owner}</td>
+            <td>${record.street || '—'}</td>
+            <td>${record.community}</td>
+            <td>${formatRoadNoInfo(record)}</td>
+            <td>${record.houseNature || '住宅'}</td>
+            <td>${record.category}结构</td>
+            <td>${record.year}年</td>
+            ${riskCol}
+            <td>${lastInspect}</td>
+            <td><span class="risk-tag ${sync.cls}">${sync.text}</span></td>
+            <td class="sticky-col sticky-right">
+                <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick="openDetailEmbed('${record.no}')">查看</button>
+                <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px; margin-left:4px; ${sync.synced ? 'opacity:0.5;cursor:not-allowed;' : 'color:var(--safe);border-color:var(--safe);'}" ${sync.synced ? 'disabled' : ''} onclick="syncOneRecord('${record.no}')" title="${sync.synced ? '已是最新' : '同步到房屋建筑档案'}">同步</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    // 不足10条时补空行，保持列表框固定高度
+    const colCount = (tbody.closest('table').querySelectorAll('thead th').length) || 13;
+    for (let i = pageRecords.length; i < RURAL_PAGE_SIZE; i++) {
+        const filler = document.createElement('tr');
+        filler.className = 'filler-row';
+        filler.innerHTML = '<td>&nbsp;</td>'.repeat(colCount);
+        tbody.appendChild(filler);
+    }
+}
+
+function renderRuralPaginationFor(stateKey, totalPages, total) {
+    const state = getRuralState(stateKey);
+    const suffix = stateKey === 'all' ? 'all' : stateKey;
+    const pageContainer = document.getElementById(suffix + 'PageNumbers');
+    const prevBtn = document.getElementById(suffix + 'Prev');
+    const nextBtn = document.getElementById(suffix + 'Next');
+    const totalText = document.getElementById(suffix + 'TotalText');
+    if (!pageContainer || !prevBtn || !nextBtn || !totalText) return;
+
+    prevBtn.disabled = state.pageRef.page <= 1;
+    nextBtn.disabled = state.pageRef.page >= totalPages;
+    totalText.textContent = '共 ' + total + ' 条';
+
+    let html = '';
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= state.pageRef.page - 1 && i <= state.pageRef.page + 1)) {
+            html += `<button class="page-btn ${i === state.pageRef.page ? 'active' : ''}" data-page="${i}">${i}</button>`;
+        } else if (i === state.pageRef.page - 2 || i === state.pageRef.page + 2) {
+            html += `<span style="padding:0 4px;color:var(--text-secondary)">...</span>`;
+        }
+    }
+    pageContainer.innerHTML = html;
+
+    pageContainer.querySelectorAll('button[data-page]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            renderRuralArchivePage(stateKey, parseInt(this.dataset.page, 10));
+        });
+    });
+}
+
+function updateTabCounts() {
+    const all = ruralFilteredRecords;
+    const counts = {
+        all: all.length,
+        major: all.filter(r => r.riskLevel === '第三类').length,
+        general: all.filter(r => r.riskLevel === '第二类').length,
+        low: all.filter(r => r.riskLevel === '第一类').length
+    };
+    document.getElementById('countAll').textContent = counts.all;
+    document.getElementById('countMajor').textContent = counts.major;
+    document.getElementById('countGeneral').textContent = counts.general;
+    document.getElementById('countLow').textContent = counts.low;
+}
+
+function getRuralState(tabKey) {
+    if (tabKey === 'all') {
+        return { pageRef: RURAL_ALL_PAGER, records: ruralFilteredRecords };
+    }
+    return { pageRef: RISK_TAB_STATE[tabKey], records: RISK_TAB_STATE[tabKey].records };
+}
+
+function renderRuralArchivePage(tabKey, page) {
+    const isAll = tabKey === 'all';
+    const state = getRuralState(tabKey);
+    const suffix = isAll ? 'all' : tabKey;
+    const tbodyId = suffix + 'TableBody';
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+
+    const total = state.records.length;
+    const totalPages = Math.max(1, Math.ceil(total / RURAL_PAGE_SIZE));
+    state.pageRef.page = Math.max(1, Math.min(page, totalPages));
+
+    const start = (state.pageRef.page - 1) * RURAL_PAGE_SIZE;
+    const pageRecords = state.records.slice(start, start + RURAL_PAGE_SIZE);
+
+    renderRuralRowsInto(pageRecords, tbody, isAll, start);
+
+    // 更新标签计数
+    const countEl = document.getElementById('count' + suffix.charAt(0).toUpperCase() + suffix.slice(1));
+    if (countEl) countEl.textContent = total;
+
+    renderRuralPaginationFor(tabKey, totalPages, total);
+}
+
+// 渲染档案列表；preservePage=true 时保留各 Tab 当前页码（服务端异步合并完成后刷新用，避免用户被拉回第 1 页）
+function renderRuralArchiveRows(preservePage) {
+    if (typeof initHouseArchSeed !== 'function' || typeof getAllHouseRecords !== 'function') return;
+    initHouseArchSeed();
+    // 统一将历史风险等级归一化为 3 类口径
+    const LEGACY_RISK_NORM = {
+        '疑似危房': '第三类',
+        '严重损坏房': '第三类',
+        '一般损坏房': '第二类',
+        '完好房(基本完好房)': '第一类',
+        '安全': '第一类',
+        '无风险': '第一类'
+    };
+    // 只用 houseType 筛选农村自建房，category 是结构类型（砖混/砖木/框架），不能用 || 兜底
+    const all = getAllHouseRecords()
+        .filter(r => r.houseType === '农村自建房')
+        .map(r => {
+            if (r.riskLevel && LEGACY_RISK_NORM[r.riskLevel]) {
+                r.riskLevel = LEGACY_RISK_NORM[r.riskLevel];
+            }
+            return r;
+        });
+
+    ruralFilteredRecords = all;
+    RISK_TAB_STATE.major.records = all.filter(r => r.riskLevel === '第三类');
+    RISK_TAB_STATE.general.records = all.filter(r => r.riskLevel === '第二类');
+    RISK_TAB_STATE.low.records = all.filter(r => r.riskLevel === '第一类');
+
+    if (!preservePage) {
+        RURAL_ALL_PAGER.page = 1;
+        Object.keys(RISK_TAB_STATE).forEach(k => { RISK_TAB_STATE[k].page = 1; });
+    }
+
+    // renderRuralArchivePage 内部会对页码越界自动 clamp，保留页码也安全
+    renderRuralArchivePage('all', RURAL_ALL_PAGER.page);
+    renderRuralArchivePage('major', RISK_TAB_STATE.major.page);
+    renderRuralArchivePage('general', RISK_TAB_STATE.general.page);
+    renderRuralArchivePage('low', RISK_TAB_STATE.low.page);
+    // 更新 Tab 计数
+    updateTabCounts();
+}
+
+function bindRuralPagination(tabKey) {
+    const isAll = tabKey === 'all';
+    const suffix = isAll ? 'all' : tabKey;
+
+    document.getElementById(suffix + 'Prev')?.addEventListener('click', function() {
+        const state = getRuralState(tabKey);
+        if (state.pageRef.page > 1) renderRuralArchivePage(tabKey, state.pageRef.page - 1);
+    });
+    document.getElementById(suffix + 'Next')?.addEventListener('click', function() {
+        const state = getRuralState(tabKey);
+        const totalPages = Math.max(1, Math.ceil(state.records.length / RURAL_PAGE_SIZE));
+        if (state.pageRef.page < totalPages) renderRuralArchivePage(tabKey, state.pageRef.page + 1);
+    });
+}
+
+// ===== 高级筛选区克隆与折叠交互 =====
+function initAdvancedFilterPanel() {
+    const sourcePanel = document.getElementById('filter-panel');
+    if (!sourcePanel) return;
+
+    // 为每个 Tab 内容区克隆一份高级筛选面板，并移除原有的简单 filter-bar
+    document.querySelectorAll('.tab-content').forEach(function(tabContent) {
+        const existingFilterBar = tabContent.querySelector('.filter-bar');
+        if (existingFilterBar) existingFilterBar.remove();
+
+        // 跳过 #tab-all，它本身已包含源面板
+        if (tabContent.id === 'tab-all') return;
+
+        const clone = sourcePanel.cloneNode(true);
+        const tabKey = tabContent.id.replace('tab-', '');
+        clone.removeAttribute('id');
+        // 清除克隆体内所有 id，避免与源面板冲突
+        clone.querySelectorAll('[id]').forEach(function(el) {
+            el.removeAttribute('id');
+        });
+        const extraId = 'filter-extra-' + tabKey;
+        const toggleBtn = clone.querySelector('.filter-toggle-btn');
+        const extraContent = clone.querySelector('.filter-extra-content');
+        if (toggleBtn && extraContent) {
+            toggleBtn.dataset.toggle = extraId;
+            extraContent.id = extraId;
+        }
+        tabContent.insertBefore(clone, tabContent.firstChild);
+    });
+
+    // 统一折叠/展开事件委托
+    document.querySelectorAll('.filter-toggle-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const targetId = this.dataset.toggle;
+            const target = document.getElementById(targetId);
+            if (!target) return;
+            const isExpanded = target.classList.contains('expanded');
+            target.classList.toggle('expanded');
+            this.classList.toggle('expanded');
+            const label = this.querySelector('span');
+            if (label) label.textContent = isExpanded ? '展开高级筛选' : '收起搜索条件';
+        });
+    });
+
+    // 给所有面板的搜索/重置按钮绑定筛选逻辑（含克隆面板）
+    document.querySelectorAll('.advanced-filter-panel').forEach(function(panel) {
+        const tabContent = panel.closest('.tab-content');
+        if (!tabContent) return;
+        const tabKey = tabContent.id.replace('tab-', '');
+        panel.querySelectorAll('.btn-primary').forEach(function(btn) {
+            if (btn.textContent.indexOf('搜索') > -1 || btn.textContent.indexOf('查询') > -1) {
+                btn.addEventListener('click', function() { applyFilter(tabKey, panel); });
+            }
+        });
+        panel.querySelectorAll('.btn-outline').forEach(function(btn) {
+            if (btn.textContent.indexOf('重置') > -1 || btn.textContent.indexOf('清空') > -1) {
+                btn.addEventListener('click', function() { resetFilter(tabKey, panel); });
+            }
+        });
+    });
+}
+
+// 客户端筛选：按关键字 + 风险等级过滤当前 Tab 的数据
+function applyFilter(tabKey, panel) {
+    const keywordInput = panel.querySelector('.filter-quick-row input.filter-input');
+    const levelSelect = panel.querySelector('.filter-quick-row select.filter-select');
+    const keyword = (keywordInput && keywordInput.value || '').trim();
+    const levelText = (levelSelect && levelSelect.value || '').trim();
+    let levelFilter = '';
+    if (levelText.indexOf('第三类') > -1) levelFilter = '第三类';
+    else if (levelText.indexOf('第二类') > -1) levelFilter = '第二类';
+    else if (levelText.indexOf('第一类') > -1) levelFilter = '第一类';
+
+    const all = getAllHouseRecords().filter(r => r.houseType === '农村自建房');
+    let filtered = all;
+    if (keyword) {
+        filtered = filtered.filter(r =>
+            (r.no && r.no.indexOf(keyword) > -1) ||
+            (r.owner && r.owner.indexOf(keyword) > -1) ||
+            (r.address && r.address.indexOf(keyword) > -1)
+        );
+    }
+    if (levelFilter) {
+        filtered = filtered.filter(r => r.riskLevel === levelFilter);
+    }
+
+    // ===== 整治情况区高级筛选（三态：是/否/空） =====
+    // 空 = 该字段无值（未填报）
+    const triFilters = {
+        manageDone: {
+            sel: 'manageDone',
+            get: r => { const m = (r.manageRecords || [])[0]; return m ? m.isDone : undefined; }
+        },
+        projectDone: {
+            sel: 'projectDone',
+            get: r => { const p = (r.projectRecords || [])[0]; return p ? (p.isDone !== undefined ? p.isDone : (r.governance === 'done')) : undefined; }
+        },
+        illegalDone: {
+            sel: 'illegalDone',
+            get: r => { const l = (r.illegalRecords || [])[0]; return l ? l.isDone : undefined; }
+        },
+        riskControlled: {
+            sel: 'riskControlled',
+            get: r => { const m = (r.manageRecords || [])[0]; return m ? m.riskControlled : undefined; }
+        },
+        hasPlanReport: {
+            sel: 'hasPlanReport',
+            get: r => { const v = r.planReport || (r.rectifyPlan && r.rectifyPlan.report); return (v === undefined || v === null || v === '') ? undefined : (v === '有' || v === true); }
+        },
+        hardIsolation: {
+            sel: 'hardIsolation',
+            get: r => { const m = (r.manageRecords || [])[0]; const v = (m && m.hardIsolation !== undefined) ? m.hardIsolation : r.hardIsolation; return (v === undefined || v === null || v === '') ? undefined : (v === true || v === '是'); }
+        }
+    };
+    Object.keys(triFilters).forEach(key => {
+        const conf = triFilters[key];
+        const sel = panel.querySelector('select.filter-select[data-filter-key="' + conf.sel + '"]');
+        if (!sel) return;
+        const v = (sel.value || '').trim();
+        // value="" 表示占位项未选 → 跳过
+        if (!v) return;
+        if (v === '空') {
+            filtered = filtered.filter(r => conf.get(r) === undefined);
+        } else {
+            // 正向：已完成/已得到控制/是/有 等；其余（未完成/未得到控制/否/无）视为负向
+            const positive = /^(是|有|已完成整治|措施已完成整治|安全隐患已得到控制)/.test(v);
+            filtered = filtered.filter(r => conf.get(r) === positive);
+        }
+    });
+
+    if (tabKey === 'all') {
+        ruralFilteredRecords = filtered;
+    } else {
+        const level = RISK_TAB_STATE[tabKey].riskLevel;
+        RISK_TAB_STATE[tabKey].records = filtered.filter(r => r.riskLevel === level);
+    }
+    renderRuralArchivePage(tabKey, 1);
+    updateTabCounts();
+}
+
+function resetFilter(tabKey, panel) {
+    panel.querySelectorAll('input.filter-input').forEach(function(inp) { inp.value = ''; });
+    panel.querySelectorAll('select.filter-select').forEach(function(sel) { sel.selectedIndex = 0; });
+    // 重新加载完整数据
+    renderRuralArchiveRows();
+}
+
+// 服务端异步合并完成后重新渲染列表（修复：首屏同步渲染时本地数据不全，合并完成后列表未刷新）
+// 保留当前页码，避免用户在翻页/浏览时被拉回第 1 页
+// 注意：initHouseArchSeed 内的服务端同步每个页面会话只发起一次，本事件不会反复触发
+document.addEventListener('house-arch-synced', function() {
+    if (typeof renderRuralArchiveRows === 'function') renderRuralArchiveRows(true);
+});
+
+// ===== 占位提示浅灰色：value="" 时加 class，选中实际值时移除 =====
+function updateSelectPlaceholderColor(sel) {
+    if (!sel) return;
+    if (sel.value === '') sel.classList.add('placeholder-active');
+    else sel.classList.remove('placeholder-active');
+}
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList && e.target.classList.contains('filter-select')) {
+        updateSelectPlaceholderColor(e.target);
+    }
+});
+// 初始化时对所有 select 跑一次
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('select.filter-select').forEach(updateSelectPlaceholderColor);
+});
+
+// ===== 镇/街道/乡与村/居委联动 =====
+// 统一使用数据层的 FENGXIAN_TOWN_VILLAGES（js/house-arch-data.js）
+const FENGXIAN_TOWN_VILLAGE = typeof FENGXIAN_TOWN_VILLAGES !== 'undefined' ? FENGXIAN_TOWN_VILLAGES : {};
+
+function initTownVillageLinkage() {
+    function bindPair(townSelect, villageSelect) {
+        if (!townSelect || !villageSelect) return;
+        function updateVillageOptions() {
+            const town = townSelect.value;
+            villageSelect.innerHTML = '<option value="">请选择村/居委</option>';
+            if (!town || !FENGXIAN_TOWN_VILLAGE[town]) return;
+            FENGXIAN_TOWN_VILLAGE[town].forEach(function(v) {
+                const opt = document.createElement('option');
+                opt.textContent = v;
+                opt.value = v;
+                villageSelect.appendChild(opt);
+            });
+        }
+        townSelect.addEventListener('change', updateVillageOptions);
+        updateVillageOptions();
+    }
+
+    const townSelect = document.getElementById('townSelect');
+    const villageSelect = document.getElementById('villageSelect');
+
+    bindPair(townSelect, villageSelect);
+
+    // 克隆面板也需要保持联动：由于克隆时清除了 id，这里用 class 查找
+    document.querySelectorAll('.advanced-filter-panel').forEach(function(panel) {
+        const selects = panel.querySelectorAll('select.filter-select');
+        let t = null, v = null;
+        selects.forEach(function(sel) {
+            const prev = sel.previousElementSibling;
+            const label = prev && prev.tagName === 'LABEL' ? prev.textContent : '';
+            if (label.indexOf('镇/街道') > -1 || label.indexOf('镇/街') > -1) t = sel;
+            if (label.indexOf('村/居委') > -1) v = sel;
+        });
+        if (t && v && t.id !== 'townSelect') {
+            t.addEventListener('change', function() {
+                v.innerHTML = '<option value="">请选择村/居委</option>';
+                if (this.value && FENGXIAN_TOWN_VILLAGE[this.value]) {
+                    FENGXIAN_TOWN_VILLAGE[this.value].forEach(function(item) {
+                        const opt = document.createElement('option');
+                        opt.textContent = item;
+                        opt.value = item;
+                        v.appendChild(opt);
+                    });
+                }
+            });
+        }
+    });
+}
+
+// ===== 所在区域与城市建成区联动 =====
+function initAreaLinkage() {
+    const areaSelect = document.getElementById('areaTypeSelect');
+    const citySelect = document.getElementById('cityAreaSelect');
+    if (!areaSelect || !citySelect) return;
+    areaSelect.addEventListener('change', function() {
+        const isCity = this.value === '城市建成区';
+        citySelect.disabled = !isCity;
+        if (!isCity) {
+            citySelect.selectedIndex = 0;
+            citySelect.classList.add('placeholder-active');
+            updateSelectPlaceholderColor(citySelect);
+        }
+    });
+    // 克隆面板也保持联动
+    document.querySelectorAll('.advanced-filter-panel').forEach(function(panel) {
+        const selects = panel.querySelectorAll('select.filter-select');
+        let a = null, c = null;
+        selects.forEach(function(sel) {
+            const prev = sel.previousElementSibling;
+            const label = prev && prev.tagName === 'LABEL' ? prev.textContent : '';
+            if (label.indexOf('所在区域') > -1) a = sel;
+            if (label.indexOf('城市建成区') > -1) c = sel;
+        });
+        if (a && c && a.id !== 'areaTypeSelect') {
+            a.addEventListener('change', function() {
+                const isCity = this.value === '城市建成区';
+                c.disabled = !isCity;
+                if (!isCity) {
+                    c.selectedIndex = 0;
+                    c.classList.add('placeholder-active');
+                    updateSelectPlaceholderColor(c);
+                }
+            });
+        }
+    });
+}
+
+// ===== 土地性质与二级土地性质联动 =====
+function initLandLinkage() {
+    const LAND_OPTIONS = {
+        '集体土地': ['宅基地', '集体建设用地', '集体非建设用地', '其他'],
+        '国有土地': ['居住用地', '商住用地', '商业用地', '国有非建设用地', '其他']
+    };
+    const landSelect = document.getElementById('landNatureSelect');
+    const landSubSelect = document.getElementById('landSubNatureSelect');
+    if (landSelect && landSubSelect) {
+        landSelect.addEventListener('change', function() {
+            const opts = LAND_OPTIONS[this.value] || [];
+            landSubSelect.innerHTML = '<option value="" disabled selected hidden>请选择</option>' +
+                opts.map(function(o) { return '<option>' + o + '</option>'; }).join('');
+            landSubSelect.disabled = opts.length === 0;
+            landSubSelect.classList.add('placeholder-active');
+            updateSelectPlaceholderColor(landSubSelect);
+        });
+    }
+    // 克隆面板也保持联动
+    document.querySelectorAll('.advanced-filter-panel').forEach(function(panel) {
+        const selects = panel.querySelectorAll('select.filter-select');
+        let land = null, sub = null;
+        selects.forEach(function(sel) {
+            const prev = sel.previousElementSibling;
+            const label = prev && prev.tagName === 'LABEL' ? prev.textContent : '';
+            if (label.indexOf('二级土地性质') > -1) sub = sel;
+            else if (label.indexOf('土地性质') > -1) land = sel;
+        });
+        if (land && sub && land.id !== 'landNatureSelect') {
+            land.addEventListener('change', function() {
+                const opts = LAND_OPTIONS[this.value] || [];
+                sub.innerHTML = '<option value="" disabled selected hidden>请选择</option>' +
+                    opts.map(function(o) { return '<option>' + o + '</option>'; }).join('');
+                sub.disabled = opts.length === 0;
+                sub.classList.add('placeholder-active');
+                updateSelectPlaceholderColor(sub);
+            });
+        }
+    });
+}
+
+// ===== 房屋用途与具体用途联动 =====
+// 经营性自建房：餐饮饭店/宾馆/批发零售/医疗卫生/养老服务/生产加工/仓储物流/出租居住/其他
+// 其他自建房：具体用途不可用
+// 未选房屋用途时，具体用途禁用
+function initUsageLinkage() {
+    const USAGE_OPTIONS = {
+        '经营性自建房': ['餐饮饭店', '宾馆', '批发零售', '医疗卫生', '养老服务', '生产加工', '仓储物流', '出租居住', '其他'],
+        '其他自建房': []
+    };
+    function applyUsageOptions(usageSel, specSel) {
+        const opts = USAGE_OPTIONS[usageSel.value] || [];
+        specSel.innerHTML = '<option value="" disabled selected hidden>请选择具体用途</option>' +
+            opts.map(function(o) { return '<option>' + o + '</option>'; }).join('');
+        specSel.disabled = opts.length === 0;
+        specSel.classList.add('placeholder-active');
+        updateSelectPlaceholderColor(specSel);
+    }
+
+    const usageSelect = document.getElementById('houseUsageSelect');
+    const specSelect = document.getElementById('specificUsageSelect');
+    if (usageSelect && specSelect) {
+        usageSelect.addEventListener('change', function() {
+            applyUsageOptions(usageSelect, specSelect);
+        });
+    }
+
+    // 克隆面板也保持联动（克隆时 id 已清除，用 label 查找）
+    document.querySelectorAll('.advanced-filter-panel').forEach(function(panel) {
+        const selects = panel.querySelectorAll('select.filter-select');
+        let u = null, s = null;
+        selects.forEach(function(sel) {
+            const prev = sel.previousElementSibling;
+            const label = prev && prev.tagName === 'LABEL' ? prev.textContent : '';
+            if (label.indexOf('具体用途') > -1) s = sel;
+            else if (label.indexOf('房屋用途') > -1 && label.indexOf('现场情况') === -1) u = sel;
+        });
+        if (u && s && u.id !== 'houseUsageSelect') {
+            u.addEventListener('change', function() {
+                applyUsageOptions(u, s);
+            });
+        }
+    });
+}
+
+function openDetailEmbed(houseNo) {
+    const overlay = document.getElementById('detailEmbedOverlay');
+    const frame = document.getElementById('detailEmbedFrame');
+    if (!overlay || !frame) return;
+    // 内嵌打开详情页
+    frame.src = 'rural-house-survey-2022-details.html?no=' + encodeURIComponent(houseNo || '');
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDetailEmbed() {
+    const overlay = document.getElementById('detailEmbedOverlay');
+    const frame = document.getElementById('detailEmbedFrame');
+    if (!overlay || !frame) return;
+    overlay.classList.remove('active');
+    frame.src = '';
+    document.body.style.overflow = '';
+}
+
+// ===== Init =====
+document.addEventListener('DOMContentLoaded', function() {
+    const setText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    };
+    const setWidth = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.style.width = val;
+    };
+
+    // 历史风险等级归一化映射（与 formatRiskInfo 共用）
+    const LEGACY_RISK_NORM = {
+        '疑似危房': '第三类',
+        '严重损坏房': '第三类',
+        '一般损坏房': '第二类',
+        '完好房(基本完好房)': '第一类',
+        '安全': '第一类',
+        '无风险': '第一类'
+    };
+    function normRisk(rl) { return LEGACY_RISK_NORM[rl] || rl || '第一类'; }
+
+    // 左侧：固有风险 · 底数台账，根据农村自建房模拟数据统计（经归一化）
+    let baseCounts = { major: 0, general: 0, low: 0 };
+    let baseTotal = 0;
+    if (typeof initHouseArchSeed === 'function' && typeof getAllHouseRecords === 'function') {
+        initHouseArchSeed();
+        const all = getAllHouseRecords().filter(r => r.houseType === '农村自建房');
+        baseTotal = all.length;
+        all.forEach(r => {
+            const norm = normRisk(r.riskLevel);
+            if (norm === '第三类') baseCounts.major++;
+            else if (norm === '第二类') baseCounts.general++;
+            else baseCounts.low++;
+        });
+    }
+    if (!baseTotal) baseTotal = baseCounts.major + baseCounts.general + baseCounts.low;
+    setText('kpiBaseStock', baseTotal.toLocaleString());
+    setText('kpiBaseMajor', baseCounts.major);
+    setText('kpiBaseGeneral', baseCounts.general);
+    setText('kpiBaseLow', baseCounts.low);
+    setWidth('kpiBaseBarMajor', baseTotal ? ((baseCounts.major / baseTotal) * 100).toFixed(2) + '%' : '0%');
+    setWidth('kpiBaseBarGeneral', baseTotal ? ((baseCounts.general / baseTotal) * 100).toFixed(2) + '%' : '0%');
+    setWidth('kpiBaseBarLow', baseTotal ? ((baseCounts.low / baseTotal) * 100).toFixed(2) + '%' : '0%');
+
+    // 右侧：动态隐患 · 现存总量（现存 = 尚未整治完成；已销号/已治理单独显示；风险等级经归一化）
+    let hazardCounts = { major: 0, general: 0, closed: 0 };
+    if (typeof getAllHouseRecords === 'function') {
+        const allRural = getAllHouseRecords().filter(r => r.houseType === '农村自建房');
+        // 现存隐患：治理状态非'已完成'（含空值兜底）
+        const active = allRural.filter(r => !r.governance || r.governance !== 'done');
+        // 已销号/已治理：治理完成且销号已通过
+        const closed = allRural.filter(r => r.governance === 'done' && r.closeStatus === '已通过');
+        hazardCounts = {
+            major: active.filter(r => normRisk(r.riskLevel) === '第三类').length,
+            general: active.filter(r => normRisk(r.riskLevel) === '第二类').length,
+            closed: closed.length
+        };
+    }
+    const hazardTotal = hazardCounts.major + hazardCounts.general;
+    setText('kpiHazardStock', hazardTotal.toLocaleString());
+    setText('kpiHazardMajor', hazardCounts.major);
+    setText('kpiHazardGeneral', hazardCounts.general);
+    setText('kpiHazardClosed', hazardCounts.closed);
+
+    renderRuralArchiveRows();
+
+    // 初始化高级筛选区（折叠面板）
+    initAdvancedFilterPanel();
+
+    // 初始化镇/街道/乡与村/居委联动
+    initTownVillageLinkage();
+
+    // 初始化所在区域与城市建成区联动
+    initAreaLinkage();
+
+    // 初始化土地性质与二级土地性质联动
+    initLandLinkage();
+
+    // 初始化房屋用途与具体用途联动
+    initUsageLinkage();
+
+    // 绑定各 Tab 分页按钮
+    bindRuralPagination('all');
+    bindRuralPagination('major');
+    bindRuralPagination('general');
+    bindRuralPagination('low');
+});
+
+/* =====================================================================
+ * 导入向导（分 Sheet 多表 + 智能列映射 + 校验预览 + 草稿入库）
+ * =================================================================== */
+
+// ---- 导入字段配置：列名与"房屋概况"详情页完全一致，path 对应 house-arch 数据结构 ----
+// label=模板列名（与详情页原文一致）；path=写入路径；req=是否必填；type=校验类型；def=默认值；alias=智能匹配别名
+const IMPORT_SHEETS = [
+    {
+        key: 'basic', sheetName: '基本信息', required: true,
+        fields: [
+            { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识', '档案编号', 'houseNo'] },
+            { label: '房屋性质', path: 'overview.houseType', def: '住宅', alias: ['房屋性质', 'houseType'] },
+            { label: '异常标记', path: 'overview.abnormalMark', def: '正常', alias: ['异常标记', 'abnormalMark'] },
+            { label: '所在区域', path: 'street', type: 'street', alias: ['所在区域', '镇', '街道', '乡镇', '所属镇', 'street'] },
+            { label: '路号信息', path: 'address', alias: ['路号信息', '地址', '坐落', '门牌号', '路号', '详细地址', 'address'] },
+            { label: '是否有产权人', path: 'overview.hasOwner', def: '有', alias: ['是否有产权人', 'hasOwner'] },
+            { label: '产权人 / 使用人信息', path: 'owner', alias: ['产权人 / 使用人信息', '产权人', '使用人', '业主', '户主', '姓名', 'owner'] },
+            { label: '身份证号码', path: 'overview.idCard', alias: ['身份证号码', '身份证', '证件号', 'idCard'] },
+            { label: '房屋用途', path: 'usage.usageType', type: 'usage', def: '自住', alias: ['房屋用途', '用途', '使用用途', 'usageType'] },
+            { label: '人员聚集场所周边', path: 'usage.crowdAround', type: 'yesno', def: '否', alias: ['人员聚集场所周边', '周边人员密集', 'crowdAround'] },
+            { label: '土地性质', path: 'homestead.landNature', def: '集体土地', alias: ['土地性质', '用地性质', 'landNature'] },
+            { label: '集体土地', path: 'overview.landNature', def: '宅基地', alias: ['集体土地', '宅基地'] },
+            { label: '所在区域类型', path: 'overview.belongTo', def: '建制镇', alias: ['所在区域（区域类型）', '区域类型', '建制镇', 'belongTo'] },
+            { label: '房屋类型', path: 'overview.usage', def: '仅自住', alias: ['房屋类型', '仅自住', 'usage'] },
+            { label: '常住人口', path: 'usage.occupancy', type: 'int', alias: ['常住人口', '居住人数', 'occupancy'] },
+            { label: '房屋类型二级分类', path: 'overview.houseName', def: '独立住宅', alias: ['房屋类型二级分类', '二级分类', '独立住宅'] },
+            { label: '楼栋号/名称', path: 'overview.buildingNo', alias: ['楼栋号/名称', '楼栋号', 'buildingNo'] },
+            { label: '住宅套数', path: 'overview.houseCount', type: 'int', alias: ['住宅套数', 'houseCount'] },
+            { label: '建筑（小区）名称', path: 'overview.communityName', alias: ['建筑（小区）名称', '小区名称', 'communityName'] },
+            { label: '自住+经营', path: 'usage.selfBusiness', alias: ['自住+经营', 'selfBusiness'] },
+            { label: '经营用房屋', path: 'usage.bizHouse', alias: ['经营用房屋', 'bizHouse'] },
+            { label: '经营用房屋其他内容', path: 'usage.bizHouseOther', alias: ['经营用房屋其他内容', 'bizHouseOther'] },
+            { label: '非营利性公共建筑', path: 'usage.npoBuilding', alias: ['非营利性公共建筑', 'npoBuilding'] },
+            { label: '非营利性公共建筑其他内容', path: 'usage.npoBuildingOther', alias: ['非营利性公共建筑其他内容', 'npoBuildingOther'] },
+            { label: '建造时间', path: 'overview.buildTime', alias: ['建造时间', 'buildTime'] },
+            { label: '建筑高度 (m)', path: 'structure.height', type: 'number', alias: ['建筑高度 (m)', '建筑高度', 'height'] },
+            { label: '建筑层数地下 (层)', path: 'structure.floorsUnderground', type: 'int', alias: ['建筑层数地下 (层)', '地下层数', 'floorsUnderground'] },
+            { label: '结构类型', path: 'category', type: 'struct', def: '砖混', alias: ['结构类型', '结构', '房屋结构', '结构形式', 'category'] },
+            { label: '结构类型其他内容', path: 'structure.structTypeOther', alias: ['结构类型其他内容', 'structTypeOther'] },
+            { label: '是否采用预制板', path: 'structure.prefab', type: 'yesno', def: '是', alias: ['是否采用预制板', 'prefab'] },
+            { label: '建筑面积 (㎡)', path: 'structure.buildingArea', type: 'number', alias: ['建筑面积 (㎡)', '建筑面积', '面积', 'buildingArea'] },
+            { label: '建筑层数', path: 'structure.floors', type: 'int', alias: ['建筑层数', '层数', '房屋层数', 'floors'] },
+            { label: '建筑层数地上(层)', path: 'structure.floorsAbove', type: 'int', alias: ['建筑层数地上(层)', '地上层数', 'floorsAbove'] },
+            { label: '建造方式', path: 'designConstruction.buildMode', def: '有资质的施工队伍', alias: ['建造方式', '施工方式', 'buildMode'] },
+            { label: '建造方式其他内容', path: 'designConstruction.buildModeOther', alias: ['建造方式其他内容', 'buildModeOther'] },
+            { label: '是否人员聚集场所', path: 'overview.crowdPlace', type: 'yesno', def: '否', alias: ['是否人员聚集场所', 'crowdPlace'] },
+            { label: '建成时间', path: 'year', type: 'year', alias: ['建成时间', '建成年份', '建造年代', '建筑年代', '年份', 'year'] },
+            { label: '具体年份', path: 'overview.actualYear', type: 'int', alias: ['具体年份', 'actualYear'] },
+            { label: '不需要排查原因', path: 'overview.otherCrowdAround', alias: ['不需要排查原因', '不排查原因'] },
+            { label: '是否同时自住', path: 'overview.isSelfLive', type: 'yesno', def: '是', alias: ['是否同时自住', '是否自住', 'isSelfLive'] },
+            { label: '具体用途', path: 'usage.specificUsage', alias: ['具体用途', '经营业态', 'specificUsage'] },
+            { label: '其他人员密集场所周边', path: 'usage.otherCrowdAround', type: 'yesno', def: '否', alias: ['其他人员密集场所周边', 'otherCrowdAround'] },
+            { label: '户主联系方式', path: 'overview.phone', alias: ['户主联系方式', '电话', '手机', '联系方式', 'phone'] },
+            { label: '家庭成员信息', path: 'familyMembers', alias: ['家庭成员信息', '家庭成员', 'familyMembers'] },
+            { label: '村/居委', path: 'community', type: 'community', alias: ['村/居委', '村', '居委', '社区', '村委会', '所属村', 'community', 'village'] },
+            { label: '风险等级', path: 'riskLevel', type: 'risk', def: '第一类', alias: ['风险等级', '隐患等级', '等级', 'riskLevel'] },
+            { label: '治理状态', path: 'governStatus', type: 'gov', def: '待整治', alias: ['治理状态', '整治状态', 'governStatus'] }
+        ]
+    },
+    {
+        key: 'homestead', sheetName: '宅基地',
+        fields: [
+            { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识'] },
+            { label: '宅基地面积', path: 'homestead.area', type: 'number', alias: ['宅基地面积', '批准面积', 'area'] },
+            { label: '审批情况', path: 'homestead.approvalStatus', alias: ['审批情况', '审批状态', 'approvalStatus'] },
+            { label: '权属证明', path: 'homestead.certNo', alias: ['权属证明', '宅基地证号', '证号', 'certNo'] },
+            { label: '宗地号', path: 'homestead.plotNo', alias: ['宗地号', 'plotNo'] },
+            { label: '审批部门', path: 'homestead.approvalDept', alias: ['审批部门', 'approvalDept'] },
+            { label: '审批日期', path: 'homestead.approvalDate', type: 'date', alias: ['审批日期', 'approvalDate'] }
+        ]
+    },
+    {
+        key: 'build', sheetName: '建设情况',
+        fields: [
+            { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识'] },
+            { label: '常住或使用人数超过 10 人', path: 'usage.over10People', type: 'yesno', alias: ['常住或使用人数超过 10 人', '10人以上', '是否10人以上', '超10人使用', 'over10People'] },
+            { label: '设计方式', path: 'designConstruction.designMode', def: '有专业设计', alias: ['设计方式', 'designMode'] },
+            { label: '建造方式', path: 'designConstruction.buildMode', def: '有资质施工队伍', alias: ['建造方式', '施工方式', 'buildMode'] },
+            { label: '结构类型', path: 'category', type: 'struct', alias: ['结构类型', '结构', 'category'] },
+            { label: '楼屋盖', path: 'structure.roofType', alias: ['楼屋盖', '屋面类型', '屋盖类型', 'roofType'] },
+            { label: '是否改扩建', path: 'structure.expansionStatus', alias: ['是否改扩建', '改扩建', '改扩建情况', 'expansionStatus'] },
+            { label: '是否装修', path: 'structure.decorationStatus', alias: ['是否装修', '装修', '装修情况', 'decorationStatus'] },
+            { label: '设计单位', path: 'designConstruction.designUnit', alias: ['设计单位', 'designUnit'] },
+            { label: '施工单位', path: 'designConstruction.constructionUnit', alias: ['施工单位', 'constructionUnit'] },
+            { label: '监理单位', path: 'designConstruction.supervisionUnit', alias: ['监理单位', 'supervisionUnit'] }
+        ]
+    },
+    {
+        key: 'manage', sheetName: '管理情况',
+        fields: [
+            { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识'] },
+            { label: '已取得的行政许可', path: 'overview.permit', alias: ['已取得的行政许可', '行政许可', 'permit'] },
+            { label: '违法建设和违法审批', path: 'overview.illegalBuild', type: 'yesno', alias: ['违法建设和违法审批', '违法建设', 'illegalBuild'] }
+        ]
+    },
+    {
+        key: 'structure', sheetName: '结构信息',
+        fields: [
+            { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识'] },
+            { label: '墙体材料', path: 'structure.wallMaterial', alias: ['墙体材料', 'wallMaterial'] },
+            { label: '基础形式', path: 'structure.foundationType', alias: ['基础形式', '基础类型', '地基类型', 'foundationType'] },
+            { label: '最大跨度', path: 'structure.maxSpan', alias: ['最大跨度', 'maxSpan'] },
+            { label: '装修情况', path: 'structure.decorationStatus', alias: ['装修情况', '装修', 'decorationStatus'] },
+            { label: '建筑层数', path: 'structure.floors', type: 'int', alias: ['建筑层数', '层数', 'floors'] },
+            { label: '屋盖类型', path: 'structure.roofType', alias: ['屋盖类型', 'roofType'] },
+            { label: '楼盖材料', path: 'structure.floorMaterial', alias: ['楼盖材料', '楼板材料', 'floorMaterial'] },
+            { label: '抗震信息', path: 'structure.seismicInfo', alias: ['抗震信息', 'seismicInfo'] },
+            { label: '改扩建情况', path: 'structure.expansionStatus', alias: ['改扩建情况', '改扩建', 'expansionStatus'] },
+            { label: '备注', path: 'structure.remark', alias: ['备注', '结构备注', 'remark'] }
+        ]
+    },
+    {
+        key: 'usage', sheetName: '使用信息',
+        fields: [
+            { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识'] },
+            { label: '使用用途', path: 'usage.usageType', type: 'usage', alias: ['使用用途', 'usageType'] },
+            { label: '具体用途', path: 'usage.specificUsage', alias: ['具体用途', 'specificUsage'] },
+            { label: '人员聚集场所周边', path: 'usage.crowdAround', type: 'yesno', alias: ['人员聚集场所周边', 'crowdAround'] },
+            { label: '超10人使用', path: 'usage.over10People', type: 'yesno', alias: ['超10人使用', '是否10人以上', 'over10People'] },
+            { label: '变更日期', path: 'usage.changeDate', type: 'date', alias: ['变更日期', 'changeDate'] },
+            { label: '变更内容', path: 'usage.changeContent', alias: ['变更内容', 'changeContent'] },
+            { label: '备注', path: 'usage.remark', alias: ['备注', 'remark'] },
+            { label: '是否自住', path: 'usage.isSelfLive', type: 'yesno', alias: ['是否自住', '自住', 'isSelfLive'] },
+            { label: '居住人数', path: 'usage.occupancy', type: 'int', alias: ['居住人数', '实际居住人数', 'occupancy'] },
+            { label: '其他人员密集场所周边', path: 'usage.otherCrowdAround', type: 'yesno', alias: ['其他人员密集场所周边', 'otherCrowdAround'] },
+            { label: '使用变更历史', path: 'usage.changeHistory', alias: ['使用变更历史', 'changeHistory'] },
+            { label: '变更类型', path: 'usage.changeType', alias: ['变更类型', 'changeType'] },
+            { label: '审批情况', path: 'usage.approvalStatus', alias: ['审批情况', '已审批', 'approvalStatus'] }
+        ]
+    },
+    {
+        key: 'designConstruction', sheetName: '设计施工记录', multi: true,
+        fields: [
+            { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识'] },
+            { label: '设计日期', path: 'designDate', type: 'date', alias: ['设计日期', 'designDate'] },
+            { label: '施工单位', path: 'constructionUnit', alias: ['施工单位', 'constructionUnit'] },
+            { label: '是否正规设计', path: 'hasProfessionalDesign', type: 'bool', alias: ['是否正规设计', 'hasProfessionalDesign'] },
+            { label: '是否正规施工', path: 'hasQualificationTeam', type: 'bool', alias: ['是否正规施工', 'hasQualificationTeam'] },
+            { label: '设计单位', path: 'designUnit', alias: ['设计单位', 'designUnit'] },
+            { label: '建造工匠', path: 'builder', alias: ['建造工匠', 'builder'] },
+            { label: '建造年份', path: 'buildYear', alias: ['建造年份', 'buildYear'] },
+            { label: '改建扩建记录', path: 'expansionRecord', alias: ['改建扩建记录', '改扩建记录', 'expansionRecord'] },
+            { label: '设计方式', path: 'designMode', alias: ['设计方式', 'designMode'] },
+            { label: '建造方式', path: 'buildMode', alias: ['建造方式', 'buildMode'] },
+            { label: '填报人', path: 'reporter', alias: ['填报人', 'reporter'] },
+            { label: '备注', path: 'remark', alias: ['备注', 'remark'] }
+        ]
+    },
+    {
+        key: 'risk', sheetName: '风险信息',
+        fields: [
+            { label: '唯一标识', path: 'no', req: true, alias: ['编号', '唯一标识'] },
+            { label: '隐患部位', path: 'riskInfo.riskPart', alias: ['隐患部位', '风险部位', 'riskPart'] },
+            { label: '隐患类型', path: 'riskInfo.riskType', alias: ['隐患类型', '风险类型', 'riskType'] },
+            { label: '发现方式', path: 'riskInfo.discoveryMethod', type: 'disc', alias: ['发现方式', '排查方式', 'discoveryMethod'] },
+            { label: '发现时间', path: 'riskInfo.discoveryTime', type: 'date', alias: ['发现时间', '排查时间', 'discoveryTime'] },
+            { label: '风险描述', path: 'riskInfo.riskDesc', alias: ['风险描述', '隐患描述', '问题描述', 'riskDesc'] }
+        ]
+    }
+];
+
+// ---- 导入向导状态 ----
+const IMP = {
+    step: 1,
+    workbook: null,          // 原始 workbook
+    sheetData: {},           // { sheetKey: { headers:[], rows:[[]], map:{fieldPath:colIndex} } }
+    validated: [],           // 校验后的记录（按基本信息行合并）
+    validCount: 0,
+    errorCount: 0
+};
+
+// 枚举值集合（来自数据层）
+const IMP_STREETS = (typeof FENGXIAN_TOWN_VILLAGES !== 'undefined') ? Object.keys(FENGXIAN_TOWN_VILLAGES) : [];
+const IMP_STRUCTS = ['砖混', '砖木', '框架', '钢结构', '木结构', '混杂结构', '石结构', '土木结构', '其他'];
+const IMP_USAGE = ['自住', '自住兼经营', '出租', '空置', '经营', '其他'];
+const IMP_RISK = ['第一类', '第二类', '第三类'];
+const IMP_GOV = ['待整治', '整治中', '已治理', '逾期未整治'];
+const IMP_DISC = ['日常巡查', '专项巡查', '临时巡查', '复查任务'];
+
+// ============ 打开/关闭向导 ============
+function openImportWizard() {
+    if (typeof XLSX === 'undefined') { alert('Excel 解析库未加载，请检查网络后刷新重试'); return; }
+    resetImportState();
+    document.getElementById('importOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    setImportStep(1);
+}
+function closeImportWizard(refresh) {
+    document.getElementById('importOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+    if (refresh && typeof renderRuralArchiveRows === 'function') renderRuralArchiveRows();
+}
+function resetImportState() {
+    IMP.step = 1; IMP.workbook = null; IMP.sheetData = {}; IMP.validated = []; IMP.validCount = 0; IMP.errorCount = 0;
+    document.getElementById('impFileName').textContent = '';
+    document.getElementById('importFileInput').value = '';
+    document.getElementById('impFootTip').textContent = '';
+}
+
+// ============ 步骤切换 ============
+function setImportStep(n) {
+    IMP.step = n;
+    document.querySelectorAll('.imp-step').forEach(function(el) {
+        const s = parseInt(el.dataset.step, 10);
+        el.classList.toggle('active', s === n);
+        el.classList.toggle('done', s < n);
+    });
+    document.querySelectorAll('.imp-pane').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('impPane' + n).classList.add('active');
+
+    document.getElementById('impBtnPrev').style.display = (n > 1 && n < 4) ? '' : 'none';
+    document.getElementById('impBtnNext').style.display = (n < 3) ? '' : 'none';
+    document.getElementById('impBtnDoImport').style.display = (n === 3) ? '' : 'none';
+    document.getElementById('impBtnFinish').style.display = (n === 4) ? '' : 'none';
+
+    if (n === 1) document.getElementById('impBtnNext').disabled = !IMP.workbook;
+    if (n === 2) document.getElementById('impBtnNext').disabled = false;
+}
+function importGoStep(delta) {
+    const next = IMP.step + delta;
+    if (next === 2 && IMP.step === 1) { buildSheetMappingUI(); }
+    if (next === 3 && IMP.step === 2) { if (!runValidation()) return; }
+    if (next >= 1 && next <= 4) setImportStep(next);
+}
+
+// ============ 模板下载（分 Sheet） ============
+function downloadImportTemplate() {
+    if (typeof XLSX === 'undefined') { alert('Excel 库未加载'); return; }
+    const wb = XLSX.utils.book_new();
+    // 说明 Sheet
+    const guide = [['农村自建房档案导入模板 - 填写说明'],
+        ['1. 共 8 个 Sheet：基本信息(必填)、宅基地、建设情况、管理情况、结构信息、使用信息、设计施工记录、风险信息。'],
+        ['2. 每个 Sheet 第一行是列标题，请勿修改；从第二行开始填数据。'],
+        ['3. "唯一标识"是各 Sheet 关联的主键，同一套房的各 Sheet 编号必须一致；不填则系统自动生成。'],
+        ['4. "设计施工记录"是记录型 Sheet：同一唯一标识填多行 = 该房多条设计施工记录。'],
+        ['5. 带 * 的列为必填。是否类列填 是/否；风险等级：第一类/第二类/第三类。'],
+        ['6. 填好后保存为 .xlsx 再上传导入。'], []];
+    const gws = XLSX.utils.aoa_to_sheet(guide); gws['!cols'] = [{ wch: 90 }];
+    XLSX.utils.book_append_sheet(wb, gws, '填写说明');
+    IMPORT_SHEETS.forEach(function(sc) {
+        const header = sc.fields.map(f => (f.req ? f.label + '*' : f.label));
+        const sample = sc.fields.map(function(f) {
+            if (f.label === '唯一标识') return 'NF-2025-00001';
+            if (f.label === '产权人/使用人') return '张三';
+            if (f.label === '镇/街道') return '南桥镇';
+            if (f.label === '村/居委') return '张翁庙村';
+            if (f.label === '详细地址') return '上海市奉贤区南桥镇张翁庙村3组12号';
+            if (f.label === '建筑年代') return '1995';
+            if (f.label === '结构类型') return '砖混';
+            if (f.label === '房屋用途') return '自住';
+            if (f.label === '风险等级') return '第一类';
+            if (f.label === '治理状态') return '待整治';
+            // 设计施工记录示例
+            if (f.label === '设计日期') return '1994-03-01';
+            if (f.label === '施工单位') return '奉贤城建公司';
+            if (f.label === '是否正规设计') return '是';
+            if (f.label === '是否正规施工') return '是';
+            if (f.label === '设计单位') return '奉贤区建筑设计院';
+            if (f.label === '建造年份') return '1995年';
+            if (f.label === '设计方式') return '有专业设计';
+            if (f.label === '建造方式') return '有资质施工队伍';
+            return f.def !== undefined ? f.def : '';
+        });
+        const rows = [header, sample];
+        // 记录型 Sheet：再补一行示例体现“一房多记录”
+        if (sc.multi) {
+            rows.push(sc.fields.map(function(f, i) {
+                if (f.label === '唯一标识') return 'NF-2025-00001';
+                if (f.label === '设计日期') return '2005-06-01';
+                if (f.label === '施工单位') return '宏基建设';
+                if (f.label === '改建扩建记录') return '加层';
+                if (f.label === '建造年份') return '2005年';
+                return '';
+            }));
+        }
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = header.map(() => ({ wch: 16 }));
+        XLSX.utils.book_append_sheet(wb, ws, sc.sheetName);
+    });
+    XLSX.writeFile(wb, '农村自建房档案导入模板.xlsx');
+}
+
+// ============ 文件读取 ============
+document.getElementById('importFileInput').addEventListener('change', function() {
+    if (this.files && this.files[0]) handleImportFile(this.files[0]);
+});
+const impZone = document.getElementById('impUploadZone');
+['dragover', 'dragenter'].forEach(ev => impZone.addEventListener(ev, e => { e.preventDefault(); impZone.classList.add('drag'); }));
+['dragleave', 'drop'].forEach(ev => impZone.addEventListener(ev, e => { e.preventDefault(); impZone.classList.remove('drag'); }));
+impZone.addEventListener('drop', e => { if (e.dataTransfer.files && e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]); });
+
+function handleImportFile(file) {
+    if (file.size > 10 * 1024 * 1024) { alert('文件超过 10MB，请拆分后再导入'); return; }
+    // CSV 是文本文件：必须按 UTF-8 文本读取，否则 SheetJS 按单字节解码会导致中文乱码
+    const isCsv = /\.csv$/i.test(file.name);
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const wb = isCsv
+                ? XLSX.read(e.target.result, { type: 'string', cellDates: true })
+                : XLSX.read(e.target.result, { type: 'array', cellDates: true });
+            IMP.workbook = wb;
+            parseWorkbookSheets();
+            document.getElementById('impFileName').innerHTML = '<i class="fa-solid fa-file-excel"></i> 已选择：' + file.name;
+            document.getElementById('impBtnNext').disabled = false;
+            document.getElementById('impFootTip').textContent = '已读取 ' + Object.keys(IMP.sheetData).length + ' 个有效 Sheet';
+        } catch (err) {
+            alert('文件解析失败：' + err.message);
+        }
+    };
+    if (isCsv) {
+        reader.readAsText(file, 'UTF-8');
+    } else {
+        reader.readAsArrayBuffer(file);
+    }
+}
+
+// 把 workbook 里各 sheet 解析成行数据，并匹配到配置的 Sheet
+function parseWorkbookSheets() {
+    IMP.sheetData = {};
+    const sheetNames = IMP.workbook.SheetNames;
+    IMPORT_SHEETS.forEach(function(sc) {
+        // 按 sheetName 模糊匹配用户 sheet；找不到则取第一个未消费的 sheet（仅基本信息兜底）
+        let matchedName = sheetNames.find(n => n.replace(/\s/g, '').indexOf(sc.sheetName.replace(/\s/g, '')) > -1);
+        if (!matchedName && sc.key === 'basic') matchedName = sheetNames[0];
+        if (!matchedName) return;
+        const ws = IMP.workbook.Sheets[matchedName];
+        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+        if (!aoa.length) return;
+        // 第一行作表头
+        const headers = aoa[0].map(h => String(h).replace(/[\s\*＊]/g, '').trim());
+        const rows = aoa.slice(1).filter(r => r.some(c => String(c).trim() !== ''));
+        IMP.sheetData[sc.key] = { headers: headers, rows: rows, map: {}, sheetName: matchedName };
+        autoMapColumns(sc.key, sc.fields, headers);
+    });
+    if (!IMP.sheetData.basic) {
+        alert('未识别到"基本信息"数据表，请检查文件');
+        IMP.workbook = null;
+        document.getElementById('impBtnNext').disabled = true;
+    }
+}
+
+// 智能列映射：按 label / alias 模糊匹配表头
+function autoMapColumns(sheetKey, fields, headers) {
+    const map = IMP.sheetData[sheetKey].map;
+    fields.forEach(function(f) {
+        const candidates = [f.label].concat(f.alias || []).map(s => s.replace(/\s/g, '').toLowerCase());
+        let idx = -1;
+        for (let i = 0; i < headers.length; i++) {
+            const h = String(headers[i]).toLowerCase();
+            if (candidates.some(c => h === c || h.indexOf(c) > -1 || c.indexOf(h) > -1)) { idx = i; break; }
+        }
+        map[f.path] = idx; // -1 = 未匹配
+    });
+}
+
+// ============ 步骤2：字段映射 UI（针对基本信息 Sheet） ============
+function buildSheetMappingUI() {
+    const basic = IMP.sheetData.basic;
+    if (!basic) return;
+    const sc = IMPORT_SHEETS.find(s => s.key === 'basic');
+    document.getElementById('impMapSheetName').textContent = basic.sheetName;
+    const grid = document.getElementById('impMapGrid');
+    grid.innerHTML = '';
+    sc.fields.forEach(function(f) {
+        const curIdx = basic.map[f.path];
+        const item = document.createElement('div');
+        item.className = 'imp-map-item';
+        const opts = ['<option value="-1">（不导入）</option>'].concat(
+            basic.headers.map((h, i) => '<option value="' + i + '"' + (i === curIdx ? ' selected' : '') + '>' + (h || '第' + (i + 1) + '列') + '</option>')
+        ).join('');
+        item.innerHTML = '<label>' + (f.req ? '<span class="req">*</span> ' : '') + f.label +
+            (curIdx > -1 ? ' <i class="fa-solid fa-circle-check" style="color:var(--safe)"></i>' : '') + '</label>' +
+            '<select data-path="' + f.path + '">' + opts + '</select>';
+        grid.appendChild(item);
+    });
+    grid.querySelectorAll('select').forEach(function(sel) {
+        sel.addEventListener('change', function() { basic.map[this.dataset.path] = parseInt(this.value, 10); });
+    });
+}
+
+// ============ 步骤3：校验 ============
+function cellOf(sheetKey, row, path) {
+    const sd = IMP.sheetData[sheetKey];
+    if (!sd) return '';
+    const idx = sd.map[path];
+    if (idx === undefined || idx < 0) return '';
+    return String(row[idx] === undefined ? '' : row[idx]).trim();
+}
+
+// 归一化枚举（容错匹配）
+function normEnum(val, list) {
+    if (!val) return '';
+    const v = val.replace(/\s/g, '');
+    const hit = list.find(o => v === o || v.indexOf(o) > -1 || o.indexOf(v) > -1);
+    return hit || '';
+}
+
+function validateField(f, val, rec) {
+    const v = (val === undefined || val === null) ? '' : String(val).trim();
+    if (f.req && !v && !(f.def !== undefined)) return { ok: false, msg: '必填' };
+    if (!v) return { ok: true, val: f.def !== undefined ? f.def : '' };
+    switch (f.type) {
+        case 'street': {
+            const s = IMP_STREETS.length ? normEnum(v, IMP_STREETS) : v;
+            if (IMP_STREETS.length && !s) return { ok: false, msg: '镇/街道无效' };
+            return { ok: true, val: s || v };
+        }
+        case 'community': {
+            const st = rec.street; const villages = (FENGXIAN_TOWN_VILLAGES && FENGXIAN_TOWN_VILLAGES[st]) || null;
+            if (villages && villages.length) {
+                const c = normEnum(v, villages);
+                if (!c) return { ok: false, msg: '村/居委不属于' + st };
+                return { ok: true, val: c };
+            }
+            return { ok: true, val: v };
+        }
+        case 'year': {
+            const m = v.match(/\d{4}/);
+            if (!m) return { ok: false, msg: '年代格式错' };
+            const y = parseInt(m[0], 10);
+            if (y < 1900 || y > 2026) return { ok: false, msg: '年代超出范围' };
+            return { ok: true, val: y };
+        }
+        case 'struct': { const s = normEnum(v, IMP_STRUCTS); if (!s) return { ok: false, msg: '结构类型无效' }; return { ok: true, val: s }; }
+        case 'usage': { const s = normEnum(v, IMP_USAGE); if (!s) return { ok: false, msg: '用途无效' }; return { ok: true, val: s }; }
+        case 'risk': {
+            const legacy = { '疑似危房': '第三类', '严重损坏房': '第三类', '一般损坏房': '第二类', '完好房': '第一类', '完好房(基本完好房)': '第一类', '安全': '第一类', '无风险': '第一类' };
+            const lv = legacy[v] || normEnum(v, IMP_RISK);
+            if (!lv) return { ok: false, msg: '风险等级无效' };
+            return { ok: true, val: lv };
+        }
+        case 'gov': { const g = normEnum(v, IMP_GOV); if (!g) return { ok: false, msg: '治理状态无效' }; return { ok: true, val: g }; }
+        case 'yesno': { const y = v === '是' || v === 'Y' || v === 'y' || v === '1' ? '是' : (v === '否' || v === 'N' || v === 'n' || v === '0' ? '否' : ''); if (!y) return { ok: false, msg: '应填是/否' }; return { ok: true, val: y }; }
+        case 'bool': {
+            if (v === '是' || v === 'Y' || v === 'y' || v === '1' || v === 'true') return { ok: true, val: true };
+            if (v === '否' || v === 'N' || v === 'n' || v === '0' || v === 'false') return { ok: true, val: false };
+            return { ok: false, msg: '应填是/否' };
+        }
+        case 'disc': { const d = normEnum(v, IMP_DISC); if (!d) return { ok: false, msg: '发现方式无效' }; return { ok: true, val: d }; }
+        case 'int': { if (!/^\d+$/.test(v)) return { ok: false, msg: '应为整数' }; return { ok: true, val: parseInt(v, 10) }; }
+        case 'number': { if (isNaN(parseFloat(v))) return { ok: false, msg: '应为数字' }; return { ok: true, val: parseFloat(v) }; }
+        case 'date': { const t = v.replace(/[.\/年月]/g, '-').replace(/日/g, ''); if (!/^\d{4}-\d{1,2}-\d{1,2}/.test(t) && v) return { ok: true, val: v }; return { ok: true, val: t || v }; }
+        default: return { ok: true, val: v };
+    }
+}
+
+function setDeep(obj, path, val) {
+    const keys = path.split('.'); let o = obj;
+    for (let i = 0; i < keys.length - 1; i++) { if (!o[keys[i]] || typeof o[keys[i]] !== 'object') o[keys[i]] = {}; o = o[keys[i]]; }
+    o[keys[keys.length - 1]] = val;
+}
+
+function runValidation() {
+    const basic = IMP.sheetData.basic;
+    if (!basic || !basic.rows.length) { alert('基本信息表没有数据行'); return false; }
+    const seen = {}; const records = []; let errCount = 0;
+    const bsc = IMPORT_SHEETS.find(s => s.key === 'basic');
+
+    basic.rows.forEach(function(row, rIdx) {
+        const rec = { __rowIdx: rIdx, __errors: {}, __valid: true };
+        // 第一遍：基本信息
+        bsc.fields.forEach(function(f) {
+            const raw = cellOf('basic', row, f.path);
+            const r = validateField(f, raw, rec);
+            if (!r.ok) { rec.__errors[f.path] = r.msg; rec.__valid = false; }
+            setDeep(rec, f.path, r.val);
+        });
+        // 编号唯一 & 自动生成
+        if (!rec.no) { rec.no = genImportNo(rIdx); }
+        if (seen[rec.no]) { rec.__errors['no'] = '编号重复'; rec.__valid = false; }
+        seen[rec.no] = true;
+        records.push(rec);
+        if (!rec.__valid) errCount++;
+    });
+
+    // 第二遍：合并其他 Sheet（按唯一标识关联）
+    ['homestead', 'build', 'manage', 'structure', 'usage', 'risk'].forEach(function(sk) {
+        const sd = IMP.sheetData[sk]; if (!sd) return;
+        const sc = IMPORT_SHEETS.find(s => s.key === sk);
+        const noIdx = sd.map['no'];
+        sd.rows.forEach(function(row) {
+            const no = noIdx >= 0 ? String(row[noIdx]).trim() : '';
+            const target = records.find(r => r.no === no);
+            if (!target) return;
+            sc.fields.forEach(function(f) {
+                if (f.path === 'no') return;
+                const raw = cellOf(sk, row, f.path);
+                const r = validateField(f, raw, target);
+                setDeep(target, f.path, r.val);
+            });
+        });
+    });
+
+    // 第三遍：记录列表型 Sheet（一房多记录，同一唯一标识多行 → 聚合成数组）
+    ['designConstruction'].forEach(function(sk) {
+        const sd = IMP.sheetData[sk]; if (!sd) return;
+        const sc = IMPORT_SHEETS.find(s => s.key === sk);
+        const noIdx = sd.map['no'];
+        sd.rows.forEach(function(row) {
+            const no = noIdx >= 0 ? String(row[noIdx]).trim() : '';
+            const target = records.find(r => r.no === no);
+            if (!target) return;
+            const rec = {};
+            let hasValue = false;
+            sc.fields.forEach(function(f) {
+                if (f.path === 'no') return;
+                const raw = cellOf(sk, row, f.path);
+                const r = validateField(f, raw, target);
+                rec[f.path] = r.val;
+                if (r.val !== '' && r.val !== undefined && r.val !== null) hasValue = true;
+            });
+            if (hasValue) {
+                if (!Array.isArray(target.designConstructionRecords)) target.designConstructionRecords = [];
+                target.designConstructionRecords.push(rec);
+            }
+        });
+    });
+
+    IMP.validated = records;
+    IMP.errorCount = errCount;
+    IMP.validCount = records.length - errCount;
+    buildPreviewTable();
+    document.getElementById('impBtnDoImport').disabled = errCount > 0;
+    return true;
+}
+
+let __importSeq = 0;
+function genImportNo(i) {
+    __importSeq++;
+    return 'NF-IMP-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-5) + String(i + 1).padStart(2, '0');
+}
+
+// 预览表格（基本信息列 + 错误定位，可在线改）
+function buildPreviewTable() {
+    const table = document.getElementById('impPreviewTable');
+    const sc = IMPORT_SHEETS.find(s => s.key === 'basic');
+    const cols = [{ label: '行号', path: '__row' }].concat(sc.fields);
+    let thead = '<thead><tr>' + cols.map(c => '<th>' + c.label + '</th>').join('') + '<th>校验</th></tr></thead>';
+    const rowsHtml = IMP.validated.map(function(rec, ri) {
+        const tds = cols.map(function(c) {
+            if (c.path === '__row') return '<td>' + (ri + 2) + '</td>';
+            const f = sc.fields.find(x => x.path === c.path); if (!f) return '<td></td>';
+            const err = rec.__errors[f.path];
+            const val = getDeep(rec, f.path);
+            return '<td class="' + (err ? 'cell-error' : '') + '" title="' + (err || '') + '">' +
+                '<input data-ri="' + ri + '" data-path="' + f.path + '" value="' + (val === undefined ? '' : String(val).replace(/"/g, '&quot;')) + '">' +
+                (err ? '<span class="imp-err-tag">' + err + '</span>' : '') + '</td>';
+        }).join('');
+        const badge = rec.__valid ? '<span style="color:var(--safe)">✔</span>' : '<span style="color:var(--danger)">✘</span>';
+        return '<tr class="' + (rec.__valid ? '' : 'row-error') + '">' + tds + '<td>' + badge + '</td></tr>';
+    }).join('');
+    table.innerHTML = thead + '<tbody>' + rowsHtml + '</tbody>';
+    document.getElementById('impSummary').innerHTML =
+        '<span>共 <b>' + IMP.validated.length + '</b> 行</span>' +
+        '<span class="ok">✔ 通过 ' + IMP.validCount + ' 行</span>' +
+        (IMP.errorCount ? '<span class="bad">✘ 待修正 ' + IMP.errorCount + ' 行</span>' : '<span class="ok">全部通过，可导入</span>');
+    // 在线改值后重校验
+    table.querySelectorAll('input').forEach(function(inp) {
+        inp.addEventListener('change', function() {
+            const ri = parseInt(this.dataset.ri, 10); const path = this.dataset.path;
+            setDeep(IMP.validated[ri], path, this.value.trim());
+            revalidateRow(ri);
+            buildPreviewTable();
+        });
+    });
+}
+function getDeep(obj, path) { return path.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : ''), obj); }
+function revalidateRow(ri) {
+    const rec = IMP.validated[ri]; const sc = IMPORT_SHEETS.find(s => s.key === 'basic');
+    rec.__errors = {}; rec.__valid = true;
+    sc.fields.forEach(function(f) {
+        const r = validateField(f, getDeep(rec, f.path), rec);
+        if (!r.ok) { rec.__errors[f.path] = r.msg; rec.__valid = false; }
+        else setDeep(rec, f.path, r.val);
+    });
+    IMP.errorCount = IMP.validated.filter(r => !r.__valid).length;
+    IMP.validCount = IMP.validated.length - IMP.errorCount;
+    document.getElementById('impBtnDoImport').disabled = IMP.errorCount > 0;
+}
+
+// ============ 步骤4：导入到草稿区 ============
+function doImport() {
+    if (IMP.errorCount > 0) { alert('仍有 ' + IMP.errorCount + ' 行未通过校验，请修正后再导入'); return; }
+    const okList = [], failList = [];
+    IMP.validated.forEach(function(rec) {
+        try {
+            const record = buildHouseRecord(rec);
+            setDraftRecord(record.no, record); // 写入草稿区（同步状态=未同步）
+            okList.push(record.no);
+        } catch (e) { failList.push(rec.no || '(无编号)'); }
+    });
+    setImportStep(4);
+    const box = document.getElementById('impResultBox');
+    if (!failList.length) {
+        box.innerHTML = '<i class="fa-solid fa-circle-check"></i><div style="font-size:16px;font-weight:600;color:var(--safe)">导入成功</div>' +
+            '<div style="color:var(--text-secondary);margin-top:6px">共导入 ' + okList.length + ' 条，已保存（未生效），请在列表点"同步"更新到房屋建筑档案。</div>';
+    } else {
+        box.innerHTML = '<i class="fa-solid fa-circle-xmark"></i><div style="font-size:16px;font-weight:600;color:var(--warning)">部分导入</div>' +
+            '<div style="color:var(--text-secondary);margin-top:6px">成功 ' + okList.length + ' 条，失败 ' + failList.length + ' 条</div>' +
+            '<div class="imp-result-list"><table class="imp-table"><tbody>' + failList.map(n => '<tr class="row-error"><td>' + n + '</td></tr>').join('') + '</tbody></table></div>';
+    }
+}
+
+// ---- 房屋概况 jbxx 平铺字段定义（与详情页 basicData_RURAL.jbxx 完全一致）----
+// label=jbxx 中文标签；path=嵌套结构路径；def=默认值；hidden=是否不在编辑表单显示（仅保留兼容）
+const JBXX_FIELDS = [
+    { label: '唯一标识', path: 'no' },
+    { label: '房屋性质', path: 'overview.houseType', def: '住宅' },
+    { label: '异常标记', path: 'overview.abnormalMark', def: '正常' },
+    { label: '所在区域', path: 'street', def: '' },
+    { label: '路号信息', path: 'address', def: '' },
+    { label: '是否有产权人', path: 'overview.hasOwner', def: '有' },
+    { label: '产权人 / 使用人信息', path: 'owner', def: '' },
+    { label: '身份证号码', path: 'overview.idCard', def: '' },
+    { label: '房屋用途', path: 'usage.usageType', def: '其他自建房' },
+    { label: '人员聚集场所周边', path: 'usage.crowdAround', def: '' },
+    { label: '土地性质', path: 'homestead.landNature', def: '集体土地' },
+    { label: '集体土地', path: 'overview.landNature', def: '宅基地' },
+    { label: '所在区域类型', path: 'overview.belongTo', def: '建制镇' },
+    { label: '房屋类型', path: 'overview.usage', def: '仅自住' },
+    { label: '常住人口', path: 'usage.occupancy', def: '' },
+    { label: '房屋类型二级分类', path: 'overview.houseName', def: '独立住宅' },
+    { label: '楼栋号/名称', path: 'overview.buildingNo', def: '' },
+    { label: '住宅套数', path: 'overview.houseCount', def: '' },
+    { label: '建筑（小区）名称', path: 'overview.communityName', def: '' },
+    { label: '自住+经营', path: 'usage.selfBusiness', def: '' },
+    { label: '经营用房屋', path: 'usage.bizHouse', def: '' },
+    { label: '经营用房屋其他内容', path: 'usage.bizHouseOther', def: '' },
+    { label: '非营利性公共建筑', path: 'usage.npoBuilding', def: '' },
+    { label: '非营利性公共建筑其他内容', path: 'usage.npoBuildingOther', def: '' },
+    { label: '建造时间', path: 'overview.buildTime', def: '' },
+    { label: '建筑高度 (m)', path: 'structure.height', def: '' },
+    { label: '建筑层数地下 (层)', path: 'structure.floorsUnderground', def: '' },
+    { label: '结构类型', path: 'category', def: '砖混' },
+    { label: '结构类型其他内容', path: 'structure.structTypeOther', def: '' },
+    { label: '是否采用预制板', path: 'structure.prefab', def: '是' },
+    { label: '建筑面积 (㎡)', path: 'structure.buildingArea', def: '' },
+    { label: '建筑层数', path: 'structure.floors', def: '' },
+    { label: '建筑层数地上(层)', path: 'structure.floorsAbove', def: '' },
+    { label: '建造方式', path: 'designConstruction.buildMode', def: '有资质的施工队伍' },
+    { label: '建造方式其他内容', path: 'designConstruction.buildModeOther', def: '' },
+    { label: '是否人员聚集场所', path: 'overview.crowdPlace', def: '否' },
+    { label: '建成时间', path: 'year', def: '' },
+    { label: '具体年份', path: 'overview.actualYear', def: '' },
+    // 以下字段不在编辑表单显示，但保留以便保存逻辑兼容
+    { label: '不需要排查原因', path: 'overview.otherCrowdAround', def: '—', hidden: true },
+    { label: '是否同时自住', path: 'overview.isSelfLive', def: '是', hidden: true },
+    { label: '具体用途', path: 'usage.specificUsage', def: '日常居住', hidden: true },
+    { label: '其他人员密集场所周边', path: 'usage.otherCrowdAround', def: '否', hidden: true },
+    { label: '户主联系方式', path: 'overview.phone', def: '', hidden: true },
+    { label: '家庭成员信息', path: 'familyMembers', def: '—', hidden: true }
+];
+
+// 从嵌套记录生成 jbxx 平铺数组（与详情页 basicData_RURAL.jbxx 结构一致）
+function buildJbxxRows(rec) {
+    return JBXX_FIELDS.map(function(f) {
+        const val = getDeep(rec, f.path);
+        const display = (val === undefined || val === null || val === '') ? (f.def || '') : String(val);
+        return f.hidden ? [f.label, display, true] : [f.label, display];
+    });
+}
+
+// 生成完整的 _fieldsLibrary（房屋概况 + 其他 Tab 默认空结构）
+function buildFieldsLibrary(rec) {
+    return {
+        basic_RURAL: {
+            jbxx: buildJbxxRows(rec),
+            zjd: [
+                ['宅基地面积', getDeep(rec, 'homestead.area') || ''],
+                ['审批情况', getDeep(rec, 'homestead.approvalStatus') || ''],
+                ['权属证明', getDeep(rec, 'homestead.certNo') || '']
+            ],
+            jsqk: [
+                ['常住或使用人数超过 10 人', getDeep(rec, 'usage.over10People') || '否'],
+                ['设计方式', getDeep(rec, 'designConstruction.designMode') || '有专业设计'],
+                ['建造方式', getDeep(rec, 'designConstruction.buildMode') || '有资质施工队伍'],
+                ['结构类型', getDeep(rec, 'category') || '砖混'],
+                ['楼屋盖', getDeep(rec, 'structure.roofType') || '现浇板'],
+                ['是否改扩建', getDeep(rec, 'structure.expansionStatus') || '否'],
+                ['是否装修', getDeep(rec, 'structure.decorationStatus') || '否']
+            ],
+            glqk: [
+                ['已取得的行政许可', getDeep(rec, 'overview.permit') || ''],
+                ['违法建设和违法审批', getDeep(rec, 'overview.illegalBuild') || '否']
+            ],
+            jgxx: [
+                ['墙体材料', getDeep(rec, 'structure.wallMaterial') || '', true],
+                ['基础形式', getDeep(rec, 'structure.foundationType') || '', true],
+                ['最大跨度', getDeep(rec, 'structure.maxSpan') || '', true],
+                ['装修情况', getDeep(rec, 'structure.decorationStatus') || '', true],
+                ['建筑层数', (getDeep(rec, 'structure.floors') || '') + (getDeep(rec, 'structure.floors') ? '层' : ''), true],
+                ['屋盖类型', getDeep(rec, 'structure.roofType') || '', true],
+                ['楼盖材料', getDeep(rec, 'structure.floorMaterial') || '', true],
+                ['抗震信息', getDeep(rec, 'structure.seismicInfo') || '', true],
+                ['改扩建情况', getDeep(rec, 'structure.expansionStatus') || '', true],
+                ['备注', getDeep(rec, 'structure.remark') || '—', true]
+            ],
+            syxx: [
+                ['使用用途', getDeep(rec, 'usage.usageType') || '', true],
+                ['具体用途', getDeep(rec, 'usage.specificUsage') || '—', true],
+                ['人员聚集场所周边', getDeep(rec, 'usage.crowdAround') || '—', true],
+                ['超10人使用', getDeep(rec, 'usage.over10People') || '—', true],
+                ['变更日期', getDeep(rec, 'usage.changeDate') || '', true],
+                ['变更内容', getDeep(rec, 'usage.changeContent') || '', true],
+                ['备注', getDeep(rec, 'usage.remark') || '—', true],
+                ['是否自住', getDeep(rec, 'usage.isSelfLive') || '—', true],
+                ['居住人数', (getDeep(rec, 'usage.occupancy') || '') + (getDeep(rec, 'usage.occupancy') ? '人' : ''), true],
+                ['其他人员密集场所周边', getDeep(rec, 'usage.otherCrowdAround') || '—', true],
+                ['使用变更历史', getDeep(rec, 'usage.changeHistory') || '—', true],
+                ['变更类型', getDeep(rec, 'usage.changeType') || '', true],
+                ['审批情况', getDeep(rec, 'usage.approvalStatus') || '', true]
+            ]
+        }
+    };
+}
+
+// 把校验后的扁平记录组装成完整 house 档案结构
+function buildHouseRecord(rec) {
+    const base = (typeof DEFAULT_HOUSE_STATUS !== 'undefined') ? JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS)) : {};
+    base.no = rec.no;
+    base.owner = rec.owner || '';
+    base.street = rec.street || '';
+    base.community = rec.community || '';
+    base.address = rec.address || '';
+    base.year = rec.year !== undefined && rec.year !== '' ? rec.year : 1990;
+    base.category = rec.category || '砖混';
+    base.houseType = '农村自建房';
+    base.riskLevel = rec.riskLevel || '第一类';
+    base.governStatus = rec.governStatus || '待整治';
+    if (rec.familyMembers) base.familyMembers = rec.familyMembers;
+    // 记录列表型：设计施工记录数组
+    if (Array.isArray(rec.designConstructionRecords) && rec.designConstructionRecords.length) {
+        base.designConstructionRecords = rec.designConstructionRecords;
+    }
+    // 深合并扩展子对象
+    ['overview', 'homestead', 'designConstruction', 'structure', 'usage', 'riskInfo'].forEach(function(k) {
+        if (rec[k]) { base[k] = Object.assign({}, base[k] || {}, rec[k]); }
+    });
+    if (base.riskInfo) { base.riskInfo.riskLevel = base.riskInfo.riskLevel || base.riskLevel; base.riskInfo.relatedHouse = base.no; base.riskInfo.relatedOwner = base.owner; }
+    // 生成字段库快照（详情页房屋概况等 Tab 直接读取）
+    base._fieldsLibrary = buildFieldsLibrary(rec);
+    return base;
+}
+</script>
+
+
+</body></html>
