@@ -133,7 +133,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table thead th { padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; color: var(--text-secondary); background: var(--header-bg); border-bottom: 1px solid var(--border); white-space: nowrap; }
 .data-table tbody td { padding: 14px 16px; font-size: 13px; color: var(--text-primary); border-bottom: 1px solid var(--border); }
-.data-table tbody tr:hover { background: var(--bg-hover); cursor: pointer; }
+.data-table tbody tr:hover { background: var(--bg-hover); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .td-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
 .badge-blue { background: rgba(26,115,232,0.12); color: var(--primary); }
@@ -285,9 +285,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             <div class="filter-bar" style="border-bottom: none; padding: 0; margin-bottom: 0;">
                 <div class="filter-group">
                     <label>机构筛选</label>
-                    <select id="orgFilter" onchange="applyOrgFilter(); refreshOverview();">
-                        <option value="">全部机构</option>
-                    </select>
+                    <input type="text" id="orgFilter" placeholder="输入机构名称关键字" oninput="refreshOverview()" style="width:220px;">
                 </div>
                 <div class="filter-group">
                     <label>时间维度</label>
@@ -332,9 +330,6 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 <div class="filter-actions">
                     <button class="btn btn-primary" onclick="refreshOverview()">
                         <i class="fas fa-sync-alt"></i> 刷新
-                    </button>
-                    <button class="btn btn-outline" onclick="resetDrillFilter()">
-                        <i class="fas fa-undo"></i> 重置下钻
                     </button>
                     <button class="btn btn-outline" onclick="openReportConfig()">
                         <i class="fas fa-cog"></i> 自定义报表
@@ -739,20 +734,6 @@ function switchTab(tab) {
     }
 }
 
-function initOrgFilter() {
-    var sel = document.getElementById('orgFilter');
-    if (!sel || typeof getAllOrgs !== 'function') return;
-    var current = sel.value;
-    sel.innerHTML = '<option value="">全部机构</option>';
-    getAllOrgs().forEach(function(o) {
-        var opt = document.createElement('option');
-        opt.value = o.orgId;
-        opt.textContent = o.orgName;
-        sel.appendChild(opt);
-    });
-    sel.value = current;
-}
-
 function initAreaFilter() {
     var sel = document.getElementById('areaDim');
     if (!sel || typeof getAllOrgs !== 'function') return;
@@ -765,20 +746,20 @@ function initAreaFilter() {
 }
 
 function applyFilters() {
-    var orgSel = document.getElementById('orgFilter');
+    var orgInput = document.getElementById('orgFilter');
     var timeSel = document.getElementById('timeDim');
     var areaSel = document.getElementById('areaDim');
     var fieldSel = document.getElementById('fieldDim');
     var typeSel = document.getElementById('typeDim');
     currentFilters = {
-        orgId: orgSel ? orgSel.value : '',
+        orgKeyword: orgInput ? orgInput.value.trim() : '',
         timeDim: timeSel ? timeSel.value : 'month',
         area: areaSel ? areaSel.value : '',
         field: fieldSel ? fieldSel.value : '',
         type: typeSel ? typeSel.value : ''
     };
     filteredOrgList = orgList.filter(function(item) {
-        if (currentFilters.orgId && item.orgId !== currentFilters.orgId) return false;
+        if (currentFilters.orgKeyword && item.name.indexOf(currentFilters.orgKeyword) === -1) return false;
         if (currentFilters.area && item.district !== currentFilters.area) return false;
         if (currentFilters.field && item.field !== currentFilters.field) return false;
         if (currentFilters.type && item.type !== currentFilters.type) return false;
@@ -788,9 +769,13 @@ function applyFilters() {
 }
 
 function setOrgFilter(orgId) {
-    var sel = document.getElementById('orgFilter');
-    if (!sel || !orgId) return;
-    sel.value = orgId;
+    var input = document.getElementById('orgFilter');
+    if (!input || !orgId) return;
+    // 根据 orgId 找到机构名称并设为关键字
+    var org = typeof getOrgById === 'function' ? getOrgById(orgId) : null;
+    if (org && org.orgName) {
+        input.value = org.orgName;
+    }
     applyFilters();
 }
 
@@ -854,7 +839,17 @@ function renderSubChart(highlightName) {
     if (Object.keys(creditMap).length === 0) {
         creditMap['未评级'] = 0;
     }
-    var creditData = Object.keys(creditMap).map(function(k) { return { value: creditMap[k], name: k }; });
+    var creditColorMap = {
+        'AAA级': '#5470c6',
+        'AA级': '#91cc75',
+        'A级': '#fac858',
+        'B级': '#ee6666',
+        'C级': '#73c0de',
+        '未评级': '#9aa0a6'
+    };
+    var creditData = Object.keys(creditMap).map(function(k) {
+        return { value: creditMap[k], name: k, itemStyle: { color: creditColorMap[k] || '#9aa0a6' } };
+    });
     var selected = {};
     if (highlightName) {
         creditData.forEach(function(d) { selected[d.name] = d.name === highlightName; });
@@ -864,7 +859,16 @@ function renderSubChart(highlightName) {
         legend: { orient: 'vertical', left: 'left', textStyle: { color: 'var(--text-secondary)' } },
         series: [{ type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false, label: { show: false }, selectedMode: highlightName ? 'single' : false, selected: selected, data: creditData }]
     });
-    chartInstances.sub.on('click', function(params) { showDrillDetail(params.name); });
+    chartInstances.sub.on('click', function(params) {
+        var level = (params.name || '').replace('级', '');
+        if (!level) return;
+        var base = filteredOrgList.length ? filteredOrgList : orgList;
+        filteredOrgList = base.filter(function(item) { return item.credit === level; });
+        statsPage = 1;
+        renderStatsTable();
+        renderStatCards();
+        renderSubChart(params.name);
+    });
 }
 
 function drillByMainChart(name) {
@@ -889,11 +893,6 @@ function drillByMainChart(name) {
     renderStatsTable();
     renderStatCards();
     renderTrendChart();
-}
-
-function resetDrillFilter() {
-    applyFilters();
-    refreshOverview();
 }
 
 function renderMainChart() {
@@ -961,7 +960,6 @@ function renderTrendChart() {
             lineStyle: { color: '#1a73e8', width: 3 }, itemStyle: { color: '#1a73e8' }
         }]
     });
-    chartInstances.trend.on('click', function(params) { showDrillDetail(params.name); });
 }
 
 function getDrillData(drill) {
@@ -1003,21 +1001,6 @@ function getNewOrgData(list) {
     return Object.keys(map).sort().map(function(k) { return { name: k + '年', value: map[k] }; });
 }
 
-function showDrillDetail(name) {
-    document.getElementById('reportModalTitle').textContent = '明细数据 - ' + name;
-    var html = '<p style="color:var(--text-secondary);margin-bottom:12px;">已筛选出 ' + name + ' 相关的机构数据：</p>';
-    html += '<table class="data-table"><thead><tr><th>机构名称</th><th>类型</th><th>领域</th><th>区域</th><th>合同数</th><th>项目数</th><th>报告数</th><th>满意度</th></tr></thead><tbody>';
-    var filter = name.replace('级', '');
-    var list = orgList.filter(function(item) { return item.type.indexOf(name) !== -1 || item.credit === filter || item.field === name; });
-    list.forEach(function(item) {
-        var nameCell = item.orgId ? '<a style="cursor:pointer;color:var(--primary);text-decoration:underline;" onclick="goToTPOrg(\'' + item.orgId + '\')">' + item.name + '</a>' : item.name;
-        html += '<tr><td>' + nameCell + '</td><td>' + item.type + '</td><td>' + item.field + '</td><td>' + item.district + '</td><td>' + item.contracts + '</td><td>' + item.projects + '</td><td>' + item.reports + '</td><td>' + item.satisfaction + '</td></tr>';
-    });
-    html += '</tbody></table>';
-    document.getElementById('reportModalBody').innerHTML = html;
-    document.getElementById('reportModal').classList.add('active');
-}
-
 function closeReportModal() { document.getElementById('reportModal').classList.remove('active'); }
 
 function renderStatsTable() {
@@ -1036,12 +1019,9 @@ function renderStatsTable() {
     pageData.forEach(function(item) {
         var creditClass = item.credit === 'A' ? 'badge-green' : (item.credit === 'B' ? 'badge-blue' : 'badge-orange');
         var statusClass = item.status === '已审核' ? 'badge-green' : 'badge-orange';
-        var nameCell = item.orgId ?
-            '<a style="cursor:pointer;color:var(--primary);text-decoration:underline;" onclick="goToTPOrg(\'' + item.orgId + '\')">' + item.name + '</a>' :
-            item.name;
         var row = document.createElement('tr');
         row.innerHTML =
-            '<td>' + nameCell + '</td>' +
+            '<td>' + item.name + '</td>' +
             '<td>' + item.type + '</td>' +
             '<td>' + item.field + '</td>' +
             '<td>' + item.district + '</td>' +
@@ -1053,7 +1033,6 @@ function renderStatsTable() {
             '<td>' + item.satisfaction + '</td>' +
             '<td><span class="td-badge ' + creditClass + '">' + item.credit + '</span></td>' +
             '<td><span class="td-badge ' + statusClass + '">' + item.status + '</span></td>';
-        row.onclick = function() { showDrillDetail(item.name); };
         tbody.appendChild(row);
     });
     renderStatsPagination(Math.ceil(filteredOrgList.length / statsPageSize) || 1);
@@ -1398,7 +1377,6 @@ window.addEventListener('resize', function() {
 });
 
 window.onload = function() {
-    initOrgFilter();
     initAreaFilter();
     var params = getTPQueryParams ? getTPQueryParams() : { orgId: '' };
     if (params.orgId) {

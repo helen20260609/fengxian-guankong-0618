@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>专家申请 - 第三方服务机构</title>
+    <title>专家/机构申请 - 第三方服务机构</title>
     <link rel="stylesheet" href="./all.min.css">
     <link rel="stylesheet" href="./tp-common.css">
     <script src="../js/third-party-data.js"></script>
@@ -265,9 +265,77 @@
             .filter-bar { flex-direction: column; }
             .filter-bar .form-group { width: 100%; }
         }
+
+        /* ===== Toast 提示 ===== */
+        .toast-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 9999;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; visibility: hidden;
+            transition: opacity 0.25s;
+        }
+        .toast-overlay.show { opacity: 1; visibility: visible; }
+        .toast-card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+            width: 380px; max-width: 90vw;
+            overflow: hidden;
+            transform: translateY(12px) scale(0.96);
+            transition: transform 0.25s;
+        }
+        .toast-overlay.show .toast-card { transform: translateY(0) scale(1); }
+        .toast-body { padding: 32px 28px 24px; text-align: center; }
+        .toast-icon {
+            width: 56px; height: 56px; margin: 0 auto 16px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 28px;
+        }
+        .toast-icon.success { background: #e6f7ed; color: #16a34a; }
+        .toast-icon.warning { background: #fef3e2; color: #d97706; }
+        .toast-title { font-size: 17px; font-weight: 600; color: #111827; margin-bottom: 8px; }
+        .toast-message { font-size: 14px; color: #4b5563; line-height: 1.7; white-space: pre-line; }
+        .toast-footer { padding: 12px 20px 20px; }
+        .toast-btn {
+            width: 100%; height: 40px;
+            border: none; border-radius: 8px;
+            background: var(--primary, #2563eb); color: #fff;
+            font-size: 14px; font-weight: 500;
+            cursor: pointer; transition: filter 0.2s;
+        }
+        .toast-btn:hover { filter: brightness(1.08); }
     </style>
 </head>
 <body>
+<!-- Toast 提示容器 -->
+<div class="toast-overlay" id="toastOverlay" onclick="if(event.target===this)hideToast()">
+    <div class="toast-card">
+        <div class="toast-body">
+            <div class="toast-icon" id="toastIcon"><i class="fa-solid fa-check"></i></div>
+            <div class="toast-title" id="toastTitle"></div>
+            <div class="toast-message" id="toastMessage"></div>
+        </div>
+        <div class="toast-footer">
+            <button class="toast-btn" onclick="hideToast()">我知道了</button>
+        </div>
+    </div>
+</div>
+<script>
+function showToast(type, title, message) {
+    var overlay = document.getElementById('toastOverlay');
+    var icon = document.getElementById('toastIcon');
+    document.getElementById('toastTitle').textContent = title;
+    document.getElementById('toastMessage').textContent = message || '';
+    icon.className = 'toast-icon ' + (type === 'warning' ? 'warning' : 'success');
+    icon.innerHTML = type === 'warning' ? '<i class="fa-solid fa-exclamation"></i>' : '<i class="fa-solid fa-check"></i>';
+    overlay.classList.add('show');
+}
+function hideToast() {
+    document.getElementById('toastOverlay').classList.remove('show');
+}
+</script>
 <div class="page-container">
     <div class="page-header">
         <div class="page-title"><i class="fas fa-user-clock" style="color:var(--primary)"></i> 申请专家 / 机构评估</div>
@@ -407,13 +475,6 @@
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>结果反馈方式</label>
-                    <select id="taskCallbackType">
-                        <option value="postMessage">站内消息回传（iframe/弹窗）</option>
-                        <option value="link">生成结果链接</option>
-                    </select>
-                </div>
-                <div class="form-group">
                     <label>附件材料</label>
                     <input type="file" id="taskAttachments" multiple onchange="handleTaskAttachments(this)">
                     <div class="selected-list" id="taskAttachmentList"></div>
@@ -469,21 +530,8 @@
 <!-- 反馈结果弹窗 -->
 <div class="modal-overlay" id="feedbackModal">
     <div class="modal" style="max-width:720px;">
-        <div class="modal-header"><i class="fas fa-paper-plane"></i> 反馈专家申请结果</div>
+        <div class="modal-header"><i class="fas fa-paper-plane"></i> <span id="feedbackModalTitle">反馈申请结果</span></div>
         <div class="modal-body">
-            <div class="form-row">
-                <div class="form-group">
-                    <label>反馈方式 <span class="required">*</span></label>
-                    <select id="feedbackType">
-                        <option value="postMessage">站内消息回传（iframe/弹窗）</option>
-                        <option value="link">生成结果链接</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>接收方</label>
-                    <input type="text" id="feedbackReceiver" placeholder="例如：风险研判系统 / 请求人姓名">
-                </div>
-            </div>
             <div class="form-row-full">
                 <div class="form-group">
                     <label>评估结论 <span class="required">*</span></label>
@@ -503,20 +551,58 @@
                     <textarea id="feedbackRemark" placeholder="请输入反馈说明，例如：已按要求安排专家，请查收"></textarea>
                 </div>
             </div>
-            <div class="form-row-full" id="feedbackLinkWrap" style="display:none;">
-                <div class="form-group">
-                    <label>结果链接</label>
-                    <div class="value" id="feedbackLink"></div>
-                </div>
-            </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeFeedbackModal()">取消</button>
-            <button class="btn btn-primary" onclick="previewFeedback()">预览结果</button>
             <button class="btn btn-success" onclick="submitFeedback()">确认反馈</button>
         </div>
     </div>
 </div>
+
+<!-- 驳回申请弹窗 -->
+<div class="modal-overlay" id="rejectModal">
+    <div class="modal" style="max-width:560px;">
+        <div class="modal-header"><i class="fas fa-times-circle" style="color:var(--danger,#d93025);"></i> 驳回申请</div>
+        <div class="modal-body">
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>需求编号</label>
+                    <div class="value" id="rejectTaskCode">—</div>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>需求名称</label>
+                    <div class="value" id="rejectTaskName">—</div>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>常用驳回原因</label>
+                    <select id="rejectPreset" onchange="onRejectPresetChange(this)">
+                        <option value="">-- 选择常用语快速填充 --</option>
+                        <option value="申请信息不完整，请补充后重新提交">申请信息不完整，请补充后重新提交</option>
+                        <option value="所需专家/机构数量超出可调派范围">所需专家/机构数量超出可调派范围</option>
+                        <option value="专业领域与现有专家库不匹配，暂无法受理">专业领域与现有专家库不匹配，暂无法受理</option>
+                        <option value="评估目的不明确，请说明后重新申请">评估目的不明确，请说明后重新申请</option>
+                        <option value="重复申请，已存在相同需求">重复申请，已存在相同需求</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>驳回原因 <span class="required">*</span></label>
+                    <textarea id="rejectReason" rows="4" placeholder="请填写驳回原因，将随驳回通知一并发送给请求方"></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeRejectModal()">取消</button>
+            <button class="btn btn-danger" onclick="confirmReject()"><i class="fas fa-times-circle"></i> 确认驳回</button>
+        </div>
+    </div>
+</div>
+
 
 <script>
     var taskList = [];
@@ -759,7 +845,6 @@
         document.getElementById('taskRequestSource').value = '';
         document.getElementById('taskRequester').value = '';
         document.getElementById('taskContact').value = '';
-        document.getElementById('taskCallbackType').value = 'postMessage';
         tempSelectedExperts = [];
         taskTempAttachments = [];
         updatePickerUI();
@@ -785,7 +870,6 @@
         document.getElementById('taskRequestSource').value = task.requestSource || '';
         document.getElementById('taskRequester').value = task.requester || '';
         document.getElementById('taskContact').value = task.contact || '';
-        document.getElementById('taskCallbackType').value = task.callbackType || 'postMessage';
         tempSelectedExperts = (task.experts || []).slice();
         taskTempAttachments = (task.attachments || []).slice();
         updatePickerUI();
@@ -805,17 +889,17 @@
         var domain = document.getElementById('taskDomain').value;
         var purpose = document.getElementById('taskPurpose').value.trim();
         var applyType = document.getElementById('taskApplyType').value;
-        if (!name) { alert('请输入需求名称'); return false; }
-        if (!purpose) { alert('请输入评估目的'); return false; }
-        if (!count || count < 1) { alert('请输入所需人数'); return false; }
-        if (!domain) { alert('请选择专业领域'); return false; }
+        if (!name) { showToast('warning', '请完善信息', '请输入需求名称'); return false; }
+        if (!purpose) { showToast('warning', '请完善信息', '请输入评估目的'); return false; }
+        if (!count || count < 1) { showToast('warning', '请完善信息', '请输入所需人数'); return false; }
+        if (!domain) { showToast('warning', '请完善信息', '请选择专业领域'); return false; }
         if (requireSelected) {
             if (!tempSelectedExperts.length) {
-                if (applyType === 'expert') { alert('请选择专家'); return false; }
-                else { alert('请选择鉴定机构'); return false; }
+                if (applyType === 'expert') { showToast('warning', '请完善信息', '请选择专家'); return false; }
+                else { showToast('warning', '请完善信息', '请选择鉴定机构'); return false; }
             }
             if (tempSelectedExperts.length < count) {
-                alert('已选' + (applyType === 'org' ? '机构' : '专家') + '数量少于所需数量 ' + count);
+                showToast('warning', '数量不足', '已选' + (applyType === 'org' ? '机构' : '专家') + '数量少于所需数量 ' + count + '\n\n请继续选择');
                 return false;
             }
         }
@@ -842,7 +926,6 @@
             requestSource: document.getElementById('taskRequestSource').value.trim() || existing.requestSource || '',
             requester: document.getElementById('taskRequester').value.trim() || existing.requester || '',
             contact: document.getElementById('taskContact').value.trim() || existing.contact || '',
-            callbackType: document.getElementById('taskCallbackType').value || existing.callbackType || 'postMessage',
             attachments: taskTempAttachments.slice(),
             createTime: existing.createTime || now,
             updateTime: now,
@@ -862,7 +945,7 @@
         saveTasks(function() {
             closeTaskModal();
             renderTaskList();
-            alert('已保存为待分派');
+            showToast('success', '已保存为待分派', '可在列表中继续分派操作');
         });
     }
 
@@ -872,7 +955,7 @@
         if (!task) return;
         var applyType = document.getElementById('taskApplyType').value;
         if (tempSelectedExperts.length < task.count) {
-            alert('已选' + (applyType === 'org' ? '机构' : '专家') + '数量少于所需数量 ' + task.count);
+            showToast('warning', '数量不足', '已选' + (applyType === 'org' ? '机构' : '专家') + '数量少于所需数量 ' + task.count + '\n\n请继续选择');
             return;
         }
         task.applyType = applyType;
@@ -882,18 +965,61 @@
         saveTasks(function() {
             closeTaskModal();
             renderTaskList();
-            alert('已分派，结果已生成可查看记录');
+            showToast('success', '分派成功', '已生成分派记录\n' + (task.applyType === 'org' ? '鉴定机构' : '专家') + '将收到评估通知');
         });
     }
 
+    var rejectTaskId = null;
+
     function rejectTask(id) {
-        if (!confirm('确认驳回该申请？')) return;
         var task = taskList.find(function(t) { return t.id === id; });
         if (!task) return;
+        rejectTaskId = id;
+        document.getElementById('rejectTaskCode').textContent = task.code || task.id;
+        document.getElementById('rejectTaskName').textContent = task.name || '—';
+        document.getElementById('rejectPreset').value = '';
+        document.getElementById('rejectReason').value = '';
+        document.getElementById('rejectModal').classList.add('show');
+    }
+
+    function onRejectPresetChange(sel) {
+        if (sel.value) {
+            document.getElementById('rejectReason').value = sel.value;
+        }
+    }
+
+    function closeRejectModal() {
+        document.getElementById('rejectModal').classList.remove('show');
+        rejectTaskId = null;
+    }
+
+    function confirmReject() {
+        var task = taskList.find(function(t) { return t.id === rejectTaskId; });
+        if (!task) { closeRejectModal(); return; }
+        var reason = document.getElementById('rejectReason').value.trim();
+        if (!reason) { showToast('warning', '请填写原因', '请填写驳回原因，便于请求方补充完善'); return; }
+        var now = new Date().toISOString().slice(0,19).replace('T',' ');
         task.status = 'rejected';
-        task.updateTime = new Date().toISOString().slice(0,19).replace('T',' ');
+        task.rejection = { reason: reason, time: now, operator: '系统管理员' };
+        task.updateTime = now;
+        // 驳回结果回传请求方（与反馈结果同一通道）
+        if (window.parent !== window) {
+            window.parent.postMessage({
+                action: 'expertDispatchRejected',
+                payload: {
+                    taskId: task.id,
+                    code: task.code || task.id,
+                    name: task.name,
+                    reason: reason,
+                    time: now,
+                    receiver: task.requester || task.requestSource || ''
+                }
+            }, '*');
+        }
         saveTasks(function() {
             renderTaskList();
+            closeRejectModal();
+            showToast('success', '已驳回', '驳回原因已通知请求方\n可在列表中查看记录');
         });
     }
 
@@ -915,7 +1041,6 @@
         document.getElementById('taskRequestSource').value = task.requestSource || '';
         document.getElementById('taskRequester').value = task.requester || '';
         document.getElementById('taskContact').value = task.contact || '';
-        document.getElementById('taskCallbackType').value = task.callbackType || 'postMessage';
         tempSelectedExperts = (task.experts || []).slice();
         taskTempAttachments = (task.attachments || []).slice();
         updatePickerUI();
@@ -929,7 +1054,7 @@
         var domain = document.getElementById('taskDomain').value;
         if (!domain) {
             var isOrg = getPickerTargetType() === 'org';
-            alert('请先选择专业领域，再选择' + (isOrg ? '鉴定机构' : '专家'));
+            showToast('warning', '操作提示', '请先选择专业领域\n再选择' + (isOrg ? '鉴定机构' : '专家'));
             document.getElementById('taskDomain').focus();
             return;
         }
@@ -1087,6 +1212,7 @@
     function viewResult(id) {
         var task = taskList.find(function(t) { return t.id === id; });
         if (!task) return;
+        window._viewResultTask = task;
         var statusText = { pending: '待分派', assigned: '已分派', feedback: '已反馈', rejected: '已驳回' }[task.status] || task.status;
         var applyTypeText = { expert: '专家评估', org: '机构鉴定' }[task.applyType] || '专家评估';
         var targetLabel = task.applyType === 'org' ? '已选鉴定机构' : '已选专家';
@@ -1098,17 +1224,23 @@
             '<div class="form-row-full"><div class="form-group"><label>评估要求</label><div class="value">' + (task.requirement || '—') + '</div></div></div>' +
             '<div class="form-row"><div class="form-group"><label>建议专家 / 机构</label><div class="value">' + (task.suggestedTarget || '—') + '</div></div><div class="form-group"><label>' + countLabel + '</label><div class="value">' + task.count + '</div></div></div>' +
             '<div class="form-row"><div class="form-group"><label>请求来源</label><div class="value">' + (task.requestSource || '—') + '</div></div><div class="form-group"><label>请求人 / 单位</label><div class="value">' + (task.requester || '—') + '</div></div></div>' +
-            '<div class="form-row"><div class="form-group"><label>请求方联系方式</label><div class="value">' + (task.contact || '—') + '</div></div><div class="form-group"><label>结果反馈方式</label><div class="value">' + ({ postMessage: '站内消息回传', link: '生成结果链接' }[task.callbackType] || '—') + '</div></div></div>' +
+            '<div class="form-row"><div class="form-group"><label>请求方联系方式</label><div class="value">' + (task.contact || '—') + '</div></div></div>' +
             '<div class="form-row-full"><div class="form-group"><label>' + targetLabel + '</label><div class="selected-list">' + (task.experts || []).map(function(e) {
                 return '<span class="selected-chip">' + e.name + '（' + e.title + '）</span>';
             }).join('') + '</div></div></div>';
         if ((task.attachments || []).length) {
-            html += '<div class="form-row-full"><div class="form-group"><label>附件材料</label><div class="selected-list">' + task.attachments.map(function(a) {
-                return '<span class="selected-chip"><i class="fas fa-file"></i> ' + a.name + '</span>';
+            html += '<div class="form-row-full"><div class="form-group"><label>附件材料</label><div class="selected-list">' + task.attachments.map(function(a, i) {
+                return '<span class="selected-chip" style="cursor:pointer;" onclick="downloadTaskAttachment(\'apply\',' + i + ')" title="点击下载"><i class="fas fa-file"></i> ' + a.name + ' <i class="fas fa-download" style="font-size:11px;opacity:0.6;"></i></span>';
             }).join('') + '</div></div></div>';
         }
         if (task.remark) {
             html += '<div class="form-row-full"><div class="form-group"><label>需求说明</label><div class="value">' + task.remark + '</div></div></div>';
+        }
+        if (task.rejection) {
+            html += '<div class="feedback-log"><div class="feedback-log-title"><i class="fas fa-times-circle"></i> 驳回记录</div>' +
+                '<div>驳回时间：' + (task.rejection.time || '—') + '</div>' +
+                '<div>操作人：' + (task.rejection.operator || '—') + '</div>' +
+                '<div>驳回原因：' + (task.rejection.reason || '—') + '</div></div>';
         }
         if (task.feedback) {
             html += '<div class="feedback-log"><div class="feedback-log-title"><i class="fas fa-paper-plane"></i> 反馈记录</div>' +
@@ -1118,7 +1250,7 @@
                 '<div>评估结论：' + (task.feedback.conclusion || '—') + '</div>' +
                 '<div>备注：' + (task.feedback.remark || '—') + '</div>';
             if ((task.feedback.attachments || []).length) {
-                html += '<div>反馈附件：' + task.feedback.attachments.map(function(a){ return a.name; }).join('、') + '</div>';
+                html += '<div>反馈附件：' + task.feedback.attachments.map(function(a, i){ return '<a href="javascript:void(0)" onclick="downloadTaskAttachment(\'fb\',' + i + ')" style="color:var(--primary);">' + a.name + '</a>'; }).join('、') + '</div>';
             }
             html += '</div>';
         }
@@ -1126,13 +1258,28 @@
         var footerHtml = '<button class="btn btn-outline" onclick="closeResultModal()">关闭</button>';
         if (task.status === 'assigned') {
             footerHtml += '<button class="btn btn-primary" onclick="closeResultModal();openFeedbackModal(\'' + task.id + '\')"><i class="fas fa-paper-plane"></i> 反馈结果</button>';
-        }
-        document.getElementById('resultFooter').innerHTML = footerHtml;
+        }        document.getElementById('resultFooter').innerHTML = footerHtml;
         document.getElementById('resultModal').classList.add('show');
     }
 
     function closeResultModal() {
         document.getElementById('resultModal').classList.remove('show');
+    }
+
+    // 下载附件（有内容直接下载，无内容提示）
+    function downloadTaskAttachment(kind, idx) {
+        var task = window._viewResultTask;
+        if (!task) return;
+        var list = kind === 'fb' ? (task.feedback && task.feedback.attachments) : task.attachments;
+        var file = (list || [])[idx];
+        if (!file) return;
+        if (!file.data) { showToast('warning', '无法下载', '该附件只有文件名记录，未包含文件内容（可能是早期数据）'); return; }
+        var a = document.createElement('a');
+        a.href = file.data;
+        a.download = file.name || '附件';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     function resetFilter() {
@@ -1143,20 +1290,14 @@
         renderTaskList();
     }
 
-    document.getElementById('feedbackType').addEventListener('change', function() {
-        document.getElementById('feedbackLinkWrap').style.display = 'none';
-    });
-
     function openFeedbackModal(id) {
         feedbackTaskId = id;
         var task = taskList.find(function(t) { return t.id === id; });
-        document.getElementById('feedbackType').value = task.callbackType || 'postMessage';
-        document.getElementById('feedbackReceiver').value = task.requester || '';
+        document.getElementById('feedbackModalTitle').textContent = task && task.applyType === 'org' ? '反馈机构鉴定结果' : '反馈专家评估结果';
         document.getElementById('feedbackConclusion').value = '';
         document.getElementById('feedbackRemark').value = '';
         feedbackTempAttachments = [];
         renderFeedbackAttachmentList();
-        document.getElementById('feedbackLinkWrap').style.display = 'none';
         document.getElementById('feedbackModal').classList.add('show');
     }
 
@@ -1165,29 +1306,14 @@
         feedbackTaskId = null;
     }
 
-    function previewFeedback() {
-        var task = taskList.find(function(t) { return t.id === feedbackTaskId; });
-        if (!task) return;
-        var type = document.getElementById('feedbackType').value;
-        if (type === 'link') {
-            document.getElementById('feedbackLinkWrap').style.display = 'block';
-            document.getElementById('feedbackLink').textContent = location.origin + location.pathname + '?viewResult=' + task.id;
-        } else {
-            document.getElementById('feedbackLinkWrap').style.display = 'none';
-            alert('已选择站内消息回传，确认后将通过 postMessage 发送给来源页面。');
-        }
-    }
-
     function submitFeedback() {
         var task = taskList.find(function(t) { return t.id === feedbackTaskId; });
         if (!task) return;
-        var type = document.getElementById('feedbackType').value;
-        var receiver = document.getElementById('feedbackReceiver').value.trim();
         var conclusion = document.getElementById('feedbackConclusion').value.trim();
         var remark = document.getElementById('feedbackRemark').value.trim();
-        if (!conclusion) { alert('请输入评估结论'); return; }
+        if (!conclusion) { showToast('warning', '请完善信息', '请输入评估结论'); return; }
 
-        if (type === 'postMessage' && window.parent !== window) {
+        if (window.parent !== window) {
             window.parent.postMessage({
                 action: 'expertDispatchResult',
                 payload: {
@@ -1200,7 +1326,6 @@
                     conclusion: conclusion,
                     attachments: feedbackTempAttachments,
                     updateTime: task.updateTime,
-                    receiver: receiver,
                     remark: remark
                 }
             }, '*');
@@ -1208,8 +1333,6 @@
 
         task.status = 'feedback';
         task.feedback = {
-            type: type,
-            receiver: receiver,
             conclusion: conclusion,
             remark: remark,
             attachments: feedbackTempAttachments.slice(),
@@ -1219,7 +1342,7 @@
         saveTasks(function() {
             renderTaskList();
             closeFeedbackModal();
-            alert('反馈结果已发送');
+            showToast('success', '反馈结果已发送', '结果已同步给请求方\n流转记录可查看详情');
         });
     }
 
@@ -1259,7 +1382,6 @@
             document.getElementById('taskRequestSource').value = payload.requestSource || (e.source ? '外部模块' : '');
             document.getElementById('taskRequester').value = payload.requester || '';
             document.getElementById('taskContact').value = payload.contact || '';
-            document.getElementById('taskCallbackType').value = payload.callbackType || 'postMessage';
             tempSelectedExperts = [];
             taskTempAttachments = (payload.attachments || []).slice();
             updatePickerUI();

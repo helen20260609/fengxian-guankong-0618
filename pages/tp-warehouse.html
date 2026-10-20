@@ -289,24 +289,24 @@ body.tp-embed .modal-close { display: none !important; }
             <div class="filter-row" style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
                 <div class="filter-item" style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-size: 13px; color: var(--text-secondary); white-space: nowrap;">机构名称：</label>
-                    <input type="text" placeholder="请输入机构名称" style="padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; width: 180px;">
+                    <input type="text" id="filterOrgName" placeholder="请输入机构名称" style="padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; width: 180px;">
                 </div>
                 <div class="filter-item" style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-size: 13px; color: var(--text-secondary); white-space: nowrap;">统一代码：</label>
-                    <input type="text" placeholder="请输入统一代码" style="padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; width: 180px;">
+                    <input type="text" id="filterOrgCode" placeholder="请输入统一代码" style="padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; width: 180px;">
                 </div>
                 <div class="filter-item" style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-size: 13px; color: var(--text-secondary); white-space: nowrap;">状态：</label>
-                    <select style="padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; width: 120px;">
-                        <option>全部</option>
-                        <option>正常</option>
-                        <option>信息待更新</option>
-                        <option>已停用</option>
+                    <select id="filterOrgStatus" style="padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; width: 120px;">
+                        <option value="">全部</option>
+                        <option value="正常">正常</option>
+                        <option value="信息待更新">信息待更新</option>
+                        <option value="已停用">已停用</option>
                     </select>
                 </div>
                 <div class="filter-actions" style="display: flex; gap: 10px; margin-left: auto;">
-                    <button class="btn btn-primary" style="padding: 8px 20px; font-size: 13px;"><i class="fas fa-search"></i> 查询</button>
-                    <button class="btn btn-outline" style="padding: 8px 20px; font-size: 13px;"><i class="fas fa-undo"></i> 重置</button>
+                    <button class="btn btn-primary" style="padding: 8px 20px; font-size: 13px;" onclick="applyOrgFilter()"><i class="fas fa-search"></i> 查询</button>
+                    <button class="btn btn-outline" style="padding: 8px 20px; font-size: 13px;" onclick="resetOrgFilter()"><i class="fas fa-undo"></i> 重置</button>
                     <button class="btn btn-outline" style="padding: 8px 20px; font-size: 13px; color: var(--primary); border-color: var(--primary);" onclick="openImportOrgModal()"><i class="fas fa-file-import"></i> 批量导入</button>
                     <button class="btn btn-primary" style="padding: 8px 20px; font-size: 13px; background: var(--success);" onclick="addNewOrg()"><i class="fas fa-plus"></i> 新增机构</button>
                 </div>
@@ -1102,8 +1102,45 @@ function renderPendingApplications() {
     });
 }
 
+var orgFilterState = { name: '', code: '', status: '' };
+
+function applyOrgFilter() {
+    var nameEl = document.getElementById('filterOrgName');
+    var codeEl = document.getElementById('filterOrgCode');
+    var statusEl = document.getElementById('filterOrgStatus');
+    orgFilterState = {
+        name: nameEl ? nameEl.value.trim() : '',
+        code: codeEl ? codeEl.value.trim() : '',
+        status: statusEl ? statusEl.value : ''
+    };
+    orgTablePage = 1;
+    renderOrgTable();
+}
+
+function resetOrgFilter() {
+    var nameEl = document.getElementById('filterOrgName');
+    var codeEl = document.getElementById('filterOrgCode');
+    var statusEl = document.getElementById('filterOrgStatus');
+    if (nameEl) nameEl.value = '';
+    if (codeEl) codeEl.value = '';
+    if (statusEl) statusEl.value = '';
+    orgFilterState = { name: '', code: '', status: '' };
+    orgTablePage = 1;
+    renderOrgTable();
+}
+
+function filterOrgs(orgs) {
+    return orgs.filter(function(org) {
+        if (orgFilterState.name && (org.orgName || '').indexOf(orgFilterState.name) === -1) return false;
+        if (orgFilterState.code && (org.orgCode || '').indexOf(orgFilterState.code) === -1) return false;
+        var st = org.status || '正常';
+        if (orgFilterState.status && st !== orgFilterState.status) return false;
+        return true;
+    });
+}
+
 function renderOrgTable() {
-    var orgs = getAllOrgs();
+    var orgs = filterOrgs(getAllOrgs());
     allOrgRows = orgs;
     var tbody = document.getElementById('orgTableBody');
     if (!tbody) return;

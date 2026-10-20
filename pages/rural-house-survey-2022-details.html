@@ -2456,32 +2456,30 @@
     <script>
         const sidebarItems_RURAL = [
             { key: 'basic', icon: 'fa-id-card', title: '房屋概况', tag: '静态档案' },
-            { key: 'discovery', icon: 'fa-search', title: '风险发现', tag: '排查/巡查' },
+            { key: 'discovery', icon: 'fa-search', title: '排查情况', tag: '排查' },
             { key: 'assessment', icon: 'fa-clipboard-check', title: '安全鉴定', tag: '鉴定评估', ruralOnly: true },
             { key: 'plan', icon: 'fa-calendar-alt', title: '整治计划', tag: '一栋一策', ruralOnly: true },
             { key: 'measure', icon: 'fa-tools', title: '整治措施', ruralOnly: true },
             { key: 'controlSituation', icon: 'fa-shield-alt', title: '隐患控制情况', tag: '动态跟踪', ruralOnly: true },
             { key: 'accept', icon: 'fa-clipboard-check', title: '阶段性验收', tag: '节点验收', ruralOnly: true },
             { key: 'close', icon: 'fa-check-circle', title: '验收销项', tag: '节点验收', ruralOnly: true },
+            { key: 'buildCheck', icon: 'fa-hard-hat', title: '建房现场安全自查情况', tag: '建房自查', ruralOnly: true },
+            { key: 'sceneUsage', icon: 'fa-home', title: '房屋用途现场情况', tag: '用途现场', ruralOnly: true },
             { key: 'quality', icon: 'fa-check-circle', title: '最新质检信息', tag: '质量检查', ruralOnly: true }
         ];
 
         const basicSubTabs_RURAL = [
             { key: 'jbxx', title: '基本信息', icon: 'fa-id-card', count: 27 },
             { key: 'jsqk', title: '建设情况', icon: 'fa-hard-hat', count: 7 },
-            { key: 'glqk', title: '管理情况', icon: 'fa-file-alt', count: 2 },
-            { key: 'jgxx', title: '结构信息', icon: 'fa-building', count: 12, ruralOnly: true },
-            { key: 'syxx', title: '使用信息', icon: 'fa-home', count: 13, ruralOnly: true },
-            { key: 'safeStatus', title: '房屋安全状况', icon: 'fa-shield-alt', count: 2, ruralOnly: true },
-            { key: 'qtxx', title: '其他信息', icon: 'fa-info-circle', count: 10, ruralOnly: true }
+            { key: 'glqk', title: '管理情况', icon: 'fa-file-alt', count: 2 }
         ];
 
-        // 房屋用途现场情况已并入每条排查/巡查记录（记录级 sceneUsage 字段），不再作为独立二级 TAB
+        // 房屋用途现场情况已搬出为独立一级 TAB（key: sceneUsage），不再嵌在排查/巡查记录内
         const surveySubTabs_RURAL = [
             { key: 'survey1', title: '排查情况', icon: 'fa-search' }
         ];
 
-        // 动态巡查二级 TAB：房屋用途现场情况已并入巡查记录，不再单独成 TAB
+        // 动态巡查二级 TAB：仅 patrol1（巡查情况）；房屋用途现场情况已搬出为独立一级 TAB
         const patrolSubTabs_RURAL = [
             { key: 'patrol1', title: '巡查情况', icon: 'fa-walking' }
         ];
@@ -2575,18 +2573,6 @@
             glqk: [
                 ['已取得的行政许可', '宅基地批准书'],
                 ['违法建设和违法审批', '否']
-            ],
-            jgxx: [
-                ['墙体材料', '烧结普通砖', true],
-                ['基础形式', '独立基础', true],
-                ['最大跨度', '3.9m', true],
-                ['装修情况', '装修', true],
-                ['建筑层数', '2层', true],
-                ['屋盖类型', '预制板', true],
-                ['楼盖材料', '预制板', true],
-                ['抗震信息', '未做抗震专项设计', true],
-                ['改扩建情况', '改扩建', true],
-                ['备注', '—', true]
             ],
             syxx: [
                 ['使用用途', '自住兼经营', true],
@@ -2891,10 +2877,10 @@
         function getMeasureSubTabs() { return measureSubTabs_RURAL; }
         function getMeasureData()    { return measureData_RURAL; }
 
-        // 支持 URL 参数 tab=xxx 初始定位（兼容 tab=survey/patrol/buildCheck → discovery 及 sub 参数）
+        // 支持 URL 参数 tab=xxx 初始定位（兼容 tab=survey/patrol → discovery 及 sub 参数）
         let currentSidebar = (function(){
             const t = getUrlParam('tab');
-            if (t === 'survey' || t === 'patrol' || t === 'buildCheck') return 'discovery';
+            if (t === 'survey' || t === 'patrol') return 'discovery';
             return t ? t : 'basic';
         })();
         // 最新质检信息：当前选中的质检记录（null=列表视图）
@@ -2902,16 +2888,10 @@
         let currentSubTab = 'jbxx';
         let currentMeasureSubTab = 'manage';
         let currentSurveySubTab = 'survey1';
-        // 动态巡查二级 TAB：patrol1（巡查情况）| patrol2（房屋用途现场情况）
+        // 动态巡查二级 TAB：patrol1（巡查情况）
         let currentPatrolSubTab = 'patrol1';
-        // 风险发现一级 TAB：survey（排查登记）| buildCheck（建房现场安全自查情况）| patrol（动态巡查）
-        let currentDiscoveryTab = (function(){
-            const t = getUrlParam('tab');
-            if (t === 'buildCheck') return t;
-            const s = getUrlParam('sub');
-            if (s === 'buildCheck') return s;
-            return 'survey';
-        })();
+        // 风险发现一级 TAB：survey（排查登记）
+        let currentDiscoveryTab = 'survey';
         let currentControlSubTab = 'dynamic'; // 隐患动态 子tab：addDanger/dynamic（situation 已提为侧栏一级TAB「隐患控制情况」）
         // 治理链子tab（安全鉴定/安全评估/整治计划/整治措施/阶段性验收/验收销项均为房屋级操作，置于侧栏一级入口；链内仅剩隐患动态 1 节点）
         let currentRiskSubTab = 'control'; // control
@@ -2965,7 +2945,7 @@
         // 业务变更（2026-10-17）：房屋用途现场情况改为每次排查/巡查记录的一部分，不再做房屋级独立 TAB。
         // 迁移规则：旧 survey3 值 → 最新一条 inspectionRecords[i].sceneUsage；旧 patrolUsage 值 → 最新一条 patrolRecords[i].sceneUsage。
         //           仅当目标记录尚无 sceneUsage 时写入；原字段库 survey3/patrolUsage 保留不动（旧数据兜底可读）。
-        (function migrateSceneUsageToRecords() {
+        function migrateSceneUsageToRecords() {
             try {
                 if (!currentHouseArch) return;
                 const getOld = function(key) {
@@ -2997,7 +2977,7 @@
                 if (currentSurveySubTab === 'survey3') currentSurveySubTab = 'survey1';
                 if (currentPatrolSubTab === 'patrol2') currentPatrolSubTab = 'patrol1';
             } catch (e) {}
-        })();
+        }
 
         // ===== 兜底：旧草稿 survey1 字段库修正——「初步判定」→「初步判定/排查结论」，「排查备注」→「排查备注/隐患描述」；并删除同义合并的「排查结论」「隐患描述」列（行数据按索引同步对齐） =====
         (function migrateSurveyJudgeColName() {
@@ -3157,21 +3137,6 @@
                 }
             });
         })();
-        // 结构信息字段兜底（旧草稿字段库无 jgxx 时补默认，避免 restore 清空后丢失）
-        const JGXX_DEFAULT = [
-            ['墙体材料', '烧结普通砖', true],
-            ['基础形式', '独立基础', true],
-            ['最大跨度', '3.9m', true],
-            ['装修情况', '装修', true],
-            ['建筑层数', '2层', true],
-            ['屋盖类型', '预制板', true],
-            ['楼盖材料', '预制板', true],
-            ['抗震信息', '未做抗震专项设计', true],
-            ['改扩建情况', '改扩建', true],
-            ['备注', '—', true]
-        ];
-        if (!Array.isArray(basicData_RURAL.jgxx)) basicData_RURAL.jgxx = JSON.parse(JSON.stringify(JGXX_DEFAULT));
-        if (!Array.isArray(basicData_URBAN.jgxx)) basicData_URBAN.jgxx = JSON.parse(JSON.stringify(JGXX_DEFAULT));
         // 使用信息字段兜底（旧草稿字段库无 syxx 时补默认）
         const SYXX_DEFAULT = [
             ['使用用途', '自住兼经营', true],
@@ -3443,7 +3408,7 @@
             renderStatusPanel();
             const area = document.getElementById('contentArea');
             // 治理节点已收编进侧栏一级入口，兜底：非法 currentSidebar 归位到 assessment
-            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'assessment', 'plan', 'measure', 'controlSituation', 'accept', 'close', 'quality'];
+            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'assessment', 'plan', 'measure', 'controlSituation', 'accept', 'close', 'buildCheck', 'sceneUsage', 'quality'];
             if (__VALID_SIDEBARS.indexOf(currentSidebar) === -1) currentSidebar = 'assessment';
             if (currentSidebar === 'basic') {
                 area.innerHTML = renderBasicContent();
@@ -3470,9 +3435,36 @@
                 bindSubTabs();
                 bindMeasureUploadDropzones(area); // 阶段性验收复用 measure 上传组件
             } else if (currentSidebar === 'discovery') {
-                migrateSurvey2ToBuildCheckRecords(); // 建房自查旧数据迁移（幂等）
                 area.innerHTML = renderDiscoveryContent();
                 bindSubTabs();
+            } else if (currentSidebar === 'buildCheck') {
+                migrateSurvey2ToBuildCheckRecords(); // 建房自查旧数据迁移（幂等）
+                const bcItem = getSidebarItems().find(function(i){ return i.key === 'buildCheck'; }) || { icon:'fa-hard-hat', title:'建房现场安全自查情况' };
+                area.innerHTML = '<div class="content-card">' +
+                    '<div class="content-card-header"><div class="content-card-title"><i class="fas ' + bcItem.icon + '"></i> ' + bcItem.title + '</div></div>' +
+                    '<div class="content-body">' + renderBuildCheckBody() + '</div>' +
+                '</div>' +
+                '<div class="bottom-bar">' +
+                    '<div class="bottom-info">' +
+                        '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                        '当前节点：<span class="bottom-node">' + bcItem.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span><span class="readonly-tag">只读</span>' +
+                    '</div>' +
+                    '<div class="bottom-actions"><button class="bottom-btn primary" onclick="openBuildCheckEditModal()"><i class="fas fa-edit"></i> 编辑建房现场安全自查情况</button></div>' +
+                '</div>';
+            } else if (currentSidebar === 'sceneUsage') {
+                migrateSceneUsageToRecords(); // 旧草稿 survey3/patrolUsage → 记录级 sceneUsage（幂等）
+                const suItem = getSidebarItems().find(function(i){ return i.key === 'sceneUsage'; }) || { icon:'fa-home', title:'房屋用途现场情况' };
+                area.innerHTML = '<div class="content-card">' +
+                    '<div class="content-card-header"><div class="content-card-title"><i class="fas ' + suItem.icon + '"></i> ' + suItem.title + '</div></div>' +
+                    '<div class="content-body">' + renderSceneUsageBody() + '</div>' +
+                '</div>' +
+                '<div class="bottom-bar">' +
+                    '<div class="bottom-info">' +
+                        '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
+                        '当前节点：<span class="bottom-node">' + suItem.title + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span><span class="readonly-tag">只读</span>' +
+                    '</div>' +
+                    '<div class="bottom-actions"><button class="bottom-btn primary" onclick="openSceneUsageEditModal()"><i class="fas fa-edit"></i> 编辑房屋用途现场情况</button></div>' +
+                '</div>';
             } else if (currentSidebar === 'survey') {
                 // 兼容旧调用：重定向到 discovery
                 currentSidebar = 'discovery';
@@ -3689,7 +3681,6 @@
             const libJbxx = libBasic.jbxx || [];
             const libJsqk = libBasic.jsqk || [];
             const libGlqk = libBasic.glqk || [];
-            const libJgxx = libBasic.jgxx || [];
             const libSyxx = libBasic.syxx || [];
             const libSyqk = libBasic.syqk || [];
             // 从字段库取值的小工具：按 label 找 value
@@ -3765,9 +3756,6 @@
                 ['是否采用减震隔震', libVal(libSyqk, '是否采用减震隔震', '否')],
                 ['是否进行抗震加固', libVal(libSyqk, '是否进行抗震加固', '否')]
             ];
-            const jgxx = (libJgxx.length ? libJgxx : basicData_RURAL.jgxx).map(function(r) {
-                return [r[0], r[1], true];
-            });
             const syxx = (libSyxx.length ? libSyxx : basicData_RURAL.syxx).map(function(r) {
                 return [r[0], r[1], true];
             });
@@ -3777,7 +3765,7 @@
             const qtxx = (libBasic.qtxx && libBasic.qtxx.length ? libBasic.qtxx : (basicData_RURAL.qtxx || [])).map(function(r) {
                 return [r[0], r[1], true];
             });
-            const dynamicBasic = { jbxx, jsqk, glqk, syqk, jgxx, syxx, safeStatus, qtxx };
+            const dynamicBasic = { jbxx, jsqk, glqk, syqk, syxx, safeStatus, qtxx };
 
             const basicData = getBasicData();
             const rows = dynamicBasic[currentSubTab] || basicData[currentSubTab] || [];
@@ -3822,32 +3810,14 @@
                         '<div class="info-label">' + label + '</div>' +
                         '<div class="info-value' + (val(label) === '--' ? ' empty' : '') + '">' + val(label) + '</div>' +
                     '</div>';
-                // 与编辑页一致的排版：
-                // 行1:  房屋性质        | (空)
-                // 行2:  异常标记 (跨整行)
-                // 行3:  所在区域        | 路号信息
-                // 行4:  是否有产权人    | (空)
-                // 行5:  产权人/使用人   | 身份证号码
-                // 行6:  房屋类型 (跨整行)
-                // 行7:  房屋类型二级分类 | 建筑（小区）名称 (仅集合住宅显示右侧)
-                // 行7b: 楼栋号/名称 | 住宅套数 (仅集合住宅显示)
-                // 行8:  自住+经营 (跨整行)
-                // 行9:  建造时间        | 建筑面积 (㎡)
-                // 行10: 建筑高度 (m)    | 建筑层数
-                // 行11: 建筑层数地上(层)| 建筑层数地下(层)
-                // 行12: 结构类型 (跨整行)
-                // 行13: 建造方式 (跨整行)
-                // 行14: 是否采用预制板  | 是否人员聚集场所
-                const isJzView = val('房屋类型二级分类') === '集合住宅';
-                const jzBlockStyle = isJzView ? '' : 'display:none;';
-                // 住宅/非住宅、房屋用途 联动显隐
-                const isFzzView = val('房屋性质') === '非住宅';
-                const isJyyView = val('房屋用途') === '经营用房屋';
-                const isNpoView = val('房屋用途') === '非营利性公共建筑';
-                const residentialRowStyle = isFzzView ? 'display:none;' : 'display:contents;';
-                const fzzRowStyle = isFzzView ? '' : 'display:none;';
-                const jyyRowStyle = (isFzzView && isJyyView) ? '' : 'display:none;';
-                const npoRowStyle = (isFzzView && isNpoView) ? '' : 'display:none;';
+                // 估算面积（若数据有，则拼接在建筑面积后）
+                const estAreaVal = val('估算面积');
+                const buildAreaBase = val('建筑面积 (㎡)');
+                const viewItemRaw = (label, rawValueHtml) =>
+                    '<div class="info-item">' +
+                        '<div class="info-label">' + label + '</div>' +
+                        '<div class="info-value">' + rawValueHtml + '</div>' +
+                    '</div>';
                 jbxxViewHtml = '<style>' +
                     '.rural-jbxx-view-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 40px;}' +
                     '.rural-jbxx-view-grid .info-item{display:flex;flex-direction:row;align-items:baseline;min-width:0;}' +
@@ -3855,45 +3825,30 @@
                     '.rural-jbxx-view-grid .info-item .info-value{flex:1 1 auto;min-width:0;}' +
                     '.rural-jbxx-view-grid .rural-view-full{grid-column:1 / -1;}' +
                     '.rural-jbxx-view-grid .rural-view-empty{visibility:hidden;}' +
-                    '.rural-jbxx-view-grid .rural-jz-row{grid-column:1 / -1;display:grid;grid-template-columns:1fr 1fr;gap:12px 40px;}' +
                 '</style>' +
                 '<div class="rural-jbxx-view-grid">' +
+                    // 行1: 房屋性质 | (空)
                     viewItem('房屋性质') + viewItem('') +
-                    fullItem('异常标记') +
+                    // 行2: 所在区域 | 路号信息
                     viewItem('所在区域') + viewItem('路号信息') +
-                    viewItem('是否有产权人') + viewItem('') +
-                    // 住宅：产权人/身份证 + 房屋类型 + 二级分类 + 自住+经营
-                    '<div class="rural-residential-block" style="' + residentialRowStyle + 'display:contents;">' +
-                        viewItem('产权人 / 使用人信息') + viewItem('身份证号码') +
-                        viewItem('房屋用途') + viewItem('人员聚集场所周边') +
-                        viewItem('土地性质') + viewItem('集体土地') +
-                        viewItem('所在区域类型') + viewItem('') +
-                        viewItem('房屋类型') + viewItem('常住人口') +
-                        viewItem('房屋类型二级分类') +
-                        '<div class="info-item" style="' + jzBlockStyle + '">' +
-                            '<div class="info-label">建筑（小区）名称</div><div class="info-value' + (val('建筑（小区）名称') === '--' ? ' empty' : '') + '">' + val('建筑（小区）名称') + '</div>' +
-                        '</div>' +
-                        '<div class="rural-jz-row" style="' + jzBlockStyle + '">' +
-                            viewItem('楼栋号/名称') + viewItem('住宅套数') +
-                        '</div>' +
-                        fullItem('自住+经营') +
+                    // 行3: 不需要排查原因 (整行)
+                    fullItem('不需要排查原因') +
+                    // 行4: 产权人/使用人信息 | 身份证号码
+                    viewItem('产权人 / 使用人信息') + viewItem('身份证号码') +
+                    // 行5: 房屋用途 (整行)
+                    fullItem('房屋用途') +
+                    // 行6: 人员聚集场所周边 (整行)
+                    fullItem('人员聚集场所周边') +
+                    // 行7: 土地性质 | 集体土地
+                    viewItem('土地性质') + viewItem('集体土地') +
+                    // 行8: 所在区域类型（label 显示"所在区域"） (整行)
+                    '<div class="info-item rural-view-full">' +
+                        '<div class="info-label">所在区域</div>' +
+                        '<div class="info-value' + (val('所在区域类型') === '--' ? ' empty' : '') + '">' + val('所在区域类型') + '</div>' +
                     '</div>' +
-                    // 非住宅：房屋用途 + 经营用房屋/非营利性公共建筑
-                    '<div class="rural-fzz-row" style="grid-column:1 / -1;display:grid;grid-template-columns:1fr;gap:12px 40px;' + fzzRowStyle + '">' +
-                        fullItem('房屋用途') +
-                    '</div>' +
-                    '<div class="rural-fzz-jyy-row" style="grid-column:1 / -1;display:grid;grid-template-columns:1fr;gap:12px 40px;' + jyyRowStyle + '">' +
-                        fullItem('经营用房屋') +
-                    '</div>' +
-                    '<div class="rural-fzz-npo-row" style="grid-column:1 / -1;display:grid;grid-template-columns:1fr;gap:12px 40px;' + npoRowStyle + '">' +
-                        fullItem('非营利性公共建筑') +
-                    '</div>' +
-                    viewItem('建造时间') + viewItem('建筑面积 (㎡)') +
-                    viewItem('建筑高度 (m)') + viewItem('建筑层数') +
-                    viewItem('建筑层数地上(层)') + viewItem('建筑层数地下 (层)') +
-                    fullItem('建造方式') +
-                    fullItem('结构类型') +
-                    viewItem('是否采用预制板') + viewItem('是否人员聚集场所') +
+                    // 行9: 建筑层数 | 建筑面积 (m²) (含估算面积)
+                    viewItem('建筑层数') + viewItemRaw('建筑面积 (m²)', (buildAreaBase === '--' ? '<span class="info-value empty">--</span>' : escapeHtml(buildAreaBase) + (estAreaVal !== '--' ? '&nbsp;&nbsp;<span style="color:var(--text-secondary);font-size:12px;">估算面积：' + escapeHtml(estAreaVal) + 'm²</span>' : ''))) +
+                    // 行10: 建成时间 | 具体年份
                     viewItem('建成时间') + viewItem('具体年份') +
                 '</div>';
             }
@@ -4780,7 +4735,7 @@
 
         function bindMeasureUploadDropzones(rootEl) {
             const root = rootEl || document;
-            root.querySelectorAll('.measure-form-block .file-upload-wrap').forEach(wrap => {
+            root.querySelectorAll('.measure-form-block .file-upload-wrap, #crudEditForm .file-upload-wrap').forEach(wrap => {
                 const input = wrap.querySelector('.file-upload-input');
                 const dropzone = wrap.querySelector('.file-upload-dropzone');
                 const urlInput = wrap.querySelector('.file-url-input');
@@ -4807,244 +4762,113 @@
 
         // ========== 排查登记 body（不含外壳与 bottom-bar，由 renderDiscoveryContent 统一包裹）==========
         function renderSurveyBody() {
-            const surveySubTabs = getSurveySubTabs();
-            const surveyData = getSurveyData();
             const s = currentHouseArch;
 
-            // 排查登记：按当前轮次可多轮多条，列表+详情（激活索引 recordViewState.inspection）
+            // 排查情况：单记录口径（只填报一次），详情始终取最新一条
             let list = (Array.isArray(s.inspectionRecords) ? s.inspectionRecords.slice() : []);
             list.sort(function(a, b) {
                 const ta = (a.checkDate || a.reportTime || '').toString();
                 const tb = (b.checkDate || b.reportTime || '').toString();
                 return tb.localeCompare(ta);
             });
-            const inspActiveIdx = Math.min(recordViewState.inspection || 0, Math.max(list.length - 1, 0));
-            recordViewState.inspection = inspActiveIdx;
-            const record = list[inspActiveIdx] || { checkDate: '', checker: '', structureStatus: '', preliminaryJudge: '', reportTime: '', reporter: '' };
+            recordViewState.inspection = 0;
+            const record = list[0] || {};
 
-            // 排查登记仅一个二级 TAB（排查情况），不再单独渲染 tab 条；房屋用途现场情况已并入每条排查记录
-            const data = surveyData[currentSurveySubTab] || { columns: [], rows: [], extraRows: [] };
-            // survey1（排查情况）详情按排查登记记录动态渲染，替换演示数据
-            if (currentSurveySubTab === 'survey1' && record && (record.checkDate || record.srcKey)) {
-                const town = record.town || (record.townName || '');
-                data.rows = [[
-                    (record.reportTime || record.checkDate || '—'),                 // 排查时间
-                    (town ? town + '人民政府' : '—'),                                // 排查单位
-                    (record.checker || '—'),                                         // 排查人员
-                    (record.structureStatus === '无变形损伤' ? '无变形损伤' : '有变形损伤'), // 结构状况（枚举兜底：旧值归一化）
-                    (record.damagePart || '—'),                                      // 发现问题
-                    (record.damagePart || '—'),                                      // 损伤具体部位
-                    (record.overload || '否'),                                       // 增加堆载
-                    (record.otherRisk || '暂无'),                                    // 其他使用安全隐患
-                    (record.preliminaryJudge || '—'),                                // 初步判定/排查结论
-                    (record.location || '—'),                                        // 位置标注
-                    (record.dutyPerson || '—'),                                      // 房屋安全责任人
-                    (record.dutyPhone || '—'),                                       // 联系方式
-                    (record.dutyPerson || '—'),                                      // 安全监管责任人
-                    (record.dutyPhone || '—'),                                       // 联系方式
-                    (record.preAppraisal === true || record.preAppraisal === '是' ? '是' : '否'), // 是否整治前鉴定
-                    (record.noAppraisalReason || '—'),                               // 未鉴定原因
-                    (record.reportTime || '—')                                       // 更新时间
-                ]];
-                data.extraRows = [
-                    [{ label: '上传证明文件', value: (record.proofFiles || ''), colspan: 'all', isPhoto: true }],
-                    [{ label: '排查备注/隐患描述', value: (record.remark || ''), colspan: 'all' }],
-                    [{ label: '排查照片', value: (record.photos || ''), colspan: 'all', isPhoto: true }]
-                ];
-            }
-            const rows = data.rows[0] || [];
-            const cols = data.columns || [];
-            const extraRows = data.extraRows || [];
-            const ruralOnlyCols = data.ruralOnlyCols || [];
-            const locationIndex = cols.indexOf('位置标注');
-            const photoIndex = cols.indexOf('排查照片');
-            const proofIndex = cols.indexOf('上传证明文件');
-            // 排查照片从 extraRows 抽出，作为整行插入到"安全鉴定：是否整治前鉴定"之前
-            const appraisalColIndex = cols.indexOf('安全鉴定：是否整治前鉴定');
-            // 更新时间从 cols 抽出，最后单独作为整行渲染
-            const updateTimeIndex = cols.indexOf('更新时间');
-            const updateTimeValue = updateTimeIndex !== -1 ? (rows[updateTimeIndex] || '') : '';
-            let photoExtraItem = null;
-            const extraRowsFiltered = extraRows.map(function(row) {
-                return row.filter(function(item) {
-                    if (item.label === '排查照片') { photoExtraItem = item; return false; }
-                    return true;
-                });
-            }).filter(function(row) { return row.length > 0; });
-            // extraRows 输出顺序固定：上传证明文件 → 排查备注/隐患描述 → 其他（避免 localStorage 缓存的旧字段库影响展示顺序）
-            (function sortExtraRows() {
-                const ORDER = ['上传证明文件', '排查备注/隐患描述'];
-                extraRowsFiltered.sort(function(a, b) {
-                    const al = (a[0] && a[0].label) || '';
-                    const bl = (b[0] && b[0].label) || '';
-                    const ai = ORDER.indexOf(al);
-                    const bi = ORDER.indexOf(bl);
-                    const av = ai === -1 ? 99 : ai;
-                    const bv = bi === -1 ? 99 : bi;
-                    return av - bv;
-                });
+            // 字段值兜底
+            const structureStatus = record.structureStatus === '无变形损伤' ? '无变形损伤' : (record.structureStatus ? '有变形损伤' : '');
+            const damagePart = record.damagePart || '';
+            const overload = record.overload || '';
+            const otherRisk = record.otherRisk || '';
+            const preliminaryJudge = record.preliminaryJudge || '';
+            const dutyPerson = record.dutyPerson || '';
+            const dutyPhone = record.dutyPhone || '';
+            const supervisePerson = record.supervisePerson || record.dutyPerson || '';
+            const supervisePhone = record.supervisePhone || record.dutyPhone || '';
+            const preAppraisal = (record.preAppraisal === true || record.preAppraisal === '是') ? '是' : (record.preAppraisal === false || record.preAppraisal === '否' ? '否' : '');
+            const noAppraisalReason = record.noAppraisalReason || '';
+            const proofFiles = record.proofFiles || '';
+            const remark = record.remark || '';
+            const updateTime = record.reportTime || record.checkDate || '';
+
+            // 上传证明文件（链接样式）
+            const proofHtml = (function() {
+                const v = String(proofFiles || '').trim();
+                if (!v) return '<div class="info-value empty">—</div>';
+                const files = v.split(/[\n,]/).map(function(t){ return t.trim(); }).filter(Boolean);
+                if (!files.length) return '<div class="info-value empty">—</div>';
+                return '<div class="info-value">' + files.map(function(f){
+                    const name = f.split('/').pop() || f;
+                    return '<a href="javascript:void(0);" onclick="viewPhotoOnline(\'' + escapeJsStr(f) + '\')" style="color:var(--primary);text-decoration:none;display:block;padding:2px 0;">' + escapeHtml(name) + '</a>';
+                }).join('') + '</div>';
             })();
 
-            // survey1（排查登记）字段渲染顺序与编辑页一致：发现问题、位置标注（整行）、结构状况（枚举下拉）、损伤具体部位（「隐患描述」已并入「排查备注/隐患描述」）
-            let viewIndexes = cols.map(function(_, i) { return i; });
-            if (currentSurveySubTab === 'survey1') {
-                const structIdx = cols.indexOf('结构状况');
-                const problemIdx = cols.indexOf('发现问题');
-                const damageIdx = cols.indexOf('损伤具体部位');
-                const locIdx = cols.indexOf('位置标注');
-                if (structIdx !== -1 && problemIdx !== -1 && damageIdx !== -1 && locIdx !== -1) {
-                    viewIndexes = viewIndexes.filter(function(i) {
-                        return i !== structIdx && i !== problemIdx && i !== damageIdx && i !== locIdx;
-                    });
-                    // 「排查结论」列已移除（与「初步判定」合并），插入锚点改为「排查人员」之后，保持原顺序
-                    const insertPos = viewIndexes.indexOf(cols.indexOf('排查人员')) + 1;
-                    viewIndexes.splice(insertPos, 0, problemIdx, locIdx, structIdx, damageIdx);
-                }
+            // 排查照片（数组 / 多行字符串 / 单值 均兼容）
+            let photosRaw = record.photos;
+            let photosArr = [];
+            if (Array.isArray(photosRaw)) {
+                photosArr = photosRaw.filter(Boolean);
+            } else if (typeof photosRaw === 'string' && photosRaw.trim()) {
+                photosArr = photosRaw.split(/[\n,]/).map(function(t){ return t.trim(); }).filter(Boolean);
             }
-            // 查看页独占一行的字段（与编辑页 specialIndexes 对齐）：位置标注、初步判定/排查结论、安全鉴定、未鉴定原因
-            const viewFullWidthCols = ['位置标注', '初步判定/排查结论', '安全鉴定：是否整治前鉴定', '未进行鉴定房屋原因'];
+            const photosHtml = photosArr.length
+                ? '<div style="display:flex;flex-wrap:wrap;gap:10px;">' + photosArr.map(function(u){
+                    return '<img src="' + escapeHtml(u) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border);">';
+                  }).join('') + '</div>'
+                : '<div class="info-value empty">—</div>';
 
-            let gridHtml = viewIndexes.map(function(i) {
-                const c = cols[i];
-                // 在"安全鉴定：是否整治前鉴定"之前插入排查照片整行
-                let prefixHtml = '';
-                if (i === appraisalColIndex && photoExtraItem) {
-                    let pv = '<div class="info-value ' + (photoExtraItem.value ? '' : 'empty') + '">' + (photoExtraItem.value || '—') + '</div>';
-                    if (photoExtraItem.isPhoto && photoExtraItem.value && photoExtraItem.value !== '—' && photoExtraItem.value !== '-') {
-                        pv = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + escapeJsStr(photoExtraItem.value) + '\')">查看文件</button></div>';
-                    }
-                    prefixHtml = '<div class="info-item full-width">' +
-                        '<div class="info-label">排查照片</div>' + pv + '</div>';
-                }
-                // 更新时间跳过，最后整行渲染
-                if (i === updateTimeIndex) return prefixHtml;
-                const isRuralOnly = ruralOnlyCols.indexOf(c) !== -1;
-                const cls = (rows[i] ? '' : 'empty') + (isRuralOnly && rows[i] && rows[i] !== '—' && rows[i] !== '-' ? ' rural-only' : '');
-                let valueHtml = '<div class="info-value ' + cls.trim() + '">' + (rows[i] || '—') + '</div>';
-                if (i === locationIndex && rows[i] && rows[i] !== '—' && rows[i] !== '-') {
-                    valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewLocationOnMap(\'' + escapeJsStr(rows[i]) + '\')"><i class="fas fa-map-marker-alt"></i> 在地图中查看</button></div>';
-                }
-                if ((i === photoIndex || i === proofIndex) && rows[i] && rows[i] !== '—' && rows[i] !== '-') {
-                    valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + escapeJsStr(rows[i]) + '\')">查看文件</button></div>';
-                }
-                const isFullWidth = viewFullWidthCols.indexOf(c) !== -1;
-                return prefixHtml + '<div class="info-item' + (isFullWidth ? ' full-width' : '') + '">' +
-                    '<div class="info-label">' + c + '</div>' +
+            // 整行 label-value 渲染（label 左 140px，value 右）
+            const row = function(label, valueHtml) {
+                return '<div class="info-item full-width">' +
+                    '<div class="info-label">' + label + '</div>' +
                     valueHtml +
-                    '</div>';
-            }).join('');
+                '</div>';
+            };
+            // 半行（两列布局，与右侧同列字段并排）
+            const rowHalf = function(label, valueHtml) {
+                return '<div class="info-item">' +
+                    '<div class="info-label">' + label + '</div>' +
+                    valueHtml +
+                '</div>';
+            };
+            const txt = function(v) {
+                const s2 = (v === undefined || v === null) ? '' : String(v);
+                const isEmpty = s2 === '' || s2 === '—' || s2 === '-';
+                return '<div class="info-value ' + (isEmpty ? 'empty' : '') + '">' + (isEmpty ? '—' : escapeHtml(s2)) + '</div>';
+            };
 
-            if (extraRowsFiltered.length) {
-                gridHtml += extraRowsFiltered.map(function(row) {
-                    return row.map(function(item) {
-                        let valueHtml = '<div class="info-value ' + (item.value ? '' : 'empty') + '">' + (item.value || '—') + '</div>';
-                        if (item.isPhoto && item.value && item.value !== '—' && item.value !== '-') {
-                            valueHtml = '<div class="info-value photo-value"><button class="photo-btn" onclick="viewPhotoOnline(\'' + escapeJsStr(item.value) + '\')">查看文件</button></div>';
-                        }
-                        return '<div class="info-item full-width">' +
-                            '<div class="info-label">' + (item.label || '') + '</div>' +
-                            valueHtml +
-                            '</div>';
-                    }).join('');
-                }).join('');
-            }
+            const gridHtml =
+                rowHalf('结构状况', txt(structureStatus)) +
+                rowHalf('损伤具体部位', txt(damagePart)) +
+                rowHalf('增加堆载（二层及以上堆放大量重物）', txt(overload)) +
+                rowHalf('其他使用安全隐患', txt(otherRisk)) +
+                row('初步判定', txt(preliminaryJudge)) +
+                rowHalf('房屋安全责任人', txt(dutyPerson)) +
+                rowHalf('联系方式', txt(dutyPhone)) +
+                rowHalf('安全监管责任人', txt(supervisePerson)) +
+                rowHalf('联系方式', txt(supervisePhone)) +
+                row('排查照片', photosHtml) +
+                row('安全鉴定：是否整治前鉴定', txt(preAppraisal)) +
+                row('未进行鉴定房屋原因', txt(noAppraisalReason)) +
+                row('上传证明文件', proofHtml) +
+                row('排查备注', txt(remark)) +
+                row('更新时间', txt(updateTime));
 
-            // 更新时间整行渲染在最末尾
-            if (updateTimeIndex !== -1) {
-                gridHtml += '<div class="info-item full-width">' +
-                    '<div class="info-label">更新时间</div>' +
-                    '<div class="info-value ' + (updateTimeValue ? '' : 'empty') + '">' + (updateTimeValue || '—') + '</div>' +
-                    '</div>';
-            }
-
-            const sub = surveySubTabs.find(t => t.key === currentSurveySubTab);
-
-            // survey1：记录级「房屋用途现场情况」区块（sceneUsage 挂在每条排查记录上；填报人/时间继承当次排查）
-            let sceneUsageHtml = '';
-            if (currentSurveySubTab === 'survey1') {
-                const su = (record && record.sceneUsage) || {};
-                const suItem = function(label, value) {
-                    const v = (value === undefined || value === null) ? '' : String(value);
-                    const isEmpty = !v || v === '—' || v === '-';
-                    return '<div class="info-item"><div class="info-label">' + label + '</div><div class="info-value' + (isEmpty ? ' empty' : '') + '">' + (isEmpty ? '—' : v) + '</div></div>';
-                };
-                sceneUsageHtml = '<div class="record-detail-header" style="margin-top:16px;"><div class="title">房屋用途现场情况</div></div>' +
-                    '<div class="info-grid info-grid-2col">' +
-                        suItem('当前使用情况', su.usageStatus) +
-                        suItem('当前房屋用途', su.houseUsage) +
-                    '</div>';
-            }
-
-            // survey1：多条排查记录列表（点击切换详情，激活行高亮）
-            let listCardHtml = '';
-            if (currentSurveySubTab === 'survey1') {
-                const listHtml = recordListTable(
-                    ['排查日期', '排查单位', '排查人员', '初步判定/排查结论', '结构状况', { title: '状态', tag: true, tagClass: function(v){ return v === '最新' ? 'primary' : 'info'; } }],
-                    list.map(function(r, i) {
-                        const town = r.town || r.townName || '';
-                        return [
-                            (r.checkDate || r.reportTime || '—'),
-                            (town ? town + '人民政府' : '—'),
-                            (r.checker || '—'),
-                            (r.preliminaryJudge || r.otherRisk || '—'),
-                            (r.structureStatus || '—'),
-                            (i === 0 ? '最新' : '历史')
-                        ];
-                    }),
-                    'inspection',
-                    inspActiveIdx,
-                    { showCrud: { edit: 'openCrudModal(\'survey\'', delete: 'deleteCrudRecord(\'survey\'' }, records: list,
-                      showCrudDeleteFilter: function(record, globalIdx) { return globalIdx === 0; } }
-                );
-                listCardHtml = recordListWrapper('排查登记记录列表', listHtml, { icon: 'fa-search', showAdd: 'addCrudRecord(\'survey\')' }) +
-                    '<div class="record-detail-header">' +
-                        '<div class="title">排查登记详情（' + (list.length ? (inspActiveIdx + 1) + ' / ' + list.length : '0 / 0') + '）</div>' +
-                    '</div>';
-            }
-
-            return listCardHtml +
-                '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + gridHtml + '</div>' +
-                sceneUsageHtml +
-                (currentSurveySubTab === 'survey1' ? renderRecordAddDanger(record, '排查') : '') +
-                (currentSurveySubTab === 'survey1' ? renderDiscoveryLinkedHazards(s, '排查', record.id) : '');
+            return '<div class="info-grid info-grid-2col" style="margin-top:4px;">' + gridHtml + '</div>';
         }
 
-        // ========== 建房现场安全自查情况 body（一级TAB，多条记录：列表+详情）==========
+        // ========== 建房现场安全自查情况 body（一级TAB，单条记录：只填报一次，无列表）==========
         function renderBuildCheckBody() {
             const s = currentHouseArch;
             const list = (Array.isArray(s.buildCheckRecords) ? s.buildCheckRecords.slice() : []);
             list.sort(function(a, b) { return String(b.reportTime || '').localeCompare(String(a.reportTime || '')); });
-            const activeIdx = Math.min(recordViewState.buildCheck || 0, Math.max(list.length - 1, 0));
-            recordViewState.buildCheck = activeIdx;
-            const record = list[activeIdx] || { buildType: '', implementPath: '', buildProgress: '', isDangerRelief: '', hasSafetyHazard: '', hazardEliminated: '', eliminateMeasures: '', remark: '', reporter: '', reportTime: '', photos: '' };
+            // 单记录口径：始终取最新一条；无记录时展示空表单字段
+            const record = list[0] || { buildType: '', implementPath: '', buildProgress: '', isDangerRelief: '', hasSafetyHazard: '', hazardEliminated: '', eliminateMeasures: '', remark: '', reporter: '', reportTime: '', photos: '' };
 
-            // 列表
-            const listHtml = recordListTable(
-                ['填报时间', '建房类型', '目前建房进度', '是否存在隐患', '填报人', { title: '状态', tag: true, tagClass: function(v){ return v === '最新' ? 'primary' : 'info'; } }],
-                list.map(function(r, i) {
-                    return [
-                        (r.reportTime || '—'),
-                        (r.buildType || '—'),
-                        (r.buildProgress || '—'),
-                        (r.hasSafetyHazard || '—'),
-                        (r.reporter || '—'),
-                        (i === 0 ? '最新' : '历史')
-                    ];
-                }),
-                'buildCheck',
-                activeIdx,
-                { showCrud: { edit: 'openCrudModal(\'buildCheck\'', delete: 'deleteCrudRecord(\'buildCheck\'' }, records: list }
-            );
-            const listCardHtml = recordListWrapper('建房现场安全自查记录列表', listHtml, { icon: 'fa-hard-hat', showAdd: 'addCrudRecord(\'buildCheck\')' }) +
-                '<div class="record-detail-header">' +
-                    '<div class="title">建房现场安全自查详情（' + (list.length ? (activeIdx + 1) + ' / ' + list.length : '0 / 0') + '）</div>' +
-                '</div>';
-
-            // 详情（字段与 crudConfigs.buildCheck 对齐）
-            const kv = function(label, value) {
+            // 详情（字段与 crudConfigs.buildCheck 对齐；排版：两列，长文本/照片整行）
+            const kv = function(label, value, full) {
                 const v = (value === undefined || value === null) ? '' : String(value);
                 const isEmpty = v === '' || v === '—' || v === '-';
-                return '<div class="info-item">' +
+                return '<div class="info-item' + (full ? ' full-width' : '') + '">' +
                     '<div class="info-label">' + label + '</div>' +
                     '<div class="info-value ' + (isEmpty ? 'empty' : '') + '">' + (isEmpty ? '—' : v) + '</div>' +
                     '</div>';
@@ -5056,66 +4880,95 @@
                 kv('是否属于初判存在隐患的农村自建房的解危工程措施', record.isDangerRelief) +
                 kv('自查现场是否存在施工安全隐患', record.hasSafetyHazard) +
                 kv('隐患是否已消除', record.hazardEliminated) +
-                kv('消除隐患的具体措施', record.eliminateMeasures) +
-                kv('备注', record.remark) +
-                kv('填报人', record.reporter) +
-                kv('填报时间', record.reportTime);
-            // 照片
+                kv('消除隐患的具体措施', record.eliminateMeasures, true) +
+                kv('备注', record.remark, true);
+            // 照片（整行，附移动端拍摄红色提示）
             const photoVal = record.photos || '';
             const isImageUrl = function(x){ return x && x !== '—' && x !== '-' && (x.startsWith('data:image') || x.startsWith('http') || x.endsWith('.jpg') || x.endsWith('.jpeg') || x.endsWith('.png') || x.endsWith('.gif')); };
             const urls = String(photoVal).split(',').map(function(x){ return x.trim(); }).filter(isImageUrl);
+            const photoTip = '<div style="color:#f56c6c;font-size:12px;margin-top:6px;">需使用移动端现场实地拍摄照片，带地址时间水印！</div>';
             let photoHtml;
             if (urls.length) {
-                photoHtml = '<div class="info-value photo-value photo-grid">' + urls.map(function(u){ return '<img src="' + escapeHtml(u) + '" alt="建房现场照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">'; }).join('') + '</div>';
+                photoHtml = '<div class="info-value photo-value"><div class="photo-grid" style="display:flex;gap:8px;flex-wrap:wrap;">' + urls.map(function(u){ return '<img src="' + escapeHtml(u) + '" alt="建房现场照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">'; }).join('') + '</div>' + photoTip + '</div>';
             } else {
-                photoHtml = '<div class="info-value empty">—</div>';
+                photoHtml = '<div class="info-value empty">—' + photoTip + '</div>';
             }
             gridHtml += '<div class="info-item full-width"><div class="info-label">建房现场照片</div>' + photoHtml + '</div>';
+            gridHtml += kv('填报人', record.reporter) +
+                kv('填报时间', record.reportTime);
             gridHtml += '</div>';
 
-            return listCardHtml + gridHtml;
+            return gridHtml;
         }
 
-        // ========== 风险发现（合并 排查登记 + 动态巡查 + 建房现场安全自查情况）==========
-        // 单卡片布局：标题 + 一级TAB + 二级TAB + 内容 + bottom-bar（样式对齐"整治措施"）
-        function renderDiscoveryContent() {
-            const tabs = [
-                { key: 'survey', title: '排查登记', icon: 'fa-search' },
-                { key: 'buildCheck', title: '建房现场安全自查情况', icon: 'fa-hard-hat' }
-            ];
-            const tabsHtml = tabs.map(function(t) {
-                const active = t.key === currentDiscoveryTab ? 'active' : '';
-                return '<div class="content-tab ' + active + '" data-key="' + t.key + '" data-scope="discovery">' +
-                    '<i class="fas ' + t.icon + '"></i> ' + t.title +
+        // ========== 房屋用途现场情况 body（一级TAB：顶部 jbxx 信息块 + 单条填报区）==========
+        function renderSceneUsageBody() {
+            const s = currentHouseArch;
+            const libBasic = getBasicData();
+            const libJbxx = libBasic.jbxx || [];
+            const _libVal = function(rows, label, fallback) {
+                const r = rows.find(function(row) { return row[0] === label; });
+                return r ? r[1] : fallback;
+            };
+
+            const kv = function(label, value, full) {
+                const v = (value === undefined || value === null) ? '' : String(value);
+                const isEmpty = v === '' || v === '—' || v === '-';
+                return '<div class="info-item' + (full ? ' full-width' : '') + '">' +
+                    '<div class="info-label">' + label + '</div>' +
+                    '<div class="info-value ' + (isEmpty ? 'empty' : '') + '">' + (isEmpty ? '—' : v) + '</div>' +
                     '</div>';
-            }).join('');
+            };
+
+            // ── 顶部：房屋用途-排查情况（来自 jbxx 字段库，只读）──
+            const topHtml = '<div class="record-detail-header" style="margin-bottom:12px;">' +
+                '<div class="title">房屋用途-排查情况</div>' +
+            '</div>' +
+            '<div class="info-grid info-grid-2col" style="margin-bottom:20px;">' +
+                kv('房屋用途', _libVal(libJbxx, '房屋用途', '')) +
+                kv('是否同时自住', _libVal(libJbxx, '是否同时自住', '')) +
+                kv('具体用途', _libVal(libJbxx, '具体用途', '')) +
+            '</div>';
+
+            // ── 下方：单条填报区（取最新一条 sceneUsage 记录；无则展示空字段）──
+            const list = (Array.isArray(s.sceneUsageRecords) ? s.sceneUsageRecords.slice() : []);
+            list.sort(function(a, b) { return String(b.reportTime || '').localeCompare(String(a.reportTime || '')); });
+            const record = list[0] || { usageStatus: '', houseUsage: '', reporter: '', reportTime: '', remark: '' };
+
+            const formHtml = '<div class="record-detail-header" style="margin-bottom:12px;">' +
+                '<div class="title">现场填报信息</div>' +
+            '</div>' +
+            '<div class="info-grid info-grid-2col">' +
+                kv('当前使用情况', record.usageStatus) +
+                kv('当前房屋用途', record.houseUsage) +
+                kv('填报人', record.reporter) +
+                kv('填报时间', record.reportTime) +
+            '</div>';
+
+            return topHtml + formHtml;
+        }
+
+        // ========== 风险发现（排查登记）==========
+        // 单卡片布局：标题 + 内容 + bottom-bar（样式对齐"整治措施"）
+        function renderDiscoveryContent() {
             // 二级内容（不含外壳、不含 bottom-bar）
-            const bodyHtml = (currentDiscoveryTab === 'buildCheck') ? renderBuildCheckBody()
-                : renderSurveyBody();
+            const bodyHtml = renderSurveyBody();
             // bottom-bar 信息
-            let bottomNode = '';
-            let bottomBtn = '';
-            if (currentDiscoveryTab === 'buildCheck') {
-                bottomNode = '建房现场安全自查情况';
-                bottomBtn = '<button class="bottom-btn primary" onclick="openBuildCheckEditModal()"><i class="fas fa-edit"></i> 编辑建房现场安全自查情况</button>';
-            } else {
-                const surveySubTabs = getSurveySubTabs();
-                const sub = surveySubTabs.find(t => t.key === currentSurveySubTab) || surveySubTabs[0];
-                const item = getSidebarItems().find(i => i.key === 'survey') || { icon: 'fa-search', title: '排查登记' };
-                bottomNode = item.title + ' - ' + sub.title;
-                bottomBtn = '<button class="bottom-btn primary" onclick="openSurveyEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
-            }
+            const surveySubTabs = getSurveySubTabs();
+            const sub = surveySubTabs.find(t => t.key === currentSurveySubTab) || surveySubTabs[0];
+            const item = getSidebarItems().find(i => i.key === 'discovery') || { icon: 'fa-search', title: '排查情况' };
+            const bottomNode = item.title;
+            const bottomBtn = '<button class="bottom-btn primary" onclick="openSurveyEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
-                    '<div class="content-card-title"><i class="fas fa-search" style="width:16px;text-align:center;"></i> 风险发现</div>' +
+                    '<div class="content-card-title"><i class="fas fa-search" style="width:16px;text-align:center;"></i> 排查情况</div>' +
                 '</div>' +
-                '<div class="content-tabs">' + tabsHtml + '</div>' +
                 '<div class="content-body">' + bodyHtml + '</div>' +
             '</div>' +
             '<div class="bottom-bar">' +
                 '<div class="bottom-info">' +
                     '<i class="fas fa-info-circle" style="color:var(--primary);"></i>' +
-                    '当前节点：<span class="bottom-node">风险发现 - ' + bottomNode + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span><span class="readonly-tag">只读</span>' +
+                    '当前节点：<span class="bottom-node">' + bottomNode + '</span> | <i class="far fa-eye"></i> <span class="mode-label">查看/编辑</span><span class="readonly-tag">只读</span>' +
                 '</div>' +
                 '<div class="bottom-actions">' + bottomBtn + '</div>' +
             '</div>';
@@ -5237,7 +5090,7 @@
                     }
                     html0 += '<button class="bottom-btn" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
                 } else if (key === 'plan') {
-                    html0 += '<button class="bottom-btn primary" onclick="openPlanEditModal(-1)"><i class="fas fa-plus"></i> 新增填报</button>';
+                    // 整治计划：只读查看模式，底栏不再显示新增填报按钮
                 } else if (key === 'assessment') {
                     // 鉴定：记录卡片头部已含新增填报按钮，底栏不再重复
                 } else if (key === 'accept') {
@@ -5278,7 +5131,7 @@
                 }
                 html += '<button class="bottom-btn" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             } else if (key === 'plan') {
-                html += '<button class="bottom-btn primary" onclick="openPlanEditModal(-1)"><i class="fas fa-plus"></i> 新增填报</button>';
+                // 整治计划：只读查看模式，底栏不再显示新增填报按钮
             } else if (key === 'assessment') {
                 // 鉴定：记录卡片头部已含新增填报按钮，底栏不再重复
             } else if (key === 'accept') {
@@ -5376,53 +5229,24 @@
                 columns = keepIdx.map(i => columns[i]);
             }
             const fwFields = isAssess ? ['鉴定报告', '备注'] : ['评估报告', '备注'];
-            // 2026-10-17：去除鉴定/评估互斥提示，用户按实际情况自由填报
-            // 顶部：标题 + 新增填报按钮
-            const headerHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;">' +
-                '<span style="font-size:13px;color:#606266;"><i class="fas fa-list-ol" style="color:var(--primary);margin-right:6px;"></i>' + title + '记录</span>' +
-                '<button class="bottom-btn primary" style="padding:6px 14px;font-size:13px;" onclick="openAppraisalEditModal(\'' + kind + '\')"><i class="fas fa-plus"></i> 新增填报</button>' +
-            '</div>';
+            // 2026-10-20：纯查看模式，无标题栏/卡片折叠，直接渲染详情内容
             if (!records.length) {
-                return headerHtml +
-                    '<div class="record-empty" style="padding:40px 20px;text-align:center;border:1px dashed var(--border);border-radius:6px;background:#fafbfc;">' +
+                return '<div class="record-empty" style="padding:40px 20px;text-align:center;border:1px dashed var(--border);border-radius:6px;background:#fafbfc;">' +
                         '<i class="fas fa-clipboard-check" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
-                        '暂无' + title + '记录<br><span style="font-size:12px;color:#909399;">点击右上角「新增填报」填写' + title + '</span>' +
+                        '暂无' + title + '记录' +
                     '</div>';
             }
-            // 卡片列表（新记录在前，按 reportTime 倒序）；每条可编辑/删除（2026-10-17 去锁定）
+            // 多条记录按 reportTime 倒序展开渲染（不折叠），单条即为查看内容
             const sorted = records.slice().sort(function(a, b){
                 return String(b.reportTime || '').localeCompare(String(a.reportTime || ''));
             });
-            const cardsHtml = sorted.map(function(rec){
-                const idx = records.indexOf(rec);
+            const bodiesHtml = sorted.map(function(rec){
                 const row = rec.rows || [];
                 // 查看时同样按 keepIdx 过滤（兼容 assessment 的隐藏列）
                 const viewRow = isAssess ? keepIdx.map(i => row[i]) : row;
-                const org = row[0] || '—';
-                const time = row[2] || '—';
-                const conclusion = row[4] || '—';
-                const reporter = rec.reporter || row[8] || '—';
-                const reportTime = rec.reportTime || row[9] || '—';
-                const timeLabel = isAssess ? '鉴定时间' : '评估时间';
-                const body = '<div class="info-grid info-grid-2col">' + renderKeyValueGrid(columns, viewRow, fwFields) + '</div>';
-                return '<div class="measure-history-card" id="appraisalCard-' + kind + '-' + idx + '" style="margin-bottom:12px;border:1px solid var(--border);border-radius:6px;background:#fff;">' +
-                    '<div class="measure-history-head" onclick="toggleAppraisalCard(\'' + kind + '\',' + idx + ')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;background:#fafbfc;border-bottom:1px solid var(--border);">' +
-                        '<i class="fas fa-circle" style="font-size:8px;color:var(--safe);"></i>' +
-                        '<span style="font-size:13px;color:var(--safe);font-weight:500;">已完成</span>' +
-                        '<span style="font-size:13px;color:#303133;flex:1;">' + org + ' · ' + conclusion + '</span>' +
-                        '<span style="font-size:12px;color:#909399;">' + timeLabel + ' ' + time + '</span>' +
-                        '<span style="font-size:12px;color:#909399;">填报 ' + reporter + ' · ' + reportTime + '</span>' +
-                        '<button class="mh-toggle" onclick="event.stopPropagation();openAppraisalEditModal(\'' + kind + '\',' + idx + ')" style="padding:2px 10px;font-size:12px;border:1px solid var(--primary);color:var(--primary);background:#fff;border-radius:3px;cursor:pointer;">编辑</button>' +
-                        '<button class="mh-toggle" onclick="event.stopPropagation();deleteAppraisalRecord(\'' + kind + '\',' + idx + ')" style="padding:2px 10px;font-size:12px;border:1px solid #f56c6c;color:#f56c6c;background:#fff;border-radius:3px;cursor:pointer;">删除</button>' +
-                        '<button class="mh-toggle" onclick="event.stopPropagation();toggleAppraisalCard(\'' + kind + '\',' + idx + ')" style="padding:2px 10px;font-size:12px;border:1px solid var(--border);background:#fff;border-radius:3px;cursor:pointer;">详情</button>' +
-                        '<i class="fas fa-chevron-right mh-caret" style="color:#909399;font-size:12px;"></i>' +
-                    '</div>' +
-                    '<div class="measure-history-body" id="appraisalCardBody-' + kind + '-' + idx + '" style="display:none;padding:14px 16px;">' +
-                        body +
-                    '</div>' +
-                '</div>';
+                return '<div class="info-grid info-grid-2col" style="margin-bottom:14px;">' + renderKeyValueGrid(columns, viewRow, fwFields) + '</div>';
             }).join('');
-            return headerHtml + cardsHtml;
+            return bodiesHtml;
         }
 
         // 删除鉴定/评估记录（2026-10-17 增删改查放开）
@@ -5449,7 +5273,21 @@
             renderContent();
         }
 
-        function renderAssessmentContent(s) { return __renderAppraisalRecordCards('assessment', s); }
+        function renderAssessmentContent(s) {
+            // 2026-10-20：仅第三类（存在严重安全隐患）才需要做安全鉴定，其余类别提示无需鉴定
+            const hasThirdClass = s.riskLevel === '第三类'
+                || (Array.isArray(s.riskRecords) && s.riskRecords.some(function(r){ return r.riskLevel === '第三类'; }))
+                || (Array.isArray(s.inspectionRecords) && s.inspectionRecords.some(function(r){
+                    return conclusionToLevel(r.preliminaryJudge || r.checkResult || r.inspectResult) === '第三类';
+                }));
+            if (!hasThirdClass) {
+                return '<div class="record-empty" style="padding:40px 20px;text-align:center;border:1px dashed var(--border);border-radius:6px;background:#fafbfc;">' +
+                        '<i class="fas fa-clipboard-check" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
+                        '该房屋非第三类（存在严重安全隐患），无需进行安全鉴定' +
+                    '</div>';
+            }
+            return __renderAppraisalRecordCards('assessment', s);
+        }
 
         // 折叠/展开鉴定卡片
         function toggleAppraisalCard(kind, idx) {
@@ -5469,7 +5307,24 @@
             const records = Array.isArray(s.planRecords) ? s.planRecords : [];
             // 旧结构兜底：无 planRecords 但有 housePlanRow 时（migratePlanToRecords 未跑），临时按单条渲染
             const fallbackRow = (!records.length && Array.isArray(s.housePlanRow)) ? [ { id:'LEGACY', rows: s.housePlanRow, reporter: s.housePlanRow[11]||'', reportTime: s.housePlanRow[12]||'', status:'进行中', remark: s.housePlanRow[10]||'' } ] : [];
-            const list = records.length ? records : fallbackRow;
+            // 演示种子：既无 planRecords 又无 housePlanRow 时，提供一条示例查看数据（只读，不落库）
+            const DEMO_PLAN_ROWS = [
+                '2023-03-30',               // [0] 计划开始时间
+                '2023-05-21',               // [1] 计划完成时间
+                '俞飞',                     // [2] 负责人姓名
+                '15618332183',              // [3] 联系电话
+                '整治方案.pdf',             // [4] 整治方案附件
+                '是',                       // [5] 是否采取硬隔离
+                '',                         // [6] 备用
+                '',                         // [7] 长期管控照片（空则走 fallback 演示图）
+                '告知承诺书.pdf',           // [8] 告知承诺书
+                '书面计划.pdf',             // [9] 书面计划
+                '',                         // [10] 备注
+                '杨丹',                     // [11] 填报人
+                '2023-09-06 08:49:07'       // [12] 填报时间
+            ];
+            const demoRow = (!records.length && !fallbackRow.length) ? [ { id:'DEMO', rows: DEMO_PLAN_ROWS, reporter:'杨丹', reportTime:'2023-09-06 08:49:07', status:'已完成', remark:'' } ] : [];
+            const list = records.length ? records : (fallbackRow.length ? fallbackRow : demoRow);
             // 渲染单条记录的详情体（原单条渲染逻辑封装）
             function renderPlanDetailHtml(row) {
                 const getV = (i) => row[i] || '';
@@ -5556,77 +5411,22 @@
                     '<div class="info-grid info-grid-2col" style="margin-top:12px;">' + grid2colLast + '</div>';
             }
 
-            // 【一栋一策】排期措施汇总（自动统计，只读，挂在最底部一份）
-            // 阶段性口径：整治计划/措施均为房屋级阶段性工作，不逐条对应隐患
-            const allMs = (Array.isArray(s.manageRecords) ? s.manageRecords : []).map(function(m){ return { m: m, kind: '管理' }; })
-                .concat((Array.isArray(s.projectRecords) ? s.projectRecords : []).map(function(m){ return { m: m, kind: '工程' }; }));
-            const msRows = allMs.map(function(it){
-                const m = it.m;
-                const nm = it.kind === '工程' ? (m.projectName || '—') : (m.measureDesc || '—');
-                const done = it.kind === '工程' ? (m.status === '已完成' || m.status === '是') : (m.isDone === true || m.isDone === '已完成' || m.isDone === '是');
-                return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px;">' +
-                    '<span class="tag ' + (it.kind === '工程' ? 'danger' : 'info') + '" style="flex-shrink:0;">' + it.kind + '</span>' +
-                    '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + String(nm).replace(/"/g, '&quot;') + '">' + nm + '</span>' +
-                    '<span style="color:' + (done ? 'var(--safe)' : '#fa8c16') + ';flex-shrink:0;font-size:12px;">' + (done ? '已完成' : '进行中') + '</span></div>';
-            }).join('');
-            const doneCnt = allMs.filter(function(it){
-                const m = it.m;
-                return it.kind === '工程' ? (m.status === '已完成' || m.status === '是') : (m.isDone === true || m.isDone === '已完成' || m.isDone === '是');
-            }).length;
-            const planSummaryHtml = '<div style="margin-top:18px;border:1px solid #d2e3fc;border-radius:8px;background:#f7faff;padding:14px 16px;">' +
-                '<div style="font-weight:600;font-size:14px;margin-bottom:10px;color:#1a56db;"><i class="fas fa-clipboard-list"></i> 一栋一策 · 本阶段排期措施（自动汇总）</div>' +
-                '<div><span style="color:#909399;font-size:13px;">排期措施 <b style="color:#303133;">' + allMs.length + '</b> 项（已完成 ' + doneCnt + ' / 进行中 ' + (allMs.length - doneCnt) + '）：</span>' +
-                    (msRows ? '<div style="margin-top:6px;">' + msRows + '</div>' : '<div style="color:#c0c4cc;font-size:13px;margin-top:6px;">暂无措施记录（可在「整治措施」中新增填报）</div>') +
-                '</div>' +
-            '</div>';
-
-            // ===== 多条记录渲染 =====
-            // 顶部：标题 + 新增填报按钮
-            const headerHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 14px;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;">' +
-                '<span style="font-size:13px;color:#606266;"><i class="fas fa-list-ol" style="color:var(--primary);margin-right:6px;"></i>整治计划记录</span>' +
-                '<button class="bottom-btn primary" style="padding:6px 14px;font-size:13px;" onclick="openPlanEditModal(-1)"><i class="fas fa-plus"></i> 新增填报</button>' +
-            '</div>';
+            // ===== 多条记录渲染（2026-10-20：纯查看模式，无标题栏/卡片折叠，直接平铺详情）=====
             if (!list.length) {
-                return headerHtml +
-                    '<div class="record-empty" style="padding:40px 20px;text-align:center;border:1px dashed var(--border);border-radius:6px;background:#fafbfc;">' +
+                return '<div class="record-empty" style="padding:40px 20px;text-align:center;border:1px dashed var(--border);border-radius:6px;background:#fafbfc;">' +
                         '<i class="fas fa-calendar-alt" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
-                        '暂无整治计划记录<br><span style="font-size:12px;color:#909399;">点击右上角「新增填报」填写第一阶段整治计划</span>' +
-                    '</div>' +
-                    planSummaryHtml;
+                        '暂无整治计划记录' +
+                    '</div>';
             }
-            // 卡片列表（新记录在前，按 reportTime 倒序）
+            // 多条按 reportTime 倒序依次渲染（不折叠）
             const sorted = list.slice().sort(function(a, b){
                 return String(b.reportTime || '').localeCompare(String(a.reportTime || ''));
             });
             const cardsHtml = sorted.map(function(rec){
-                const idx = list.indexOf(rec); // 原数组索引（编辑/删除用）
                 const row = rec.rows || [];
-                const statusText = (rec.status === '已完成') ? '已完成' : '进行中';
-                const statusColor = (rec.status === '已完成') ? 'var(--safe)' : '#fa8c16';
-                const range = (row[0] || '—') + ' ~ ' + (row[1] || '—');
-                const person = row[2] || '—';
-                const reporter = rec.reporter || row[11] || '—';
-                const reportTime = rec.reportTime || row[12] || '—';
-                return '<div class="measure-history-card" id="planCard-' + idx + '" style="margin-bottom:12px;border:1px solid var(--border);border-radius:6px;background:#fff;">' +
-                    '<div class="measure-history-head" onclick="togglePlanCard(' + idx + ')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;background:#fafbfc;border-bottom:1px solid var(--border);">' +
-                        '<i class="fas fa-circle" style="font-size:8px;color:' + statusColor + ';"></i>' +
-                        '<span style="font-size:13px;color:' + statusColor + ';font-weight:500;">' + statusText + '</span>' +
-                        '<span style="font-size:13px;color:#303133;flex:1;">计划周期 ' + range + '</span>' +
-                        '<span style="font-size:12px;color:#909399;">负责人 ' + person + '</span>' +
-                        '<span style="font-size:12px;color:#909399;">填报 ' + reporter + ' · ' + reportTime + '</span>' +
-                        '<button class="mh-toggle" onclick="event.stopPropagation();togglePlanCard(' + idx + ')" style="padding:2px 10px;font-size:12px;border:1px solid var(--border);background:#fff;border-radius:3px;cursor:pointer;">详情</button>' +
-                        '<i class="fas fa-chevron-right mh-caret" style="color:#909399;font-size:12px;"></i>' +
-                    '</div>' +
-                    '<div class="measure-history-body" id="planCardBody-' + idx + '" style="display:none;padding:14px 16px;">' +
-                        renderPlanDetailHtml(row) +
-                        '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">' +
-                            '<button class="bottom-btn" style="padding:4px 12px;font-size:12px;" onclick="event.stopPropagation();openPlanEditModal(' + idx + ')"><i class="fas fa-edit"></i> 编辑</button>' +
-                            '<button class="bottom-btn" style="padding:4px 12px;font-size:12px;border-color:var(--danger);color:var(--danger);" onclick="event.stopPropagation();deletePlanRecord(' + idx + ')"><i class="fas fa-trash-alt"></i> 删除</button>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>';
+                return '<div style="margin-bottom:14px;">' + renderPlanDetailHtml(row) + '</div>';
             }).join('');
-            return headerHtml + cardsHtml + planSummaryHtml;
+            return cardsHtml;
         }
 
         // 折叠/展开整治计划卡片
@@ -5761,41 +5561,6 @@
             renderContent();
         }
 
-        // 风险发现详情底部：本次排查/巡查 登记/复查 的隐患清单（详情页已移除，行不跳转；照片缩略图可直接放大）
-        function renderDiscoveryLinkedHazards(s, sourceType, sourceId) {
-            if (!s || !sourceId) return '';
-            const rr = (s.riskRecords || []).find(function(r){ return r.sourceType === sourceType && r.sourceId === sourceId; });
-            let hzIds = (rr && Array.isArray(rr.linkedHazardIds)) ? rr.linkedHazardIds.slice() : [];
-            // 兜底：按来源字段直接匹配（rr 尚未生成/关联缺失时不漏显）
-            (s.hazardRecords || []).forEach(function(h){
-                if (h.sourceType === sourceType && h.sourceId === sourceId && hzIds.indexOf(h.id) === -1) hzIds.push(h.id);
-            });
-            // 第一类=无隐患，过滤存量数据（2026-10-17）
-            const hazards = (s.hazardRecords || []).filter(function(h){ return hzIds.indexOf(h.id) !== -1 && h.initialJudge !== '第一类'; });
-            if (!hazards.length) return '';
-            const rows = hazards.map(function(h){
-                const photos = (Array.isArray(h.photos) ? h.photos : (h.photos ? String(h.photos).split(/[\n,]/).map(function(t){ return t.trim(); }).filter(Boolean) : [])).filter(function(u){
-                    return /^data:image\//.test(u) || /^https?:\/\//.test(u) || /\.(jpe?g|png|gif|bmp|webp|svg)(\?|$)/i.test(u);
-                });
-                const thumbs = photos.length
-                    ? '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + photos.map(function(u){
-                        return '<img src="' + escapeHtml(u) + '" alt="隐患照片" onclick="event.stopPropagation();viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:64px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in;">';
-                    }).join('') + '</div>'
-                    : '<span style="color:#c0c4cc;">—</span>';
-                return '<tr>' +
-                    '<td>' + (h.hazardType || '—') + (h.hazardTypeOther ? '<span style="color:#909399;font-size:11px;">（' + h.hazardTypeOther + '）</span>' : '') + '</td>' +
-                    '<td>' + thumbs + '</td>' +
-                    '<td><span class="tag ' + (h.initialJudge === '第三类' ? 'danger' : (h.initialJudge === '第二类' ? 'warning' : 'info')) + '">' + (h.initialJudge || '—') + '</span></td>' +
-                '</tr>';
-            }).join('');
-            return '<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:16px;">' +
-                '<div class="info-section-title"><i class="fas fa-list-ul"></i> 本次' + (sourceType === '巡查' ? '巡查' : '排查') + '登记/复查的隐患（' + hazards.length + '）</div>' +
-                '<table class="data-table record-table"><thead><tr>' +
-                    '<th>隐患类型</th><th style="width:200px;">现场照片</th><th style="width:80px;">排查判断</th>' +
-                '</tr></thead><tbody>' + rows + '</tbody></table>' +
-            '</div>';
-        }
-
         // 隐患动态：仅保留「隐患动态记录」（addDanger 已搬到排查/巡查记录级编辑，2026-10-15）
         // 「隐患控制情况」已提为侧栏一级TAB（controlSituation，与整治措施同级），治理链路内不再展示
         function renderControlTable(s) {
@@ -5870,61 +5635,6 @@
                 }).join('');
             }
             return '<div class="record-detail-header"><div class="title">新增隐患</div></div>' +
-                '<div class="info-grid" style="grid-template-columns:1fr;">' + typesHtml + judgeHtml + '</div>';
-        }
-
-        // ===== 记录级新增隐患（挂在每条 排查/巡查 记录上，2026-10-15 从房屋级 addDanger 搬移）=====
-        // 结构：record.addDanger = { types: [], typesOther: '', photosByType: {type: 'url\nurl'}, judge: '第一类|第二类|第三类' }
-        // 读取兜底：record 无 addDanger 时返回 null（查看态不渲染该区块，避免干扰历史数据）
-        function getRecordAddDanger(rec) {
-            if (!rec || typeof rec !== 'object') return null;
-            const ad = rec.addDanger;
-            if (!ad || typeof ad !== 'object') return null;
-            if (!Array.isArray(ad.types)) ad.types = [];
-            if (!ad.photosByType || typeof ad.photosByType !== 'object') ad.photosByType = {};
-            return ad;
-        }
-        function getRecordAddDangerPhotos(ad, type) {
-            if (!ad || !ad.photosByType) return [];
-            const v = ad.photosByType[type];
-            if (!v) return [];
-            if (Array.isArray(v)) return v.filter(Boolean);
-            if (typeof v === 'string') return v.split('\n').filter(Boolean);
-            return [];
-        }
-        // 查看态：仅当该记录已填写 addDanger（有类型勾选或判断）时才渲染区块
-        function renderRecordAddDanger(rec, sourceLabel) {
-            const ad = getRecordAddDanger(rec);
-            if (!ad) return '';
-            const hasContent = (ad.types && ad.types.length) || ad.judge;
-            if (!hasContent) return '';
-            const types = ad.types || [];
-            const judgeHtml = '<div class="info-item" style="grid-column:1 / -1;">' +
-                '<div class="info-label"><span style="color:#dc3545;">*</span>' + (sourceLabel || '排查') + '判断</div>' +
-                '<div class="info-value">' + (ad.judge || '—') + '</div>' +
-            '</div>';
-            let typesHtml = '';
-            if (!types.length) {
-                typesHtml = '<div class="info-item" style="grid-column:1 / -1;">' +
-                    '<div class="info-label">隐患类型</div>' +
-                    '<div class="info-value empty">暂未新增隐患</div>' +
-                '</div>';
-            } else {
-                typesHtml = types.map(function(t) {
-                    const label = (t === '其他安全问题' && ad.typesOther) ? (t + '（' + ad.typesOther + '）') : t;
-                    const photos = getRecordAddDangerPhotos(ad, t);
-                    const photoHtml = photos.length
-                        ? '<div style="display:flex;flex-wrap:wrap;gap:10px;">' + photos.map(function(u) {
-                            return '<img src="' + escapeHtml(u) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border);">';
-                          }).join('') + '</div>'
-                        : '<div class="info-value empty">暂未上传照片</div>';
-                    return '<div class="info-item" style="grid-column:1 / -1;align-items:flex-start;">' +
-                        '<div class="info-label">' + label + '</div>' +
-                        '<div class="info-value">' + photoHtml + '</div>' +
-                    '</div>';
-                }).join('');
-            }
-            return '<div class="record-detail-header" style="margin-top:16px;"><div class="title">本次' + (sourceLabel || '排查') + '新增隐患</div></div>' +
                 '<div class="info-grid" style="grid-template-columns:1fr;">' + typesHtml + judgeHtml + '</div>';
         }
 
@@ -7609,8 +7319,6 @@
                     { key: 'dutyPhone', label: '联系方式', type: 'text' },
                     { key: 'preAppraisal', label: '安全鉴定：是否整治前鉴定', type: 'select', options: ['否', '是'] },
                     { key: 'noAppraisalReason', label: '未进行鉴定房屋原因', type: 'text' },
-                    { key: 'sceneUsage.usageStatus', label: '当前使用情况（房屋用途现场情况）', type: 'text' },
-                    { key: 'sceneUsage.houseUsage', label: '当前房屋用途（房屋用途现场情况）', type: 'text' },
                     { key: 'remark', label: '排查备注/隐患描述', type: 'textarea' }
                 ]
             },
@@ -7625,8 +7333,6 @@
                     { key: 'result', label: '初步判定/巡查结论', type: 'select', options: ['未发现安全隐患(第一类)', '存在一定安全隐患(第二类)', '存在严重安全隐患(第三类)'] },
                     { key: 'foundProblems', label: '发现问题', type: 'textarea' },
                     { key: 'suggestion', label: '处置建议', type: 'textarea' },
-                    { key: 'sceneUsage.usageStatus', label: '当前使用情况（房屋用途现场情况）', type: 'text' },
-                    { key: 'sceneUsage.houseUsage', label: '当前房屋用途（房屋用途现场情况）', type: 'text' },
                     { key: 'remark', label: '备注', type: 'textarea' }
                 ]
             },
@@ -7643,6 +7349,16 @@
                     { key: 'eliminateMeasures', label: '消除隐患的具体措施', type: 'textarea' },
                     { key: 'remark', label: '备注', type: 'textarea' },
                     { key: 'photos', label: '建房现场照片', type: 'photo' },
+                    { key: 'reporter', label: '填报人', type: 'text' },
+                    { key: 'reportTime', label: '填报时间', type: 'text' }
+                ]
+            },
+            sceneUsage: {
+                title: '房屋用途现场情况',
+                dataPath: 'sceneUsageRecords',
+                fields: [
+                    { key: 'usageStatus', label: '当前使用情况', type: 'select', options: ['正常使用', '未使用', '出租使用', '空置', '其他'] },
+                    { key: 'houseUsage', label: '当前房屋用途', type: 'text' },
                     { key: 'reporter', label: '填报人', type: 'text' },
                     { key: 'reportTime', label: '填报时间', type: 'text' }
                 ]
@@ -7711,8 +7427,12 @@
                     inputHtml = '<textarea class="form-input" data-crud-key="' + f.key + '" rows="2">' + (val || '') + '</textarea>';
                 } else if (f.type === 'photo') {
                     const arr = Array.isArray(val) ? val : (val ? String(val).split(',').map(s => s.trim()).filter(Boolean) : []);
-                    const thumbHtml = arr.length ? '<div class="file-thumb-preview">' + arr.map(u => '<img src="' + escapeHtml(u) + '" alt="预览" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')">').join('') + '</div>' : '';
-                    inputHtml = '<input class="form-input" type="text" data-crud-key="' + f.key + '" data-crud-type="photo" value="' + arr.join(',').replace(/"/g, '&quot;') + '" placeholder="图片 URL，逗号分隔">' + thumbHtml;
+                    // 统一图片上传组件（点击/拖拽上传、预览、删除）；URL 存 hidden input（仍带 data-crud-key + data-crud-type=photo，保存逻辑不变）
+                    inputHtml = '<div class="file-upload-wrap">' +
+                        '<input class="form-input file-url-input" type="hidden" data-crud-key="' + f.key + '" data-crud-type="photo" data-photo-type="image" value="' + arr.join(',').replace(/"/g, '&quot;') + '">' +
+                        '<input class="file-upload-input" type="file" accept="image/*" multiple onchange="handleMeasureFormUpload(this)">' +
+                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传图片</div>' +
+                    '</div>';
                 } else if (f.key === 'patrolPointCoord' || f.key === 'location') {
                     // 巡查点位坐标/位置标注由 H5 现场打卡自动回传，PC 端只读展示，不提供地图选点
                     inputHtml = '<input class="form-input" type="text" data-crud-key="' + f.key + '" value="' + String(val || '').replace(/"/g, '&quot;') + '" readonly placeholder="H5现场打卡自动获取" style="background:#f5f6f8;color:#888;cursor:not-allowed;">';
@@ -7726,166 +7446,9 @@
             };
             document.getElementById('crudEditForm').innerHTML = '<div class="form-grid">' +
                 cfg.fields.map(f => textField(f, getNestedValue(rec, f.key))).join('') + '</div>';
-            // 排查登记 / 动态巡查：表单底部追加「本次排查/巡查新增隐患（选填）」编辑区（记录级 addDanger）
-            if (moduleKey === 'survey' || moduleKey === 'patrol') {
-                const __adSec = document.createElement('div');
-                __adSec.id = 'crudAddDangerSection';
-                document.getElementById('crudEditForm').appendChild(__adSec);
-                renderCrudAddDangerSection(rec, moduleKey === 'survey' ? '排查' : '巡查');
-            }
             document.getElementById('crudEditModal').classList.add('open');
-        }
-
-        // ===== 记录级「新增隐患」编辑区（排查登记/动态巡查 编辑弹窗底部，2026-10-15）=====
-        // 与房屋级 renderAddDangerEditForm 结构一致，但操作 rec.addDanger（不持久化，由 saveCrudEdit 统一保存）
-        // containerId：渲染目标容器 ID（默认 crudEditModal 内的 crudAddDangerSection；排查/巡查编辑弹窗传入各自容器 ID）
-        function renderCrudAddDangerSection(rec, sourceLabel, containerId) {
-            const cid = containerId || 'crudAddDangerSection';
-            const container = document.getElementById(cid);
-            if (!container || !rec) return;
-            // 初始化记录级 addDanger
-            if (!rec.addDanger || typeof rec.addDanger !== 'object') {
-                rec.addDanger = { types: [], typesOther: '', photosByType: {}, judge: '' };
-            }
-            const ad = rec.addDanger;
-            if (!Array.isArray(ad.types)) ad.types = [];
-            if (!ad.photosByType || typeof ad.photosByType !== 'object') ad.photosByType = {};
-            const getPhotos = function(type) {
-                const v = ad.photosByType[type];
-                if (!v) return [];
-                if (Array.isArray(v)) return v.filter(Boolean);
-                if (typeof v === 'string') return v.split('\n').filter(Boolean);
-                return [];
-            };
-            const setPhotos = function(type, arr) {
-                ad.photosByType[type] = (arr || []).filter(Boolean).join('\n');
-            };
-            const types = ad.types || [];
-            // 隐患类型 checkbox
-            const typesHtml = ADD_DANGER_TYPES.map(function(t) {
-                const checked = types.indexOf(t) !== -1 ? ' checked' : '';
-                return '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:normal;padding:6px 0;">' +
-                    '<input type="checkbox" class="crud-add-danger-type" value="' + t + '"' + checked + ' style="cursor:pointer;width:16px;height:16px;">' +
-                    '<span style="' + (types.indexOf(t) !== -1 ? 'color:var(--primary);font-weight:500;' : '') + '">' + t + '</span>' +
-                '</label>';
-            }).join('');
-            const otherDisplay = types.indexOf('其他安全问题') !== -1 ? '' : 'display:none;';
-            // 按勾选类型的照片行
-            const photoRowsHtml = types.length === 0
-                ? '<div style="color:var(--text-secondary);font-size:13px;padding:14px;background:var(--bg);border-radius:6px;text-align:center;">请先勾选上方"隐患类型"</div>'
-                : types.map(function(t) {
-                    const label = (t === '其他安全问题' && ad.typesOther) ? (t + '（' + ad.typesOther + '）') : t;
-                    const photos = getPhotos(t);
-                    const photoItemsHtml = photos.map(function(u, i) {
-                        return '<div class="crud-add-danger-photo-item" style="position:relative;width:160px;height:120px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">' +
-                            '<img src="' + escapeHtml(u) + '" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:100%;height:100%;object-fit:cover;cursor:pointer;">' +
-                            '<button type="button" class="crud-add-danger-photo-remove" data-type="' + t.replace(/"/g, '&quot;') + '" data-photo-idx="' + i + '" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:#dc3545;color:#fff;border:none;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>' +
-                        '</div>';
-                    }).join('');
-                    return '<div style="margin-bottom:14px;">' +
-                        '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">' + label + '</div>' +
-                        '<div style="display:flex;flex-wrap:wrap;gap:10px;">' +
-                            photoItemsHtml +
-                            '<label style="width:160px;height:120px;border:2px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--text-secondary);cursor:pointer;background:#fafafa;">' +
-                                '+' +
-                                '<input type="file" class="crud-add-danger-photo-input" data-type="' + t.replace(/"/g, '&quot;') + '" accept="image/*" multiple style="display:none;">' +
-                            '</label>' +
-                        '</div>' +
-                    '</div>';
-                }).join('');
-            // 排查/巡查判断 radio（name 按容器参数化，避免多弹窗冲突）
-            const judgeRadiosHtml = ADD_DANGER_JUDGES.map(function(j) {
-                return '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-primary);margin-right:24px;">' +
-                    '<input type="radio" name="' + cid + 'JudgeRadio" class="crud-add-danger-judge" value="' + j + '"' + (ad.judge === j ? ' checked' : '') + '>' +
-                    '<span>' + j + '</span>' +
-                '</label>';
-            }).join('');
-
-            container.innerHTML =
-                '<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);">' +
-                    '<div style="text-align:center;font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--border);">+ 本次' + sourceLabel + '新增隐患 (选填)</div>' +
-                    '<div style="display:grid;grid-template-columns:140px 1fr;gap:14px;margin-bottom:14px;align-items:start;">' +
-                        '<div style="font-size:13px;color:var(--text-secondary);padding-top:8px;">隐患类型</div>' +
-                        '<div>' +
-                            '<div style="display:flex;flex-wrap:wrap;gap:4px 24px;">' + typesHtml + '</div>' +
-                            '<input type="text" id="' + cid + 'OtherInput" class="form-input" placeholder="请输入其他内容" value="' + (ad.typesOther || '').replace(/"/g, '&quot;') + '" style="margin-top:10px;width:260px;padding:6px 10px;font-size:13px;' + otherDisplay + '">' +
-                        '</div>' +
-                    '</div>' +
-                    '<div id="' + cid + 'PhotoRows" style="margin-bottom:14px;">' + photoRowsHtml + '</div>' +
-                    '<div style="display:grid;grid-template-columns:140px 1fr;gap:14px;align-items:center;">' +
-                        '<div style="font-size:13px;color:var(--text-primary);"><span style="color:#dc3545;">*</span>' + sourceLabel + '判断</div>' +
-                        '<div style="display:flex;flex-wrap:wrap;gap:4px 0;align-items:center;">' + judgeRadiosHtml + '</div>' +
-                    '</div>' +
-                '</div>';
-
-            // 绑定：类型 checkbox 变化 -> 同步到 ad + 重渲染照片行
-            container.querySelectorAll('.crud-add-danger-type').forEach(function(cb) {
-                cb.addEventListener('change', function() {
-                    const prevTypes = (ad.types || []).slice();
-                    ad.types = Array.from(container.querySelectorAll('.crud-add-danger-type:checked')).map(function(x) { return x.value; });
-                    // 取消勾选的类型，清理其照片
-                    prevTypes.forEach(function(t) {
-                        if (ad.types.indexOf(t) === -1 && ad.photosByType && ad.photosByType[t]) {
-                            delete ad.photosByType[t];
-                        }
-                    });
-                    const oi = document.getElementById(cid + 'OtherInput');
-                    if (oi) ad.typesOther = oi.value;
-                    const jc = container.querySelector('.crud-add-danger-judge:checked');
-                    if (jc) ad.judge = jc.value;
-                    renderCrudAddDangerSection(rec, sourceLabel, cid);
-                });
-            });
-            // 其他内容输入
-            const otherInput = document.getElementById(cid + 'OtherInput');
-            if (otherInput) {
-                otherInput.addEventListener('input', function() { ad.typesOther = otherInput.value; });
-            }
-            // 判断 radio 变化
-            container.querySelectorAll('.crud-add-danger-judge').forEach(function(r) {
-                r.addEventListener('change', function() { ad.judge = r.value; });
-            });
-            // 照片上传
-            container.querySelectorAll('.crud-add-danger-photo-input').forEach(function(inp) {
-                inp.addEventListener('change', function() {
-                    const files = Array.from(inp.files || []);
-                    if (!files.length) return;
-                    const type = inp.dataset.type;
-                    if (!type) return;
-                    const jc = container.querySelector('.crud-add-danger-judge:checked');
-                    if (jc) ad.judge = jc.value;
-                    const current = getPhotos(type);
-                    let pending = files.length;
-                    files.forEach(function(f) {
-                        const reader = new FileReader();
-                        reader.onload = function(ev) {
-                            current.push(ev.target.result);
-                            pending--;
-                            if (pending === 0) {
-                                setPhotos(type, current);
-                                renderCrudAddDangerSection(rec, sourceLabel, cid);
-                            }
-                        };
-                        reader.readAsDataURL(f);
-                    });
-                });
-            });
-            // 照片删除
-            container.querySelectorAll('.crud-add-danger-photo-remove').forEach(function(btn) {
-                btn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const type = btn.dataset.type;
-                    const idx = parseInt(btn.dataset.photoIdx, 10);
-                    const jc = container.querySelector('.crud-add-danger-judge:checked');
-                    if (jc) ad.judge = jc.value;
-                    const current = getPhotos(type);
-                    if (idx >= 0 && idx < current.length) {
-                        current.splice(idx, 1);
-                        setPhotos(type, current);
-                    }
-                    renderCrudAddDangerSection(rec, sourceLabel, cid);
-                });
-            });
+            // 绑定 crud 表单内 photo 字段的上传组件（点击/拖拽）
+            bindMeasureUploadDropzones(document.getElementById('crudEditForm'));
         }
 
         function closeCrudModal() {
@@ -8040,46 +7603,6 @@
                     setNestedValue(rec, el.dataset.crudKey, el.value);
                 }
             });
-            // 排查/巡查记录级 addDanger：保存时转换为隐患台账记录（一处一条查重由 registerDiscoveryHazards 处理），
-            // 写入成功后清除源记录上的 addDanger（隐患统一由 hazardRecords 跟踪，源记录不重复持有）
-            if ((editingCrudModule === 'survey' || editingCrudModule === 'patrol') && rec.addDanger) {
-                const ad = rec.addDanger;
-                const hasTypes = Array.isArray(ad.types) && ad.types.length > 0;
-                const hasJudge = !!ad.judge;
-                const hasOther = !!(ad.typesOther && String(ad.typesOther).trim());
-                const hasPhotos = ad.photosByType && Object.keys(ad.photosByType).some(function(k) {
-                    const v = ad.photosByType[k];
-                    return (Array.isArray(v) && v.length) || (typeof v === 'string' && v.trim());
-                });
-                if (hasTypes) {
-                    let registered = false;
-                    try {
-                        const getPhotosArr = function(t) {
-                            const v = ad.photosByType && ad.photosByType[t];
-                            if (!v) return [];
-                            if (Array.isArray(v)) return v.filter(Boolean);
-                            return String(v).split('\n').filter(Boolean);
-                        };
-                        const newHazards = ad.types.map(function(t) {
-                            const otherText = (t === '其他安全问题' && hasOther) ? String(ad.typesOther).trim() : '';
-                            return {
-                                hazardType: t,
-                                hazardTypeOther: otherText,
-                                location: rec.damagePart || '',
-                                description: otherText || t,
-                                photos: getPhotosArr(t),
-                                initialJudge: ad.judge || '第三类'
-                            };
-                        });
-                        registerDiscoveryHazards(s, editingCrudModule === 'survey' ? '排查' : '巡查', rec, newHazards, []);
-                        registered = true;
-                    } catch (e) { console.warn('addDanger 写入隐患台账失败', e); }
-                    // 登记成功才清除；失败保留 addDanger，避免填报内容静默丢失（用户可再次保存重试）
-                    if (registered) delete rec.addDanger;
-                } else {
-                    delete rec.addDanger;
-                }
-            }
             // 质检模块：'是'/'否' 字符串转回 boolean
             if (editingCrudModule === 'quality') {
                 rec.hasEngineeringMeasure = (rec.hasEngineeringMeasure === '是');
@@ -10236,41 +9759,9 @@
                     '<input class="form-input" type="text" data-idx="' + updateTimeIndex + '" value="' + updateTimeValue.replace(/"/g, '&quot;') + '" readonly style="background:#f5f6f8;color:#888;cursor:not-allowed;">' +
                     '</div>';
             }
-            // 记录级「房屋用途现场情况」输入组（survey1 排查登记；填报人/填报时间继承当次排查，不重复填）
-            if (surveyEditModalSubTab === 'survey1') {
-                const sortedInsp = (Array.isArray(currentHouseArch.inspectionRecords) ? currentHouseArch.inspectionRecords.slice() : []).sort(function(a, b){
-                    return String(b.checkDate || b.reportTime || '').localeCompare(String(a.checkDate || a.reportTime || ''));
-                });
-                const actInspIdx = Math.min(recordViewState.inspection || 0, Math.max(sortedInsp.length - 1, 0));
-                const recForScene = sortedInsp[actInspIdx] || {};
-                const su = recForScene.sceneUsage || {};
-                const suInput = function(field, label, placeholder) {
-                    const v = (su[field] || '').replace(/"/g, '&quot;');
-                    return '<div class="form-item">' +
-                        '<label class="form-label">' + label + '</label>' +
-                        '<input class="form-input survey-scene-input" type="text" data-field="' + field + '" value="' + v + '" placeholder="' + (placeholder || '') + '">' +
-                        '</div>';
-                };
-                gridHtml += '<div class="form-item form-item-full" style="border-top:1px dashed var(--border);padding-top:12px;margin-top:4px;">' +
-                    '<div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">房屋用途现场情况</div>' +
-                    '</div>' +
-                    suInput('usageStatus', '当前使用情况') +
-                    suInput('houseUsage', '当前房屋用途');
-            }
             // 记录级「新增隐患」编辑区（survey1 排查登记；checkbox 多选 + 按类型照片行 + 判断 radio，与 crudEditModal 同款）
-            const addDangerBlockHtml = (surveyEditModalSubTab === 'survey1')
-                ? '<div id="surveyAddDangerSection" style="grid-column:1 / -1;"></div>'
-                : '';
+            const addDangerBlockHtml = '';
             document.getElementById('surveyEditModalForm').innerHTML = '<div class="form-grid">' + gridHtml + addDangerBlockHtml + '</div>';
-            // 渲染「新增隐患」区块到独立容器（操作当前激活排查记录的 rec.addDanger，保存时由 saveSurveyEdit 统一处理）
-            if (surveyEditModalSubTab === 'survey1') {
-                const sortedInsp2 = (Array.isArray(currentHouseArch.inspectionRecords) ? currentHouseArch.inspectionRecords.slice() : []).sort(function(a, b){
-                    return String(b.checkDate || b.reportTime || '').localeCompare(String(a.checkDate || a.reportTime || ''));
-                });
-                const actInspIdx2 = Math.min(recordViewState.inspection || 0, Math.max(sortedInsp2.length - 1, 0));
-                const recForAd = sortedInsp2[actInspIdx2];
-                if (recForAd) renderCrudAddDangerSection(recForAd, '排查', 'surveyAddDangerSection');
-            }
             bindSurveyPhotoDropzones();
             // 初步判定 radio 同步到 hidden input
             document.querySelectorAll('#surveyEditModalForm .survey-judge-radio').forEach(function(radio) {
@@ -10478,11 +9969,11 @@
                     const cols = data.columns || [];
                     const rowVals = (data.rows && data.rows[0]) || [];
                     const get = function(label){ const i = cols.indexOf(label); return i !== -1 ? (rowVals[i] || '') : ''; };
-                    // 排序后索引
+                    // 排序后索引（单记录口径：恒取最新一条）
                     const sorted = currentHouseArch.inspectionRecords.slice().sort(function(a,b){
                         return String(b.checkDate || b.reportTime || '').localeCompare(String(a.checkDate || a.reportTime || ''));
                     });
-                    const actIdx = Math.min(recordViewState.inspection || 0, Math.max(sorted.length - 1, 0));
+                    const actIdx = 0;
                     const rec = sorted[actIdx];
                     if (rec) {
                         rec.checkDate = get('排查时间') || rec.checkDate;
@@ -10518,60 +10009,9 @@
                             }
                             return rec.photos;
                         })();
-                        // 记录级「房屋用途现场情况」（sceneUsage）
-                        try {
-                            const suStatusInput = document.querySelector('#surveyEditModalForm .survey-scene-input[data-field="usageStatus"]');
-                            const suUsageInput = document.querySelector('#surveyEditModalForm .survey-scene-input[data-field="houseUsage"]');
-                            if (suStatusInput || suUsageInput) {
-                                if (!rec.sceneUsage || typeof rec.sceneUsage !== 'object') rec.sceneUsage = {};
-                                if (suStatusInput) rec.sceneUsage.usageStatus = suStatusInput.value;
-                                if (suUsageInput) rec.sceneUsage.houseUsage = suUsageInput.value;
-                            }
-                        } catch (e) {}
                         // 同步风险记录中对应条目（结论可能变了）
                         try { syncRiskRecords(currentHouseArch); } catch (e) {}
                         try { ensureGovernanceEvents(currentHouseArch); } catch (e) {}
-                        // 记录级「新增隐患」：保存时转换为隐患台账记录（一处一条查重由 registerDiscoveryHazards 处理），
-                        // 写入成功后清除源记录上的 addDanger（隐患统一由 hazardRecords 跟踪，源记录不重复持有）
-                        try {
-                            if (rec.addDanger) {
-                                const ad = rec.addDanger;
-                                const hasTypes = Array.isArray(ad.types) && ad.types.length > 0;
-                                const hasJudge = !!ad.judge;
-                                const hasOther = !!(ad.typesOther && String(ad.typesOther).trim());
-                                const hasPhotos = ad.photosByType && Object.keys(ad.photosByType).some(function(k) {
-                                    const v = ad.photosByType[k];
-                                    return (Array.isArray(v) && v.length) || (typeof v === 'string' && v.trim());
-                                });
-                                if (hasTypes) {
-                                    let registered = false;
-                                    try {
-                                        const getPhotosArr = function(t) {
-                                            const v = ad.photosByType && ad.photosByType[t];
-                                            if (!v) return [];
-                                            if (Array.isArray(v)) return v.filter(Boolean);
-                                            return String(v).split('\n').filter(Boolean);
-                                        };
-                                        const newHazards = ad.types.map(function(t) {
-                                            const otherText = (t === '其他安全问题' && hasOther) ? String(ad.typesOther).trim() : '';
-                                            return {
-                                                hazardType: t,
-                                                hazardTypeOther: otherText,
-                                                location: rec.damagePart || '',
-                                                description: otherText || t,
-                                                photos: getPhotosArr(t),
-                                                initialJudge: ad.judge || '第三类'
-                                            };
-                                        });
-                                        registerDiscoveryHazards(currentHouseArch, '排查', rec, newHazards, []);
-                                        registered = true;
-                                    } catch (e) { console.warn('addDanger 写入隐患台账失败', e); }
-                                    if (registered) delete rec.addDanger;
-                                } else {
-                                    delete rec.addDanger;
-                                }
-                            }
-                        } catch (e) { console.warn('登记隐患写入失败', e); }
                     }
                 }
             } catch (e) {}
@@ -10585,20 +10025,43 @@
         }
 
 
-        // ========== 建房现场安全自查情况 编辑（一级TAB独立入口：编辑当前激活记录）==========
+        // ========== 建房现场安全自查情况 编辑（一级TAB独立入口：单条记录，固定编辑第 0 条；无记录时兜底新增）==========
         function openBuildCheckEditModal() {
             const s = currentHouseArch;
             const list = (Array.isArray(s.buildCheckRecords) ? s.buildCheckRecords.slice() : []);
             list.sort(function(a, b) { return String(b.reportTime || '').localeCompare(String(a.reportTime || '')); });
-            const activeIdx = Math.min(recordViewState.buildCheck || 0, Math.max(list.length - 1, 0));
-            if (list.length && list[activeIdx]) {
-                openCrudModal('buildCheck', activeIdx);
+            if (list.length) {
+                // 单记录口径：永远编辑最新一条（即原数组中 reportTime 最大者）
+                const latest = list[0];
+                const origIdx = (s.buildCheckRecords || []).indexOf(latest);
+                openCrudModal('buildCheck', origIdx < 0 ? 0 : origIdx);
             } else {
+                // 无记录：走新增（addCrudRecord 内部会创建首条并弹出编辑框）
                 addCrudRecord('buildCheck');
             }
         }
 
         function closeBuildCheckEditModal() {
+            closeCrudModal();
+        }
+
+        // ========== 房屋用途现场情况 编辑（一级TAB独立入口：单条记录，固定编辑最新一条；无记录时兜底新增）==========
+        function openSceneUsageEditModal() {
+            const s = currentHouseArch;
+            const list = (Array.isArray(s.sceneUsageRecords) ? s.sceneUsageRecords.slice() : []);
+            list.sort(function(a, b) { return String(b.reportTime || '').localeCompare(String(a.reportTime || '')); });
+            if (list.length) {
+                // 单记录口径：永远编辑最新一条（即原数组中 reportTime 最大者）
+                const latest = list[0];
+                const origIdx = (s.sceneUsageRecords || []).indexOf(latest);
+                openCrudModal('sceneUsage', origIdx < 0 ? 0 : origIdx);
+            } else {
+                // 无记录：走新增（addCrudRecord 内部会创建首条并弹出编辑框）
+                addCrudRecord('sceneUsage');
+            }
+        }
+
+        function closeSceneUsageEditModal() {
             closeCrudModal();
         }
 

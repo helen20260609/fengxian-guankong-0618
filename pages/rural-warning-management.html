@@ -584,6 +584,30 @@ body {
 .tab-item.active .tab-count {
     background: rgba(255,255,255,0.2);
 }
+/* 调度结果未读徽标 */
+.dispatch-unread-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-left: 6px; padding: 2px 8px;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    color: #dc2626; border: 1px solid #fecaca;
+    border-radius: 999px; font-size: 11px; font-weight: 600;
+    line-height: 1.4; vertical-align: middle; white-space: nowrap;
+    cursor: default;
+    box-shadow: 0 1px 2px rgba(220, 38, 38, 0.12);
+}
+.dispatch-unread-badge .fa-solid {
+    font-size: 6px;
+    animation: unreadBlink 1.4s ease-in-out infinite;
+}
+.dispatch-unread-badge.badge-assigned {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    color: #1d4ed8; border-color: #bfdbfe;
+    box-shadow: 0 1px 2px rgba(29, 78, 216, 0.12);
+}
+@keyframes unreadBlink {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.8); }
+}
 </style>
 </head>
 <body>
@@ -898,6 +922,36 @@ body {
         return detail;
     }
 
+    // ===== 调度任务未读徽标（专家/机构已分派或已反馈） =====
+    let dispatchUnreadByHouse = {};
+    function getDispatchReadSet() {
+        try { return JSON.parse(localStorage.getItem('dispatchReadCodes') || '[]'); } catch (e) { return []; }
+    }
+    function loadDispatchUnreadBadges() {
+        fetch('/api/dispatch-tasks')
+            .then(function(r) { return r.json(); })
+            .then(function(list) {
+                if (!Array.isArray(list)) return;
+                const read = getDispatchReadSet();
+                const map = {};
+                list.forEach(function(t) {
+                    if (!t.sourceHouseNo || !t.code) return;
+                    if (['assigned', 'feedback', 'rejected'].indexOf(t.status) === -1) return;
+                    if (read.indexOf(t.code) !== -1) return;
+                    const hint = t.status === 'assigned' ? '专家/机构已分派' : (t.status === 'feedback' ? '专家/机构已反馈结果' : '申请已被驳回');
+                    const shortText = t.status === 'assigned' ? '已分派' : (t.status === 'feedback' ? '已反馈' : '已驳回');
+                    // 同一房屋多条取最新（feedback/rejected 优先）
+                    const cur = map[t.sourceHouseNo];
+                    if (!cur || cur.status === 'assigned' || (t.createTime || '') >= (cur.createTime || '')) {
+                        map[t.sourceHouseNo] = { code: t.code, status: t.status, hint: hint, shortText: shortText, createTime: t.createTime || '' };
+                    }
+                });
+                dispatchUnreadByHouse = map;
+                renderTable();
+            })
+            .catch(function() {});
+    }
+
     function renderTable() {
         const tbody = document.getElementById('hazard-table-body');
         const start = (currentPage - 1) * PAGE_SIZE;
@@ -908,6 +962,8 @@ body {
             tr.dataset.status = row.status.key;
             // 管理员视图下状态标签显示为阶段文案，但 data-status 仍保留原始 key
             const statusLabel = viewMode === 'admin' ? (ADMIN_STAGE_LABELS[row.status.label] || row.status.label) : row.status.label;
+            const unread = (row.status.key === 'pending-audit' || row.status.key === 'pending-dispatch') ? dispatchUnreadByHouse[row.houseNo] : null;
+            const unreadBadge = unread ? ` <span class="dispatch-unread-badge${unread.status === 'assigned' ? ' badge-assigned' : ''}" title="${unread.hint}，点击进入核实页查看"><i class="fa-solid fa-circle"></i>${unread.shortText}</span>` : '';
             tr.innerHTML = `
                 <td>${row.hazardName}</td>
                 <td>${row.hazardType}</td>
@@ -919,7 +975,7 @@ body {
                 <td>${row.dutyPerson}</td>
                 <td>${formatDateTime(row.reportTime)}</td>
                 <td>${row.ownerName}</td>
-                <td><span class="status-tag ${row.status.cls}">${statusLabel}</span></td>
+                <td><span class="status-tag ${row.status.cls}">${statusLabel}</span>${unreadBadge}</td>
                 <td><div class="actions">${getActionButtons(row.status, row.houseNo)}</div></td>
             `;
             tbody.appendChild(tr);
@@ -1153,6 +1209,7 @@ body {
     filteredHazards = allHazards.slice();
     updateTabCounts();
     renderTable();
+    loadDispatchUnreadBadges();
 })();
 
 // 动态测量"操作"列实际宽度，写入 CSS 变量，让"状态"列与之无缝拼接
