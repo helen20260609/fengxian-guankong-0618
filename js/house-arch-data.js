@@ -131,8 +131,28 @@ function __postToServer(all) {
 }
 
 function __setHouseArchStorage(all) {
-    localStorage.setItem(HOUSE_ARCH_KEY, JSON.stringify(all));
+    __safeSetLocal(HOUSE_ARCH_KEY, all);
     __postToServer(all);
+}
+
+// 安全写 localStorage：超限时静默失败（数据已 POST 到服务端，本地缓存仅作加速）
+let __quotaWarned = false;
+function __safeSetLocal(key, obj) {
+    try {
+        localStorage.setItem(key, JSON.stringify(obj));
+        return true;
+    } catch (e) {
+        if (e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''))) {
+            if (!__quotaWarned) {
+                __quotaWarned = true;
+                console.warn('[house-arch-data] localStorage 写入超限，本次仅存服务端（数据不丢失），本地缓存已跳过。');
+            }
+            // 尝试只写当前操作的单条记录，最小化本地占用
+            try { localStorage.removeItem(key); } catch (_) {}
+            return false;
+        }
+        return false;
+    }
 }
 
 // 从服务端拉取档案并合并到本地（服务端数据优先，本地独有保留）
@@ -151,7 +171,7 @@ function syncHouseArchFromServer() {
         var merged = Object.assign({}, local, serverData);
         __syncToServerEnabled = false; // 合并写回本地时不要再回写服务端
         try {
-            localStorage.setItem(HOUSE_ARCH_KEY, JSON.stringify(merged));
+            __safeSetLocal(HOUSE_ARCH_KEY, merged);
         } finally {
             __syncToServerEnabled = true;
         }
@@ -162,7 +182,7 @@ function __getCloseApplyStorage() {
     try { const raw = localStorage.getItem(CLOSE_APPLY_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
 function __setCloseApplyStorage(list) {
-    localStorage.setItem(CLOSE_APPLY_KEY, JSON.stringify(list));
+    __safeSetLocal(CLOSE_APPLY_KEY, list);
 }
 
 // ---------------- 草稿区（风险档案工作区） ----------------
@@ -178,7 +198,7 @@ function __getHouseArchDraft() {
     } catch (e) { return {}; }
 }
 function __setHouseArchDraft(all) {
-    localStorage.setItem(HOUSE_ARCH_DRAFT_KEY, JSON.stringify(all));
+    __safeSetLocal(HOUSE_ARCH_DRAFT_KEY, all);
     if (!__syncToServerEnabled) return;
     if (typeof fetch !== 'function') return;
     try {
@@ -201,7 +221,7 @@ function syncRuralHouseArchFromServer() {
             try { local = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) {}
             var merged = Object.assign({}, local, serverData);
             __syncToServerEnabled = false;
-            try { localStorage.setItem(key, JSON.stringify(merged)); } finally { __syncToServerEnabled = true; }
+            try { __safeSetLocal(key, merged); } finally { __syncToServerEnabled = true; }
         }).catch(function() {});
     }
     return Promise.all([
@@ -213,7 +233,7 @@ function __getSyncLog() {
     try { const raw = localStorage.getItem(HOUSE_ARCH_SYNC_LOG_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
 function __setSyncLog(list) {
-    localStorage.setItem(HOUSE_ARCH_SYNC_LOG_KEY, JSON.stringify(list.slice(-200))); // 只保留最近200条
+    __safeSetLocal(HOUSE_ARCH_SYNC_LOG_KEY, list.slice(-200)); // 只保留最近200条
 }
 
 // 读草稿（无草稿时回落到发布区，保证首次进入也能看到数据）
@@ -1771,17 +1791,17 @@ function getZoneCheckins() {
 function saveZoneCheckin(record) {
     const all = getZoneCheckins();
     all[record.zoneId] = record;
-    localStorage.setItem(REVIEW_ZONE_CHECKIN_KEY, JSON.stringify(all));
+    __safeSetLocal(REVIEW_ZONE_CHECKIN_KEY, all);
     // 同步写入历史
     const hist = getZoneCheckinHistory();
     hist.unshift(Object.assign({ seq: Date.now() }, record));
-    localStorage.setItem(REVIEW_ZONE_HISTORY_KEY, JSON.stringify(hist.slice(0, 100)));
+    __safeSetLocal(REVIEW_ZONE_HISTORY_KEY, hist.slice(0, 100));
 }
 
 function removeZoneCheckin(zoneId) {
     const all = getZoneCheckins();
     delete all[zoneId];
-    localStorage.setItem(REVIEW_ZONE_CHECKIN_KEY, JSON.stringify(all));
+    __safeSetLocal(REVIEW_ZONE_CHECKIN_KEY, all);
 }
 
 const REVIEW_ZONE_HISTORY_KEY = 'review-2026-zone-checkin-history';

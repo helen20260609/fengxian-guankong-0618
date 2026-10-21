@@ -16,6 +16,21 @@
     <script src="../js/third-party-data.js"></script>
     <script src="../js/house-arch-data.js"></script>
     <script>
+        // 全局错误兜底：渲染异常时在页面上显示错误信息（避免白屏无从排查）
+        window.addEventListener('error', function(e) {
+            var msg = (e && e.message) ? e.message : '未知错误';
+            var src = (e && e.filename) ? e.filename.split('/').pop() + ':' + (e.lineno || '?') : '';
+            var panel = document.getElementById('statusPanel');
+            if (panel && !document.getElementById('jsErrorBanner')) {
+                var banner = document.createElement('div');
+                banner.id = 'jsErrorBanner';
+                banner.style.cssText = 'grid-column:1/-1;padding:10px 14px;background:#fff1f0;border:1px solid #ffccc7;border-radius:6px;color:#cf1322;font-size:12px;line-height:1.6;';
+                banner.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 页面脚本执行出错：' + msg + (src ? '（' + src + '）' : '') + '<br>请按 Ctrl+Shift+R 强制刷新；若仍报错，请在控制台执行 localStorage.removeItem(\'houseArch\') 后刷新。';
+                panel.appendChild(banner);
+            }
+        });
+    </script>
+    <script>
         // =========================================================
         // 房屋建筑档案状态联动数据层（已接入 house-arch-data.js 统一数据层）
         // =========================================================
@@ -12087,9 +12102,18 @@
 
         // 原型演示：启动时先从服务端拉取最新档案（发布区+草稿区），再渲染
         function bootstrapRender() {
-            syncHouseArchFromStatus();
-            renderSidebar();
-            renderContent();
+            try {
+                syncHouseArchFromStatus();
+                renderSidebar();
+                renderContent();
+            } catch (err) {
+                var panel = document.getElementById('statusPanel');
+                if (panel) {
+                    panel.innerHTML = '<div style="grid-column:1/-1;padding:14px;background:#fff1f0;border:1px solid #ffccc7;border-radius:6px;color:#cf1322;font-size:13px;line-height:1.8;">' +
+                        '<i class="fas fa-exclamation-triangle"></i> <b>渲染失败：</b>' + (err && err.message || err) +
+                        '<br>本地缓存数据可能损坏。请在控制台执行 <code>localStorage.removeItem(\'houseArch\')</code> 后刷新页面（服务端数据不受影响）。</div>';
+                }
+            }
         }
         if (typeof syncRuralHouseArchFromServer === 'function') {
             syncRuralHouseArchFromServer().then(bootstrapRender).catch(bootstrapRender);
