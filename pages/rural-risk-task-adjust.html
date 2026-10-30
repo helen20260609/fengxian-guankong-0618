@@ -1160,11 +1160,6 @@ body {
  border-color: var(--primary);
 }
 
-/* Urgency */
-.urgency-high { color: var(--danger); font-weight: 600; }
-.urgency-medium { color: #c78000; font-weight: 600; }
-.urgency-low { color: var(--success); font-weight: 600; }
-
 /* ===== Risk Distribution ===== */
 .risk-distribution {
  display: flex;
@@ -1219,6 +1214,7 @@ body {
 .status-rectify.accept-reject { color: var(--danger); background: rgba(217,48,37,0.10); }
 
 </style>
+    <link rel="stylesheet" href="ui-modal.css">
 </head>
 <body>
 
@@ -1282,10 +1278,6 @@ body {
   <div class="info-item">
   <span class="info-label">任务类型</span>
   <span class="info-value">临时巡查</span>
-  </div>
-  <div class="info-item">
-  <span class="info-label">紧急程度</span>
-  <span class="info-value urgency-high">高</span>
   </div>
   <div class="info-item">
   <span class="info-label">创建人</span>
@@ -2131,19 +2123,34 @@ function restoreAllAdjustDrafts() {
 }
 
 // ===== Terminate Adjust =====
-function confirmTerminateAdjust() {
+async function confirmTerminateAdjust() {
  const reason = document.getElementById('terminateReason').value.trim();
  if (!reason) {
   alert('请输入任务终止原因');
   return;
  }
- if (confirm('确认终止该巡查任务？终止后任务将不可继续执行。')) {
+ if (await uiConfirm('确认终止该巡查任务？终止后任务将不可继续执行。')) {
+  try {
+   const taskId = new URLSearchParams(window.location.search).get('id');
+   const saved = JSON.parse(localStorage.getItem('patrolTasks') || '[]');
+   const task = saved.find(t => String(t.id) === String(taskId));
+   if (task) {
+    const now = new Date();
+    task.status = 'terminated';
+    task.statusLabel = '已终止';
+    task.statusClass = 'terminated';
+    task.terminateReason = reason;
+    task.terminateTime = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    localStorage.setItem('patrolTasks', JSON.stringify(saved));
+   }
+  } catch (e) { /* 数据异常时静默 */ }
   alert('任务终止成功！');
+  window.location.href = 'patrol-task-management.html';
  }
 }
 
 // ===== Deadline Adjust =====
-function confirmDeadlineAdjust() {
+async function confirmDeadlineAdjust() {
  const newDeadline = document.getElementById('newDeadline').value;
  const reason = document.getElementById('deadlineReason').value.trim();
  
@@ -2156,13 +2163,13 @@ function confirmDeadlineAdjust() {
   return;
  }
  
- if (confirm(`确认将截止时间从 ${document.getElementById('currentDeadline').value} 调整至 ${newDeadline}？`)) {
+ if (await uiConfirm(`确认将截止时间从 ${document.getElementById('currentDeadline').value} 调整至 ${newDeadline}？`)) {
   alert('截止时间调整成功！');
  }
 }
 
 // ===== Person Adjust =====
-function confirmPersonAdjust() {
+async function confirmPersonAdjust() {
  const newPersonId = document.getElementById('newAssignPerson').value;
  const reason = document.getElementById('personReason').value.trim();
  
@@ -2178,7 +2185,7 @@ function confirmPersonAdjust() {
  const selectedPersons = personData.filter(p => newPersonId.split(',').includes(p.id));
  const names = selectedPersons.map(p => p.name).join('、');
  
- if (confirm(`确认将巡查人员调整为 ${names}？`)) {
+ if (await uiConfirm(`确认将巡查人员调整为 ${names}？`)) {
   alert('巡查人员调整成功！');
  }
 }
@@ -2347,17 +2354,17 @@ function addNewScopePoint() {
  openScopeModal();
 }
 
-function removeScopePoint(id) {
+async function removeScopePoint(id) {
  const item = document.querySelector(`.scope-item[data-id="${id}"]`);
  if (item) {
   const name = item.querySelector('.scope-name').textContent;
-  if (confirm(`确认删除巡查房屋 "${name}"？`)) {
+  if (await uiConfirm(`确认删除巡查房屋 "${name}"？`)) {
   item.remove();
   }
  }
 }
 
-function confirmScopeAdjust() {
+async function confirmScopeAdjust() {
  const reason = document.getElementById('scopeReason').value.trim();
  
  if (!reason) {
@@ -2365,7 +2372,7 @@ function confirmScopeAdjust() {
   return;
  }
  
- if (confirm('确认提交巡查房屋调整？')) {
+ if (await uiConfirm('确认提交巡查房屋调整？')) {
   alert('巡查房屋调整成功！');
  }
 }
@@ -2444,7 +2451,7 @@ function clearPersonSelection() {
  document.getElementById('selectedPersonDisplay').innerHTML = '';
 }
 
-function confirmAssign() {
+async function confirmAssign() {
  const personIds = document.getElementById('assignPerson').value;
  if (!personIds) {
   alert('请先选择巡查人员');
@@ -2452,7 +2459,7 @@ function confirmAssign() {
  }
  const selectedPersons = personData.filter(p => personIds.split(',').includes(p.id));
  const names = selectedPersons.map(p => p.name).join('、');
- if (confirm(`确认将任务分配给以下人员？\n\n${names}`)) {
+ if (await uiConfirm(`确认将任务分配给以下人员？\n\n${names}`)) {
   alert('分配成功！');
   // 实际项目中这里会调用API提交分配
  }
@@ -2593,8 +2600,6 @@ const taskData = {
  name: '青村镇农村自建房房屋结构应急排查',
  type: 'temporary',
  typeLabel: '临时巡查',
- urgency: 'high',
- urgencyLabel: '高',
  archiveCount: 4,
  unit: '农村自建房管理办公室',
  person: '刘大伟',
@@ -2736,8 +2741,6 @@ function renderHiddenCount() {
 function renderBasicInfo() {
  const grid = document.getElementById('basicInfoGrid');
  const pct = Math.round((taskData.inspected / taskData.total) * 100);
- const urgencyClass = taskData.urgency === 'high' ? 'urgency-high' : taskData.urgency === 'medium' ? 'urgency-medium' : 'urgency-low';
-
  grid.innerHTML = `
   <div class="info-item">
   <span class="info-label">任务名称</span>
@@ -2746,10 +2749,6 @@ function renderBasicInfo() {
   <div class="info-item">
   <span class="info-label">任务类型</span>
   <span class="info-value">${taskData.typeLabel}</span>
-  </div>
-  <div class="info-item">
-  <span class="info-label">紧急程度</span>
-  <span class="info-value ${urgencyClass}">${taskData.urgencyLabel}</span>
   </div>
   <div class="info-item">
   <span class="info-label">创建人</span>
@@ -2996,7 +2995,14 @@ renderHiddenCount();
 renderAuditHistory();
 restoreAllAdjustDrafts();
 </script>
+<script>
+// 农村自建房隐患上报：仅保留 隐患描述/现场照片（去掉 紧急程度/处置方式/影响范围），标题为"隐患上报"
+window.POINT_MODAL_ABNORMAL_FIELDS = ['description', 'photos'];
+window.POINT_MODAL_ABNORMAL_TITLE = '隐患上报';
+window.POINT_MODAL_PHOTOS_LABEL = '现场照片';
+</script>
 <script src="./pc-point-modal.js"></script>
 
 
+    <script src="ui-modal.js"></script>
 </body></html>

@@ -1402,6 +1402,7 @@ body {
     50% { opacity: 0.45; }
 }
 </style>
+    <link rel="stylesheet" href="ui-modal.css">
 </head>
 <body>
 
@@ -1411,7 +1412,7 @@ body {
         <div class="page-title" style="margin-top:8px">
             <i class="fa-solid fa-clipboard-check"></i>
             <span>风险隐患核实</span>
-            <a href="rural-warning-management.html" class="btn btn-secondary page-title-btn">
+            <a href="rural-warning-management.html" class="btn btn-secondary page-title-btn" id="backToWarningMgmtBtn">
                 <i class="fa-solid fa-arrow-left"></i> 返回风险隐患管理
             </a>
         </div>
@@ -1612,7 +1613,7 @@ body {
                 <span class="info-value" id="house-phone">-</span>
             </div>
             <div class="info-item">
-                <span class="info-label">房屋结构</span>
+                <span class="info-label">结构类型</span>
                 <span class="info-value" id="house-structure">-</span>
             </div>
             <div class="info-item">
@@ -1624,7 +1625,7 @@ body {
                 <span class="info-value" id="house-area">-</span>
             </div>
             <div class="info-item">
-                <span class="info-label">建造年代</span>
+                <span class="info-label">建成时间</span>
                 <span class="info-value" id="house-year">-</span>
             </div>
             <div class="info-item">
@@ -1741,16 +1742,16 @@ body {
                 <div class="decision-option-form" id="pass-form">
                     <div class="risk-confirm-group">
                         <div class="risk-confirm-label">隐患等级确认 <span class="required">*</span></div>
-                        <select class="risk-select">
+                        <select class="risk-select" id="pass-level-select">
                             <option value="">请选择隐患等级</option>
-                            <option value="red">严重安全隐患</option>
-                            <option value="yellow">一定安全隐患</option>
-                            <option value="blue">未发现安全隐患</option>
+                            <option value="第三类">存在严重安全隐患（第三类）</option>
+                            <option value="第二类">存在一定安全隐患（第二类）</option>
+                            <option value="第一类">未发现安全隐患（第一类）</option>
                         </select>
                     </div>
                     <div class="form-group" style="margin-top: 12px;">
                         <label class="form-label">核实意见 <span class="required">*</span></label>
-                        <textarea class="form-textarea" placeholder="请输入核实意见..."></textarea>
+                        <textarea class="form-textarea" id="pass-opinion" placeholder="请输入核实意见..."></textarea>
                     </div>
                 </div>
             </div>
@@ -1768,7 +1769,7 @@ body {
                 <div class="decision-option-form" id="reject-form">
                     <div class="form-group">
                         <label class="form-label">驳回/退回原因 <span class="required">*</span></label>
-                        <textarea class="form-textarea" placeholder="请输入驳回/退回原因..."></textarea>
+                        <textarea class="form-textarea" id="reject-reason" placeholder="请输入驳回/退回原因..."></textarea>
                     </div>
                 </div>
             </div>
@@ -1790,7 +1791,7 @@ body {
             <button class="btn btn-secondary" onclick="saveDraft()" style="flex: 1; height: 44px; justify-content: center;">
                 <i class="fa-solid fa-floppy-disk"></i> 暂存
             </button>
-            <button class="btn btn-primary" id="submit-btn" style="flex: 1; height: 44px; justify-content: center;">
+            <button class="btn btn-primary" id="submit-btn" onclick="submitAudit()" style="flex: 1; height: 44px; justify-content: center;">
                 <i class="fa-solid fa-check"></i> 确认提交
             </button>
         </div>
@@ -1970,8 +1971,107 @@ function applyExpert() {
     alert('已申请专家/机构评估');
 }
 
+function getSelectedDecision() {
+    if (document.getElementById('pass-option').classList.contains('selected')) return 'pass';
+    if (document.getElementById('reject-option').classList.contains('rejected')) return 'reject';
+    if (document.getElementById('expert-option').classList.contains('expert-selected')) return 'expert';
+    return '';
+}
+
+function getNowStr() {
+    var now = new Date();
+    var pad = function(n) { return n < 10 ? '0' + n : n; };
+    return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+}
+
 function saveDraft() {
-    alert('已暂存');
+    var no = getUrlParam('no');
+    if (!no) { showToast('warning', '无法暂存', '未找到隐患记录'); return; }
+    var draft = {
+        decision: getSelectedDecision(),
+        level: (document.getElementById('pass-level-select') || {}).value || '',
+        opinion: (document.getElementById('pass-opinion') || {}).value || '',
+        rejectReason: (document.getElementById('reject-reason') || {}).value || '',
+        savedAt: getNowStr()
+    };
+    try {
+        localStorage.setItem('auditDraft_' + no, JSON.stringify(draft));
+        showToast('success', '已暂存', '核实草稿已保存（' + draft.savedAt + '），\n下次进入本页将自动回填');
+    } catch (e) {
+        showToast('warning', '暂存失败', '浏览器存储不可用');
+    }
+}
+
+function clearAuditDraft(no) {
+    try { localStorage.removeItem('auditDraft_' + no); } catch (e) {}
+}
+
+function restoreAuditDraft() {
+    var no = getUrlParam('no');
+    if (!no) return;
+    var draft = null;
+    try { draft = JSON.parse(localStorage.getItem('auditDraft_' + no) || 'null'); } catch (e) { return; }
+    if (!draft || !draft.decision) return;
+    if (draft.decision === 'pass') {
+        document.getElementById('pass-option').click();
+        if (draft.level) document.getElementById('pass-level-select').value = draft.level;
+        if (draft.opinion) document.getElementById('pass-opinion').value = draft.opinion;
+    } else if (draft.decision === 'reject') {
+        document.getElementById('reject-option').click();
+        if (draft.rejectReason) document.getElementById('reject-reason').value = draft.rejectReason;
+    }
+}
+
+// 确认提交：审核意见（核实通过 / 驳回）
+function submitAudit() {
+    var decision = getSelectedDecision();
+    if (!decision) {
+        showToast('warning', '请选择审核意见', '请选择「核实通过」或「驳回/退回」后再提交');
+        return;
+    }
+    if (decision === 'expert') {
+        showToast('warning', '请先完成专家/机构评估申请', '如需专家评估，请在弹出面板中提交申请；\n否则请改选「核实通过」或「驳回/退回」');
+        return;
+    }
+    var no = getUrlParam('no');
+    if (!no || typeof getHouseRecord !== 'function' || typeof setHouseRecord !== 'function') {
+        showToast('warning', '无法提交', '未找到对应的隐患记录');
+        return;
+    }
+    var rec = getHouseRecord(no);
+    if (!rec) {
+        showToast('warning', '无法提交', '未找到房屋档案：' + no);
+        return;
+    }
+    var timeStr = getNowStr();
+
+    if (decision === 'pass') {
+        var level = document.getElementById('pass-level-select').value;
+        var opinion = document.getElementById('pass-opinion').value.trim();
+        if (!level) { showToast('warning', '请确认隐患等级', '核实通过前请选择确认后的隐患等级'); return; }
+        if (!opinion) { showToast('warning', '请填写核实意见', ''); return; }
+
+        rec.auditStatus = '已通过';
+        rec.audit = { result: '已通过', level: level, opinion: opinion, time: timeStr, auditor: '当前用户' };
+        // 确认等级写回：隐患条目与房屋风险等级同步（确认为第一类时将退出隐患清单）
+        if (Array.isArray(rec.hazards)) rec.hazards.forEach(function(h) { h.level = level; });
+        rec.riskLevel = level;
+        rec.riskDisplayLevel = level;
+        setHouseRecord(no, rec);
+        clearAuditDraft(no);
+        showToast('success', '核实通过', '隐患等级已确认为「' + level + '」，\n该隐患进入待分发流程');
+    } else {
+        var reason = document.getElementById('reject-reason').value.trim();
+        if (!reason) { showToast('warning', '请填写驳回/退回原因', ''); return; }
+
+        rec.auditStatus = '已驳回';
+        rec.closeStatus = '已驳回';
+        rec.audit = { result: '已驳回', reason: reason, time: timeStr, auditor: '当前用户' };
+        setHouseRecord(no, rec);
+        clearAuditDraft(no);
+        showToast('success', '已驳回', '该隐患已退回上报人补充，\n状态更新为「已驳回」');
+    }
+    setTimeout(function() { window.location.href = 'rural-warning-management.html'; }, 1500);
 }
 
 function toggleExpertPanel() {
@@ -2568,11 +2668,34 @@ window.addEventListener('message', function(e) {
         if (el) el.innerHTML = html;
     }
 
-    function loadData() {
+    // 结构类型枚举归一化：砖混/砖木/钢结构/混杂结构/木结构/其他
+function normalizeStructureType(v) {
+    const s = String(v || '');
+    if (!s) return '';
+    if (s.indexOf('砖混') >= 0 || s.indexOf('砌体') >= 0) return '砖混';
+    if (s.indexOf('砖木') >= 0) return '砖木';
+    if (s.indexOf('钢') >= 0 || s.indexOf('框架') >= 0) return '钢结构';
+    if (s.indexOf('混杂') >= 0 || s.indexOf('土木') >= 0) return '混杂结构';
+    if (s.indexOf('木') >= 0) return '木结构';
+    return '其他';
+}
+function loadData() {
         if (typeof initHouseArchSeed !== 'function' || typeof getHouseRecord !== 'function') return;
         initHouseArchSeed();
         const no = getUrlParam('no');
         if (!no) return;
+
+        // 从房屋档案跳转而来时，返回按钮回到档案页（页面跳转及返回）
+        if (getUrlParam('from') === 'archive') {
+            const backBtn = document.getElementById('backToWarningMgmtBtn');
+            if (backBtn) {
+                const category = getUrlParam('category') || '农村自建房';
+                const mode = getUrlParam('mode') || 'draft';
+                backBtn.href = 'house-arch-detail-rural.html?no=' + encodeURIComponent(no) +
+                    '&category=' + encodeURIComponent(category) + '&mode=' + encodeURIComponent(mode);
+                backBtn.innerHTML = '<i class="fa-solid fa-arrow-left"></i> 返回房屋档案';
+            }
+        }
 
         const rec = getHouseRecord(no);
         if (!rec) return;
@@ -2617,7 +2740,7 @@ window.addEventListener('message', function(e) {
         setText('house-address', ov.address || rec.address || '-');
         setText('house-owner', ov.owner || rec.owner || '-');
         setText('house-phone', ov.phone || rec.phone || rec.managerPhone || '-');
-        setText('house-structure', structure.structureType || rec.category || '-');
+        setText('house-structure', normalizeStructureType(structure.structureType || rec.category) || '-');
         setText('house-floors', structure.floors || '-');
         setText('house-area', structure.buildingArea || '-');
         setText('house-year', rec.year || '-');
@@ -2691,6 +2814,17 @@ window.addEventListener('message', function(e) {
                     completed: true
                 });
             }
+            if (rec.audit) {
+                items.push({
+                    title: rec.audit.result === '已通过' ? '核实通过' : '核实驳回',
+                    user: rec.audit.auditor || '核实人员',
+                    time: formatDateTime(rec.audit.time),
+                    desc: rec.audit.result === '已通过'
+                        ? ('确认隐患等级：' + (rec.audit.level || '-') + '；核实意见：' + (rec.audit.opinion || '-'))
+                        : ('驳回原因：' + (rec.audit.reason || '-')),
+                    completed: true
+                });
+            }
             if (manage.length) {
                 items.push({
                     title: '任务分配',
@@ -2739,13 +2873,15 @@ window.addEventListener('message', function(e) {
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() { loadData(); loadLinkedDispatchTasks(getUrlParam('no')); });
+        document.addEventListener('DOMContentLoaded', function() { loadData(); loadLinkedDispatchTasks(getUrlParam('no')); restoreAuditDraft(); });
     } else {
         loadData();
         loadLinkedDispatchTasks(getUrlParam('no'));
+        restoreAuditDraft();
     }
 })();
 </script>
 
 
+    <script src="ui-modal.js"></script>
 </body></html>

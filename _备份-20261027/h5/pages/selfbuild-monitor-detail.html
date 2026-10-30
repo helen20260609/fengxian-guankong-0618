@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>自建房监测详情</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/tokens.css">
+    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../assets/css/h5-frame.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        .page-body { padding: 0; padding-bottom: calc(var(--space) + var(--safe-bottom)); }
+
+        /* 顶部 Hero */
+        .knowledge-hero {
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #1d4ed8 100%);
+            margin-top: -34px;
+            padding: calc(34px + 4px) 18px 12px;
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 85px;
+        }
+        .knowledge-hero::before {
+            content: '';
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            right: -50px;
+            top: -20px;
+            background: radial-gradient(circle, rgba(255,255,255,.18), transparent 70%);
+            border-radius: 50%;
+        }
+        .knowledge-hero .kh-back {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            position: relative;
+            z-index: 2;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .knowledge-hero .hero-title { flex: 1; position: relative; z-index: 2; text-align: center; padding-right: 32px; }
+        .knowledge-hero h1 { font-size: 17px; font-weight: 600; }
+
+        /* 头部实时数据区域（融合 Hero 下方） */
+        .hero-data {
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #1d4ed8 100%);
+            margin-top: 0;
+            padding: 12px var(--space) 24px;
+            color: #fff;
+            position: relative;
+        }
+        .hero-data .meta-line {
+            display: flex;
+            gap: var(--space-sm);
+            font-size: var(--font-sm);
+            opacity: 0.9;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .hero-data .meta-line span { display: flex; align-items: center; gap: 4px; }
+        .hero-data .value-line { display: flex; align-items: baseline; gap: 8px; }
+        .hero-data .value-number { font-size: 48px; font-weight: 700; line-height: 1; }
+        .hero-data .value-unit { font-size: 18px; font-weight: 500; opacity: 0.9; }
+        .hero-data .status-tag.alarm { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 999px; font-size: var(--font-sm); font-weight: 600; margin-top: 12px; background: #dc2626; color: #fff; box-shadow: 0 2px 8px rgba(220, 38, 38, .35); }
+        .hero-data .status-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 999px; font-size: var(--font-sm); font-weight: 600; margin-top: 12px; background: rgba(255,255,255,.25); color: #fff; }
+
+        /* 内容卡片（向上顶入 Hero 区域） */
+        .content-card {
+            background: var(--bg-card);
+            margin: calc(-18px) var(--space) var(--space);
+            border-radius: var(--radius-lg);
+            padding: var(--space);
+            box-shadow: 0 2px 12px var(--shadow);
+            position: relative;
+            z-index: 2;
+        }
+
+        /* 时间筛选 */
+        .time-filter { display: flex; gap: 8px; margin-bottom: var(--space); }
+        .time-tag {
+            flex: 1;
+            text-align: center;
+            padding: 8px 0;
+            border-radius: var(--radius-sm);
+            font-size: var(--font-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .time-tag.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        .trend-chart { height: 220px; position: relative; background: var(--bg-dark); border-radius: var(--radius); overflow: hidden; margin-bottom: var(--space); }
+        .chart-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+            font-size: var(--font-sm);
+            flex-direction: column;
+            gap: 8px;
+        }
+        .chart-placeholder i { font-size: 32px; color: var(--border); }
+
+        /* 监测统计 */
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        .stat-box { padding: 14px; background: var(--bg-dark); border-radius: var(--radius); }
+        .stat-box-label { font-size: var(--font-xs); color: var(--text-secondary); margin-bottom: 6px; }
+        .stat-box-value { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="side-button side-button-left mute"></div>
+        <div class="side-button side-button-left volume-up"></div>
+        <div class="side-button side-button-left volume-down"></div>
+        <div class="side-button side-button-right power"></div>
+        <div class="phone-shell">
+            <div class="status-bar light">
+                <span class="sb-time" id="statusTime">9:41</span>
+                <span class="sb-icons">
+                    <i class="fa-solid fa-signal"></i>
+                    <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                    <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+                </span>
+            </div>
+
+            <div class="knowledge-hero">
+                <div class="kh-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+                <div class="hero-title"><h1>自建房监测详情</h1></div>
+            </div>
+
+            <div class="hero-data">
+                <div class="meta-line">
+                    <span id="houseId">自建房 · 倾斜率</span>
+                    <span><i class="fa-solid fa-location-dot"></i> <span id="houseLocation">--</span></span>
+                </div>
+                <div class="value-line">
+                    <span class="value-number" id="realtimeValue">--</span>
+                    <span class="value-unit" id="realtimeUnit">‰</span>
+                </div>
+                <div class="status-tag" id="statusTag">
+                    <i class="fa-solid fa-circle-question" id="statusIcon"></i>
+                    <span id="statusText">--</span>
+                </div>
+            </div>
+
+            <div class="page-body">
+                <div class="content-card">
+                    <!-- 历史趋势 -->
+                    <div class="time-filter">
+                        <div class="time-tag active" onclick="switchTimeRange(this, '24h')">24小时</div>
+                        <div class="time-tag" onclick="switchTimeRange(this, '7d')">7天</div>
+                        <div class="time-tag" onclick="switchTimeRange(this, '30d')">30天</div>
+                    </div>
+                    <div class="trend-chart" id="trendChart">
+                        <div class="chart-placeholder" id="chartPlaceholder">
+                            <i class="fa-solid fa-chart-area"></i>
+                            <span>趋势图表区域</span>
+                        </div>
+                    </div>
+
+                    <!-- 监测统计 -->
+                    <div class="stats-summary">
+                        <div class="stat-box">
+                            <div class="stat-box-label">最大值</div>
+                            <div class="stat-box-value" id="maxValue">--</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-box-label">最小值</div>
+                            <div class="stat-box-value" id="minValue">--</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-box-label">平均值</div>
+                            <div class="stat-box-value" id="avgValue">--</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-box-label">更新次数</div>
+                            <div class="stat-box-value" id="updateCount">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+// 自建房监测点扩展数据（与 DataStore.monitoringPoints 的 MP-0006 对应）
+const selfbuildData = {
+    'MP-0006': {
+        location: '奉贤区青村镇青村中路 128 号',
+        coordinates: '121.5123, 30.8901',
+        structure: '砖混结构',
+        buildYear: '1988年',
+        floors: '3层',
+        area: '约 180㎡',
+        device: '无线倾斜监测仪',
+        installDate: '2024-09-10',
+        manufacturer: '上海某监测科技',
+        model: 'TILT-2024A',
+        serialNo: 'TILT20240910001',
+        alarmThreshold: '≥5.0‰',
+        warningThreshold: '≥3.5‰',
+        tags: ['C级危房', '重点监测', '独居老人'],
+        alarmRecords: [
+            { time: '2025-06-26 14:28:33', type: 'alarm', desc: '倾斜率超过报警阈值', value: '4.8‰' },
+            { time: '2025-06-25 16:42:11', type: 'warning', desc: '倾斜率接近报警阈值', value: '3.6‰' },
+            { time: '2025-06-20 09:15:22', type: 'warning', desc: '倾斜率波动异常', value: '3.4‰' }
+        ]
+    }
+};
+
+const statusMap = {
+    green:  { label: '正常', icon: 'fa-circle-check', color: '#22c55e' },
+    yellow: { label: '预警', icon: 'fa-triangle-exclamation', color: '#f59e0b' },
+    orange: { label: '预警', icon: 'fa-triangle-exclamation', color: '#f59e0b' },
+    red:    { label: '报警', icon: 'fa-circle-exclamation', color: '#ef4444' }
+};
+
+var chart = null;
+
+function initPage() {
+    var id = App.getQuery('id') || 'MP-0006';
+    var point = DataStore.monitoringPoints.find(function(m) { return m.id === id; });
+
+    if (!point || point.domain !== 'selfbuild') {
+        App.showToast('自建房监测点不存在');
+        setTimeout(function() { App.back(); }, 1500);
+        return;
+    }
+
+    var extra = selfbuildData[id] || {};
+    var status = statusMap[point.status] || statusMap.red;
+
+    // 头部信息
+    document.getElementById('houseId').textContent = '自建房 · 倾斜率';
+    document.getElementById('houseLocation').textContent = extra.location || '奉贤区青村镇';
+
+    // 实时数值
+    document.getElementById('realtimeValue').textContent = point.value;
+    document.getElementById('realtimeUnit').textContent = point.unit || '‰';
+
+    // 状态标签
+    var tagEl = document.getElementById('statusTag');
+    tagEl.className = 'status-tag' + (status.label === '报警' ? ' alarm' : '');
+    document.getElementById('statusIcon').className = 'fa-solid ' + status.icon;
+    document.getElementById('statusText').textContent = status.label;
+
+    // 初始化图表
+    initChart(point);
+    renderTrend('24h', point);
+}
+
+function initChart(point) {
+    var chartEl = document.getElementById('trendChart');
+    chartEl.innerHTML = '';
+    chart = echarts.init(chartEl);
+}
+
+function renderTrend(range, point) {
+    if (!chart) return;
+
+    var all = point.history || [];
+    var data = [];
+
+    if (range === '24h') {
+        data = all.slice(-7).map(function(h) {
+            return { time: h.time.substring(11, 16), value: h.value };
+        });
+    } else if (range === '7d') {
+        data = all.slice(-7).map(function(h) {
+            return { time: h.time.substring(5, 10), value: h.value };
+        });
+    } else {
+        data = all.map(function(h, idx) {
+            if (idx % 3 !== 0) return null;
+            return { time: h.time.substring(5, 10), value: h.value };
+        }).filter(Boolean);
+    }
+
+    var values = data.map(function(d) { return d.value; });
+    if (!values.length) {
+        document.getElementById('maxValue').textContent = '--';
+        document.getElementById('minValue').textContent = '--';
+        document.getElementById('avgValue').textContent = '--';
+        document.getElementById('updateCount').textContent = '--';
+        chart.clear();
+        return;
+    }
+
+    var max = Math.max.apply(null, values);
+    var min = Math.min.apply(null, values);
+    var avg = values.reduce(function(a, b) { return a + b; }, 0) / values.length;
+
+    document.getElementById('maxValue').textContent = max.toFixed(2) + point.unit;
+    document.getElementById('minValue').textContent = min.toFixed(2) + point.unit;
+    document.getElementById('avgValue').textContent = avg.toFixed(2) + point.unit;
+    document.getElementById('updateCount').textContent = point.history ? point.history.length : 0;
+
+    var status = statusMap[point.status] || statusMap.red;
+    var hexColor = status.color;
+
+    chart.setOption({
+        grid: { left: 10, right: 10, top: 30, bottom: 20, containLabel: true },
+        tooltip: { trigger: 'axis' },
+        xAxis: {
+            type: 'category',
+            data: data.map(function(d) { return d.time; }),
+            axisLine: { lineStyle: { color: '#e5e7eb' } },
+            axisLabel: { color: '#6b7280', fontSize: 11, interval: 'auto' },
+            axisTick: { alignWithLabel: true }
+        },
+        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#6b7280', fontSize: 11 } },
+        series: [{
+            data: values,
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 6,
+            lineStyle: { color: hexColor, width: 3 },
+            itemStyle: { color: hexColor },
+            areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: hexColor + '40' }, { offset: 1, color: hexColor + '05' }] } }
+        }]
+    }, true);
+    setTimeout(function() { chart.resize(); }, 100);
+}
+
+function switchTimeRange(el, range) {
+    document.querySelectorAll('.time-tag').forEach(function(tag) { tag.classList.remove('active'); });
+    el.classList.add('active');
+    var id = App.getQuery('id') || 'MP-0006';
+    var point = DataStore.monitoringPoints.find(function(m) { return m.id === id; });
+    if (point) renderTrend(range, point);
+}
+
+initPage();
+</script>
+</body>
+</html>

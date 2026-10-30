@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>分级响应指挥</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.page-hero .ph-sub { display: none; }
+
+/* 修复底部筛选抽屉：使用标准底部弹窗过渡方案，避免 base.css 默认显示问题 */
+.modal-sheet {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 80%;
+    display: flex !important;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: transform .25s ease, opacity .25s ease;
+    z-index: 1001;
+    background: var(--card);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.modal-sheet.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.modal-mask { display: none; opacity: 0; transition: opacity .25s ease; z-index: 1000; }
+.modal-mask.show { display: block; opacity: 1; }
+.sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sheet-title { font-size: 16px; font-weight: 700; }
+.sheet-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--text2); cursor: pointer; }
+.sheet-footer { display: flex; gap: 12px; padding: 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.sheet-footer .btn { flex: 1; height: 44px; border-radius: 10px; }
+.sheet-body { padding: 16px; flex: 1; overflow-y: auto; min-height: 0; }
+.sheet-body::-webkit-scrollbar { display: none; }
+.filter-section { margin-bottom: 18px; }
+.filter-section .filter-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px; }
+.filter-section .filter-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.filter-chip { padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text-primary); cursor: pointer; transition: all .15s; word-break: break-word; }
+.filter-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.filter-input-field { width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); font-size: 14px; background: var(--input-bg); color: var(--text-primary); font-family: inherit; box-sizing: border-box; }
+.filter-input-field:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(var(--primary-rgb),.1); }
+.date-range-row { display: flex; align-items: center; gap: 10px; }
+.date-range-row .filter-input-field { flex: 1; }
+.date-range-row span { color: var(--text2); font-size: 13px; flex-shrink: 0; }
+
+.content-sheet.page-body-sheet { margin-top: 0; padding-top: 18px; border-radius: 0; box-shadow: none; border: none; background: transparent; }
+.content-sheet .search-bar { align-items: center; gap: 10px; margin-top: 4px; background: transparent; box-shadow: none; border: none; padding: 0; }
+.content-sheet .search-input-wrapper { display: flex; align-items: center; background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); min-height: 40px; }
+.content-sheet .search-input-wrapper input { background: transparent; border-color: transparent; height: 40px; padding-top: 0; padding-bottom: 0; }
+.content-sheet .filter-trigger {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 14px;
+    background: var(--card);
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 8px var(--shadow);
+    cursor: pointer;
+    position: relative;
+    transition: all .15s;
+}
+.content-sheet .filter-trigger.active { color: var(--primary); border-color: var(--primary); background: rgba(var(--primary-rgb),.08); }
+.content-sheet .filter-trigger:active { transform: scale(.96); }
+.content-sheet .filter-trigger .badge-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    border: 1.5px solid var(--card);
+    display: none;
+}
+.content-sheet .filter-trigger .badge-num {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid var(--card);
+    box-sizing: border-box;
+}
+
+.search-input-wrapper .clear-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--text2);
+    color: #fff;
+    font-size: 10px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+}
+
+.level-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 2px;
+}
+.level-tabs::-webkit-scrollbar { display: none; }
+.level-tab {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 0;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all .15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+.level-tab.active { color: #fff; border-color: transparent; }
+.level-tab .dot { width: 7px; height: 7px; border-radius: 50%; }
+
+.level-tab.all.active { background: var(--primary); }
+.level-tab.level-1.active { background: var(--danger); }
+.level-tab.level-2.active { background: #e65100; }
+.level-tab.level-3.active { background: #c78000; }
+.level-tab.level-4.active { background: var(--primary); }
+
+.level-tab .dot.level-1 { background: var(--danger); }
+.level-tab .dot.level-2 { background: #e65100; }
+.level-tab .dot.level-3 { background: #c78000; }
+.level-tab .dot.level-4 { background: var(--primary); }
+.level-tab.active .dot { background: #fff; }
+
+.selected-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.tag { background: rgba(var(--primary-rgb),.08); color: var(--primary); border: 1px solid rgba(var(--primary-rgb),.18); border-radius: 999px; padding: 4px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.tag i { cursor: pointer; font-size: 10px; }
+
+/* 卡片容器 */
+.response-card {
+    cursor: pointer;
+    transition: transform .12s;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    border: none;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.response-card:active { transform: scale(.99); }
+
+.response-card-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 12px;
+}
+.response-card-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.response-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    background: #1677FF;
+}
+.response-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.2;
+}
+.response-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1F1F1F;
+}
+.response-position {
+    font-size: 12px;
+    font-weight: 500;
+    color: #fff;
+    background: #1677FF;
+    padding: 2px 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+    max-width: 80px;
+}
+.response-duties {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.response-phone {
+    font-size: 14px;
+    font-weight: 400;
+    color: #595959;
+    font-family: Arial, "Helvetica Neue", DIN, "PingFang SC", sans-serif;
+    letter-spacing: .5px;
+}
+.response-call-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.call-btn-large {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #E6FFED;
+    color: #52C41A;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    text-decoration: none;
+    transition: all .15s;
+}
+.call-btn-large:active { transform: scale(.94); background: #52C41A; color: #fff; }
+.call-btn-large.disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
+.call-btn-text { display: none; }
+.duty-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 400;
+    border: none;
+    line-height: 1.3;
+    flex-shrink: 0;
+}
+.duty-chip.level-1 { color: #F5222D; background: #FFF1F0; }
+.duty-chip.level-2 { color: #FA8C16; background: #FFF7E6; }
+.duty-chip.level-3 { color: #D48806; background: #FFFBF0; }
+.duty-chip.level-4 { color: #1677FF; background: #E6F4FF; }
+.duty-chip.empty { color: #8C8C8C; background: #F5F5F5; }
+.duty-chip.na { color: #8C8C8C; background: #F5F5F5; }
+.duty-chip.highlight { opacity: 1; }
+.duty-chip .level-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.duty-chip.level-1 .level-dot { background: #F5222D; }
+.duty-chip.level-2 .level-dot { background: #FA8C16; }
+.duty-chip.level-3 .level-dot { background: #D48806; }
+.duty-chip.level-4 .level-dot { background: #1677FF; }
+.duty-chip.empty .level-dot,
+.duty-chip.na .level-dot { background: #8C8C8C; }
+
+    function buildDutyChips(item) {
+        var levelMap = { '1': 'level-1', '2': 'level-2', '3': 'level-3', '4': 'level-4' };
+        var levels = ['1','2','3','4'];
+
+        if (currentLevel !== 'all') {
+            var single = getLevelDuty(item, parseInt(currentLevel, 10));
+            if (single.type !== 'duty') return '<div class="duty-chip na"><span class="level-dot"></span>不适用</div>';
+            var cls = levelMap[currentLevel];
+            return '<div class="duty-chip ' + cls + ' highlight"><span class="level-dot"></span>' + App.escapeHtml(single.value) + '</div>';
+        }
+
+        // 全部状态：只展示最高级别下的单一标签
+        for (var i = 0; i < levels.length; i++) {
+            var l = levels[i];
+            var d = getLevelDuty(item, parseInt(l, 10));
+            if (d.type === 'duty') {
+                return '<div class="duty-chip ' + levelMap[l] + '"><span class="level-dot"></span>' + App.escapeHtml(d.value) + '</div>';
+            }
+        }
+        return '<div class="duty-chip empty"><span class="level-dot"></span>—</div>';
+    }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="phone-shell">
+        <div class="status-bar light">
+            <span class="sb-time" id="statusTime">9:41</span>
+            <span class="sb-icons">
+                <i class="fa-solid fa-signal"></i>
+                <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+            </span>
+        </div>
+
+        <div class="page-hero">
+            <div class="ph-back" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+            <div class="ph-title">分级响应指挥</div>
+        </div>
+
+        <div class="content-sheet page-body-sheet">
+            <div class="search-bar">
+                <div class="search-input-wrapper" style="flex:1">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="搜索姓名、行政职务、电话、响应职务" autocomplete="off">
+                    <button class="clear-btn" id="clearSearch" onclick="clearSearch(event)"><i class="fa-solid fa-times"></i></button>
+                </div>
+                <div class="filter-trigger" id="filterTrigger" onclick="openDrawer()">
+                    <i class="fa-solid fa-filter"></i> 筛选
+                    <span class="badge-dot" id="filterDot"></span>
+                    <span class="badge-num" id="filterBadge" style="display:none">0</span>
+                </div>
+            </div>
+
+            <div class="level-tabs" id="levelTabs">
+                <div class="level-tab all active" data-level="all" onclick="selectLevelTab('all')">
+                    <span class="dot"></span>全部
+                </div>
+                <div class="level-tab level-1" data-level="1" onclick="selectLevelTab('1')">
+                    <span class="dot level-1"></span>I级红
+                </div>
+                <div class="level-tab level-2" data-level="2" onclick="selectLevelTab('2')">
+                    <span class="dot level-2"></span>II级橙
+                </div>
+                <div class="level-tab level-3" data-level="3" onclick="selectLevelTab('3')">
+                    <span class="dot level-3"></span>III级黄
+                </div>
+                <div class="level-tab level-4" data-level="4" onclick="selectLevelTab('4')">
+                    <span class="dot level-4"></span>IV级蓝
+                </div>
+            </div>
+
+            <div class="selected-tags" id="selectedTags"></div>
+
+            <div class="section-v2" id="listSection" style="background:transparent;box-shadow:none;border:none;padding:0;margin:0">
+                <div class="sv2-head" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;padding-left:0">
+                    <div class="sv2-title" style="padding-left:0">
+                        <i class="fa-solid fa-layer-group" style="color:var(--primary);margin-right:6px"></i>指挥名单
+                    </div>
+                    <div class="sv2-more" id="totalCount" style="font-size:13px;color:var(--text2)">共 0 人</div>
+                </div>
+                <div class="card-list" id="cardList"></div>
+                <div class="loading" id="loading" style="display:none"><i class="fa-solid fa-circle-notch fa-spin"></i> 加载中…</div>
+                <div class="empty-state" id="empty" style="display:none">
+                    <i class="fa-regular fa-folder-open"></i>
+                    <div class="empty-title">暂无符合条件的人员</div>
+                    <div class="empty-desc">请调整筛选或搜索条件</div>
+                </div>
+                <div class="bottom-spacer"></div>
+            </div>
+        </div>
+
+        <!-- 筛选抽屉 -->
+        <div class="modal-mask" id="drawerOverlay" onclick="closeDrawer()"></div>
+        <div class="modal-sheet" id="drawer">
+            <div class="sheet-header">
+                <div class="sheet-title">筛选条件</div>
+                <div class="sheet-close" onclick="closeDrawer()"><i class="fa-solid fa-times"></i></div>
+            </div>
+            <div class="sheet-body" id="drawerBody"></div>
+            <div class="sheet-footer">
+                <button class="btn btn-outline" onclick="resetFilters()">重置</button>
+                <button class="btn btn-primary" onclick="confirmFilters()">确定</button>
+            </div>
+        </div>
+    </div>
+    <div class="phone-home-indicator"></div>
+</div>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function(){
+    var dutyOptions = ['全部职务', '总指挥', '常务副总指挥', '副总指挥', '现场总指挥', '行业总指挥', '行业现场总指挥', '行业现场指挥'];
+
+    var embeddedData = [
+        { id: 'rc1', no: '1', name: '张建国', position: '主任', mobilePhone: '138 1234 5678', level1Duty: '总指挥', level2Duty: '总指挥', level3Duty: '', level4Duty: '', reportUnit: '区燃气管理所', reportPerson: '张助理', reportDate: '2025-06-01' },
+        { id: 'rc2', no: '2', name: '李明华', position: '科长', mobilePhone: '139 5678 9012', level1Duty: '总指挥', level2Duty: '总指挥', level3Duty: '行业总指挥', level4Duty: '', reportUnit: '区燃气管理所', reportPerson: '李秘书', reportDate: '2025-06-02' },
+        { id: 'rc3', no: '3', name: '王志强', position: '科长', mobilePhone: '137 9012 3456', level1Duty: '常务副总指挥', level2Duty: '常务副总指挥', level3Duty: '行业总指挥', level4Duty: '行业现场指挥', reportUnit: '区城市综合管理科', reportPerson: '王干事', reportDate: '2025-06-03' },
+        { id: 'rc4', no: '4', name: '陈书记', position: '党委书记', mobilePhone: '136 1111 2222', level1Duty: '总指挥', level2Duty: '总指挥', level3Duty: '', level4Duty: '', reportUnit: '区交通中心', reportPerson: '陈干事', reportDate: '2025-06-04' },
+        { id: 'rc5', no: '5', name: '赵副主任', position: '副主任', mobilePhone: '135 2222 3333', level1Duty: '副总指挥', level2Duty: '副总指挥', level3Duty: '行业总指挥', level4Duty: '行业现场总指挥', reportUnit: '区水务局', reportPerson: '赵助理', reportDate: '2025-06-05' },
+        { id: 'rc6', no: '6', name: '孙丽娜', position: '科员', mobilePhone: '133 3333 4444', level1Duty: '', level2Duty: '现场总指挥', level3Duty: '行业现场总指挥', level4Duty: '行业现场指挥', reportUnit: '区应急管理局', reportPerson: '孙秘书', reportDate: '2025-06-06' }
+    ];
+
+    function getInitialData() {
+        // 每次强制使用最新示例数据，避免旧缓存导致显示脱敏手机号
+        return embeddedData;
+    }
+
+    var allData = getInitialData();
+    var currentLevel = 'all';
+    var selectedFilters = {};
+
+    function shouldShowDuty(position, level) {
+        var pos = String(position || '');
+        if (pos.indexOf('书记') !== -1) {
+            return level !== 3 && level !== 4;
+        }
+        if (pos.indexOf('主任') !== -1 && pos.indexOf('副主任') === -1) {
+            return level !== 4;
+        }
+        return true;
+    }
+
+    function getLevelDuty(item, level) {
+        if (!shouldShowDuty(item.position, level)) return { type: 'na', value: '不适用' };
+        var val = item['level' + level + 'Duty'];
+        return val && String(val).trim() ? { type: 'duty', value: val } : { type: 'empty', value: '—' };
+    }
+
+    function buildDutyChips(item) {
+        var levelMap = { '1': 'level-1', '2': 'level-2', '3': 'level-3', '4': 'level-4' };
+        var levels = ['1','2','3','4'];
+
+        if (currentLevel !== 'all') {
+            var single = getLevelDuty(item, parseInt(currentLevel, 10));
+            if (single.type !== 'duty') return '<div class="duty-chip na"><span class="level-dot"></span>不适用</div>';
+            var cls = levelMap[currentLevel];
+            return '<div class="duty-chip ' + cls + ' highlight"><span class="level-dot"></span>' + App.escapeHtml(single.value) + '</div>';
+        }
+
+        // 全部状态：只取最高级别下的角色（最高级别 = 1 优先级最高）
+        for (var i = 0; i < levels.length; i++) {
+            var l = levels[i];
+            var d = getLevelDuty(item, parseInt(l, 10));
+            if (d.type === 'duty') {
+                return '<div class="duty-chip ' + levelMap[l] + '"><span class="level-dot"></span>' + App.escapeHtml(d.value) + '</div>';
+            }
+        }
+        return '<div class="duty-chip empty"><span class="level-dot"></span>—</div>';
+    }
+
+    function selectLevelTab(level) {
+        currentLevel = level;
+        document.querySelectorAll('.level-tab').forEach(function(el) {
+            el.classList.toggle('active', el.dataset.level === level);
+        });
+        refresh();
+    }
+    window.selectLevelTab = selectLevelTab;
+
+    function getFilteredData() {
+        var keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+        return allData.filter(function(item) {
+            if (currentLevel !== 'all') {
+                var d = getLevelDuty(item, parseInt(currentLevel, 10));
+                if (d.type !== 'duty') return false;
+            }
+            if (keyword) {
+                var hay = (item.name + ' ' + item.position + ' ' + item.mobilePhone + ' ' +
+                    (item.level1Duty || '') + ' ' + (item.level2Duty || '') + ' ' +
+                    (item.level3Duty || '') + ' ' + (item.level4Duty || '') + ' ' +
+                    item.reportUnit + ' ' + item.reportPerson).toLowerCase();
+                if (hay.indexOf(keyword) === -1) return false;
+            }
+            for (var k in selectedFilters) {
+                var val = selectedFilters[k];
+                if (!val || val.indexOf('全部') === 0) continue;
+                if (k === 'duty' && [1,2,3,4].some(function(l) { return item['level' + l + 'Duty'] === val; })) continue;
+                if (k === 'reportUnit' && (item.reportUnit || '').toLowerCase().indexOf(val.toLowerCase()) !== -1) continue;
+                if (k === 'reportDateStart' && item.reportDate && item.reportDate >= val) continue;
+                if (k === 'reportDateEnd' && item.reportDate && item.reportDate <= val) continue;
+                return false;
+            }
+            return true;
+        });
+    }
+
+    function renderTags() {
+        var container = document.getElementById('selectedTags');
+        var tags = [];
+        if (currentLevel !== 'all') {
+            var levelMap = { '1': 'I级红色响应', '2': 'II级橙色响应', '3': 'III级黄色响应', '4': 'IV级蓝色响应' };
+            tags.push({ key: 'level', label: '响应等级：' + levelMap[currentLevel] });
+        }
+        for (var k in selectedFilters) {
+            var val = selectedFilters[k];
+            if (!val || val.indexOf('全部') === 0) continue;
+            var title = '';
+            if (k === 'duty') title = '响应职务';
+            if (k === 'reportUnit') title = '填报单位';
+            if (k === 'reportDateStart') title = '填报日期起';
+            if (k === 'reportDateEnd') title = '填报日期止';
+            tags.push({ key: k, label: title + '：' + val });
+        }
+        container.innerHTML = tags.map(function(t) {
+            return '<div class="tag">' + App.escapeHtml(t.label) + '<i class="fa-solid fa-times" onclick="removeFilter(\'' + t.key + '\')"></i></div>';
+        }).join('');
+    }
+
+    window.removeFilter = function(key) {
+        if (key === 'level') {
+            selectLevelTab('all');
+            return;
+        }
+        delete selectedFilters[key];
+        renderTags();
+        renderFilterDot();
+        refresh();
+    };
+
+    function renderFilterDot() {
+        var activeCount = 0;
+        for (var k in selectedFilters) {
+            var val = selectedFilters[k];
+            if (val && val.indexOf('全部') !== 0) activeCount++;
+        }
+        var badge = document.getElementById('filterBadge');
+        var trigger = document.getElementById('filterTrigger');
+        if (activeCount > 0) {
+            badge.textContent = activeCount;
+            badge.style.display = 'inline-flex';
+            trigger.classList.add('active');
+        } else {
+            badge.style.display = 'none';
+            trigger.classList.remove('active');
+        }
+    }
+
+    function renderCard(item) {
+        var firstChar = item.name ? item.name.charAt(0) : '?';
+        var dutiesHtml = buildDutyChips(item);
+        var phone = item.mobilePhone || '—';
+        var phoneRaw = String(phone).replace(/\s/g, '').replace(/\*/g, '');
+        var hasPhone = phoneRaw.length >= 7;
+        var callBtn = hasPhone
+            ? '<a class="call-btn-large tap" onclick="event.stopPropagation();window.location.href=\'tel:' + App.escapeHtml(phoneRaw) + '\'">' +
+                '<i class="fa-solid fa-phone"></i>' +
+              '</a>'
+            : '<a class="call-btn-large disabled tap"><i class="fa-solid fa-phone"></i></a>';
+
+        return '<div class="response-card tap" onclick="App.go(\'response-command-detail.html?id=' + encodeURIComponent(item.id) + '\')">' +
+            '<div class="response-card-body">' +
+                '<div class="response-avatar">' + App.escapeHtml(firstChar) + '</div>' +
+                '<div class="response-card-main">' +
+                    '<div class="response-name-row">' +
+                        '<div class="response-name">' + App.escapeHtml(item.name) + '</div>' +
+                        '<div class="response-position">' + App.escapeHtml(item.position || '') + '</div>' +
+                    '</div>' +
+                    '<div class="response-phone">' + App.escapeHtml(phone) + '</div>' +
+                    '<div class="response-duties">' + dutiesHtml + '</div>' +
+                '</div>' +
+                '<div class="response-call-col">' + callBtn + '</div>' +
+            '</div>' +
+        '</div>';
+    }
+
+    function renderList() {
+        var data = getFilteredData();
+        var container = document.getElementById('cardList');
+        var empty = document.getElementById('empty');
+        document.getElementById('totalCount').textContent = '共 ' + data.length + ' 人';
+        if (data.length === 0) {
+            container.innerHTML = '';
+            empty.style.display = 'block';
+            return;
+        }
+        empty.style.display = 'none';
+        container.innerHTML = data.map(renderCard).join('');
+    }
+
+    function refresh() {
+        renderTags();
+        renderList();
+    }
+
+    function initSearch() {
+        var input = document.getElementById('searchInput');
+        var clearBtn = document.getElementById('clearSearch');
+        input.addEventListener('input', function() {
+            clearBtn.style.display = input.value ? 'flex' : 'none';
+            refresh();
+        });
+        input.addEventListener('focus', function() { clearBtn.style.display = input.value ? 'flex' : 'none'; });
+    }
+
+    window.clearSearch = function(e) {
+        if (e) e.stopPropagation();
+        document.getElementById('searchInput').value = '';
+        document.getElementById('clearSearch').style.display = 'none';
+        refresh();
+    };
+
+    function renderDrawer() {
+        var body = document.getElementById('drawerBody');
+        var dutyHtml = '<div class="filter-section">' +
+            '<div class="filter-title">响应职务</div>' +
+            '<div class="filter-options">' +
+            dutyOptions.map(function(opt) {
+                var active = selectedFilters.duty === opt || (!selectedFilters.duty && opt.indexOf('全部') === 0);
+                return '<div class="filter-chip ' + (active ? 'active' : '') + '" onclick="selectFilter(\'duty\', \'' + opt + '\')">' + App.escapeHtml(opt) + '</div>';
+            }).join('') +
+            '</div></div>';
+
+        var unitHtml = '<div class="filter-section">' +
+            '<div class="filter-title">填报单位</div>' +
+            '<input type="text" class="filter-input-field" id="drawerReportUnit" placeholder="搜索填报单位" value="' + App.escapeHtml(selectedFilters.reportUnit || '') + '">' +
+            '</div>';
+
+        var dateHtml = '<div class="filter-section">' +
+            '<div class="filter-title">填报日期</div>' +
+            '<div class="date-range-row">' +
+                '<input type="date" class="filter-input-field" id="drawerDateStart" value="' + App.escapeHtml(selectedFilters.reportDateStart || '') + '">' +
+                '<span>至</span>' +
+                '<input type="date" class="filter-input-field" id="drawerDateEnd" value="' + App.escapeHtml(selectedFilters.reportDateEnd || '') + '">' +
+            '</div>' +
+            '</div>';
+
+        body.innerHTML = dutyHtml + unitHtml + dateHtml;
+    }
+
+    window.selectFilter = function(key, val) {
+        selectedFilters[key] = val;
+        renderDrawer();
+    };
+
+    window.openDrawer = function() {
+        renderDrawer();
+        document.getElementById('drawerOverlay').classList.add('show');
+        document.getElementById('drawer').classList.add('show');
+    };
+
+    window.closeDrawer = function() {
+        document.getElementById('drawerOverlay').classList.remove('show');
+        document.getElementById('drawer').classList.remove('show');
+    };
+
+    window.confirmFilters = function() {
+        var unitInput = document.getElementById('drawerReportUnit');
+        var startInput = document.getElementById('drawerDateStart');
+        var endInput = document.getElementById('drawerDateEnd');
+        if (unitInput) selectedFilters.reportUnit = unitInput.value.trim() || undefined;
+        if (startInput && startInput.value) selectedFilters.reportDateStart = startInput.value;
+        else delete selectedFilters.reportDateStart;
+        if (endInput && endInput.value) selectedFilters.reportDateEnd = endInput.value;
+        else delete selectedFilters.reportDateEnd;
+        if (selectedFilters.reportUnit === undefined) delete selectedFilters.reportUnit;
+        renderTags();
+        renderFilterDot();
+        closeDrawer();
+        refresh();
+    };
+
+    window.resetFilters = function() {
+        selectedFilters = {};
+        renderDrawer();
+    };
+
+    function init() {
+        initSearch();
+        renderTags();
+        renderFilterDot();
+        renderList();
+
+        var now = new Date();
+        document.getElementById('statusTime').textContent =
+            String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    }
+
+    init();
+})();
+</script>
+</body>
+</html>

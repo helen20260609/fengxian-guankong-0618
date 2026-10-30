@@ -238,21 +238,21 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     <div class="stat-item">
         <div class="stat-icon blue"><i class="fas fa-building"></i></div>
         <div class="stat-info">
-            <div class="stat-number">128</div>
+            <div class="stat-number" id="orgTotalCount">0</div>
             <div class="stat-label">机构总数</div>
         </div>
     </div>
     <div class="stat-item">
         <div class="stat-icon orange"><i class="fas fa-calendar-plus"></i></div>
         <div class="stat-info">
-            <div class="stat-number">8</div>
+            <div class="stat-number" id="orgMonthNewCount">0</div>
             <div class="stat-label">本月新增</div>
         </div>
     </div>
     <div class="stat-item">
         <div class="stat-icon red"><i class="fas fa-clock"></i></div>
         <div class="stat-info">
-            <div class="stat-number">12</div>
+            <div class="stat-number" id="orgPendingCount">0</div>
             <div class="stat-label">待审核</div>
         </div>
     </div>
@@ -378,14 +378,21 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     <select id="orgFilterRegion" onchange="renderOrgList()">
                         <option value="">全部</option>
                         <option>黄浦区</option>
-                        <option>静安区</option>
                         <option>徐汇区</option>
                         <option>长宁区</option>
-                        <option>浦东新区</option>
-                        <option>杨浦区</option>
+                        <option>静安区</option>
+                        <option>普陀区</option>
                         <option>虹口区</option>
+                        <option>杨浦区</option>
                         <option>闵行区</option>
+                        <option>宝山区</option>
+                        <option>嘉定区</option>
+                        <option>浦东新区</option>
+                        <option>金山区</option>
+                        <option>松江区</option>
+                        <option>青浦区</option>
                         <option>奉贤区</option>
+                        <option>崇明区</option>
                     </select>
                 </div>
                 <div class="filter-actions">
@@ -394,7 +401,6 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 </div>
             </div>
         </div>
-        <div id="orgListCount" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; display: none;"></div>
         <div class="table-wrapper" style="width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;">
         <table class="list-table" id="orgListTable">
             <thead>
@@ -1090,8 +1096,6 @@ function openOrgViewInNewTab(type, orgId) {
     if (cfg) window.open(cfg.url + '?orgId=' + encodeURIComponent(orgId), '_blank');
 }
 
-var orgListData = buildOrgListData();
-
 function renderOrgList(reset) {
     if (reset !== false) {
         filteredOrgList = getOrgFilteredList();
@@ -1107,8 +1111,6 @@ function renderOrgList(reset) {
     if (total === 0) {
         tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-secondary);padding:24px;">暂无符合条件的数据</td></tr>';
         renderOrgPagination(0);
-        document.getElementById('orgListCount').textContent = '共 0 条记录';
-        document.getElementById('orgListCount').style.display = 'none';
         return;
     }
     tbody.innerHTML = pageData.map(function(org) {
@@ -1123,7 +1125,8 @@ function renderOrgList(reset) {
             '<button class="btn btn-outline" onclick="openOrgModal(\'warehouse\', \'' + orgId + '\')">详情</button>' +
             '<button class="btn btn-outline" onclick="openOrgModal(\'contract\', \'' + orgId + '\')">合同</button>' +
             '<button class="btn btn-outline" onclick="openOrgModal(\'performance\', \'' + orgId + '\')">业绩</button>' +
-            '<button class="btn btn-outline" onclick="openOrgModal(\'credit\', \'' + orgId + '\')">信用</button>' : '';
+            '<button class="btn btn-outline" onclick="openOrgModal(\'credit\', \'' + orgId + '\')">信用</button>' +
+            '<a class="btn btn-outline" href="tp-org-apply.html?change=' + encodeURIComponent(orgId) + '" title="发起机构信息变更申请" style="text-decoration:none;">变更</a>' : '';
         return '<tr>' +
             '<td>' + orgName + '</td>' +
             '<td>' + field + '</td>' +
@@ -1138,8 +1141,6 @@ function renderOrgList(reset) {
             '<td>' + actionBtns + '</td>' +
         '</tr>';
     }).join('');
-    document.getElementById('orgListCount').textContent = '共 ' + total + ' 条记录';
-    document.getElementById('orgListCount').style.display = 'none';
     renderOrgPagination(totalPages);
     updateSortHeaders();
 }
@@ -1156,32 +1157,8 @@ function getOrgFilteredList() {
     var region = document.getElementById('orgFilterRegion').value;
     var keywordEl = document.getElementById('orgFilterKeyword');
     var keyword = keywordEl ? keywordEl.value.trim().toLowerCase() : '';
-    var list = orgListData.slice();
-    // 如果统一数据层存在，合并真实机构数据（去重）
-    if (typeof getAllOrgs === 'function') {
-        try {
-            var tpOrgs = getAllOrgs();
-            tpOrgs.forEach(function(o) {
-                var found = list.find(function(x) { return x.code === o.orgCode || x.name === o.orgName; });
-                if (!found) {
-                    list.push({
-                        name: o.orgName,
-                        code: o.orgCode,
-                        legal: o.legalPerson || '-',
-                        phone: o.phone || '-',
-                        credit: o.creditLevel,
-                        score: o.score,
-                        status: o.status,
-                        field: o.field,
-                        qual: o.qual,
-                        region: o.region ? o.region.replace('上海市', '') : '',
-                        established: o.established,
-                        orgId: o.orgId
-                    });
-                }
-            });
-        } catch (e) { console.error('加载统一机构数据失败', e); }
-    }
+    // 每次筛选都从统一数据层实时重建，保证新入库/变更的机构立即可见
+    var list = buildOrgListData();
     var result = list.filter(function(org) {
         var orgField = org.field || '';
         var orgQual = org.qual || '';
@@ -1281,8 +1258,27 @@ function renderOrgPagination(totalPages) {
 
 document.addEventListener('DOMContentLoaded', function() {
     renderOrgList();
+    renderOrgStats();
     renderExpertTotalCount();
 });
+
+function renderOrgStats() {
+    if (typeof getAllOrgs !== 'function') return;
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    var now = new Date();
+    var ym = now.getFullYear() + '-' + pad(now.getMonth() + 1);
+    var elTotal = document.getElementById('orgTotalCount');
+    if (elTotal) elTotal.textContent = getAllOrgs().length;
+    var apps = (typeof getAllOrgApplications === 'function') ? getAllOrgApplications() : [];
+    var elNew = document.getElementById('orgMonthNewCount');
+    if (elNew) elNew.textContent = apps.filter(function(a) { return a.status === '已通过' && (a.approveTime || '').indexOf(ym) === 0; }).length;
+    var pending = apps.filter(function(a) { return a.status === '待审核' || a.status === '审核中'; }).length;
+    if (typeof getAllOrgChangeRequests === 'function') {
+        pending += getAllOrgChangeRequests().filter(function(c) { return c.status === '待审核' || c.status === '审核中'; }).length;
+    }
+    var elPending = document.getElementById('orgPendingCount');
+    if (elPending) elPending.textContent = pending;
+}
 
 function renderExpertTotalCount() {
     var el = document.getElementById('expertTotalCount');
@@ -1293,12 +1289,9 @@ function renderExpertTotalCount() {
 
 // 机构名录查询导出功能
 function exportOrgList(type) {
-    var headers = [];
-    document.querySelectorAll('#orgListTable thead th').forEach(function(th) {
-        headers.push(th.textContent.trim());
-    });
+    var headers = ['机构名称', '专业领域', '资质等级', '信用等级', '统一社会信用代码', '法人代表', '联系电话', '信用评分', '成立时间', '状态'];
     var data = filteredOrgList.map(function(org) {
-        return [org.name, org.field, org.qual, org.credit, org.code, org.legal, org.phone, org.score, org.established, org.region, org.status];
+        return [org.name, org.field, org.qual, org.credit, org.code, org.legal, org.phone, org.score, org.established, org.status];
     });
 
     if (type === 'excel') {

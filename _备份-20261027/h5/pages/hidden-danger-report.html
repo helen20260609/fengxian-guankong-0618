@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>隐患上报</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+
+.map-area { height: 320px; background: #e8f4e9; position: relative; overflow: hidden; border-radius: var(--radius-sm); }
+.map-area::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(0,0,0,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.05) 1px, transparent 1px); background-size: 40px 40px; }
+.map-area::after { content: '地图示意（点击选点）'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: var(--text2); font-size: 12px; pointer-events: none; }
+.map-point { position: absolute; width: 24px; height: 24px; background: var(--danger); border-radius: 50% 50% 50% 0; transform: translate(-50%,-100%) rotate(-45deg); border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); display: none; }
+.map-point.show { display: block; }
+.map-picker-info { padding: 12px 0; font-size: 12px; color: var(--text2); border-bottom: 1px solid var(--border); }
+.map-picker-actions { padding-top: 12px; display: flex; gap: 10px; }
+.map-picker-actions .btn { flex: 1; }
+
+.knowledge-hero { background: linear-gradient(135deg,#60a5fa 0%,#3b82f6 50%,#1d4ed8 100%); margin-top: -34px; padding: calc(34px + 16px) 18px 42px; color: #fff; position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; }
+.knowledge-hero::before { content: ''; position: absolute; width: 160px; height: 160px; right: -50px; top: -20px; background: radial-gradient(circle,rgba(255,255,255,.18),transparent 70%); border-radius: 50%; }
+.knowledge-hero .kh-back { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 17px; position: relative; z-index: 2; flex-shrink: 0; }
+.knowledge-hero .hero-title { flex: 1; position: relative; z-index: 2; }
+.knowledge-hero h1 { font-size: 19px; font-weight: 700; }
+.knowledge-hero p { font-size: 12.5px; opacity: .85; margin-top: 4px; }
+
+.law-body { flex: 1; overflow-y: auto; padding: var(--space); background: var(--card); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="knowledge-hero">
+        <div class="kh-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="hero-title">
+            <h1>隐患上报</h1>
+            <p>发现安全隐患，快速上报处置</p>
+        </div>
+    </div>
+
+    <div class="law-body">
+
+        <!-- 风险基本信息 -->
+        <div class="card anim d1">
+            <div class="form-item">
+                <label>隐患标题 <span class="req">*</span></label>
+                <input type="text" id="hdTitle" placeholder="请输入隐患标题">
+                <div class="error-msg" id="hdTitleError"></div>
+            </div>
+            <div class="form-item">
+                <label>风险类型（从风险清单选择）</label>
+                <div class="risk-picker tap" id="riskPicker">
+                    <div id="riskText">请选择关联风险...</div>
+                </div>
+            </div>
+            <div class="form-item">
+                <label>风险等级 <span class="req">*</span></label>
+                <div class="level-select">
+                    <label class="tap"><input type="radio" name="hdLevel" value="red"><span class="ls-red">红色</span></label>
+                    <label class="tap"><input type="radio" name="hdLevel" value="orange" checked><span class="ls-orange">橙色</span></label>
+                    <label class="tap"><input type="radio" name="hdLevel" value="yellow"><span class="ls-yellow">黄色</span></label>
+                    <label class="tap"><input type="radio" name="hdLevel" value="blue"><span class="ls-blue">蓝色</span></label>
+                </div>
+            </div>
+        </div>
+
+        <!-- 时间与位置 -->
+        <div class="card anim d2">
+            <div class="form-item">
+                <label>发现时间 <span class="req">*</span></label>
+                <input type="datetime-local" id="hdTime">
+                <div class="error-msg" id="hdTimeError"></div>
+            </div>
+            <div class="form-item">
+                <label>隐患地点 <span class="req">*</span></label>
+                <input type="text" id="hdLocation" placeholder="请输入隐患地点">
+                <div class="error-msg" id="hdLocationError"></div>
+            </div>
+            <div class="form-item">
+                <label>位置信息</label>
+                <div class="location-bar">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                    <div id="gpsText">点击获取定位</div>
+                    <button class="btn btn-sm btn-outline tap" type="button" onclick="getLocation()">定位</button>
+                </div>
+                <div style="margin-top:8px">
+                    <button class="btn btn-sm btn-outline btn-block tap" type="button" onclick="openMapPicker()"><i class="fa-solid fa-map" style="margin-right:4px"></i>地图选点</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 风险描述 -->
+        <div class="card anim d3">
+            <div class="form-item">
+                <label>隐患描述 <span class="req">*</span></label>
+                <textarea rows="4" id="hdDesc" placeholder="详细描述隐患情况、影响范围等"></textarea>
+                <div class="error-msg" id="hdDescError"></div>
+            </div>
+        </div>
+
+        <!-- 现场证据 -->
+        <div class="card anim d3">
+            <div class="form-item">
+                <label>现场证据</label>
+                <div class="photo-grid" id="evidenceGrid">
+                    <div class="photo-add tap" onclick="takePhoto()"><i class="fa-solid fa-camera"></i></div>
+                    <div class="photo-add tap" onclick="takeVideo()"><i class="fa-solid fa-video"></i></div>
+                    <div class="photo-add tap" onclick="takeAudio()"><i class="fa-solid fa-microphone"></i></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 风险类型动态字段 -->
+        <div class="card anim d4" id="dynamicFieldsCard" style="display:none">
+            <div class="dynamic-section-title"><i class="fa-solid fa-circle-info"></i><span id="dynamicFieldsTitle">专项信息</span></div>
+            <div class="dynamic-fields" id="dynamicFields"></div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+    </div>
+
+    <div class="bottom-actions">
+        <button class="btn btn-outline tap" onclick="App.back()">取消</button>
+        <button class="btn btn-primary tap" onclick="submitReport()">提交上报</button>
+    </div>
+
+    <!-- 地图选点弹窗 -->
+    <div class="modal-mask" id="mapPickerMask" onclick="closeMapPicker(event)">
+        <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:70vh;">
+            <div class="sheet-header">
+                <div class="sheet-title">地图选点</div>
+                <div class="sheet-close tap" onclick="closeMapPicker()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="map-area" id="mapArea" onclick="pickMapPoint(event)">
+                <div class="map-point" id="mapPoint"></div>
+            </div>
+            <div class="map-picker-info" id="mapPickerInfo">请点击地图选择位置</div>
+            <div class="map-picker-actions">
+                <button class="btn btn-outline tap" onclick="closeMapPicker()">取消</button>
+                <button class="btn btn-primary tap" onclick="confirmMapPoint()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    // 状态栏时间
+    var now = new Date();
+    document.getElementById('statusTime').textContent =
+        String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+    var riskId = App.getQuery('riskId');
+    var taskId = App.getQuery('taskId');
+    var abnormalPoints = (App.getQuery('abnormalPoints') || '').split(',').filter(function(p) { return p; });
+    var relatedRisk = null;
+    var pickedRisk = null;
+    var task = null;
+    var currentDomain = 'other';
+
+    if (riskId) {
+        relatedRisk = RiskData.getDetail(riskId);
+    }
+
+    // 关联任务时回填地点
+    if (taskId) {
+        task = DataStore.getTask(taskId);
+        if (task) {
+            document.getElementById('hdLocation').value = task.area + ' ' + task.location;
+        }
+    }
+
+    // 默认发现时间为当前时间
+    function setDefaultTime() {
+        var d = new Date();
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        document.getElementById('hdTime').value = d.toISOString().slice(0, 16);
+    }
+    setDefaultTime();
+
+    // 风险类型选择器跳转
+    document.getElementById('riskPicker').addEventListener('click', function() {
+        var domain = task && task.domain ? task.domain : '';
+        if (!domain && task) {
+            Object.keys(DataStore.domainInspectionTasks || {}).forEach(function(d) {
+                if ((DataStore.domainInspectionTasks[d] || []).some(function(t) { return t.id === task.id; })) {
+                    domain = d;
+                }
+            });
+        }
+        App.go('risk-list.html?mode=pick' + (domain ? '&domain=' + domain : ''));
+    });
+
+    // 从风险清单选择返回的数据
+    function loadPickedRisk() {
+        var raw = localStorage.getItem('risk-pick-data');
+        if (!raw) return null;
+        try {
+            var data = JSON.parse(raw);
+            if (Date.now() - data.timestamp < 5 * 60 * 1000) {
+                return data;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    // 动态字段模板：按风险领域生成不同表单
+    var DYNAMIC_FIELD_TEMPLATES = {
+        build: {
+            title: '建筑工地专项信息',
+            fields: [
+                { id: 'projectName', label: '工程名称', placeholder: '请输入工程名称' },
+                { id: 'constructionUnit', label: '施工单位', placeholder: '请输入施工单位' },
+                { id: 'projectManager', label: '项目经理', placeholder: '请输入项目经理' },
+                { id: 'workerCount', label: '作业人数', placeholder: '请输入作业人数', type: 'number' }
+            ]
+        },
+        gas: {
+            title: '燃气安全专项信息',
+            fields: [
+                { id: 'facilityType', label: '燃气设施类型', placeholder: '如：中压管线、阀门井' },
+                { id: 'userType', label: '用户类型', placeholder: '居民 / 商业 / 工业' },
+                { id: 'leakStatus', label: '泄漏情况', placeholder: '是否有泄漏、泄漏程度' }
+            ]
+        },
+        traffic: {
+            title: '交通安全专项信息',
+            fields: [
+                { id: 'roadName', label: '道路名称', placeholder: '请输入道路名称' },
+                { id: 'sectionType', label: '路段类型', placeholder: '如：交叉口、施工区' },
+                { id: 'trafficFlow', label: '交通流量', placeholder: '请输入大致流量' }
+            ]
+        },
+        foundation: {
+            title: '基坑工程专项信息',
+            fields: [
+                { id: 'pitDepth', label: '基坑深度（m）', placeholder: '请输入基坑深度', type: 'number' },
+                { id: 'supportType', label: '支护方式', placeholder: '如：排桩、地下连续墙' }
+            ]
+        },
+        curtain: {
+            title: '玻璃幕墙专项信息',
+            fields: [
+                { id: 'buildingHeight', label: '建筑高度（m）', placeholder: '请输入建筑高度', type: 'number' },
+                { id: 'curtainArea', label: '幕墙面积（㎡）', placeholder: '请输入幕墙面积', type: 'number' }
+            ]
+        },
+        falling: {
+            title: '高空坠物专项信息',
+            fields: [
+                { id: 'fallingObject', label: '坠物类型', placeholder: '如：外墙砖、广告牌' },
+                { id: 'height', label: '坠落高度（m）', placeholder: '请输入坠落高度', type: 'number' }
+            ]
+        },
+        selfbuild: {
+            title: '自建房安全专项信息',
+            fields: [
+                { id: 'floorCount', label: '层数', placeholder: '请输入层数', type: 'number' },
+                { id: 'structureType', label: '结构类型', placeholder: '如：砖混、框架' }
+            ]
+        },
+        other: {
+            title: '其他专项信息',
+            fields: [
+                { id: 'remark', label: '补充说明', placeholder: '请输入补充说明' }
+            ]
+        }
+    };
+
+    function renderDynamicFields(domain) {
+        domain = domain || 'other';
+        currentDomain = domain;
+        var tpl = DYNAMIC_FIELD_TEMPLATES[domain] || DYNAMIC_FIELD_TEMPLATES.other;
+        var card = document.getElementById('dynamicFieldsCard');
+        var title = document.getElementById('dynamicFieldsTitle');
+        var container = document.getElementById('dynamicFields');
+
+        title.textContent = tpl.title;
+        container.innerHTML = tpl.fields.map(function(f) {
+            var inputType = f.type || 'text';
+            return '<div class="form-item">' +
+                '<label>' + App.escapeHtml(f.label) + '</label>' +
+                '<input type="' + inputType + '" id="extra_' + f.id + '" placeholder="' + App.escapeHtml(f.placeholder || '') + '" data-key="' + f.id + '" data-label="' + App.escapeHtml(f.label) + '">' +
+            '</div>';
+        }).join('');
+
+        card.style.display = 'block';
+    }
+
+    // 自动回填风险信息
+    function fillRiskInfo(risk) {
+        if (!risk) return;
+        document.getElementById('riskText').textContent = risk.riskIdentify;
+        document.getElementById('riskText').classList.add('rp-selected');
+        document.getElementById('hdTitle').value = risk.main + (risk.sub ? ' - ' + risk.sub : '') + '隐患';
+
+        var descParts = [];
+        if (risk.riskIdentify) descParts.push('风险识别：' + risk.riskIdentify);
+        if (risk.accident) descParts.push('事故类型：' + risk.accident);
+        if (risk.measures) descParts.push('防范措施：' + risk.measures);
+        if (abnormalPoints.length) descParts.push('异常点位：' + abnormalPoints.join('、'));
+        document.getElementById('hdDesc').value = descParts.join('\n\n');
+
+        // 自动选中风险等级
+        var levelInput = document.querySelector('input[name="hdLevel"][value="' + (risk.level || 'orange') + '"]');
+        if (levelInput) levelInput.checked = true;
+
+        // 根据风险领域渲染动态字段
+        renderDynamicFields(risk.domain);
+    }
+
+    pickedRisk = loadPickedRisk();
+    if (pickedRisk) {
+        relatedRisk = pickedRisk;
+        fillRiskInfo(pickedRisk);
+        localStorage.removeItem('risk-pick-data');
+    } else if (relatedRisk) {
+        fillRiskInfo(relatedRisk);
+    } else if (abnormalPoints.length) {
+        document.getElementById('hdDesc').value = '巡查发现以下点位异常：\n' + abnormalPoints.join('\n');
+        renderDynamicFields('other');
+    } else {
+        renderDynamicFields('other');
+    }
+
+    var currentLocation = null;
+    var pickedMapPoint = null;
+    var evidenceList = [];
+
+    window.getLocation = function() {
+        document.getElementById('gpsText').textContent = '定位中...';
+        App.getLocation().then(function(loc) {
+            currentLocation = loc;
+            document.getElementById('gpsText').textContent = loc.lat.toFixed(4) + ', ' + loc.lng.toFixed(4) + '（精度 ' + loc.accuracy + 'm）';
+        });
+    };
+    getLocation();
+
+    // 地图选点
+    window.openMapPicker = function() {
+        document.getElementById('mapPickerMask').classList.add('show');
+    };
+
+    window.closeMapPicker = function(e) {
+        if (e && !e.target.classList.contains('modal-mask') && !e.target.classList.contains('sheet-close')) return;
+        document.getElementById('mapPickerMask').classList.remove('show');
+    };
+
+    window.pickMapPoint = function(e) {
+        var area = document.getElementById('mapArea');
+        var rect = area.getBoundingClientRect();
+        var x = e.clientX - rect.left;
+        var y = e.clientY - rect.top;
+        var point = document.getElementById('mapPoint');
+        point.style.left = x + 'px';
+        point.style.top = y + 'px';
+        point.classList.add('show');
+
+        // 模拟经纬度（以奉贤区为中心，按点击位置偏移）
+        var baseLat = 30.9123;
+        var baseLng = 121.4726;
+        pickedMapPoint = {
+            lat: baseLat + (y / rect.height - 0.5) * 0.04,
+            lng: baseLng + (x / rect.width - 0.5) * 0.06
+        };
+        document.getElementById('mapPickerInfo').textContent = '已选位置：' + pickedMapPoint.lat.toFixed(4) + ', ' + pickedMapPoint.lng.toFixed(4);
+    };
+
+    window.confirmMapPoint = function() {
+        if (!pickedMapPoint) {
+            App.showToast('请先点击地图选择位置');
+            return;
+        }
+        currentLocation = {
+            lat: pickedMapPoint.lat,
+            lng: pickedMapPoint.lng,
+            accuracy: 10
+        };
+        document.getElementById('gpsText').textContent = pickedMapPoint.lat.toFixed(4) + ', ' + pickedMapPoint.lng.toFixed(4) + '（地图选点）';
+        closeMapPicker();
+    };
+
+    function renderEvidence() {
+        var html = '';
+        evidenceList.forEach(function(item, i) {
+            if (item.type === 'photo') {
+                html += '<div class="photo-thumb" style="background-image:url(' + item.url + ')"><div class="remove" onclick="removeEvidence(' + i + ')"><i class="fa-solid fa-xmark"></i></div></div>';
+            } else {
+                var icon = item.type === 'video' ? 'fa-video' : 'fa-microphone';
+                html += '<div class="photo-thumb" style="background:var(--bg-hover);display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text2);font-size: 11px">' +
+                    '<i class="fa-solid ' + icon + '" style="font-size: 19px;margin-bottom:4px"></i>' + item.duration + 's' +
+                    '<div class="remove" onclick="removeEvidence(' + i + ')"><i class="fa-solid fa-xmark"></i></div>' +
+                '</div>';
+            }
+        });
+        html += '<div class="photo-add tap" onclick="takePhoto()"><i class="fa-solid fa-camera"></i></div>' +
+            '<div class="photo-add tap" onclick="takeVideo()"><i class="fa-solid fa-video"></i></div>' +
+            '<div class="photo-add tap" onclick="takeAudio()"><i class="fa-solid fa-microphone"></i></div>';
+        document.getElementById('evidenceGrid').innerHTML = html;
+    }
+
+    window.takePhoto = function() {
+        App.takePhoto().then(function(url) {
+            evidenceList.push({ type: 'photo', url: url });
+            renderEvidence();
+        });
+    };
+
+    window.takeVideo = function() {
+        App.recordVideo().then(function(v) {
+            evidenceList.push({ type: 'video', duration: v.duration });
+            renderEvidence();
+        });
+    };
+
+    window.takeAudio = function() {
+        App.recordAudio().then(function(a) {
+            evidenceList.push({ type: 'audio', duration: a.duration });
+            renderEvidence();
+        });
+    };
+
+    window.removeEvidence = function(idx) {
+        App.confirm('确认删除该证据？', function() {
+            evidenceList.splice(idx, 1);
+            renderEvidence();
+        });
+    };
+
+    function collectDynamicFields() {
+        var tpl = DYNAMIC_FIELD_TEMPLATES[currentDomain] || DYNAMIC_FIELD_TEMPLATES.other;
+        var result = {};
+        tpl.fields.forEach(function(f) {
+            var el = document.getElementById('extra_' + f.id);
+            if (el && el.value.trim()) {
+                result[f.id] = { label: f.label, value: el.value.trim() };
+            }
+        });
+        return result;
+    }
+
+    window.submitReport = function() {
+        var btn = document.activeElement;
+        var title = document.getElementById('hdTitle').value.trim();
+        var reportTime = document.getElementById('hdTime').value;
+        var location = document.getElementById('hdLocation').value.trim();
+        var desc = document.getElementById('hdDesc').value.trim();
+
+        App.clearFormErrors();
+        var v = App.validateForm([
+            { id: 'hdTitle', name: '隐患标题', rules: ['required'] },
+            { id: 'hdTime', name: '发现时间', rules: ['required'] },
+            { id: 'hdLocation', name: '隐患地点', rules: ['required'] },
+            { id: 'hdDesc', name: '隐患描述', rules: ['required'] }
+        ]);
+        if (!v.valid) {
+            if (v.errors[0]) {
+                var firstEl = document.getElementById(v.errors[0].id);
+                if (firstEl) firstEl.focus();
+            }
+            return;
+        }
+
+        if (btn) btn.disabled = true;
+        App.showLoading('提交上报中...');
+        setTimeout(function() {
+            var level = document.querySelector('input[name="hdLevel"]:checked').value;
+            var eventNo = 'HD-' + new Date().getFullYear() + '-' + String(DataStore.hiddenDangers.length + 1).padStart(4, '0');
+            var report = {
+                id: eventNo,
+                title: title,
+                type: relatedRisk ? relatedRisk.main : '其他',
+                level: level,
+                domain: relatedRisk ? relatedRisk.domain : currentDomain,
+                location: location,
+                reportTime: reportTime ? new Date(reportTime).toISOString() : new Date().toISOString(),
+                description: desc,
+                photos: evidenceList.filter(function(e) { return e.type === 'photo'; }).map(function(e) { return e.url; }),
+                videos: evidenceList.filter(function(e) { return e.type === 'video'; }),
+                audios: evidenceList.filter(function(e) { return e.type === 'audio'; }),
+                gps: currentLocation,
+                extra: collectDynamicFields(),
+                status: 'reported',
+                relatedRiskId: relatedRisk ? relatedRisk.riskId : ''
+            };
+            DataStore.addReport(report);
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            App.showToast('上报成功，事件编号：' + eventNo);
+            setTimeout(function() {
+                App.go('hidden-danger-list.html');
+            }, 1500);
+        }, 600);
+    };
+
+    // 实时校验
+    var fields = [
+        { id: 'hdTitle', name: '隐患标题', rules: ['required'] },
+        { id: 'hdTime', name: '发现时间', rules: ['required'] },
+        { id: 'hdLocation', name: '隐患地点', rules: ['required'] },
+        { id: 'hdDesc', name: '隐患描述', rules: ['required'] }
+    ];
+    fields.forEach(function(f) {
+        var el = document.getElementById(f.id);
+        if (!el) return;
+        el.addEventListener('input', function() { App.clearFieldError(f.id); });
+        el.addEventListener('blur', function() { App.validateField(f); });
+    });
+})();
+</script>
+</body>
+</html>

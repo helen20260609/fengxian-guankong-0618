@@ -38,6 +38,21 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .parse-result.show { display: block; }
 .parse-result .ok { color: #188038; }
 .parse-result .bad { color: #d93025; }
+
+/* 友好提示框 */
+.tip-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); z-index: 99999; display: none; align-items: center; justify-content: center; padding: 20px; }
+.tip-overlay.show { display: flex; }
+.tip-box { background: var(--bg-card, #fff); border-radius: 12px; width: 100%; max-width: 380px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.2); animation: tipPop .18s ease-out; }
+@keyframes tipPop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.tip-body { padding: 26px 24px 18px; text-align: center; }
+.tip-icon { font-size: 38px; margin-bottom: 10px; }
+.tip-icon.success { color: #1e8e3e; }
+.tip-icon.warning { color: #e37400; }
+.tip-icon.info { color: var(--primary); }
+.tip-message { font-size: 15px; color: var(--text-primary); line-height: 1.6; }
+.tip-detail { margin-top: 8px; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.tip-footer { padding: 0 24px 20px; display: flex; gap: 12px; justify-content: center; }
+.tip-footer .btn { min-width: 96px; justify-content: center; }
 </style>
 </head>
 <body>
@@ -74,9 +89,48 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     document.documentElement.setAttribute('data-theme', s);
 })();
 
+/* ===== 友好提示与确认框 ===== */
+var tipCallback = null;
+function showTip(message, type, callback) {
+    if (!type) {
+        if (/成功|已提交|已保存|已导入|完成|已通过/.test(message)) type = 'success';
+        else if (/请|暂无|不能|没有|尚未|失败|异常/.test(message)) type = 'warning';
+        else type = 'info';
+    }
+    var iconMap = { success: 'fa-check-circle', warning: 'fa-exclamation-circle', info: 'fa-info-circle' };
+    var icon = document.getElementById('tipIcon');
+    icon.className = 'tip-icon ' + type;
+    icon.innerHTML = '<i class="fas ' + (iconMap[type] || iconMap.info) + '"></i>';
+    document.getElementById('tipMessage').textContent = message;
+    tipCallback = callback || null;
+    document.getElementById('tipModal').classList.add('show');
+}
+function closeTip() {
+    document.getElementById('tipModal').classList.remove('show');
+    if (tipCallback) { var cb = tipCallback; tipCallback = null; cb(); }
+}
+window.alert = function(msg) { showTip(String(msg)); };
+
+var confirmResolve = null;
+function showConfirm(message, detail, okText) {
+    return new Promise(function(resolve) {
+        document.getElementById('confirmMessage').textContent = message;
+        var d = document.getElementById('confirmDetail');
+        if (detail) { d.textContent = detail; d.style.display = 'block'; }
+        else { d.style.display = 'none'; }
+        document.getElementById('confirmOkBtn').textContent = okText || '确 定';
+        confirmResolve = resolve;
+        document.getElementById('confirmModal').classList.add('show');
+    });
+}
+function closeConfirmModal(result) {
+    document.getElementById('confirmModal').classList.remove('show');
+    if (confirmResolve) { var r = confirmResolve; confirmResolve = null; r(!!result); }
+}
+
 var DOMAINS = ['建筑工地','基坑','交通','玻璃幕墙','燃气','高空坠物','城镇自建房','农村自建房'];
 var SERVICE_TYPES = ['应急咨询','安全评估','检测检验','隐患排查'];
-var CONCLUSIONS = ['合格','基本合格','不合格','待验收'];
+var CONCLUSIONS = ['优秀','良好','合格','不合格','待验收'];
 var SOURCES = ['平台录入','合同导入','手工补录','第三方接口'];
 var HEADERS = ['项目名称','机构名称','委托单位','服务领域','服务类型','服务时间','合同金额(万)','验收结论','数据来源','交付物','业绩说明'];
 
@@ -183,49 +237,52 @@ function renderParseResult() {
 
 function doImport() {
     var valid = parsedRows.filter(function(r){ return r._errs.length === 0; });
-    if (!valid.length) { alert('没有可导入的有效数据'); return; }
-    if (!confirm('确认导入 ' + valid.length + ' 条业绩进入审核？')) return;
+    if (!valid.length) { showTip('没有可导入的有效数据', 'warning'); return; }
+    showConfirm('确认导入 ' + valid.length + ' 条业绩进入审核？', '导入后状态为「待审核」，可在审核中心查看进度。', '导 入').then(function(ok) {
+        if (!ok) return;
 
-    var data = getStorage('performanceData');
-    var auditList = getStorage('auditListData');
-    var now = new Date();
-    var dateStr = now.toISOString().slice(0, 10);
-    var timeStr = dateStr + ' ' + now.toTimeString().slice(0, 5);
-    valid.forEach(function(r, i) {
-        var record = {
-            id: Date.now() + i,
-            projectName: r.projectName,
-            orgName: r.orgName,
-            client: r.client,
-            domain: r.domain,
-            serviceType: r.serviceType,
-            serviceTime: r.serviceTime,
-            amount: parseFloat(r.amount) || 0,
-            conclusion: r.conclusion,
-            deliverable: r.deliverable,
-            desc: r.desc,
-            proofFiles: [],
-            auditStatus: '待审核',
-            source: r.source,
-            createTime: dateStr
-        };
-        data.unshift(record);
-        auditList.unshift({
-            id: record.id,
-            type: '业绩导入',
-            title: r.projectName,
-            org: r.orgName,
-            submitTime: timeStr,
-            status: '待审核'
+        var data = getStorage('performanceData');
+        var auditList = getStorage('auditListData');
+        var now = new Date();
+        var dateStr = now.toISOString().slice(0, 10);
+        var timeStr = dateStr + ' ' + now.toTimeString().slice(0, 5);
+        valid.forEach(function(r, i) {
+            var record = {
+                id: Date.now() + i,
+                projectName: r.projectName,
+                orgName: r.orgName,
+                client: r.client,
+                domain: r.domain,
+                serviceType: r.serviceType,
+                serviceTime: r.serviceTime,
+                amount: parseFloat(r.amount) || 0,
+                conclusion: r.conclusion,
+                deliverable: r.deliverable,
+                desc: r.desc,
+                proofFiles: [],
+                auditStatus: '待审核',
+                source: r.source,
+                createTime: dateStr
+            };
+            data.unshift(record);
+            auditList.unshift({
+                id: record.id,
+                type: '业绩导入',
+                title: r.projectName,
+                org: r.orgName,
+                submitTime: timeStr,
+                status: '待审核'
+            });
+        });
+        setStorage('performanceData', data);
+        setStorage('auditListData', auditList);
+
+        showTip('已导入 ' + valid.length + ' 条业绩，进入审核中心', 'success', function() {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ action: 'performanceEntrySaved' }, '*');
+            }
         });
     });
-    setStorage('performanceData', data);
-    setStorage('auditListData', auditList);
-
-    alert('已导入 ' + valid.length + ' 条业绩，进入审核中心');
-    if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ action: 'performanceEntrySaved' }, '*');
-    }
 }
 
 function downloadTemplate() {
@@ -243,6 +300,35 @@ function closeEntryWindow() {
         window.parent.postMessage({ action: 'closeModal' }, '*');
     }
 }
+
 </script>
+
+<!-- 友好提示框 -->
+<div class="tip-overlay" id="tipModal">
+    <div class="tip-box">
+        <div class="tip-body">
+            <div class="tip-icon info" id="tipIcon"><i class="fas fa-info-circle"></i></div>
+            <div class="tip-message" id="tipMessage"></div>
+        </div>
+        <div class="tip-footer">
+            <button class="btn btn-primary" onclick="closeTip()">确 定</button>
+        </div>
+    </div>
+</div>
+
+<!-- 操作确认框 -->
+<div class="tip-overlay" id="confirmModal">
+    <div class="tip-box">
+        <div class="tip-body">
+            <div class="tip-icon warning"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="tip-message" id="confirmMessage" style="font-weight:600;"></div>
+            <div class="tip-detail" id="confirmDetail" style="display:none;"></div>
+        </div>
+        <div class="tip-footer">
+            <button class="btn btn-outline" onclick="closeConfirmModal(false)">取 消</button>
+            <button class="btn btn-primary" id="confirmOkBtn" onclick="closeConfirmModal(true)">确 定</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

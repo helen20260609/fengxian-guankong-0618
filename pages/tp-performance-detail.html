@@ -118,6 +118,20 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 @media (max-width: 768px) {
     .info-grid, .form-row { grid-template-columns: 1fr; }
 }
+
+/* 友好提示框 */
+.tip-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); z-index: 99999; display: none; align-items: center; justify-content: center; padding: 20px; }
+.tip-overlay.show { display: flex; }
+.tip-box { background: var(--bg-card, #fff); border-radius: 12px; width: 100%; max-width: 380px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.2); animation: tipPop .18s ease-out; }
+@keyframes tipPop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.tip-body { padding: 26px 24px 18px; text-align: center; }
+.tip-icon { font-size: 38px; margin-bottom: 10px; }
+.tip-icon.success { color: var(--success, #1e8e3e); }
+.tip-icon.warning { color: var(--warning, #e37400); }
+.tip-icon.info { color: var(--primary, #1a73e8); }
+.tip-message { font-size: 15px; color: var(--text-primary, #202124); line-height: 1.6; }
+.tip-footer { padding: 0 24px 20px; display: flex; gap: 12px; justify-content: center; }
+.tip-footer .btn { min-width: 96px; justify-content: center; }
 </style>
 </head>
 <body>
@@ -136,16 +150,38 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     document.documentElement.setAttribute('data-theme', s);
 })();
 
+/* ===== 友好提示 ===== */
+var tipCallback = null;
+function showTip(message, type, callback) {
+    if (!type) {
+        if (/成功|已提交|已保存|完成|已通过/.test(message)) type = 'success';
+        else if (/请|暂无|不能|没有|尚未|失败|异常/.test(message)) type = 'warning';
+        else type = 'info';
+    }
+    var iconMap = { success: 'fa-check-circle', warning: 'fa-exclamation-circle', info: 'fa-info-circle' };
+    var icon = document.getElementById('tipIcon');
+    icon.className = 'tip-icon ' + type;
+    icon.innerHTML = '<i class="fas ' + (iconMap[type] || iconMap.info) + '"></i>';
+    document.getElementById('tipMessage').textContent = message;
+    tipCallback = callback || null;
+    document.getElementById('tipModal').classList.add('show');
+}
+function closeTip() {
+    document.getElementById('tipModal').classList.remove('show');
+    if (tipCallback) { var cb = tipCallback; tipCallback = null; cb(); }
+}
+window.alert = function(msg) { showTip(String(msg)); };
+
 var domains = ['建筑工地','基坑','交通','玻璃幕墙','燃气','高空坠物','城镇自建房','农村自建房'];
 var serviceTypes = ['应急咨询','安全评估','检测检验','隐患排查'];
-var conclusions = ['合格','基本合格','不合格','待验收'];
+var conclusions = ['优秀','良好','合格','不合格','待验收'];
 
 var params = parseUrlParams();
 var isEdit = params.mode === 'edit';
-var recordId = parseInt(params.id, 10) || 0;
+var recordId = params.id ? String(params.id) : '';
 
 var allData = loadPerformanceData();
-var record = allData.find(function(item) { return item.id === recordId; });
+var record = allData.find(function(item) { return String(item.id) === recordId; });
 
 var pendingProofFiles = [];
 
@@ -189,10 +225,11 @@ function formatFileSize(bytes) {
 }
 
 function getConclusionClass(conclusion) {
-    if (conclusion === '合格') return 'success';
-    if (conclusion === '基本合格') return 'warning';
+    if (conclusion === '优秀') return 'success';
+    if (conclusion === '良好') return 'info';
+    if (conclusion === '合格') return 'warning';
     if (conclusion === '不合格') return 'danger';
-    return 'info';
+    return 'grey';
 }
 
 function getAuditStatusClass(status) {
@@ -378,8 +415,9 @@ function saveEdit() {
         try { window.parent.postMessage({ action: 'performanceRefresh' }, '*'); } catch (e) {}
     }
 
-    alert('保存成功');
-    window.location.href = 'tp-performance-detail.html?id=' + recordId;
+    showTip('保存成功', 'success', function() {
+        window.location.href = 'tp-performance-detail.html?id=' + recordId;
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -394,5 +432,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
+<!-- 友好提示框 -->
+<div class="tip-overlay" id="tipModal">
+    <div class="tip-box">
+        <div class="tip-body">
+            <div class="tip-icon info" id="tipIcon"><i class="fas fa-info-circle"></i></div>
+            <div class="tip-message" id="tipMessage"></div>
+        </div>
+        <div class="tip-footer">
+            <button class="btn btn-primary" onclick="closeTip()">确 定</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

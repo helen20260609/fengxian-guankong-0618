@@ -102,6 +102,37 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     .form-row { grid-template-columns: 1fr; }
     .form-row-3 { grid-template-columns: 1fr; }
 }
+
+/* 友好提示框 */
+.tip-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 99999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.tip-overlay.show { display: flex; }
+.tip-box {
+    background: var(--bg-card);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 380px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    animation: tipPop .18s ease-out;
+}
+@keyframes tipPop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.tip-body { padding: 26px 24px 18px; text-align: center; }
+.tip-icon { font-size: 38px; margin-bottom: 10px; }
+.tip-icon.success { color: var(--success); }
+.tip-icon.warning { color: var(--warning); }
+.tip-icon.info { color: var(--primary); }
+.tip-message { font-size: 15px; color: var(--text-primary); line-height: 1.6; }
+.tip-footer { padding: 0 24px 20px; display: flex; gap: 12px; justify-content: center; }
+.tip-footer .btn { min-width: 96px; }
 </style>
 </head>
 <body>
@@ -169,8 +200,9 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             <div class="form-group">
                 <label>验收结论</label>
                 <select id="inputConclusion">
+                    <option>优秀</option>
+                    <option>良好</option>
                     <option>合格</option>
-                    <option>基本合格</option>
                     <option>不合格</option>
                     <option>待验收</option>
                 </select>
@@ -211,6 +243,28 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     var s = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', s);
 })();
+
+/* ===== 友好提示 ===== */
+var tipCallback = null;
+function showTip(message, type, callback) {
+    if (!type) {
+        if (/成功|已提交|已保存|完成|已通过/.test(message)) type = 'success';
+        else if (/请|暂无|不能|没有|尚未|失败/.test(message)) type = 'warning';
+        else type = 'info';
+    }
+    var iconMap = { success: 'fa-check-circle', warning: 'fa-exclamation-circle', info: 'fa-info-circle' };
+    var icon = document.getElementById('tipIcon');
+    icon.className = 'tip-icon ' + type;
+    icon.innerHTML = '<i class="fas ' + (iconMap[type] || iconMap.info) + '"></i>';
+    document.getElementById('tipMessage').textContent = message;
+    tipCallback = callback || null;
+    document.getElementById('tipModal').classList.add('show');
+}
+function closeTip() {
+    document.getElementById('tipModal').classList.remove('show');
+    if (tipCallback) { var cb = tipCallback; tipCallback = null; cb(); }
+}
+window.alert = function(msg) { showTip(String(msg)); };
 
 // 证明材料临时文件列表
 var proofFiles = [];
@@ -306,10 +360,11 @@ function submitPerformance() {
     });
     setStorage('auditListData', auditList);
 
-    alert('业绩已提交，进入审核中心');
-    if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ action: 'performanceEntrySaved' }, '*');
-    }
+    showTip('业绩已提交，进入审核中心', 'success', function() {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ action: 'performanceEntrySaved' }, '*');
+        }
+    });
 }
 
 function closeEntryWindow() {
@@ -318,5 +373,18 @@ function closeEntryWindow() {
     }
 }
 </script>
+
+<!-- 友好提示框 -->
+<div class="tip-overlay" id="tipModal">
+    <div class="tip-box">
+        <div class="tip-body">
+            <div class="tip-icon info" id="tipIcon"><i class="fas fa-info-circle"></i></div>
+            <div class="tip-message" id="tipMessage"></div>
+        </div>
+        <div class="tip-footer">
+            <button class="btn btn-primary" onclick="closeTip()">确 定</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

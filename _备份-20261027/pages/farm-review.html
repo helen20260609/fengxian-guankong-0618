@@ -1,0 +1,2353 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>农房回头看 - 排查管理</title>
+<link rel="stylesheet" href="./all.min.css">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="../js/house-arch-data.js"></script>
+<script src="./org-data.js"></script>
+<style>
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+    background: var(--bg-dark); color: var(--text-primary);
+    padding: 20px; min-height: 100vh;
+}
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+.page-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.page-title i { color: var(--primary); }
+.page-title .sub { font-size: 12px; color: var(--text-secondary); font-weight: 400; margin-left: 8px; }
+.header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg-card); color: var(--text-primary);
+    font-size: 13px; cursor: pointer; transition: all 0.2s; text-decoration: none;
+}
+.btn:hover { background: var(--bg-hover); border-color: var(--primary); color: var(--primary); }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: var(--primary-dark); color: #fff; }
+.btn-success { background: var(--success); color: #fff; border-color: var(--success); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+/* 页头操作按钮：描边风格，hover 填充，语义色与表格行内按钮一致 */
+.hdr-btn { background: transparent; }
+.hdr-btn.hdr-import { color: var(--success); border-color: var(--success); }
+.hdr-btn.hdr-import:hover { background: var(--success); border-color: var(--success); color: #fff; }
+.hdr-btn.hdr-export { color: var(--primary); border-color: var(--primary); }
+.hdr-btn.hdr-export:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+.hdr-btn.hdr-push { color: var(--primary); border-color: var(--primary); }
+.hdr-btn.hdr-push:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+.hdr-btn.hdr-arch { color: var(--secondary); border-color: var(--secondary); }
+.hdr-btn.hdr-arch:hover { background: var(--secondary); border-color: var(--secondary); color: #fff; }
+.hdr-btn.hdr-dispatch { color: #2e7d32; border-color: #2e7d32; }
+.hdr-btn.hdr-dispatch:hover { background: #2e7d32; border-color: #2e7d32; color: #fff; }
+.hdr-btn.hdr-recall { color: #c62828; border-color: #c62828; }
+.hdr-btn.hdr-recall:hover { background: #c62828; border-color: #c62828; color: #fff; }
+/* 表格行内操作按钮：统一描边风格，仅 hover 时填充 */
+.btn-push { color: var(--primary); border-color: var(--primary); background: transparent; }
+.btn-push:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn-push.pushing { opacity: .6; pointer-events: none; }
+.btn-push.pushed { color: var(--success); border-color: var(--success); background: transparent; }
+.btn-push.pushed:hover { background: var(--success); border-color: var(--success); color: #fff; }
+.btn-arch { color: var(--secondary); border-color: var(--secondary); background: transparent; }
+.btn-arch:hover { background: var(--secondary); border-color: var(--secondary); color: #fff; }
+.btn-arch.arching { opacity: .6; pointer-events: none; }
+.btn-arch.arched { color: var(--success); border-color: var(--success); background: transparent; }
+.btn-arch.arched:hover { background: var(--success); border-color: var(--success); color: #fff; }
+.op-cell { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.filter-bar {
+    background: var(--bg-card); border-radius: 8px; padding: 14px 16px;
+    margin-bottom: 16px; box-shadow: 0 1px 3px var(--shadow);
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+}
+.filter-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.filter-item label { color: var(--text-secondary); white-space: nowrap; }
+.filter-item select, .filter-item input {
+    padding: 6px 10px; border: 1px solid var(--input-border); border-radius: 4px;
+    background: var(--input-bg); color: var(--text-primary); font-size: 13px;
+    outline: none; transition: border 0.2s; min-width: 120px;
+}
+.filter-item select:focus, .filter-item input:focus { border-color: var(--primary); }
+.filter-item input[type="date"] { min-width: 140px; }
+
+.table-card {
+    background: var(--bg-card); border-radius: 8px;
+    box-shadow: 0 1px 3px var(--shadow); overflow: hidden;
+}
+.table-wrap { overflow-x: auto; }
+table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.grid th {
+    background: var(--bg-hover); padding: 12px 10px; text-align: left;
+    font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+}
+table.grid td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.grid tbody tr:hover { background: var(--bg-hover); }
+
+.col-no { font-family: 'Consolas', monospace; font-size: 12px; }
+.col-addr { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.tag-success { background: #e6f4ea; color: var(--success); }
+.tag-warning { background: #fef7e0; color: var(--warning); }
+.tag-danger { background: #fce8e6; color: var(--danger); }
+.tag-info { background: #e8f0fe; color: var(--primary); }
+.tag-primary { background: #e0f2f1; color: var(--secondary, #00838f); }
+.tag-secondary { background: var(--bg-hover); color: var(--text-secondary); }
+
+.pagination {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--text-secondary); flex-wrap: wrap; gap: 12px;
+}
+.pager-btns { display: flex; gap: 4px; align-items: center; }
+.pager-btn {
+    min-width: 30px; height: 30px; padding: 0 6px;
+    border: 1px solid var(--border); background: var(--bg-card);
+    color: var(--text-primary); border-radius: 4px; cursor: pointer;
+    font-size: 13px; transition: all 0.2s;
+}
+.pager-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.pager-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pager-jump { display: flex; align-items: center; gap: 6px; }
+.pager-jump input {
+    width: 50px; padding: 4px 8px; border: 1px solid var(--input-border);
+    border-radius: 4px; text-align: center; font-size: 13px;
+}
+
+.form-section { margin-bottom: 20px; }
+.form-section-title {
+    font-size: 13px; font-weight: 600; color: var(--primary);
+    margin-bottom: 10px; padding-left: 8px; border-left: 3px solid var(--primary);
+}
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid .full { grid-column: 1 / -1; }
+.form-item label {
+    display: block; font-size: 12px; color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+.form-item input, .form-item select, .form-item textarea {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--input-border);
+    border-radius: 4px; background: var(--input-bg); color: var(--text-primary);
+    font-size: 13px; font-family: inherit; outline: none;
+}
+.form-item input:focus, .form-item select:focus, .form-item textarea:focus {
+    border-color: var(--primary);
+}
+.form-item textarea { resize: vertical; min-height: 60px; }
+.form-item input[readonly], .form-item textarea[readonly] { background: var(--bg-hover); cursor: not-allowed; }
+
+/* 抽屉内单选/多选 pill（对齐 H5 端交互） */
+.radio-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.radio-pill {
+    padding: 6px 14px; border-radius: 16px; border: 1px solid var(--input-border);
+    font-size: 12px; color: var(--text-secondary); background: var(--input-bg);
+    cursor: pointer; user-select: none; display: inline-flex; align-items: center; min-height: 30px;
+}
+.radio-pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.radio-pill.active.danger { background: #d93025; border-color: #d93025; color: #fff; }
+.radio-pill.active.warning { background: #f9ab00; border-color: #f9ab00; color: #fff; }
+.checkbox-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.checkbox-pill {
+    padding: 6px 14px; border-radius: 16px; border: 1px solid var(--input-border);
+    font-size: 12px; color: var(--text-secondary); background: var(--input-bg);
+    cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; min-height: 30px;
+}
+.checkbox-pill::before { content: '\f0c8'; font-family: 'Font Awesome 6 Free'; font-weight: 400; font-size: 11px; }
+.checkbox-pill.active { background: rgba(26,115,232,.1); color: var(--primary); border-color: var(--primary); }
+.checkbox-pill.active::before { content: '\f14a'; font-weight: 900; }
+.other-input { display: none; margin-top: 8px; }
+
+/* 下拉多选（筛选条用，紧凑） */
+.ms-select { position: relative; min-width: 160px; }
+.ms-select-toggle {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    width: 100%; padding: 6px 10px; border: 1px solid var(--input-border); border-radius: 4px;
+    background: var(--input-bg); color: var(--text-primary); font-size: 13px;
+    cursor: pointer; user-select: none; transition: border 0.2s; min-height: 30px;
+}
+.ms-select-toggle:hover { border-color: var(--primary); }
+.ms-select.open .ms-select-toggle { border-color: var(--primary); }
+.ms-select-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: var(--text-secondary); }
+.ms-select.has-value .ms-select-label { color: var(--text-primary); }
+.ms-select-count {
+    background: var(--primary); color: #fff; border-radius: 9px; font-size: 11px;
+    padding: 1px 7px; font-weight: 600; line-height: 1.4; flex-shrink: 0;
+}
+.ms-select-arrow { font-size: 10px; color: var(--text-secondary); transition: transform 0.2s; flex-shrink: 0; }
+.ms-select.open .ms-select-arrow { transform: rotate(180deg); }
+.ms-select-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
+    min-width: 260px; max-width: 340px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.14); overflow: hidden;
+}
+.ms-select.open .ms-select-panel { display: block; }
+.ms-select-panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-hover);
+    font-size: 12px; color: var(--text-secondary);
+}
+.ms-select-panel-head .ms-actions { display: flex; gap: 10px; }
+.ms-select-panel-head .ms-act { color: var(--primary); cursor: pointer; }
+.ms-select-panel-head .ms-act:hover { text-decoration: underline; }
+.ms-select-panel-body { max-height: 260px; overflow-y: auto; padding: 6px; }
+.ms-opt {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 4px;
+    font-size: 13px; color: var(--text-primary); cursor: pointer; user-select: none;
+}
+.ms-opt:hover { background: var(--bg-hover); }
+.ms-opt .ms-box {
+    width: 15px; height: 15px; border: 1px solid var(--input-border); border-radius: 3px;
+    flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; color: transparent; transition: all .15s; background: var(--input-bg);
+}
+.ms-opt.checked .ms-box { background: var(--primary); border-color: var(--primary); color: #fff; }
+.ms-opt.checked { color: var(--primary); font-weight: 500; }
+
+.modal-mask {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 200; display: none; align-items: center; justify-content: center;
+}
+.modal-mask.open { display: flex; }
+.modal {
+    background: var(--bg-card); border-radius: 8px; width: 780px; max-width: 95vw;
+    max-height: 90vh; display: flex; flex-direction: column;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+}
+.modal-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title { font-size: 15px; font-weight: 600; }
+
+/* 弹层关闭按钮：大点击区 + 悬停反馈 */
+.drawer-close {
+    width: 36px; height: 36px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent; border-radius: 8px;
+    color: var(--text-secondary); font-size: 16px; cursor: pointer;
+    transition: all 0.15s; font-family: inherit;
+}
+.drawer-close:hover {
+    background: var(--bg-hover); color: var(--danger);
+    transform: scale(1.05);
+}
+.drawer-close:active { transform: scale(0.95); }
+
+.modal-body { flex: 1; overflow-y: auto; padding: 20px; }
+.modal-footer {
+    padding: 12px 20px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 10px;
+}
+
+.import-step { display: none; }
+.import-step.active { display: block; }
+
+/* 下发账号选择弹层 */
+.dispatch-group { margin-bottom: 18px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.dispatch-group-head { background: var(--bg-hover); padding: 10px 14px; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.dispatch-group-head .cnt { font-weight: 400; color: var(--text-secondary); font-size: 12px; }
+.dispatch-group-body { padding: 12px 14px; }
+.dispatch-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dispatch-row label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.dispatch-row select { flex: 1; min-width: 220px; padding: 7px 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; }
+.dispatch-tasks { margin-top: 10px; font-size: 12px; color: var(--text-secondary); max-height: 90px; overflow-y: auto; line-height: 1.7; }
+.dispatch-accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-top: 8px; }
+.dispatch-acc { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 13px; transition: all .15s; }
+.dispatch-acc:hover { border-color: var(--primary); }
+.dispatch-acc.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.dispatch-acc i { font-size: 12px; color: var(--text-secondary); }
+.dispatch-acc.active i { color: var(--primary); }
+/* 街镇无同名账号时的警告 */
+.dispatch-warn { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; background: #fef7e0; border: 1px solid #f9ab00; border-radius: 6px; color: #b06000; font-size: 12px; }
+.dispatch-warn i { font-size: 12px; }
+.dispatch-group.unmatched .dispatch-group-head { color: #b06000; }
+.dispatch-group.unmatched .dispatch-group-head .cnt { background: #fef7e0; color: #b06000; }
+#btnDispatchConfirm:disabled { opacity: .5; cursor: not-allowed; }
+.step-indicator { display: flex; gap: 4px; margin-bottom: 20px; font-size: 12px; }
+.step-indicator .step {
+    flex: 1; text-align: center; padding: 8px;
+    border-bottom: 2px solid var(--border); color: var(--text-secondary);
+}
+.step-indicator .step.active { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+.upload-zone {
+    border: 2px dashed var(--border); border-radius: 8px;
+    padding: 40px; text-align: center; cursor: pointer;
+    transition: all 0.2s; color: var(--text-secondary);
+}
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: var(--primary-light); }
+.upload-zone i { font-size: 42px; color: var(--primary); margin-bottom: 12px; display: block; }
+
+.mapping-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+.mapping-table th, .mapping-table td { padding: 8px; border: 1px solid var(--border); text-align: left; }
+.mapping-table th { background: var(--bg-hover); font-weight: 600; font-size: 12px; }
+.mapping-table select { width: 100%; padding: 4px 8px; border: 1px solid var(--input-border); border-radius: 4px; font-size: 12px; background: var(--input-bg); color: var(--text-primary); }
+.mapping-table .preview { color: var(--text-secondary); font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.import-mode { display: flex; gap: 16px; margin: 16px 0; }
+.import-mode label {
+    flex: 1; display: flex; align-items: flex-start; gap: 8px;
+    padding: 12px; border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; font-size: 13px;
+}
+.import-mode label:hover { border-color: var(--primary); background: var(--primary-light); }
+.import-mode input[type="radio"] { margin-top: 3px; }
+.import-mode .mode-title { font-weight: 600; display: block; margin-bottom: 2px; }
+.import-mode .mode-desc { font-size: 11px; color: var(--text-secondary); }
+
+.progress-bar {
+    width: 100%; height: 8px; background: var(--bg-hover);
+    border-radius: 4px; overflow: hidden; margin: 12px 0;
+}
+.progress-fill { height: 100%; background: var(--primary); transition: width 0.3s; }
+
+.import-result { padding: 12px; background: var(--bg-hover); border-radius: 6px; font-size: 13px; }
+.import-result .stat { display: flex; gap: 24px; margin-top: 8px; }
+.import-result .stat-item { text-align: center; }
+.import-result .stat-num { font-size: 22px; font-weight: 700; }
+.import-result .stat-num.success { color: var(--success); }
+.import-result .stat-num.skip { color: var(--warning); }
+.import-result .stat-num.fail { color: var(--danger); }
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+.empty-state i { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+
+.loading {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--border); border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast {
+    position: fixed; top: 20px; right: 20px; z-index: 999;
+    padding: 10px 16px; background: rgba(32,33,36,0.92); color: #fff;
+    border-radius: 6px; font-size: 13px; opacity: 0;
+    transform: translateY(-10px); transition: all 0.25s;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+
+/* Tab 切换 */
+.tab-bar {
+    display: flex; gap: 4px; margin-bottom: 16px;
+    background: var(--bg-card); border-radius: 8px;
+    padding: 4px; box-shadow: 0 1px 3px var(--shadow);
+    width: fit-content;
+}
+.tab-btn {
+    padding: 8px 20px; border: none; background: transparent;
+    color: var(--text-secondary); font-size: 13px; cursor: pointer;
+    border-radius: 6px; transition: all 0.2s; font-family: inherit;
+    display: flex; align-items: center; gap: 6px; font-weight: 500;
+}
+.tab-btn:hover { color: var(--primary); }
+.tab-btn.active { background: var(--primary); color: #fff; }
+.tab-btn .badge {
+    display: inline-block; padding: 1px 7px; border-radius: 10px;
+    background: var(--bg-hover); color: var(--text-secondary);
+    font-size: 11px; font-weight: 600;
+}
+.tab-btn.active .badge { background: rgba(255,255,255,0.25); color: #fff; }
+.tab-btn .badge.warn { background: var(--warning); color: #fff; }
+.tab-btn.active .badge.warn { background: rgba(255,255,255,0.9); color: var(--warning); }
+
+/* 排查结果二级分类 tab */
+.sub-tab-bar {
+    display: flex; gap: 4px; margin-bottom: 14px;
+    background: var(--bg-card); border-radius: 8px;
+    padding: 4px; box-shadow: 0 1px 3px var(--shadow);
+    width: fit-content;
+}
+.sub-tab-btn {
+    padding: 6px 14px; border: none; background: transparent;
+    color: var(--text-secondary); font-size: 12px; cursor: pointer;
+    border-radius: 5px; transition: all 0.15s; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 6px; font-weight: 500;
+}
+.sub-tab-btn:hover { color: var(--primary); }
+.sub-tab-btn.active { background: var(--primary); color: #fff; }
+.sub-tab-btn .cnt {
+    display: inline-block; padding: 1px 7px; border-radius: 9px;
+    background: var(--bg-hover); color: var(--text-secondary);
+    font-size: 11px; font-weight: 600;
+}
+.sub-tab-btn.active .cnt { background: rgba(255,255,255,0.25); color: #fff; }
+.sub-tab-btn[data-cat="draft"]:not(.active) .cnt { background: var(--primary-light); color: var(--primary); }
+.sub-tab-btn[data-cat="safe"]:not(.active) .cnt { background: #e0f2f1; color: #00897b; }
+.sub-tab-btn[data-cat="unrectified"]:not(.active) .cnt { background: #fef7e0; color: var(--warning); }
+.sub-tab-btn[data-cat="rectified"]:not(.active) .cnt { background: #e6f4ea; color: var(--success); }
+
+/* 下载模板下拉菜单 */
+.tpl-dropdown { position: relative; display: inline-block; }
+.tpl-menu {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+    min-width: 380px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); overflow: hidden;
+}
+.tpl-dropdown.open .tpl-menu { display: block; }
+.tpl-item {
+    display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
+    cursor: pointer; transition: background 0.15s;
+}
+.tpl-item:hover { background: var(--primary-light); }
+.tpl-item + .tpl-item { border-top: 1px solid var(--border); }
+.tpl-item > i { font-size: 18px; color: var(--primary); margin-top: 2px; }
+.tpl-item-text { flex: 1; min-width: 0; }
+.tpl-item-title { font-size: 13px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
+.tpl-item-desc { font-size: 11px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; }
+.tpl-badge {
+    display: none; padding: 1px 6px; border-radius: 8px;
+    background: var(--primary); color: #fff; font-size: 10px; font-weight: 600;
+}
+.tpl-badge.show { display: inline-block; }
+.tpl-group-title {
+    padding: 8px 14px 4px; font-size: 11px; font-weight: 600;
+    color: var(--text-secondary); background: var(--bg-hover, #f5f5f5);
+    letter-spacing: 0.5px;
+}
+.tpl-item[data-import] > i { color: var(--success); }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+    <div class="page-title">
+        <i class="fa-solid fa-clipboard-check"></i>
+        农房回头看 · 排查管理
+    </div>
+    <div class="header-actions">
+        <div class="tpl-dropdown" id="tplDropdown">
+            <button class="btn hdr-btn hdr-import" id="btnDownloadTpl"><i class="fa-solid fa-file-arrow-down"></i> 数据导入 <i class="fa-solid fa-caret-down" style="margin-left: 4px; font-size: 11px;"></i></button>
+            <div class="tpl-menu" id="tplMenu">
+                <div class="tpl-group-title">下载模板</div>
+                <div class="tpl-item" data-tpl="pending">
+                    <i class="fa-solid fa-list-check"></i>
+                    <div class="tpl-item-text">
+                        <div class="tpl-item-title">待排查任务模板 <span class="tpl-badge" data-tab-hl="pending">当前</span></div>
+                    </div>
+                </div>
+                <div class="tpl-item" data-tpl="records">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <div class="tpl-item-text">
+                        <div class="tpl-item-title">排查结果模板 <span class="tpl-badge" data-tab-hl="records">当前</span></div>
+                    </div>
+                </div>
+                <div class="tpl-group-title">导入数据</div>
+                <div class="tpl-item" data-import="pending">
+                    <i class="fa-solid fa-file-import"></i>
+                    <div class="tpl-item-text">
+                        <div class="tpl-item-title">导入待排查 <span class="tpl-badge" data-tab-hl="pending">当前</span></div>
+                    </div>
+                </div>
+                <div class="tpl-item" data-import="records">
+                    <i class="fa-solid fa-file-import"></i>
+                    <div class="tpl-item-text">
+                        <div class="tpl-item-title">导入排查结果 <span class="tpl-badge" data-tab-hl="records">当前</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <button class="btn hdr-btn hdr-export" id="btnExport"><i class="fa-solid fa-file-excel"></i> 导出</button>
+        <button class="btn hdr-btn hdr-push" id="btnBatchPush"><i class="fa-solid fa-paper-plane"></i> 批量推送</button>
+        <button class="btn hdr-btn hdr-arch" id="btnBatchArch"><i class="fa-solid fa-box-archive"></i> 批量入档</button>
+        <button class="btn hdr-btn hdr-dispatch" id="btnBatchDispatch" data-only="pending"><i class="fa-solid fa-share-from-square"></i> 批量下发</button>
+        <button class="btn hdr-btn hdr-recall" id="btnBatchRecall" data-only="pending"><i class="fa-solid fa-rotate-left"></i> 批量收回</button>
+    </div>
+</div>
+
+<div class="tab-bar">
+    <button class="tab-btn active" data-tab="records">
+        <i class="fa-solid fa-clipboard-check"></i>
+        排查结果
+    </button>
+    <button class="tab-btn" data-tab="pending">
+        <i class="fa-solid fa-list-check"></i>
+        待排查任务
+    </button>
+</div>
+
+<div class="sub-tab-bar" id="subTabBar" data-only="records">
+    <button class="sub-tab-btn active" data-cat=""><i class="fa-solid fa-list"></i> 全部 <span class="cnt" id="cntAll">0</span></button>
+    <button class="sub-tab-btn" data-cat="draft"><i class="fa-solid fa-file-pen"></i> 草稿 <span class="cnt" id="cntDraft">0</span></button>
+    <button class="sub-tab-btn" data-cat="safe"><i class="fa-solid fa-shield-halved"></i> 未发现隐患 <span class="cnt" id="cntSafe">0</span></button>
+    <button class="sub-tab-btn" data-cat="unrectified"><i class="fa-solid fa-screwdriver-wrench"></i> 未整改 <span class="cnt" id="cntUnrectified">0</span></button>
+    <button class="sub-tab-btn" data-cat="rectified"><i class="fa-solid fa-circle-check"></i> 已整改 <span class="cnt" id="cntRectified">0</span></button>
+</div>
+
+<div class="filter-bar">
+    <!-- 第一行 -->
+    <div class="filter-item" style="min-width: 480px;">
+        <input type="text" id="filterQ" placeholder="搜索：唯一标识 / 地址" style="width: 100%;">
+    </div>
+    <div class="filter-item">
+        <label>街镇</label>
+        <select id="filterTown"><option value="">全部</option></select>
+    </div>
+    <div class="filter-item">
+        <label>村居委</label>
+        <select id="filterVillage"><option value="">全部</option></select>
+    </div>
+    <div class="filter-item">
+        <label>隐患等级</label>
+        <select id="filterHazard">
+            <option value="">全部</option>
+            <option value="未发现">未发现</option>
+            <option value="一般">一般</option>
+            <option value="严重">严重</option>
+        </select>
+    </div>
+    <!-- 强制换行 -->
+    <div style="flex-basis: 100%; height: 0; margin: 0; padding: 0;"></div>
+    <!-- 第二行 -->
+    <div class="filter-item">
+        <label>房屋用途</label>
+        <select id="filterHouseUsage">
+            <option value="">全部</option>
+            <option value="经营性自建房">经营性自建房</option>
+            <option value="其他自建房">其他自建房</option>
+        </select>
+    </div>
+    <div class="filter-item">
+        <label>具体用途</label>
+        <div class="ms-select" id="filterSpecificUsage">
+            <div class="ms-select-toggle" id="filterSpecificUsageToggle">
+                <span class="ms-select-label">全部</span>
+                <span class="ms-select-count" id="filterSpecificUsageCount" style="display:none;">0</span>
+                <i class="fa-solid fa-chevron-down ms-select-arrow"></i>
+            </div>
+            <div class="ms-select-panel">
+                <div class="ms-select-panel-head">
+                    <span>选择具体用途（可多选）</span>
+                    <span class="ms-actions">
+                        <span class="ms-act" id="filterSpecificUsageAll">全选</span>
+                        <span class="ms-act" id="filterSpecificUsageClear">清空</span>
+                    </span>
+                </div>
+                <div class="ms-select-panel-body" id="filterSpecificUsageBody"></div>
+            </div>
+        </div>
+    </div>
+    <div class="filter-item" data-only="pending">
+        <label>下发状态</label>
+        <select id="filterDispatched">
+            <option value="">全部</option>
+            <option value="no">未下发</option>
+            <option value="yes">已下发</option>
+        </select>
+    </div>
+    <div class="filter-item" data-only="records">
+        <label>房屋类型</label>
+        <select id="filterHouseType">
+            <option value="">全部</option>
+            <option value="农村经营性自建房">农村经营性自建房</option>
+            <option value="农村辅房(含居住功能的出租房)">农村辅房(含居住功能的出租房)</option>
+            <option value="前两轮专项排查认定的三类房屋">前两轮专项排查认定的三类房屋</option>
+            <option value="经鉴定明确的C级、D级危房">经鉴定明确的C级、D级危房</option>
+            <option value="前两轮专项排查认定的二类房屋">前两轮专项排查认定的二类房屋</option>
+            <option value="其他宅基地自建房">其他宅基地自建房</option>
+        </select>
+    </div>
+    <div class="filter-item" data-only="records">
+        <label>排查日期</label>
+        <input type="date" id="filterDateFrom"> 至 <input type="date" id="filterDateTo">
+    </div>
+    <div style="margin-left: auto; display: flex; gap: 8px;">
+        <button class="btn btn-primary" id="btnSearch"><i class="fa-solid fa-magnifying-glass"></i> 查询</button>
+        <button class="btn" id="btnReset"><i class="fa-solid fa-rotate-left"></i> 重置</button>
+    </div>
+</div>
+
+<div class="table-card">
+    <div class="table-wrap">
+        <table class="grid">
+            <thead>
+                <tr id="theadRow"></tr>
+            </thead>
+            <tbody id="tbodyMain">
+                <tr><td colspan="10" style="text-align: center; padding: 30px;"><span class="loading"></span> 加载中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination">
+        <div>共 <b id="totalCount">0</b> 条</div>
+        <div class="pager-btns" id="pagerBtns"></div>
+        <div class="pager-jump">
+            跳至 <input type="number" id="jumpPage" min="1"> 页
+            <button class="btn btn-sm" id="btnJump">确定</button>
+        </div>
+    </div>
+</div>
+
+<!-- 导入弹层 -->
+<div class="modal-mask" id="importMask">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="importTitle">批量导入</div>
+            <button class="drawer-close" id="importClose"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="step-indicator">
+                <div class="step" data-step="1">1. 上传文件</div>
+                <div class="step" data-step="2">2. 字段映射</div>
+                <div class="step" data-step="3">3. 导入设置</div>
+                <div class="step" data-step="4">4. 完成</div>
+            </div>
+
+            <div class="import-step active" data-step="1">
+                <div class="upload-zone" id="uploadZone">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">点击选择或拖拽 Excel 文件</div>
+                    <div style="font-size: 12px;">支持 .xlsx / .xls / .csv</div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                </div>
+                <div id="fileInfo" style="margin-top: 12px; font-size: 13px; color: var(--text-secondary);"></div>
+            </div>
+
+            <div class="import-step" data-step="2">
+                <div style="font-size: 13px; margin-bottom: 8px; color: var(--text-secondary);">
+                    系统自动识别了以下列名，请确认或调整映射关系（<span style="color: var(--danger);">*</span> 为必填）：
+                </div>
+                <div id="requiredWarn" style="display:none; font-size: 12px; margin-bottom: 8px; padding: 6px 10px; border-radius: 4px; background: #fce8e6; color: var(--danger); border: 1px solid #f5c6c0;"></div>
+                <div style="max-height: 380px; overflow-y: auto;">
+                    <table class="mapping-table" id="mappingTable">
+                        <thead><tr><th style="width: 180px;">Excel 列名</th><th style="width: 200px;">映射到字段</th><th>数据预览</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="import-step" data-step="3">
+                <div style="font-size: 13px; margin-bottom: 8px; font-weight: 600;">重复数据处理方式：</div>
+                <div class="import-mode">
+                    <label><input type="radio" name="importMode" value="append"><div><span class="mode-title">仅新增</span><span class="mode-desc">已存在的"唯一标识"跳过</span></div></label>
+                    <label><input type="radio" name="importMode" value="merge" checked><div><span class="mode-title">合并</span><span class="mode-desc">新数据优先，空字段保留旧值（推荐）</span></div></label>
+                    <label><input type="radio" name="importMode" value="overwrite"><div><span class="mode-title">覆盖</span><span class="mode-desc">已存在的整行替换为新数据</span></div></label>
+                </div>
+                <div id="importSummary" style="font-size: 13px; color: var(--text-secondary); margin-top: 12px;"></div>
+                <div class="progress-bar" id="importProgress" style="display: none;"><div class="progress-fill" id="progressFill" style="width: 0%;"></div></div>
+                <div id="importStatus" style="font-size: 12px; color: var(--text-secondary); text-align: center;"></div>
+            </div>
+
+            <div class="import-step" data-step="4">
+                <div class="import-result">
+                    <div style="font-weight: 600; font-size: 14px;" id="resultTitle">导入完成</div>
+                    <div class="stat">
+                        <div class="stat-item"><div class="stat-num success" id="statAdded">0</div><div>新增</div></div>
+                        <div class="stat-item"><div class="stat-num" id="statUpdated" style="color: var(--primary);">0</div><div>更新</div></div>
+                        <div class="stat-item"><div class="stat-num skip" id="statSkipped">0</div><div>跳过</div></div>
+                        <div class="stat-item"><div class="stat-num fail" id="statFail">0</div><div>失败</div></div>
+                    </div>
+                </div>
+                <div id="failList" style="margin-top: 12px; max-height: 240px; overflow-y: auto;"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" id="btnImportPrev" style="display: none;">上一步</button>
+            <button class="btn" id="btnImportCancel">取消</button>
+            <button class="btn btn-primary" id="btnImportNext" disabled>下一步</button>
+            <button class="btn btn-primary" id="btnImportRun" style="display: none;"><i class="fa-solid fa-play"></i> 开始导入</button>
+            <button class="btn btn-primary" id="btnImportDone" style="display: none;">完成</button>
+        </div>
+    </div>
+</div>
+
+<!-- 选择下发账号弹层 -->
+<div class="modal-mask" id="dispatchMask">
+    <div class="modal" style="width: 640px;">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fa-solid fa-share-from-square" style="color:#2e7d32;margin-right:6px;"></i>选择下发账号</div>
+            <button class="drawer-close" id="dispatchClose"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;">按街镇分组为所选任务选择下发账号（组织架构 → 各街镇），确认后任务将下发到小程序端。</div>
+            <div id="dispatchGroups"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" id="btnDispatchCancel">取消</button>
+            <button class="btn btn-primary" id="btnDispatchConfirm" style="background:#2e7d32;border-color:#2e7d32;"><i class="fa-solid fa-share-from-square"></i> 确认下发</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+    'use strict';
+
+    function $(id) { return document.getElementById(id); }
+    function toast(msg, type) {
+        var t = $('toast');
+        t.textContent = msg;
+        t.className = 'toast show' + (type ? ' ' + type : '');
+        setTimeout(function() { t.classList.remove('show'); }, 2200);
+    }
+    function esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/[&<>"']/g, function(c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    // 当前 Tab：'records' = 排查结果 / 'pending' = 待排查任务（支持 URL ?tab=pending 初始化，便于详情页返回时还原）
+    var currentTab = (function() {
+        var t = new URLSearchParams(location.search).get('tab');
+        return t === 'pending' ? 'pending' : 'records';
+    })();
+    // 排查结果二级分类：''=全部 / draft=草稿 / safe=未发现隐患 / unrectified=未整改 / rectified=已整改
+    var currentCat = '';
+    // cat → { status, hazard } 查询条件；hazard 为逗号分隔多值
+    var CAT_FILTER_MAP = {
+        '':           { status: '',          hazard: '' },
+        'draft':      { status: 'draft',     hazard: '' },
+        'safe':       { status: 'submitted', hazard: '未发现' },
+        'unrectified':{ status: 'submitted', hazard: '一般,严重' },
+        'rectified':  { status: 'rectified', hazard: '' }
+    };
+    // 当前 cat 是否锁定了隐患等级（safe/unrectified 锁定，其余放开）
+    function catHazardLock() {
+        var f = CAT_FILTER_MAP[currentCat] || CAT_FILTER_MAP[''];
+        return f.hazard || '';
+    }
+    function applyHazardLock() {
+        var lock = catHazardLock();
+        var sel = $('filterHazard');
+        if (!sel) return;
+        // 锁定时若为多值（如 一般,严重），临时注入一个组合选项用于展示
+        var comboOpt = sel.querySelector('option[data-combo="1"]');
+        if (lock && lock.indexOf(',') > -1) {
+            if (!comboOpt) {
+                comboOpt = document.createElement('option');
+                comboOpt.setAttribute('data-combo', '1');
+                comboOpt.value = lock;
+                comboOpt.textContent = lock.replace(/[,，]/g, ' / ');
+                sel.appendChild(comboOpt);
+            }
+            comboOpt.value = lock;
+            comboOpt.textContent = lock.replace(/[,，]/g, ' / ');
+        } else if (comboOpt) {
+            comboOpt.remove();
+            comboOpt = null;
+        }
+        if (lock) {
+            sel.value = lock;
+            sel.disabled = true;
+        } else {
+            sel.disabled = false;
+        }
+    }
+    var states = {
+        records: { page: 1, size: 10, total: 0, rows: [] },
+        pending: { page: 1, size: 10, total: 0, rows: [] }
+    };
+    function cur() { return states[currentTab]; }
+    function apiBase() { return currentTab === 'pending' ? '/api/farm-review-pending' : '/api/farm-review-records'; }
+
+    // ===== 具体用途下拉多选 =====
+    var SPECIFIC_USAGE_OPTS = ['宾馆','仓储物流','餐饮饭店','出租居住','教育培训','农贸市场','民宿','批发零售','其他','商务办公','生产加工','休闲娱乐','医疗卫生','养老服务','宗教场所'];
+    var msFilterSpecificUsage = (function() {
+        var root = $('filterSpecificUsage');
+        var toggle = $('filterSpecificUsageToggle');
+        var labelEl = toggle.querySelector('.ms-select-label');
+        var countEl = $('filterSpecificUsageCount');
+        var body = $('filterSpecificUsageBody');
+        var selected = [];
+        // 构建选项
+        body.innerHTML = SPECIFIC_USAGE_OPTS.map(function(v) {
+            return '<div class="ms-opt" data-value="' + v + '"><span class="ms-box"><i class="fa-solid fa-check"></i></span><span>' + v + '</span></div>';
+        }).join('');
+        function refresh() {
+            var n = selected.length;
+            if (n === 0) {
+                labelEl.textContent = '全部';
+                root.classList.remove('has-value');
+                countEl.style.display = 'none';
+            } else if (n === 1) {
+                labelEl.textContent = selected[0];
+                root.classList.add('has-value');
+                countEl.style.display = 'none';
+            } else {
+                labelEl.textContent = selected[0] + ' 等';
+                root.classList.add('has-value');
+                countEl.style.display = '';
+                countEl.textContent = n;
+            }
+            body.querySelectorAll('.ms-opt').forEach(function(o) {
+                o.classList.toggle('checked', selected.indexOf(o.getAttribute('data-value')) >= 0);
+            });
+        }
+        function fire() { root.dispatchEvent(new Event('change', { bubbles: false })); }
+        body.querySelectorAll('.ms-opt').forEach(function(o) {
+            o.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var v = o.getAttribute('data-value');
+                var i = selected.indexOf(v);
+                if (i >= 0) selected.splice(i, 1); else selected.push(v);
+                refresh(); fire();
+            });
+        });
+        toggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var wasOpen = root.classList.contains('open');
+            document.querySelectorAll('.ms-select.open').forEach(function(m) { m.classList.remove('open'); });
+            if (!wasOpen) root.classList.add('open');
+        });
+        root.querySelector('.ms-select-panel').addEventListener('click', function(e) { e.stopPropagation(); });
+        $('filterSpecificUsageAll').addEventListener('click', function(e) {
+            e.stopPropagation();
+            selected = SPECIFIC_USAGE_OPTS.slice();
+            refresh(); fire();
+        });
+        $('filterSpecificUsageClear').addEventListener('click', function(e) {
+            e.stopPropagation();
+            selected = [];
+            refresh(); fire();
+        });
+        return {
+            get: function() { return selected.slice(); },
+            clear: function() { selected = []; refresh(); }
+        };
+    })();
+    // 点击页面其他位置关闭所有下拉多选
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.ms-select.open').forEach(function(m) { m.classList.remove('open'); });
+    });
+
+    function getFilters() {
+        var catF = CAT_FILTER_MAP[currentCat] || CAT_FILTER_MAP[''];
+        return {
+            town: $('filterTown').value,
+            village: $('filterVillage').value,
+            status: catF.status || '',
+            hazard: catF.hazard || $('filterHazard').value,
+            houseUsage: $('filterHouseUsage').value,
+            houseType: $('filterHouseType').value,
+            specificUsage: msFilterSpecificUsage.get(),
+            q: $('filterQ').value.trim(),
+            dateFrom: $('filterDateFrom').value,
+            dateTo: $('filterDateTo').value
+        };
+    }
+
+    // 加载二级分类计数（不受当前分类影响，但继承其他筛选条件）
+    function loadCatCounts() {
+        if (currentTab !== 'records') return;
+        var f = getFilters();
+        var base = new URLSearchParams();
+        base.set('page', 1); base.set('size', 1);
+        if (f.town) base.set('town', f.town);
+        if (f.village) base.set('village', f.village);
+        // hazard 下拉条件只在 tab 未锁定时继承到计数；tab 锁定（safe/unrectified）时由各计数请求自带 hazard
+        if (!catHazardLock() && f.hazard) base.set('hazard', f.hazard);
+        if (f.houseUsage) base.set('houseUsage', f.houseUsage);
+        if (f.houseType) base.set('houseType', f.houseType);
+        if (f.specificUsage.length) base.set('specificUsage', f.specificUsage.join(','));
+        if (f.q) base.set('q', f.q);
+        if (f.dateFrom) base.set('dateFrom', f.dateFrom);
+        if (f.dateTo) base.set('dateTo', f.dateTo);
+        var fetchCount = function(status, hazard) {
+            var p = new URLSearchParams(base);
+            if (status) p.set('status', status);
+            if (hazard) p.set('hazard', hazard);
+            return fetch('/api/farm-review-records/page?' + p.toString())
+                .then(function(r) { return r.json(); })
+                .then(function(res) { return res.total || 0; })
+                .catch(function() { return 0; });
+        };
+        Promise.all([
+            fetchCount('', ''),
+            fetchCount('draft', ''),
+            fetchCount('submitted', '未发现'),
+            fetchCount('submitted', '一般,严重'),
+            fetchCount('rectified', '')
+        ])
+            .then(function(rs) {
+                var setTxt = function(id, v) { var el = $(id); if (el) el.textContent = v; };
+                setTxt('cntAll', rs[0]);
+                setTxt('cntDraft', rs[1]);
+                setTxt('cntSafe', rs[2]);
+                setTxt('cntUnrectified', rs[3]);
+                setTxt('cntRectified', rs[4]);
+            });
+    }
+    function switchCat(cat) {
+        if (cat === currentCat) return;
+        currentCat = cat;
+        document.querySelectorAll('.sub-tab-btn').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.cat === cat);
+        });
+        applyHazardLock();
+        states.records.page = 1;
+        loadList();
+    }
+    document.querySelectorAll('.sub-tab-btn').forEach(function(b) {
+        b.addEventListener('click', function() { switchCat(b.dataset.cat); });
+    });
+
+    function buildQuery() {
+        var f = getFilters();
+        var s = cur();
+        var params = new URLSearchParams();
+        params.set('page', s.page);
+        params.set('size', s.size);
+        if (f.town) params.set('town', f.town);
+        if (f.village) params.set('village', f.village);
+        if (f.hazard) params.set('hazard', f.hazard);
+        if (f.houseUsage) params.set('houseUsage', f.houseUsage);
+        if (f.specificUsage.length) params.set('specificUsage', f.specificUsage.join(','));
+        if (f.q) params.set('q', f.q);
+        if (currentTab === 'records') {
+            if (f.houseType) params.set('houseType', f.houseType);
+            if (f.status) params.set('status', f.status);
+            if (f.dateFrom) params.set('dateFrom', f.dateFrom);
+            if (f.dateTo) params.set('dateTo', f.dateTo);
+        }
+        if (currentTab === 'pending') {
+            var dv = $('filterDispatched') ? $('filterDispatched').value : '';
+            if (dv) params.set('dispatched', dv);
+        }
+        return params.toString();
+    }
+
+    var _loadSeq = 0; // 请求序号：防止旧响应覆盖新结果（竞态防护）
+    function loadList() {
+        var s = cur();
+        var colspan = currentTab === 'pending' ? 9 : 8;
+        var seq = ++_loadSeq;
+        $('tbodyMain').innerHTML = '<tr><td colspan="' + colspan + '" style="text-align: center; padding: 30px;"><span class="loading"></span> 加载中...</td></tr>';
+        fetch(apiBase() + '/page?' + buildQuery())
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (seq !== _loadSeq) return; // 已有更新请求发出，丢弃本次旧响应
+                s.rows = res.rows || [];
+                s.total = res.total || 0;
+                if (res.townVillages) TOWN_VILLAGES = res.townVillages;
+                renderTableHead();
+                renderTable();
+                renderPager();
+                renderTownFilter(res.towns || []);
+                renderVillageFilter();
+                loadCatCounts();
+            })
+            .catch(function() {
+                if (seq !== _loadSeq) return;
+                $('tbodyMain').innerHTML = '<tr><td colspan="' + colspan + '" class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><div>加载失败</div></td></tr>';
+                toast('加载失败', 'error');
+            });
+    }
+
+    function renderTableHead() {
+        var thead = $('theadRow');
+        if (currentTab === 'pending') {
+            thead.innerHTML =
+                '<th style="width: 36px;"><input type="checkbox" id="chkAll"></th>' +
+                '<th>唯一标识</th><th>地址</th><th>街镇/村居委</th>' +
+                '<th>隐患等级</th><th>初步判定</th><th>下发状态</th><th>导入时间</th><th>操作</th>';
+        } else {
+            thead.innerHTML =
+                '<th style="width: 36px;"><input type="checkbox" id="chkAll"></th>' +
+                '<th>唯一标识</th><th>地址</th><th>街镇/村居委</th>' +
+                '<th>隐患等级</th><th>状态</th><th>排查时间</th><th>操作</th>';
+        }
+        var chkAll = $('chkAll');
+        if (chkAll) {
+            chkAll.addEventListener('change', function() {
+                var checked = this.checked;
+                document.querySelectorAll('.row-chk').forEach(function(c) { c.checked = checked; });
+            });
+        }
+    }
+
+    // 缓存服务端返回的 town→villages 映射，供村/居委联动
+    var TOWN_VILLAGES = {};
+
+    function renderTownFilter(towns) {
+        var sel = $('filterTown');
+        var cur = sel.value;
+        var existing = {};
+        for (var i = 1; i < sel.options.length; i++) existing[sel.options[i].value] = 1;
+        towns.forEach(function(t) {
+            if (!existing[t]) {
+                var opt = document.createElement('option');
+                opt.value = t; opt.textContent = t;
+                sel.appendChild(opt);
+            }
+        });
+        sel.value = cur;
+    }
+
+    // 根据当前选中的镇，重建村/居委下拉（联动）
+    function renderVillageFilter() {
+        var town = $('filterTown').value;
+        var sel = $('filterVillage');
+        var curVal = sel.value;
+        var villages = (town && TOWN_VILLAGES[town]) ? TOWN_VILLAGES[town] : [];
+        sel.innerHTML = '<option value="">全部</option>';
+        villages.forEach(function(v) {
+            var opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            sel.appendChild(opt);
+        });
+        // 若之前选中的村仍在新列表中则保留，否则清空
+        sel.value = (curVal && villages.indexOf(curVal) >= 0) ? curVal : '';
+    }
+
+    function renderTable() {
+        var s = cur();
+        var tbody = $('tbodyMain');
+        var colspan = currentTab === 'pending' ? 9 : 8;
+        if (!s.rows.length) {
+            tbody.innerHTML = '<tr><td colspan="' + colspan + '" class="empty-state"><i class="fa-solid fa-inbox"></i><div>暂无数据</div></td></tr>';
+            return;
+        }
+        tbody.innerHTML = s.rows.map(function(r) {
+            // 隐患等级兼容：优先顶层，其次 answers 内（H5 提交时写在 answers.hazardLevel）
+            var hz = r.hazardLevel || (r.answers && r.answers.hazardLevel) || '';
+            var hazardCls = hz === '严重' ? 'tag-danger' : (hz === '一般' ? 'tag-warning' : (hz === '未发现' ? 'tag-info' : 'tag-secondary'));
+            var statusCls = r.status === 'submitted' ? 'tag-success' : (r.status === 'rectified' ? 'tag-primary' : (r.status === 'draft' ? 'tag-info' : 'tag-secondary'));
+            var statusText = r.status === 'submitted' ? '已提交' : (r.status === 'rectified' ? '已整改' : (r.status === 'draft' ? '草稿' : (r.status || '—')));
+            // 排查时间显示规则：提交/整改 → submitTime（手机端提交时间为准）；
+            // 草稿 → 优先 saveTime（保存草稿时刻），兜底 checkin.time（更早的现场打卡时刻）
+            var time = '—';
+            if (r.status === 'draft') {
+                var draftT = r.saveTime || (r.checkin && r.checkin.time) || '';
+                if (draftT) time = String(draftT).slice(0, 16).replace('T', ' ');
+            } else {
+                var subT = r.submitTime || r.inspectTime || '';
+                if (subT) time = String(subT).slice(0, 16).replace('T', ' ');
+            }
+            var importTime = r.importTime ? String(r.importTime).slice(0, 16).replace('T', ' ') : '—';
+            var cols =
+                '<td><input type="checkbox" class="row-chk" data-no="' + esc(r.houseNo) + '"></td>' +
+                '<td class="col-no">' + esc(r.houseNo) + '</td>' +
+                '<td class="col-addr" title="' + esc(r.houseAddress || '') + '">' + esc(r.houseAddress || '—') + '</td>' +
+                '<td>' + esc((r.town || '—') + (r.village ? ' / ' + r.village : '')) + '</td>' +
+                '<td><span class="tag ' + hazardCls + '">' + esc(hz || '—') + '</span></td>';
+            if (currentTab === 'pending') {
+                var dispatched = r.dispatched === true || r.dispatched === 'true';
+                var dCls = dispatched ? 'tag-success' : 'tag-secondary';
+                var dText = dispatched ? '已下发' : '未下发';
+                var dTitle = dispatched && r.dispatchedTime ? (' title="下发时间：' + esc(r.dispatchedTime) + '"') : '';
+                cols += '<td>' + esc(r.initialJudgment || '—') + '</td>' +
+                        '<td' + dTitle + '><span class="tag ' + dCls + '">' + dText + '</span></td>' +
+                        '<td>' + esc(importTime) + '</td>';
+            } else {
+                cols += '<td><span class="tag ' + statusCls + '">' + esc(statusText) + '</span></td>' +
+                        '<td>' + esc(time) + '</td>';
+            }
+            cols += '<td class="op-cell"><button class="btn btn-sm" onclick="window.__openDetail(\'' + esc(r.houseNo) + '\')"><i class="fa-solid fa-pen-to-square"></i> 详情</button>';
+            if (currentTab === 'pending') {
+                var dispatched2 = r.dispatched === true || r.dispatched === 'true';
+                if (dispatched2) {
+                    cols += '<button class="btn btn-sm" style="color:#c62828;border-color:#c62828;" onclick="window.__recallOne(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-rotate-left"></i> 收回</button>';
+                } else {
+                    cols += '<button class="btn btn-sm" style="color:#2e7d32;border-color:#2e7d32;" onclick="window.__dispatchOne(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-share-from-square"></i> 下发</button>';
+                }
+            }
+            if (currentTab === 'records') {
+                var isDraft = r.status === 'draft';
+                var isRectified = r.status === 'rectified';
+                if (!isDraft && !isRectified) {
+                    // 有隐患（一般/严重）的记录显示整改入口
+                    if (hz === '严重' || hz === '一般') {
+                        cols += '<button class="btn btn-sm" style="color:#e65100;border-color:#e65100;" onclick="window.__openRectify(\'' + esc(r.houseNo) + '\')"><i class="fa-solid fa-screwdriver-wrench"></i> 整改</button>';
+                    }
+                    // 推送按钮：未推送 → 蓝色"推送"；已推送 → 绿色"已推送×N"（hover 显示最后推送时间）
+                    var pCnt = parseInt(r.pushCount, 10) || 0;
+                    if (pCnt > 0) {
+                        var pTip = r.pushedTime ? (' title="最后推送：' + esc(r.pushedTime) + '"') : '';
+                        cols += '<button class="btn btn-sm btn-push pushed"' + pTip + ' onclick="window.__pushToMini(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-check"></i> 已推送×' + pCnt + '</button>';
+                    } else {
+                        cols += '<button class="btn btn-sm btn-push" onclick="window.__pushToMini(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-paper-plane"></i> 推送</button>';
+                    }
+                }
+                // 已整改记录：除"详情"外提供"入档"按钮，同步到农村自建房风险档案
+                if (isRectified) {
+                    cols += '<button class="btn btn-sm btn-arch" onclick="window.__syncToArchive(\'' + esc(r.houseNo) + '\', this)"><i class="fa-solid fa-box-archive"></i> 入档</button>';
+                }
+            }
+            cols += '</td>';
+            return '<tr>' + cols + '</tr>';
+        }).join('');
+    }
+
+    function renderPager() {
+        var s = cur();
+        $('totalCount').textContent = s.total;
+        var totalPages = Math.max(1, Math.ceil(s.total / s.size));
+        var btns = $('pagerBtns');
+        var curPage = s.page;
+        var html = '';
+        html += '<button class="pager-btn" data-p="1" ' + (curPage <= 1 ? 'disabled' : '') + '><i class="fa-solid fa-angles-left"></i></button>';
+        html += '<button class="pager-btn" data-p="' + (curPage - 1) + '" ' + (curPage <= 1 ? 'disabled' : '') + '><i class="fa-solid fa-angle-left"></i></button>';
+        var start = Math.max(1, curPage - 2);
+        var end = Math.min(totalPages, curPage + 2);
+        if (start > 1) { html += '<button class="pager-btn" data-p="1">1</button>'; if (start > 2) html += '<span style="padding: 0 4px;">…</span>'; }
+        for (var p = start; p <= end; p++) {
+            html += '<button class="pager-btn' + (p === curPage ? ' active' : '') + '" data-p="' + p + '">' + p + '</button>';
+        }
+        if (end < totalPages) { if (end < totalPages - 1) html += '<span style="padding: 0 4px;">…</span>'; html += '<button class="pager-btn" data-p="' + totalPages + '">' + totalPages + '</button>'; }
+        html += '<button class="pager-btn" data-p="' + (curPage + 1) + '" ' + (curPage >= totalPages ? 'disabled' : '') + '><i class="fa-solid fa-angle-right"></i></button>';
+        html += '<button class="pager-btn" data-p="' + totalPages + '" ' + (curPage >= totalPages ? 'disabled' : '') + '><i class="fa-solid fa-angles-right"></i></button>';
+        btns.innerHTML = html;
+        btns.querySelectorAll('.pager-btn[data-p]').forEach(function(b) {
+            b.addEventListener('click', function() {
+                var p = parseInt(b.dataset.p, 10);
+                if (p >= 1 && p <= totalPages && p !== cur().page) {
+                    cur().page = p;
+                    loadList();
+                }
+            });
+        });
+    }
+
+    // ================= 详情抽屉 =================
+    var currentRecord = null;
+
+    // 按唯一标识查找当前行数据
+    function findRow(houseNo) {
+        var s = cur();
+        for (var i = 0; i < s.rows.length; i++) {
+            if (s.rows[i].houseNo === houseNo) return s.rows[i];
+        }
+        return null;
+    }
+
+    // 推送白名单：只推送 PC 详情页第 1/2/4 节字段（房屋底数 + 排查问题清单 + 现场照片）
+    // 不含第 3 节现场打卡（checkin）、第 5 节房屋鉴定（rectify.appraisal）、第 6 节隐患整治（rectify.measures 下的非排查字段）
+    var PUSH_KEYS = [
+        // 标识 / 系统字段（H5 识别 + 服务端计数需要）
+        'houseNo', 'status', 'submitTime', 'saveTime', 'updateTime', 'pushedTime', 'pushCount',
+        // 第 1 节 房屋底数
+        'district', 'town', 'village', 'villageName', 'groupName', 'roadName', 'buildingNo',
+        'houseAddress', 'houseUsage', 'specificUsage', 'otherUsage',
+        'floors', 'area', 'buildYear', 'initialJudgment', 'appraisalResult',
+        // 第 2 节 排查问题清单
+        'checkFindTime', 'homesteadLocation', 'uniqueId', 'houseOwner', 'contactPhone',
+        'houseFloors', 'houseType', 'hazards', 'structuralProblems', 'hazardLevel',
+        'tempControlMeasures', 'tempControlMeasuresOther',
+        'inspector', 'inspectorName', 'checkRemark',
+        // 第 4 节 现场照片
+        'photos', 'photoCount',
+        // H5 地图/详情渲染依赖（房屋定位 + 产权人兜底）
+        'lat', 'lng', 'houseLat', 'houseLng', 'owner', 'houseName'
+    ];
+
+    // 单条推送核心逻辑（返回 Promise），只推送第 1/2/4 节内容，小程序端据此检测到变化
+    function pushOne(r) {
+        // 按白名单挑字段，避免把现场打卡/鉴定/整治等 PC 私有字段推给小程序
+        var payload = {};
+        PUSH_KEYS.forEach(function(k) {
+            if (r[k] !== undefined) payload[k] = r[k];
+        });
+        // 第 2 节里嵌套的「需产权人落实整改措施 / 计划整改完成时限」属于推送范围
+        // 但 rectify 下的 appraisal、controlPhotos、engineeringPhotos、签名等属于第 5/6 节，不推
+        var rm = (r.rectify && r.rectify.measures) || {};
+        if (rm.controlTypes !== undefined || rm.ownerDate !== undefined) {
+            payload.rectify = { measures: {} };
+            if (rm.controlTypes !== undefined) payload.rectify.measures.controlTypes = rm.controlTypes;
+            if (rm.ownerDate !== undefined) payload.rectify.measures.ownerDate = rm.ownerDate;
+        }
+        payload.pushedTime = new Date().toLocaleString('sv-SE').slice(0, 16);
+        // 推送快照：H5 端冻结在推送那一刻的数据，PC 后续保存不影响手机端
+        // 剔除 pushedSnapshot 自身避免嵌套膨胀；剔除 checkin/rectify 等 PC 私有字段（白名单已过滤，但快照要完整副本）
+        var snapshot = {};
+        Object.keys(r).forEach(function(k) {
+            if (k === 'pushedSnapshot') return;
+            snapshot[k] = r[k];
+        });
+        payload.pushedSnapshot = snapshot;
+        return fetch('/api/farm-review-records/' + encodeURIComponent(r.houseNo), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(resp) { return resp.json(); })
+          .then(function(res) { return !!(res && res.success); });
+    }
+
+    // 单条入档核心逻辑（同步，失败抛错），写入农村自建房风险档案
+    function archiveOne(r) {
+        var houseNo = r.houseNo;
+        // 隐患等级 → 风险等级映射
+        var riskLevel = r.hazardLevel === '严重' ? '第三类' : (r.hazardLevel === '一般' ? '第二类' : '第一类');
+        // 先读旧记录用于静态字段 diff 留痕（2026-10-19 三层档案改造）
+        var oldRec = (typeof getHouseRecord === 'function') ? JSON.parse(JSON.stringify(getHouseRecord(houseNo) || {})) : {};
+        patchHouseRecord(houseNo, function(rec) {
+            rec.no = houseNo;
+            rec.name = r.owner || rec.name || houseNo;
+            rec.owner = r.owner || rec.owner || '';
+            rec.address = r.houseAddress || rec.address || '';
+            rec.street = r.town || rec.street || '';
+            rec.community = r.village || rec.community || '';
+            rec.village = r.village || rec.village || '';
+            rec.houseType = '农村自建房';
+            rec.riskLevel = riskLevel;
+            rec.risk = (typeof RISK_LABEL_MAP_INV !== 'undefined' && RISK_LABEL_MAP_INV[riskLevel]) || rec.risk;
+            // 风险信息
+            rec.riskInfo = rec.riskInfo || {};
+            rec.riskInfo.riskLevel = riskLevel;
+            rec.riskInfo.riskNo = rec.riskInfo.riskNo || ('RSK-' + houseNo);
+            rec.riskInfo.riskName = rec.riskInfo.riskName || ((r.owner || houseNo) + ' ' + riskLevel + '风险');
+            rec.riskInfo.discoveryTime = rec.riskInfo.discoveryTime || r.inspectTime || r.submitTime || '';
+            rec.riskInfo.discoverer = rec.riskInfo.discoverer || r.inspector || '';
+            rec.riskInfo.riskDesc = r.checkRemark || rec.riskInfo.riskDesc || '';
+            rec.riskInfo.discoveryMethod = rec.riskInfo.discoveryMethod || '农房回头看排查';
+            // 基础信息
+            rec.overview = rec.overview || {};
+            rec.overview.houseNo = houseNo;
+            rec.overview.owner = r.owner || rec.overview.owner || '';
+            rec.overview.address = r.houseAddress || rec.overview.address || '';
+            rec.overview.belongTo = ((r.town || '') + (r.village ? ' ' + r.village : '')) || rec.overview.belongTo || '';
+            // 排查来源标记
+            rec.reviewSource = '农房回头看';
+            rec.reviewTime = r.inspectTime || r.submitTime || '';
+            rec.reviewInspector = r.inspector || '';
+
+            // ===== 2026-10-19 三层档案改造：留痕 + 隐患关联 + taskFlows 索引 =====
+            // 1. 静态字段 diff → changeLog[]
+            if (typeof diffStaticFields === 'function') {
+                diffStaticFields(oldRec, rec, 'task', r.id || r.houseNo, r.inspector || '');
+            }
+            // 2. 隐患关联：一般/严重 才生成隐患
+            if (r.hazardLevel === '一般' || r.hazardLevel === '严重') {
+                if (!Array.isArray(rec.hazardRecords)) rec.hazardRecords = [];
+                if (!Array.isArray(rec.hazardDynamics)) rec.hazardDynamics = [];
+                var hazardType = r.checkRemark || '安全隐患';
+                var loc = r.address || r.houseAddress || '';
+                // 查重：同部位+同类型+未销号
+                var dup = loc ? rec.hazardRecords.find(function(h){
+                    return h.currentStatus !== '已销号' && (h.location || '') === loc && (h.hazardType || '') === hazardType;
+                }) : null;
+                var taskFlowEntry = {
+                    taskType: 'farm-review',
+                    taskName: '农房回头看',
+                    recordId: r.id || r.houseNo,
+                    round: 1,
+                    joinedAt: r.submitTime || r.inspectTime || new Date().toLocaleString('sv-SE').slice(0, 16),
+                    result: r.hazardLevel + '隐患',
+                    action: dup ? '复查' : '登记'
+                };
+                if (dup) {
+                    // 复查：追加动态 + 更新 taskFlows
+                    if (!Array.isArray(dup.taskFlows)) dup.taskFlows = [];
+                    dup.taskFlows.push(taskFlowEntry);
+                    var dynSeq = rec.hazardDynamics.filter(function(d){ return d.hazardId === dup.id; }).length + 1;
+                    rec.hazardDynamics.push({
+                        id: 'DYN-' + dup.id + '-' + String(dynSeq).padStart(2, '0'),
+                        hazardId: dup.id,
+                        actionType: '复查',
+                        actionTime: taskFlowEntry.joinedAt,
+                        operator: r.inspector || '',
+                        org: r.town || '',
+                        content: '[农房回头看复查] ' + (r.checkRemark || hazardType),
+                        conclusion: r.checkRemark || '复查确认',
+                        levelAfter: riskLevel,
+                        photos: [],
+                        sourceType: '排查',
+                        sourceId: r.id || ''
+                    });
+                } else {
+                    // 登记：新建隐患 + 动态 + taskFlows
+                    var seq = rec.hazardRecords.length + 1;
+                    var hid = 'HZ-' + houseNo + '-' + String(seq).padStart(3, '0');
+                    var hz = {
+                        id: hid,
+                        houseNo: houseNo,
+                        createdAt: taskFlowEntry.joinedAt,
+                        createdBy: r.inspector || '',
+                        sourceType: '排查',
+                        sourceId: r.id || '',
+                        hazardType: hazardType,
+                        hazardTypeOther: '',
+                        location: loc,
+                        description: r.checkRemark || '',
+                        photos: [],
+                        initialJudge: riskLevel,
+                        currentLevel: riskLevel,
+                        currentStatus: '管控中',
+                        controlMeasure: '',
+                        controlUpdatedAt: '',
+                        closedAt: '',
+                        closeAuditId: '',
+                        taskFlows: [taskFlowEntry]
+                    };
+                    rec.hazardRecords.push(hz);
+                    rec.hazardDynamics.push({
+                        id: 'DYN-' + hid + '-01',
+                        hazardId: hid,
+                        actionType: '登记',
+                        actionTime: taskFlowEntry.joinedAt,
+                        operator: r.inspector || '',
+                        org: r.town || '',
+                        content: '[农房回头看登记] ' + (r.checkRemark || hazardType),
+                        conclusion: r.checkRemark || '确认安全隐患',
+                        levelAfter: riskLevel,
+                        photos: [],
+                        sourceType: '排查',
+                        sourceId: r.id || ''
+                    });
+                }
+            }
+        });
+    }
+
+    // 按钮成功反馈：变绿 ✓，2 秒后恢复
+    function flashBtn(btn, cls, iconOk, iconBack) {
+        if (!btn) return;
+        btn.classList.add(cls);
+        var icon = btn.querySelector('i');
+        if (icon) icon.className = iconOk;
+        setTimeout(function() {
+            btn.classList.remove(cls);
+            if (icon) icon.className = iconBack;
+        }, 2000);
+    }
+
+    // 手动推送单条排查结果到服务端（行内按钮入口）
+    window.__pushToMini = function(houseNo, btn) {
+        var r = findRow(houseNo);
+        if (!r) { toast('记录不存在', 'error'); return; }
+        if (btn) btn.classList.add('pushing');
+        pushOne(r)
+        .then(function(ok) {
+            if (btn) btn.classList.remove('pushing');
+            if (ok) {
+                // 立即更新行数据 + 按钮文案（计数 +1，时间戳更新）
+                r.pushCount = (parseInt(r.pushCount, 10) || 0) + 1;
+                r.pushedTime = new Date().toLocaleString('sv-SE').slice(0, 16);
+                if (btn) {
+                    btn.classList.add('pushed');
+                    btn.title = '最后推送：' + r.pushedTime;
+                    btn.innerHTML = '<i class="fa-solid fa-check"></i> 已推送×' + r.pushCount;
+                }
+                toast('已推送（第 ' + r.pushCount + ' 次），小程序端将自动同步', 'success');
+            } else {
+                toast('推送失败', 'error');
+            }
+        })
+        .catch(function() {
+            if (btn) btn.classList.remove('pushing');
+            toast('网络异常，推送失败', 'error');
+        });
+    };
+
+    // 手动同步单条排查结果到农村自建房风险档案（行内按钮入口）
+    window.__syncToArchive = function(houseNo, btn) {
+        var r = findRow(houseNo);
+        if (!r) { toast('记录不存在', 'error'); return; }
+        if (typeof patchHouseRecord !== 'function') { toast('档案数据层未加载', 'error'); return; }
+        if (btn) btn.classList.add('arching');
+        try {
+            archiveOne(r);
+            if (btn) btn.classList.remove('arching');
+            flashBtn(btn, 'arched', 'fa-solid fa-check', 'fa-solid fa-box-archive');
+            toast('已同步到风险档案', 'success');
+        } catch (e) {
+            if (btn) btn.classList.remove('arching');
+            toast('同步失败：' + e.message, 'error');
+        }
+    };
+
+    // 获取当前勾选的行数据
+    function getSelectedRows() {
+        var s = cur();
+        var nos = {};
+        document.querySelectorAll('.row-chk:checked').forEach(function(c) {
+            if (c.dataset.no) nos[c.dataset.no] = true;
+        });
+        return s.rows.filter(function(r) { return nos[r.houseNo]; });
+    }
+
+    // 批量推送到小程序端（分批执行，每批 20 条，避免瞬时大量请求）
+    function batchPush() {
+        var rows = getSelectedRows();
+        if (!rows.length) { toast('请先勾选要推送的记录', 'error'); return; }
+        var btn = $('btnBatchPush');
+        if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+        var BATCH = 20;
+        var done = 0, fail = 0, idx = 0;
+        function runBatch() {
+            if (idx >= rows.length) {
+                if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+                if (fail === 0) toast('已批量推送 ' + done + ' 条，小程序端将自动同步', 'success');
+                else toast('推送完成：成功 ' + done + ' 条，失败 ' + fail + ' 条', fail ? 'error' : 'success');
+                return;
+            }
+            var batch = rows.slice(idx, idx + BATCH);
+            idx += BATCH;
+            Promise.all(batch.map(function(r) {
+                return pushOne(r).then(function(ok) { ok ? done++ : fail++; })
+                                .catch(function() { fail++; });
+            })).then(runBatch);
+        }
+        runBatch();
+    }
+
+    // 批量入档到风险档案（仅已整改记录可入档）
+    function batchArchive() {
+        if (typeof patchHouseRecord !== 'function') { toast('档案数据层未加载', 'error'); return; }
+        var rows = getSelectedRows();
+        if (!rows.length) { toast('请先勾选要入档的记录', 'error'); return; }
+        // 过滤：只允许"已整改"状态入档
+        var eligible = rows.filter(function(r) { return r.status === 'rectified'; });
+        var skipped = rows.length - eligible.length;
+        if (!eligible.length) {
+            toast('仅「已整改」状态的记录可入档，当前勾选 ' + rows.length + ' 条均不符合', 'error');
+            return;
+        }
+        var done = 0, fail = 0;
+        eligible.forEach(function(r) {
+            try { archiveOne(r); done++; } catch (e) { fail++; }
+        });
+        var msg = '已批量入档 ' + done + ' 条到风险档案';
+        if (skipped > 0) msg += '，跳过非已整改 ' + skipped + ' 条';
+        if (fail === 0) toast(msg, skipped > 0 ? 'info' : 'success');
+        else toast('入档完成：成功 ' + done + ' 条，失败 ' + fail + ' 条' + (skipped > 0 ? '，跳过非已整改 ' + skipped + ' 条' : ''), fail ? 'error' : 'success');
+    }
+
+    window.__openDetail = function(houseNo) {
+        // 跳转到独立详情页（抽屉逻辑已迁移到 farm-review-detail.html）
+        var url = './farm-review-detail.html?no=' + encodeURIComponent(houseNo);
+        if (currentTab === 'pending') {
+            url += '&tab=pending';
+        } else {
+            // 已整改记录：带 mode=rectify 让详情页显示全部 6 节（含房屋鉴定、隐患整治），只读
+            var r = findRow(houseNo);
+            if (r && r.status === 'rectified') url += '&mode=rectify';
+        }
+        location.href = url;
+    };
+
+    // 跳转到隐患整改页（records 有隐患记录的整改入口）
+    // 已合并到 detail 页：使用 mode=rectify 参数
+    window.__openRectify = function(houseNo) {
+        location.href = './farm-review-detail.html?no=' + encodeURIComponent(houseNo) + '&mode=rectify';
+    };
+
+    // ================= 待排查任务下发 / 收回 =================
+    // 从组织架构提取“各街镇”节点下的账号列表
+    function getTownAccounts() {
+        var list = [];
+        if (typeof orgData === 'undefined' || !Array.isArray(orgData)) return list;
+        for (var i = 0; i < orgData.length; i++) {
+            if (orgData[i] && orgData[i].id === 'dept100') {
+                (orgData[i].children || []).forEach(function(c) {
+                    list.push({ id: c.id, name: c.name });
+                });
+                break;
+            }
+        }
+        return list;
+    }
+
+    // 打开“选择下发账号”弹层。tasks: 待下发任务数组；onConfirm(dispatchedToMap): 确认回调
+    function openDispatchModal(tasks, onConfirm) {
+        var accounts = getTownAccounts();
+        var container = $('dispatchGroups');
+        if (!container) return;
+        if (!accounts.length) { toast('组织架构中未找到街镇账号', 'error'); return; }
+        // 按街镇分组
+        var groups = {};
+        var order = [];
+        tasks.forEach(function(t) {
+            var town = t.town || '(未填街镇)';
+            if (!groups[town]) { groups[town] = []; order.push(town); }
+            groups[town].push(t);
+        });
+        // 记录每组所选账号：默认选与街镇同名的账号；找不到同名则不选中，提示用户手动选
+        var selected = {};
+        var unmatchedTowns = []; // 找不到同名账号的街镇
+        order.forEach(function(town) {
+            var def = accounts.filter(function(a) { return a.name === town; })[0];
+            if (def) {
+                selected[town] = def.name;
+            } else {
+                selected[town] = ''; // 不默认选第一个，强制用户手动选择
+                unmatchedTowns.push(town);
+            }
+        });
+        // 渲染
+        var html = '';
+        order.forEach(function(town) {
+            var items = groups[town];
+            var unmatched = unmatchedTowns.indexOf(town) >= 0;
+            html += '<div class="dispatch-group' + (unmatched ? ' unmatched' : '') + '" data-town="' + esc(town) + '">' +
+                '<div class="dispatch-group-head"><span><i class="fa-solid fa-location-dot" style="color:var(--primary);margin-right:6px;"></i>' + esc(town) + '</span>' +
+                '<span class="cnt">' + items.length + ' 条任务</span></div>' +
+                '<div class="dispatch-group-body">';
+            if (unmatched) {
+                html += '<div class="dispatch-warn"><i class="fa-solid fa-triangle-exclamation"></i>未找到与「' + esc(town) + '」同名的账号，请手动选择下发账号</div>';
+            }
+            html += '<div class="dispatch-row"><label>下发账号</label><div class="dispatch-accounts" style="flex:1;margin-top:0;">';
+            accounts.forEach(function(a) {
+                var act = (selected[town] === a.name) ? ' active' : '';
+                html += '<div class="dispatch-acc' + act + '" data-town="' + esc(town) + '" data-acc="' + esc(a.name) + '"><i class="fa-solid fa-user"></i>' + esc(a.name) + '</div>';
+            });
+            html += '</div></div>';
+            html += '<div class="dispatch-tasks">';
+            items.forEach(function(t) {
+                html += '<div>· ' + esc(t.houseNo || '') + '　' + esc(t.houseAddress || t.address || '') + '</div>';
+            });
+            html += '</div></div></div>';
+        });
+        container.innerHTML = html;
+        // 绑定账号点选
+        container.querySelectorAll('.dispatch-acc').forEach(function(el) {
+            el.addEventListener('click', function() {
+                var town = el.dataset.town;
+                var acc = el.dataset.acc;
+                selected[town] = acc;
+                container.querySelectorAll('.dispatch-acc[data-town="' + town + '"]').forEach(function(x) {
+                    x.classList.toggle('active', x.dataset.acc === acc);
+                });
+                // 选好后解除该组警告态 + 刷新确认按钮状态
+                var groupEl = container.querySelector('.dispatch-group[data-town="' + town + '"]');
+                if (groupEl && acc) {
+                    groupEl.classList.remove('unmatched');
+                    var warn = groupEl.querySelector('.dispatch-warn');
+                    if (warn) warn.remove();
+                }
+                refreshConfirmState();
+            });
+        });
+        // 确认按钮：所有组都选好账号才能点
+        var confirmBtn = $('btnDispatchConfirm');
+        function refreshConfirmState() {
+            var allPicked = order.every(function(t) { return !!selected[t]; });
+            confirmBtn.disabled = !allPicked;
+            if (allPicked) {
+                confirmBtn.innerHTML = '<i class="fa-solid fa-share-from-square"></i> 确认下发';
+            } else {
+                var left = order.filter(function(t) { return !selected[t]; }).length;
+                confirmBtn.innerHTML = '<i class="fa-solid fa-share-from-square"></i> 还有 ' + left + ' 组未选账号';
+            }
+        }
+        var newConfirm = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+        confirmBtn = newConfirm;
+        newConfirm.addEventListener('click', function() {
+            if (newConfirm.disabled) return;
+            var map = {};
+            order.forEach(function(town) {
+                groups[town].forEach(function(t) { map[t.houseNo] = selected[town]; });
+            });
+            closeDispatchModal();
+            if (typeof onConfirm === 'function') onConfirm(map);
+        });
+        refreshConfirmState();
+        $('dispatchMask').classList.add('open');
+    }
+    function closeDispatchModal() {
+        var m = $('dispatchMask');
+        if (m) m.classList.remove('open');
+    }
+
+    // 单条更新 pending 记录的下发标记（返回 Promise<boolean>）
+    function setDispatched(r, flag, accountName) {
+        var payload = JSON.parse(JSON.stringify(r));
+        payload.dispatched = flag;
+        if (flag) {
+            payload.dispatchedTime = new Date().toLocaleString('sv-SE').slice(0, 16);
+            payload.dispatchedTo = accountName || '';
+        } else {
+            payload.dispatchedTime = '';
+            payload.dispatchedTo = '';
+        }
+        return fetch('/api/farm-review-pending/' + encodeURIComponent(r.houseNo), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(resp) { return resp.json(); })
+          .then(function(res) { return !!(res && res.success); });
+    }
+
+    // 行内：下发单条（先选账号）
+    window.__dispatchOne = function(houseNo, btn) {
+        var r = findRow(houseNo);
+        if (!r) { toast('记录不存在', 'error'); return; }
+        if (r.dispatched === true || r.dispatched === 'true') { toast('该任务已下发', 'error'); return; }
+        openDispatchModal([r], function(map) {
+            if (btn) btn.disabled = true;
+            setDispatched(r, true, map[r.houseNo]).then(function(ok) {
+                if (ok) { toast('已下发到 ' + (map[r.houseNo] || ''), 'success'); loadList(); }
+                else { if (btn) btn.disabled = false; toast('下发失败', 'error'); }
+            }).catch(function() {
+                if (btn) btn.disabled = false; toast('网络异常，下发失败', 'error');
+            });
+        });
+    };
+
+    // 行内：收回单条
+    window.__recallOne = function(houseNo, btn) {
+        var r = findRow(houseNo);
+        if (!r) { toast('记录不存在', 'error'); return; }
+        if (btn) btn.disabled = true;
+        setDispatched(r, false).then(function(ok) {
+            if (ok) { toast('已收回', 'success'); loadList(); }
+            else { if (btn) btn.disabled = false; toast('收回失败', 'error'); }
+        }).catch(function() {
+            if (btn) btn.disabled = false; toast('网络异常，收回失败', 'error');
+        });
+    };
+
+    // 批量原子设置下发标记（单次请求，避免并发全量覆盖丢失）
+    function setDispatchedBatch(houseNos, flag, dispatchedToMap) {
+        return fetch('/api/farm-review-pending/dispatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ houseNos: houseNos, dispatched: flag, dispatchedToMap: dispatchedToMap || null })
+        }).then(function(resp) { return resp.json(); })
+          .then(function(res) { return res; });
+    }
+
+    // 批量下发（打开账号选择弹层，支持跨街镇分组选账号）
+    function batchDispatch() {
+        var rows = getSelectedRows();
+        if (!rows.length) { toast('请先勾选要下发的任务', 'error'); return; }
+        // 仅下发当前未下发的，避免重复
+        var todo = rows.filter(function(r) { return !(r.dispatched === true || r.dispatched === 'true'); });
+        if (!todo.length) { toast('所选任务均已下发', 'error'); return; }
+        // 校验：所选任务必须属于同一街镇，否则只能逐条下发
+        var towns = todo.map(function(r) { return String(r.town || '').trim(); });
+        var noTown = towns.some(function(t) { return !t; });
+        if (noTown) {
+            toast('所选任务中存在街镇信息不明的记录，无法批量下发，请逐条手动下发', 'error');
+            return;
+        }
+        var uniq = {};
+        towns.forEach(function(t) { uniq[t] = true; });
+        if (Object.keys(uniq).length > 1) {
+            toast('所选任务跨多个街镇（' + Object.keys(uniq).join('、') + '），批量下发仅限同一街镇，请分街镇勾选或逐条手动下发', 'error');
+            return;
+        }
+        var skipped = rows.length - todo.length;
+        openDispatchModal(todo, function(map) {
+            var btn = $('btnBatchDispatch');
+            if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+            var nos = todo.map(function(r) { return r.houseNo; });
+            setDispatchedBatch(nos, true, map).then(function(res) {
+                if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+                if (res && res.success) {
+                    var msg = '已批量下发 ' + (res.updated != null ? res.updated : nos.length) + ' 条';
+                    if (skipped > 0) msg += '（跳过已下发 ' + skipped + ' 条）';
+                    toast(msg, 'success');
+                } else {
+                    toast('下发失败', 'error');
+                }
+                loadList();
+            }).catch(function() {
+                if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+                toast('网络异常，下发失败', 'error');
+            });
+        });
+    }
+
+    // 批量收回（带确认）
+    function batchRecall() {
+        var rows = getSelectedRows();
+        if (!rows.length) { toast('请先勾选要收回的任务', 'error'); return; }
+        var todo = rows.filter(function(r) { return r.dispatched === true || r.dispatched === 'true'; });
+        if (!todo.length) { toast('所选任务均未下发', 'error'); return; }
+        if (!confirm('确认收回 ' + todo.length + ' 条已下发任务？收回后小程序端将不再显示。')) return;
+        var btn = $('btnBatchRecall');
+        if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+        var nos = todo.map(function(r) { return r.houseNo; });
+        setDispatchedBatch(nos, false).then(function(res) {
+            if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+            if (res && res.success) {
+                toast('已批量收回 ' + (res.updated != null ? res.updated : nos.length) + ' 条', 'success');
+            } else {
+                toast('收回失败', 'error');
+            }
+            loadList();
+        }).catch(function() {
+            if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+            toast('网络异常，收回失败', 'error');
+        });
+    }
+
+    // ================= 筛选事件 =================
+    $('btnSearch').addEventListener('click', function() { cur().page = 1; loadList(); });
+    $('btnReset').addEventListener('click', function() {
+        $('filterTown').value = '';
+        renderVillageFilter();
+        $('filterHazard').value = ''; $('filterQ').value = '';
+        $('filterHouseUsage').value = '';
+        $('filterHouseType').value = '';
+        msFilterSpecificUsage.clear();
+        $('filterDateFrom').value = ''; $('filterDateTo').value = '';
+        if ($('filterDispatched')) $('filterDispatched').value = '';
+        switchCat('');
+        cur().page = 1; loadList();
+    });
+    // 镇/街道变化 → 联动重建村/居委，并重新查询
+    $('filterTown').addEventListener('change', function() {
+        renderVillageFilter();
+        cur().page = 1; loadList();
+    });
+    // 村/居委变化 → 重新查询
+    $('filterVillage').addEventListener('change', function() {
+        cur().page = 1; loadList();
+    });
+    // 隐患等级变化 → 重新查询
+    $('filterHazard').addEventListener('change', function() {
+        cur().page = 1; loadList();
+    });
+    // 房屋用途变化 → 重新查询
+    $('filterHouseUsage').addEventListener('change', function() {
+        cur().page = 1; loadList();
+    });
+    // 具体用途多选变化 → 重新查询（change 由 msFilterSpecificUsage 触发）
+    $('filterSpecificUsage').addEventListener('change', function() {
+        cur().page = 1; loadList();
+    });
+    // 房屋类型变化 → 重新查询
+    $('filterHouseType').addEventListener('change', function() {
+        cur().page = 1; loadList();
+    });
+    // 下发状态变化 → 重新查询
+    if ($('filterDispatched')) {
+        $('filterDispatched').addEventListener('change', function() {
+            cur().page = 1; loadList();
+        });
+    }
+    $('filterQ').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { cur().page = 1; loadList(); }
+    });
+    $('btnJump').addEventListener('click', function() {
+        var p = parseInt($('jumpPage').value, 10);
+        var s = cur();
+        var totalPages = Math.max(1, Math.ceil(s.total / s.size));
+        if (p >= 1 && p <= totalPages) { s.page = p; loadList(); }
+    });
+
+    $('btnExport').addEventListener('click', function() {
+        var f = getFilters();
+        var params = new URLSearchParams();
+        if (f.town) params.set('town', f.town);
+        if (f.village) params.set('village', f.village);
+        if (f.hazard) params.set('hazard', f.hazard);
+        if (f.houseUsage) params.set('houseUsage', f.houseUsage);
+        if (f.specificUsage.length) params.set('specificUsage', f.specificUsage.join(','));
+        if (f.q) params.set('q', f.q);
+        if (currentTab === 'records') {
+            if (f.houseType) params.set('houseType', f.houseType);
+            if (f.status) params.set('status', f.status);
+            if (f.dateFrom) params.set('dateFrom', f.dateFrom);
+            if (f.dateTo) params.set('dateTo', f.dateTo);
+        }
+        if (currentTab === 'pending') {
+            var dv = $('filterDispatched') ? $('filterDispatched').value : '';
+            if (dv) params.set('dispatched', dv);
+        }
+        window.open(apiBase() + '/export.csv?' + params.toString(), '_blank');
+    });
+
+    // ================= 批量推送 / 批量入档 =================
+    $('btnBatchPush').addEventListener('click', batchPush);
+    $('btnBatchArch').addEventListener('click', batchArchive);
+    var bdBtn = $('btnBatchDispatch'), brBtn = $('btnBatchRecall');
+    if (bdBtn) bdBtn.addEventListener('click', batchDispatch);
+    if (brBtn) brBtn.addEventListener('click', batchRecall);
+
+    // ================= Tab 切换 =================
+    function switchTab(tab) {
+        if (tab === currentTab) return;
+        currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.tab === tab);
+        });
+        // 筛选条字段显隐
+        document.querySelectorAll('.filter-item[data-only]').forEach(function(el) {
+            el.style.display = (el.dataset.only === tab) ? '' : 'none';
+        });
+        // 二级分类条仅排查结果显示
+        document.querySelectorAll('.sub-tab-bar[data-only]').forEach(function(el) {
+            el.style.display = (el.dataset.only === tab) ? '' : 'none';
+        });
+        // 工具栏按钮显隐（批量下发/收回仅待排查有效）
+        document.querySelectorAll('.btn[data-only]').forEach(function(el) {
+            el.style.display = (el.dataset.only === tab) ? '' : 'none';
+        });
+        // 批量推送/入档仅对排查结果有效
+        var showBatch = (tab === 'records');
+        var bp = $('btnBatchPush'), ba = $('btnBatchArch');
+        if (bp) bp.style.display = showBatch ? '' : 'none';
+        if (ba) ba.style.display = showBatch ? '' : 'none';
+        loadList();
+    }
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+        b.addEventListener('click', function() { switchTab(b.dataset.tab); });
+    });
+
+    // ================= 批量导入 =================
+    var importState = {
+        target: 'pending', step: 1, file: null,
+        rows: [], headers: [], mapping: {}, failures: [], validRows: []
+    };
+
+    var FIELD_DEFS = [
+        // ========= 房屋底数（与 detail 页「房屋底数」卡片对齐） =========
+        { key: 'houseNo', label: '唯一标识', required: true, aliases: ['唯一标识', '唯一标识', '编号', 'id', 'houseNo', 'uniqueId'] },
+        { key: 'district', label: '所在区', aliases: ['所在区', '区', 'district'] },
+        { key: 'town', label: '街镇', aliases: ['街镇', '镇', '镇/街道', '所属镇', '街道', '所在镇', 'town'] },
+        { key: 'village', label: '村居委', aliases: ['村居委', '村', '行政村', '所属村', '所在村', '村/居委', 'village'] },
+        { key: 'villageName', label: '村居委（底数）', aliases: ['村居委（底数）', '村委会', 'villageName'] },
+        { key: 'groupName', label: '组', aliases: ['组', '村组', '队', 'groupName'] },
+        { key: 'roadName', label: '路', aliases: ['路', '道路', 'roadName'] },
+        { key: 'buildingNo', label: '号栋', aliases: ['号栋', '号', '门牌号', 'buildingNo'] },
+        { key: 'houseAddress', label: '地址', aliases: ['地址', '房屋地址', '详细地址', '宅基地位置', '坐落地址', 'houseAddress'] },
+        { key: 'owner', label: '房屋产权人', aliases: ['房屋产权人', '产权人', '户主', '业主', 'owner', 'houseOwner'] },
+        { key: 'phone', label: '联系电话', aliases: ['联系电话', '电话', '手机', 'phone', 'contactPhone'] },
+        { key: 'houseUsage', label: '房屋用途', aliases: ['房屋用途', '用途', 'houseUsage'] },
+        { key: 'specificUsage', label: '具体用途', aliases: ['具体用途', 'specificUsage'] },
+        { key: 'otherUsage', label: '其他具体用途', aliases: ['其他具体用途', 'otherUsage'] },
+        { key: 'floors', label: '房屋层数', aliases: ['房屋层数', '建筑层数', '层数', 'floors', 'houseFloors'] },
+        { key: 'area', label: '建筑面积', aliases: ['建筑面积', '面积', 'area'] },
+        { key: 'buildYear', label: '房屋建造年份', aliases: ['房屋建造年份', '建成时间', '建成年份', '建造年份', 'buildYear'] },
+        { key: 'initialJudgment', label: '初步判定（底数）', aliases: ['初步判定（底数）', '判定结果', 'initialJudgment'] },
+        { key: 'appraisalResult', label: '鉴定结论', aliases: ['鉴定结论', '鉴定结果', 'appraisalResult'] },
+        // ========= 排查问题清单（与 detail 页「排查问题清单」卡片严格对齐） =========
+        { key: 'checkFindTime', label: '排查发现时间（2026年X月）', aliases: ['排查发现时间（2026年X月）', '排查发现时间', '发现时间', 'checkFindTime'] },
+        { key: 'homesteadLocation', label: '宅基地位置门牌号', aliases: ['宅基地位置门牌号', '宅基地位置', 'homesteadLocation'] },
+        { key: 'houseType', label: '房屋类型', aliases: ['房屋类型', '类型', 'houseType'] },
+        { key: 'inspectTime', label: '排查时间', aliases: ['排查时间', '排查日期', 'inspectTime'] },
+        { key: 'inspector', label: '现场排查人员', aliases: ['现场排查人员', '排查人', '排查人员', 'inspector'] },
+        { key: 'status', label: '状态', aliases: ['状态', 'status'] },
+        { key: 'hazards', label: '排查发现具体结构安全问题（地基/梁/板/柱/墙体/改扩建违规行为等详细描述）', aliases: ['排查发现具体结构安全问题（地基/梁/板/柱/墙体/改扩建违规行为等详细描述）', '排查发现具体结构安全问题', '结构安全问题', '安全问题', 'hazards', 'structuralProblems'] },
+        { key: 'hazardLevel', label: '隐患等级（一般/严重）', aliases: ['隐患等级（一般/严重）', '隐患等级（整户取最高等级）', '隐患等级', '风险等级', '等级', 'hazardLevel'] },
+        { key: 'tempControlMeasures', label: '现场落实临时管控措施（围挡封控/人员疏散/安全警示/隔离防护等）', aliases: ['现场落实临时管控措施（围挡封控/人员疏散/安全警示/隔离防护等）', '现场落实临时管控措施', '临时管控措施', '临时管控', 'tempControlMeasures', 'tempControl'] },
+        { key: 'rectify.measures.controlTypes', label: '需产权人落实整改措施（修缮加固/安全鉴定/拆除违建/停止经营性使用等）', aliases: ['需产权人落实整改措施（修缮加固/安全鉴定/拆除违建/停止经营性使用等）', '需产权人落实整改措施', '整改措施', 'rectification'] },
+        { key: 'rectify.measures.ownerDate', label: '计划整改完成时限', aliases: ['计划整改完成时限', '整改期限', '计划整改期限', 'deadline'] },
+        { key: 'inspectResult', label: '初步判定', aliases: ['初步判定', '排查结果', 'inspectResult'] },
+        { key: 'checkRemark', label: '备注', aliases: ['备注', '详细描述', '问题描述', 'checkRemark', 'remark'] }
+    ];
+
+    function openImport(target) {
+        importState.target = target;
+        importState.step = 1;
+        importState.file = null;
+        importState.rows = [];
+        importState.headers = [];
+        importState.mapping = {};
+        importState.failures = [];
+        importState.validRows = [];
+
+        $('importTitle').textContent = target === 'pending' ? '批量导入 · 待排查任务' : '批量导入 · 排查结果';
+        $('fileInfo').textContent = '';
+        $('fileInput').value = '';
+        $('btnImportNext').disabled = true;
+        setImportStep(1);
+        $('importMask').classList.add('open');
+    }
+
+    function closeImport() { $('importMask').classList.remove('open'); }
+
+    function setImportStep(n) {
+        importState.step = n;
+        document.querySelectorAll('.import-step').forEach(function(el) {
+            el.classList.toggle('active', parseInt(el.dataset.step, 10) === n);
+        });
+        document.querySelectorAll('.step-indicator .step').forEach(function(el) {
+            el.classList.toggle('active', parseInt(el.dataset.step, 10) <= n);
+        });
+        $('btnImportPrev').style.display = (n > 1 && n < 4) ? '' : 'none';
+        $('btnImportNext').style.display = (n >= 1 && n < 3) ? '' : 'none';
+        $('btnImportRun').style.display = (n === 3) ? '' : 'none';
+        $('btnImportDone').style.display = (n === 4) ? '' : 'none';
+        $('btnImportCancel').style.display = (n < 4) ? '' : 'none';
+    }
+
+    // 导入入口已合并进"数据导入"下拉（data-import 菜单项统一调用 openImport）
+    $('importClose').addEventListener('click', closeImport);
+    $('btnImportCancel').addEventListener('click', closeImport);
+    // 下发账号弹层关闭
+    $('dispatchClose').addEventListener('click', closeDispatchModal);
+    $('btnDispatchCancel').addEventListener('click', closeDispatchModal);
+    $('dispatchMask').addEventListener('click', function(e) { if (e.target === this) closeDispatchModal(); });
+    $('btnImportDone').addEventListener('click', function() {
+        var importedTo = importState.target;
+        closeImport();
+        // 若导入目标 ≠ 当前 tab，切换过去；否则只刷新当前
+        if (importedTo !== currentTab) {
+            switchTab(importedTo);
+        } else {
+            loadList();
+        }
+    });
+
+    $('uploadZone').addEventListener('click', function() { $('fileInput').click(); });
+    $('uploadZone').addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('dragover'); });
+    $('uploadZone').addEventListener('dragleave', function() { this.classList.remove('dragover'); });
+    $('uploadZone').addEventListener('drop', function(e) {
+        e.preventDefault(); this.classList.remove('dragover');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    $('fileInput').addEventListener('change', function() {
+        if (this.files.length) handleFile(this.files[0]);
+    });
+
+    function handleFile(file) {
+        importState.file = file;
+        $('fileInfo').innerHTML = '<i class="fa-solid fa-file-excel"></i> ' + esc(file.name) + ' (' + (file.size / 1024).toFixed(1) + ' KB) <span class="loading"></span> 解析中...';
+
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                var wb = XLSX.read(e.target.result, { type: 'array' });
+                importState.workbook = wb; // 保存 workbook 供后续选择 sheet
+
+                // 如果有多个 sheet，显示选择器
+                if (wb.SheetNames.length > 1) {
+                    var sheetOptions = wb.SheetNames.map(function(name, idx) {
+                        return '<option value="' + idx + '">' + esc(name) + '</option>';
+                    }).join('');
+                    $('fileInfo').innerHTML = '<i class="fa-solid fa-file-excel" style="color: var(--success);"></i> ' + esc(file.name) +
+                        ' <select id="sheetSelector" style="margin-left: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;">' +
+                        sheetOptions + '</select> <span class="loading"></span> 解析中...';
+                    $('sheetSelector').onchange = function() {
+                        parseSheet(parseInt(this.value));
+                    };
+                    parseSheet(0); // 默认解析第一个 sheet
+                } else {
+                    parseSheet(0);
+                }
+            } catch (err) {
+                console.error(err);
+                $('fileInfo').innerHTML = '<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> 解析失败：' + esc(err.message) + '</span>';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function parseSheet(sheetIndex) {
+        var wb = importState.workbook;
+        var ws = wb.Sheets[wb.SheetNames[sheetIndex]];
+
+        // 自动检测并跳过标题行：如果第一行只有 1 个非空单元格，而第二行有多个，则跳过第一行
+        var range = XLSX.utils.decode_range(ws['!ref']);
+        var firstRowCells = 0;
+        for (var C = range.s.c; C <= range.e.c; C++) {
+            var cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
+            if (cell && cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== '') firstRowCells++;
+        }
+        var secondRowCells = 0;
+        for (var C = range.s.c; C <= range.e.c; C++) {
+            var cell = ws[XLSX.utils.encode_cell({ r: 1, c: C })];
+            if (cell && cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== '') secondRowCells++;
+        }
+        var skipRows = (firstRowCells === 1 && secondRowCells > 1) ? 1 : 0;
+
+        var json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, range: skipRows });
+        if (!json.length) {
+            $('fileInfo').innerHTML = '<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> 文件为空或无数据</span>';
+            return;
+        }
+        importState.rows = json;
+        importState.headers = Object.keys(json[0]);
+        autoMapFields();
+
+        var sheetInfo = wb.SheetNames.length > 1 ? ' <select id="sheetSelector" style="margin-left: 8px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;">' +
+            wb.SheetNames.map(function(name, idx) {
+                return '<option value="' + idx + '"' + (idx === sheetIndex ? ' selected' : '') + '>' + esc(name) + '</option>';
+            }).join('') + '</select>' : '';
+
+        $('fileInfo').innerHTML = '<i class="fa-solid fa-file-excel" style="color: var(--success);"></i> ' + esc(importState.file.name) +
+            sheetInfo + ' · <b style="color: var(--success);">' + json.length + '</b> 行数据' + (skipRows ? '（已跳过标题行）' : '');
+
+        if (wb.SheetNames.length > 1) {
+            $('sheetSelector').onchange = function() {
+                parseSheet(parseInt(this.value));
+            };
+        }
+        $('btnImportNext').disabled = false;
+    }
+
+    function autoMapFields() {
+        importState.mapping = {};
+        importState.headers.forEach(function(h) {
+            // 去掉必填标记（尾随的 * 及前后空白），并转小写便于比较
+            var hNorm = String(h).replace(/\s*\*\s*$/, '').trim().toLowerCase();
+            var matched = null;
+            for (var i = 0; i < FIELD_DEFS.length; i++) {
+                var f = FIELD_DEFS[i];
+                for (var j = 0; j < f.aliases.length; j++) {
+                    if (f.aliases[j].toLowerCase() === hNorm) { matched = f.key; break; }
+                }
+                if (matched) break;
+            }
+            if (matched) importState.mapping[h] = matched;
+        });
+    }
+
+    function refreshRequiredWarn() {
+        var warn = $('requiredWarn');
+        if (!warn) return;
+        var mappedFields = {};
+        for (var h in importState.mapping) mappedFields[importState.mapping[h]] = true;
+        var missing = FIELD_DEFS.filter(function(f) { return f.required && !mappedFields[f.key]; });
+        if (missing.length) {
+            warn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 缺少必填字段映射：<b>' +
+                missing.map(function(f) { return esc(f.label); }).join('、') + '</b>，请在下拉框中选择对应 Excel 列';
+            warn.style.display = '';
+        } else {
+            warn.style.display = 'none';
+        }
+    }
+
+    function renderMappingTable() {
+        var tbody = $('mappingTable').querySelector('tbody');
+        tbody.innerHTML = importState.headers.map(function(h) {
+            var previewVals = importState.rows.slice(0, 3).map(function(r) { return String(r[h] || ''); }).filter(Boolean);
+            var preview = previewVals.join(', ') || '(空)';
+            var selOptions = '<option value="">— 忽略 —</option>' + FIELD_DEFS.map(function(f) {
+                var sel = (importState.mapping[h] === f.key) ? ' selected' : '';
+                return '<option value="' + f.key + '"' + sel + '>' + f.label + (f.required ? ' *' : '') + '</option>';
+            }).join('');
+            return '<tr><td><b>' + esc(h) + '</b></td>' +
+                '<td><select data-header="' + esc(h) + '">' + selOptions + '</select></td>' +
+                '<td class="preview" title="' + esc(preview) + '">' + esc(preview) + '</td></tr>';
+        }).join('');
+        tbody.querySelectorAll('select').forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                var h = this.dataset.header;
+                if (this.value) importState.mapping[h] = this.value;
+                else delete importState.mapping[h];
+                refreshRequiredWarn();
+            });
+        });
+        refreshRequiredWarn();
+    }
+
+    function validateMapping() {
+        var mappedFields = {};
+        for (var h in importState.mapping) {
+            var f = importState.mapping[h];
+            if (mappedFields[f]) {
+                toast('字段 "' + f + '" 被重复映射', 'error');
+                return false;
+            }
+            mappedFields[f] = h;
+        }
+        if (!mappedFields.houseNo) {
+            toast('请映射必填字段：唯一标识', 'error');
+            return false;
+        }
+        return true;
+    }
+
+    function transformRows() {
+        // 嵌套路径写入辅助：setPath(obj, 'a.b.c', val)
+        function setPath(obj, path, val) {
+            var parts = path.split('.');
+            var cur = obj;
+            for (var i = 0; i < parts.length - 1; i++) {
+                if (!cur[parts[i]] || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {};
+                cur = cur[parts[i]];
+            }
+            cur[parts[parts.length - 1]] = val;
+        }
+        var result = [];
+        var errs = [];
+        importState.rows.forEach(function(row, idx) {
+            var rec = {};
+            var rowNum = idx + 2;
+            for (var h in importState.mapping) {
+                var field = importState.mapping[h];
+                var v = row[h];
+                if (v !== undefined && v !== null && v !== '') {
+                    var val = String(v).trim();
+                    if (field === 'hazards') {
+                        // 排查发现具体结构安全问题：「【部位】描述; 【部位】描述」→ hazards 数组
+                        var hazardArr = [];
+                        val.split(/[;；]/).forEach(function(seg) {
+                            seg = seg.trim();
+                            if (!seg) return;
+                            var m = seg.match(/^【([^】]+)】\s*(.*)$/);
+                            if (m) {
+                                hazardArr.push({ part: m[1].trim(), description: m[2].trim() });
+                            } else {
+                                hazardArr.push({ part: '', description: seg });
+                            }
+                        });
+                        if (hazardArr.length) rec.hazards = hazardArr;
+                    } else if (field === 'tempControlMeasures') {
+                        // 现场落实临时管控措施：顿号/逗号分隔 → 数组
+                        rec.tempControlMeasures = val.split(/[,，、]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                    } else if (field.indexOf('.') > -1) {
+                        // 整改措施列：逗号/顿号分隔转数组
+                        if (field === 'rectify.measures.controlTypes') {
+                            val = val.split(/[,，、]/).map(function(s) { return s.trim(); }).filter(Boolean);
+                        }
+                        setPath(rec, field, val);
+                    } else {
+                        rec[field] = val;
+                    }
+                }
+            }
+            if (!rec.houseNo) {
+                errs.push({ row: rowNum, reason: '唯一标识为空' });
+                return;
+            }
+            if (rec.hazardLevel && rec.hazardLevel !== '一般' && rec.hazardLevel !== '严重' && rec.hazardLevel !== '未发现') {
+                errs.push({ row: rowNum, houseNo: rec.houseNo, reason: '隐患等级必须是"未发现"、"一般"或"严重"，当前: ' + rec.hazardLevel });
+                return;
+            }
+
+            // 地址组合：如果存在拆分字段（所在区/街镇/村居委/组/路/号栋），组合成详细地址
+            var addrParts = [];
+            var partKeys = ['所在区', '街镇', '村居委', '组', '路', '号栋'];
+            var hasParts = false;
+            partKeys.forEach(function(pk) {
+                // 在原始 row 里查找（不区分大小写、去空格）
+                for (var h in row) {
+                    var hNorm = String(h).trim().toLowerCase();
+                    if (hNorm === pk.toLowerCase()) {
+                        var v = String(row[h] || '').trim();
+                        if (v) {
+                            addrParts.push(v);
+                            hasParts = true;
+                        }
+                        break;
+                    }
+                }
+            });
+            if (hasParts) {
+                rec.houseAddress = addrParts.join(' ');
+            }
+
+            if (rec.status && rec.status !== 'draft' && rec.status !== 'submitted') {
+                if (rec.status === '草稿') rec.status = 'draft';
+                else if (rec.status === '已提交') rec.status = 'submitted';
+                else rec.status = importState.target === 'records' ? 'submitted' : 'draft';
+            } else if (!rec.status) {
+                rec.status = importState.target === 'records' ? 'submitted' : 'draft';
+            }
+            rec.source = 'batch-import';
+            rec.importTime = new Date().toISOString();
+            result.push(rec);
+        });
+        return { rows: result, errors: errs };
+    }
+
+    $('btnImportNext').addEventListener('click', function() {
+        if (importState.step === 1) {
+            if (!importState.rows.length) { toast('请先上传文件', 'error'); return; }
+            renderMappingTable();
+            setImportStep(2);
+        } else if (importState.step === 2) {
+            if (!validateMapping()) return;
+            var result = transformRows();
+            $('importSummary').innerHTML =
+                '共解析 <b>' + importState.rows.length + '</b> 行，' +
+                '其中 <b style="color: var(--success);">' + result.rows.length + '</b> 行有效，' +
+                '<b style="color: var(--danger);">' + result.errors.length + '</b> 行有问题';
+            importState.failures = result.errors;
+            importState.validRows = result.rows;
+            setImportStep(3);
+        }
+    });
+
+    $('btnImportPrev').addEventListener('click', function() {
+        if (importState.step > 1) setImportStep(importState.step - 1);
+    });
+
+    $('btnImportRun').addEventListener('click', function() {
+        var mode = document.querySelector('input[name="importMode"]:checked').value;
+        var rows = importState.validRows || [];
+        if (!rows.length) { toast('没有可导入的数据', 'error'); return; }
+
+        $('btnImportRun').disabled = true;
+        $('importProgress').style.display = '';
+        var endpoint = importState.target === 'pending' ? '/api/farm-review-pending/import' : '/api/farm-review-records/import';
+
+        var BATCH = 500;
+        var totalAdded = 0, totalUpdated = 0, totalSkipped = 0;
+        var failList = (importState.failures || []).slice();
+        var i = 0;
+
+        function runNext() {
+            if (i >= rows.length) {
+                $('statAdded').textContent = totalAdded;
+                $('statUpdated').textContent = totalUpdated;
+                $('statSkipped').textContent = totalSkipped;
+                $('statFail').textContent = failList.length;
+
+                var fl = $('failList');
+                if (failList.length) {
+                    fl.innerHTML = '<div style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">失败明细（前 20 条）：</div>' +
+                        '<table class="mapping-table"><thead><tr><th>行号</th><th>唯一标识</th><th>原因</th></tr></thead><tbody>' +
+                        failList.slice(0, 20).map(function(f) {
+                            return '<tr><td>' + f.row + '</td><td>' + esc(f.houseNo || '') + '</td><td>' + esc(f.reason) + '</td></tr>';
+                        }).join('') + '</tbody></table>';
+                } else {
+                    fl.innerHTML = '';
+                }
+
+                $('btnImportRun').disabled = false;
+                setImportStep(4);
+                return;
+            }
+
+            var chunk = rows.slice(i, i + BATCH);
+            var pct = Math.min(100, Math.round((i + chunk.length) / rows.length * 100));
+            $('progressFill').style.width = pct + '%';
+            $('importStatus').textContent = '正在导入 ' + (i + chunk.length) + ' / ' + rows.length + '...';
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: mode, rows: chunk })
+            }).then(function(r) { return r.json(); }).then(function(j) {
+                if (j && j.success) {
+                    totalAdded += j.added || 0;
+                    totalUpdated += j.updated || 0;
+                    totalSkipped += j.skipped || 0;
+                } else {
+                    chunk.forEach(function(row, k) {
+                        failList.push({ row: i + k + 2, houseNo: row.houseNo, reason: j && j.error || '服务端错误' });
+                    });
+                }
+                i += BATCH;
+                runNext();
+            }).catch(function() {
+                chunk.forEach(function(row, k) {
+                    failList.push({ row: i + k + 2, houseNo: row.houseNo, reason: '网络错误' });
+                });
+                i += BATCH;
+                runNext();
+            });
+        }
+        runNext();
+    });
+
+    // ================= 模板下载（按当前 tab 推荐对应模板） =================
+    // 待排查模板：仅摸底字段（与 detail 页"房屋底数"卡片字段严格一致：唯一标识/所在区/街镇/村居委/组/路/号栋/地址/房屋用途/具体用途/其他具体用途/建成时间/建筑层数/建筑面积/初步判定/鉴定结论，另加隐患等级用于分级）
+    var PENDING_TPL_KEYS = ['houseNo', 'district', 'town', 'villageName', 'groupName', 'roadName', 'buildingNo', 'houseAddress',
+        'houseUsage', 'specificUsage', 'otherUsage', 'buildYear', 'floors', 'area',
+        'initialJudgment', 'appraisalResult', 'hazardLevel'];
+    // 排查结果模板：严格按用户给定的 16 个字段，顺序一致
+    var RECORDS_TPL_KEYS = [
+        'checkFindTime', 'village', 'homesteadLocation', 'houseNo', 'owner', 'phone',
+        'buildYear', 'floors', 'houseType', 'hazards', 'hazardLevel', 'tempControlMeasures',
+        'rectify.measures.controlTypes', 'rectify.measures.ownerDate', 'inspector', 'checkRemark'
+    ];
+
+    var TPL_SAMPLES = {
+        pending: ['10322290307554676', '奉贤区', '青村镇', '湾张村', '6', '6', '608号', '奉贤区青村镇湾张村608号',
+            '自住', '', '', '2000', '2', '120.5', '存在一定安全隐患', '', '一般'],
+        records: [
+            '2026-09',                                   // 排查发现时间（2026年X月）
+            '杨王村',                                    // 村居委
+            '杨王村宁富路295号',                          // 宅基地位置门牌号
+            '9234933136788227',                          // 唯一标识
+            '李四',                                      // 房屋产权人
+            '13900000000',                               // 联系电话
+            '2000',                                      // 房屋建造年份
+            '2',                                         // 房屋层数
+            '砖混结构',                                  // 房屋类型
+            '【地基基础】房屋东侧散水开裂; 【上部结构】屋顶局部渗水', // 排查发现具体结构安全问题
+            '一般',                                      // 隐患等级（一般/严重）
+            '围挡封控、安全警示',                          // 现场落实临时管控措施
+            '修缮加固',                                  // 需产权人落实整改措施
+            '2026-12-31',                                // 计划整改完成时限
+            '王五',                                      // 现场排查人员
+            '示例数据'                                   // 备注
+        ]
+    };
+
+    function refreshTplBadge() {
+        document.querySelectorAll('.tpl-badge').forEach(function(b) {
+            b.classList.toggle('show', b.dataset.tabHl === currentTab);
+        });
+    }
+
+    function downloadTemplate(kind) {
+        var keys = kind === 'pending' ? PENDING_TPL_KEYS : RECORDS_TPL_KEYS;
+        var headers = keys.map(function(k) {
+            var f = null;
+            for (var i = 0; i < FIELD_DEFS.length; i++) if (FIELD_DEFS[i].key === k) { f = FIELD_DEFS[i]; break; }
+            return (f ? f.label : k) + (f && f.required ? ' *' : '');
+        });
+        var sample = TPL_SAMPLES[kind];
+        var ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+        // 列宽自适应（按表头字数）
+        ws['!cols'] = headers.map(function(h) { return { wch: Math.max(10, String(h).length * 2 + 2) }; });
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, kind === 'pending' ? '待排查任务' : '排查结果');
+        XLSX.writeFile(wb, kind === 'pending' ? '农房回头看-待排查任务模板.xlsx' : '农房回头看-排查结果模板.xlsx');
+        toast(kind === 'pending' ? '已下载待排查任务模板' : '已下载排查结果模板', 'success');
+    }
+
+    // 主按钮：直接下载当前 tab 对应模板
+    $('btnDownloadTpl').addEventListener('click', function(e) {
+        e.stopPropagation();
+        $('tplDropdown').classList.toggle('open');
+        refreshTplBadge();
+    });
+    // 菜单项：下载指定模板 或 打开对应导入
+    document.querySelectorAll('.tpl-item').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (item.dataset.tpl) {
+                downloadTemplate(item.dataset.tpl);
+            } else if (item.dataset.import) {
+                openImport(item.dataset.import);
+            }
+            $('tplDropdown').classList.remove('open');
+        });
+    });
+    // 点击外部关闭
+    document.addEventListener('click', function(e) {
+        var dd = $('tplDropdown');
+        if (dd && !dd.contains(e.target)) dd.classList.remove('open');
+    });
+    // Tab 切换时刷新"当前"徽标
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+        b.addEventListener('click', refreshTplBadge);
+    });
+
+    // 初始根据当前 tab 设置各 data-only 元素显隐（筛选项 + 工具栏按钮）
+    (function() {
+        // 同步 tab 按钮 active 态（支持 URL ?tab=pending 初始化）
+        document.querySelectorAll('.tab-btn').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.tab === currentTab);
+        });
+        document.querySelectorAll('.filter-item[data-only], .toolbar [data-only], .btn[data-only], .sub-tab-bar[data-only]').forEach(function(el) {
+            el.style.display = (el.dataset.only === currentTab) ? '' : 'none';
+        });
+        // 批量推送/入档仅排查结果有效
+        var showBatch = (currentTab === 'records');
+        var bp = $('btnBatchPush'), ba = $('btnBatchArch');
+        if (bp) bp.style.display = showBatch ? '' : 'none';
+        if (ba) ba.style.display = showBatch ? '' : 'none';
+    })();
+
+    loadList();
+})();
+</script>
+</body>
+</html>

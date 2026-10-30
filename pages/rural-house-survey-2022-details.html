@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -80,14 +80,14 @@
         })();
 
         // 同步草稿到发布区（房屋建筑档案）
-        function syncToPublish() {
+        async function syncToPublish() {
             const no = getCurrentHouseNo();
             if (typeof publishDraftRecord !== 'function') { alert('数据层未就绪'); return; }
             // 先把内存里最新的字段保存到草稿，再推送
             if (typeof saveCurrentHouseArch === 'function' && typeof currentHouseArch !== 'undefined') {
                 saveCurrentHouseArch(currentHouseArch);
             }
-            if (!confirm('确认将当前修改更新到房屋建筑档案？\n更新后房屋建筑档案将显示本记录的最新内容。')) return;
+            if (!await uiConfirm('确认将当前修改更新到房屋建筑档案？\n更新后房屋建筑档案将显示本记录的最新内容。')) return;
             const r = publishDraftRecord(no, 'user');
             if (r && r.ok) {
                 alert('✅ 已更新到房屋建筑档案');
@@ -2007,6 +2007,7 @@
         .map-picker-coord input { width: 140px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
         .map-picker-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; background: #fafbfc; }
     </style>
+    <link rel="stylesheet" href="ui-modal.css">
 </head>
 <body>
     <div class="modal-overlay" id="basicEditModal">
@@ -4483,7 +4484,7 @@
         }
 
         // 删除一条措施记录
-        function deleteMeasureRecord(kind, idx) {
+        async function deleteMeasureRecord(kind, idx) {
             const s = currentHouseArch;
             const list = (kind === 'manage') ? (s.manageRecords || []) : (s.projectRecords || []);
             const rec = list[idx] || {};
@@ -4492,7 +4493,7 @@
                 alert('该措施已完成整治（含结束时间），已成历史，不允许删除。');
                 return;
             }
-            if (!confirm('确定删除这条记录吗？')) return;
+            if (!await uiConfirm('确定删除这条记录吗？')) return;
             list.splice(idx, 1);
             if (kind === 'manage') s.manageRecords = list; else s.projectRecords = list;
             delete s._syncedAt;
@@ -4518,7 +4519,7 @@
         }
 
         // 删除一个整治阶段（连同其下归属的措施记录）
-        function deleteMeasureStage(idx) {
+        async function deleteMeasureStage(idx) {
             const s = currentHouseArch;
             const st = (s.measureStages || [])[idx];
             if (!st) return;
@@ -4532,7 +4533,7 @@
                 alert('该阶段含已完成整治（含结束时间）的历史记录，不允许删除阶段。');
                 return;
             }
-            if (!confirm('确定删除「第' + st.no + '阶段」吗？其下 ' + (sm.manage.length + sm.project.length) + ' 条措施记录将一并删除。')) return;
+            if (!await uiConfirm('确定删除「第' + st.no + '阶段」吗？其下 ' + (sm.manage.length + sm.project.length) + ' 条措施记录将一并删除。')) return;
             s.manageRecords = (s.manageRecords || []).filter(function(m){ return m.stageId !== st.id; });
             s.projectRecords = (s.projectRecords || []).filter(function(p){ return p.stageId !== st.id; });
             s.measureStages.splice(idx, 1);
@@ -4735,8 +4736,8 @@
             document.body.removeChild(a);
         }
 
-        function removeMeasureFile(idx, btn) {
-            if (!confirm('确认删除该文件？')) return;
+        async function removeMeasureFile(idx, btn) {
+            if (!await uiConfirm('确认删除该文件？')) return;
             const wrap = btn.closest('.file-upload-wrap');
             const urlInput = wrap.querySelector('.file-url-input');
             const urls = getMeasureFileListFromWrap(wrap);
@@ -5265,14 +5266,14 @@
         }
 
         // 删除鉴定/评估记录（2026-10-17 增删改查放开）
-        function deleteAppraisalRecord(kind, idx) {
+        async function deleteAppraisalRecord(kind, idx) {
             const isAssess = (kind === 'assessment');
             const title = isAssess ? '安全鉴定' : '安全评估';
             const s = currentHouseArch;
             const arrKey = isAssess ? 'assessmentRecords' : 'evaluationRecords';
             const records = s[arrKey] || [];
             if (idx < 0 || idx >= records.length) return;
-            if (!confirm('确认删除该' + title + '记录？删除后不可恢复。')) return;
+            if (!await uiConfirm('确认删除该' + title + '记录？删除后不可恢复。')) return;
             records.splice(idx, 1);
             // 同步最新一条到字段库 rows[0]（兼容旧读口）
             const libData = getTableData()[kind];
@@ -5455,10 +5456,10 @@
         }
 
         // 删除某条整治计划记录
-        function deletePlanRecord(idx) {
+        async function deletePlanRecord(idx) {
             const s = currentHouseArch;
             if (!Array.isArray(s.planRecords) || idx < 0 || idx >= s.planRecords.length) return;
-            if (!confirm('确认删除本条整治计划记录？删除后不可恢复。')) return;
+            if (!await uiConfirm('确认删除本条整治计划记录？删除后不可恢复。')) return;
             s.planRecords.splice(idx, 1);
             // 同步最新一条到 housePlanRow（兼容旧读口）
             const sortedRecs = s.planRecords.slice().sort(function(a, b){
@@ -5749,10 +5750,10 @@
         }
 
         // 删除某条控制情况记录（最新一条删除后由次新记录接管旧读口）
-        function deleteControlRecord(idx) {
+        async function deleteControlRecord(idx) {
             const s = currentHouseArch;
             if (!Array.isArray(s.controlRecords) || idx < 0 || idx >= s.controlRecords.length) return;
-            if (!confirm('确认删除本条隐患控制情况记录？删除后不可恢复。')) return;
+            if (!await uiConfirm('确认删除本条隐患控制情况记录？删除后不可恢复。')) return;
             s.controlRecords.splice(idx, 1);
             __syncControlLegacy(s);
             saveCurrentHouseArch(s);
@@ -6260,8 +6261,8 @@
             return s.acceptHistoryRecords;
         }
 
-        function deleteAcceptHistoryRecord(idx) {
-            if (!confirm('确认删除该条阶段性验收填报记录吗？')) return;
+        async function deleteAcceptHistoryRecord(idx) {
+            if (!await uiConfirm('确认删除该条阶段性验收填报记录吗？')) return;
             const s = currentHouseArch;
             const list = getAcceptHistoryRecords(s);
             list.splice(idx, 1);
@@ -6592,8 +6593,8 @@
             document.body.removeChild(a);
         }
 
-        function removeAcceptFile(idx, btn) {
-            if (!confirm('确认删除该文件？')) return;
+        async function removeAcceptFile(idx, btn) {
+            if (!await uiConfirm('确认删除该文件？')) return;
             const wrap = btn.closest('.file-upload-wrap');
             const urlInput = wrap.querySelector('.file-url-input');
             const urls = getAcceptFileListFromWrap(wrap);
@@ -6869,8 +6870,8 @@
             return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
         }
 
-        function deleteAcceptAudit(idx) {
-            if (!confirm('确定删除这条审核记录吗？')) return;
+        async function deleteAcceptAudit(idx) {
+            if (!await uiConfirm('确定删除这条审核记录吗？')) return;
             const s = currentHouseArch;
             const list = buildAcceptAuditList(s).slice();
             list.splice(idx, 1);
@@ -6901,8 +6902,8 @@
             editingAuditListKind = 'close';
             openAuditEditModalShared(idx); // 复用同一弹窗，结构相同，但读写 closeAuditRecords
         }
-        function deleteCloseAudit(idx) {
-            if (!confirm('确定删除这条审核记录吗？')) return;
+        async function deleteCloseAudit(idx) {
+            if (!await uiConfirm('确定删除这条审核记录吗？')) return;
             const s = currentHouseArch;
             const list = buildCloseAuditList().slice();
             list.splice(idx, 1);
@@ -7039,8 +7040,8 @@
             closeHistoryFormState = null;
             renderContent();
         }
-        function deleteCloseHistoryRecord(idx) {
-            if (!confirm('确认删除该条验收销项记录吗？')) return;
+        async function deleteCloseHistoryRecord(idx) {
+            if (!await uiConfirm('确认删除该条验收销项记录吗？')) return;
             const s = currentHouseArch;
             const list = getCloseHistoryRecords(s);
             list.splice(idx, 1);
@@ -7632,8 +7633,8 @@
             renderContent();
         }
 
-        function deleteCrudRecord(moduleKey, idx) {
-            if (!confirm('确定删除这条记录吗？')) return;
+        async function deleteCrudRecord(moduleKey, idx) {
+            if (!await uiConfirm('确定删除这条记录吗？')) return;
             const cfg = crudConfigs[moduleKey];
             if (!cfg) return;
             const s = currentHouseArch;
@@ -11829,8 +11830,8 @@
             closeProjectTimelineNodeModal();
         }
 
-        function deleteProjectTimelineNode(nodeId) {
-            if (!confirm('确定删除该施工节点吗？')) return;
+        async function deleteProjectTimelineNode(nodeId) {
+            if (!await uiConfirm('确定删除该施工节点吗？')) return;
             getMeasureData().project.timeline = (getMeasureData().project.timeline || []).filter(n => n.nodeId !== nodeId);
         }
 
@@ -12121,5 +12122,6 @@
             bootstrapRender();
         }
     </script>
+    <script src="ui-modal.js"></script>
 </body>
 </html>

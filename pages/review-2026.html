@@ -204,11 +204,6 @@ body {
 .data-table tbody tr:hover td:last-child { background: #f1f7fe; }
 .data-table th:last-child { z-index: 30; }
 
-/* Urgency */
-.urgency-high { color: var(--danger); font-weight: 600; }
-.urgency-medium { color: #c78000; font-weight: 600; }
-.urgency-low { color: var(--success); font-weight: 600; }
-
 /* Actions */
 .actions { display: flex; gap: 16px; align-items: center; }
 .action-link {
@@ -466,15 +461,6 @@ body {
             <input type="text" class="filter-input" id="filterPerson" placeholder="请输入排查人员">
         </div>
         <div class="filter-item" style="min-width:120px;">
-            <label>紧急程度</label>
-            <select class="filter-select" id="filterUrgency">
-                <option value="">全部</option>
-                <option value="高">高</option>
-                <option value="中">中</option>
-                <option value="低">低</option>
-            </select>
-        </div>
-        <div class="filter-item" style="min-width:120px;">
             <label>发现隐患</label>
             <select class="filter-select" id="filterHidden">
                 <option value="">全部</option>
@@ -505,7 +491,6 @@ body {
                 <thead>
                     <tr>
                         <th>任务名称</th>
-                        <th>紧急程度</th>
                         <th>排查户数</th>
                         <th>镇/街道</th>
                         <th>村/居委</th>
@@ -578,20 +563,6 @@ function getLocalDateString(d = new Date()) {
     return `${year}-${month}-${day}`;
 }
 
-function getUrgencyColor(urgency) {
-    if (urgency === 'high' || urgency === '高') return 'var(--danger)';
-    if (urgency === 'medium' || urgency === '中') return 'var(--warning)';
-    if (urgency === 'low' || urgency === '低') return 'var(--success)';
-    return 'var(--text-secondary)';
-}
-
-function getUrgencyClass(urgency) {
-    if (urgency === 'high' || urgency === '高') return 'urgency-high';
-    if (urgency === 'medium' || urgency === '中') return 'urgency-medium';
-    if (urgency === 'low' || urgency === '低') return 'urgency-low';
-    return '';
-}
-
 // ==================== 常态化监测 · 服务端记录聚合成任务 ====================
 const REVIEW2026_MIGRATE_KEY = 'review2026_migrated'; // localStorage 一次性迁移标记
 
@@ -629,8 +600,6 @@ function review2026BuildTask(group) {
     return {
         id: 'R2026-' + group.town + '-' + group.village,
         name: group.town + group.village + ' 常态化监测',
-        urgency: group.hiddenCount > 0 ? 'high' : 'medium',
-        urgencyLabel: group.hiddenCount > 0 ? '高' : '中',
         houseCount: total,
         town: group.town,
         village: group.village,
@@ -683,16 +652,14 @@ function getFilteredTasks() {
     const town = document.getElementById('filterUnit').value;
     const village = document.getElementById('filterVillage').value.toLowerCase();
     const person = document.getElementById('filterPerson').value.toLowerCase();
-    const urgency = document.getElementById('filterUrgency').value;
     const hidden = document.getElementById('filterHidden').value;
     return allTasks.filter(t => {
         const matchName = !name || (t.name || '').toLowerCase().includes(name);
         const matchTown = !town || t.town === town;
         const matchVillage = !village || (t.village || '').toLowerCase().includes(village);
         const matchPerson = !person || (t.person || '').toLowerCase().includes(person);
-        const matchUrgency = !urgency || t.urgencyLabel === urgency;
         const matchHidden = !hidden || (hidden === 'yes' ? (t.hiddenCount || 0) > 0 : (t.hiddenCount || 0) === 0);
-        return matchName && matchTown && matchVillage && matchPerson && matchUrgency && matchHidden;
+        return matchName && matchTown && matchVillage && matchPerson && matchHidden;
     });
 }
 
@@ -706,7 +673,6 @@ function resetFilter() {
     document.getElementById('filterUnit').value = '';
     document.getElementById('filterVillage').value = '';
     document.getElementById('filterPerson').value = '';
-    document.getElementById('filterUrgency').value = '';
     document.getElementById('filterHidden').value = '';
     applyFilter();
 }
@@ -733,15 +699,11 @@ function renderTable(data) {
     const pageData = data.slice(pageStart, pageStart + PAGE_SIZE);
 
     tbody.innerHTML = pageData.map(t => {
-        const urgencyColor = getUrgencyColor(t.urgency || t.urgencyLabel);
-        const urgencyClass = getUrgencyClass(t.urgency || t.urgencyLabel);
-        const urgencyLabel = t.urgencyLabel || '中';
         const hasHidden = (t.hiddenCount || 0) > 0;
         const pcEdited = (t.records || []).some(r => r && r.editedByPC);
         return `
         <tr data-task-id="${t.id}">
             <td><strong>${t.name}</strong></td>
-            <td><span class="${urgencyClass}" style="font-size:12px;font-weight:600;color:${urgencyColor};">${urgencyLabel}</span></td>
             <td><a class="house-count-link" href="javascript:void(0);" onclick='viewTask(${JSON.stringify(t.id)});event.stopPropagation();' title="查看该村排查记录"><span style="color:var(--primary);font-weight:600;">${t.houseCount || 0}</span> 户</a></td>
             <td><span style="font-size:12px;color:var(--text-secondary);">${t.town || '-'}</span></td>
             <td><span style="font-size:12px;color:var(--text-secondary);">${t.village || '-'}</span></td>

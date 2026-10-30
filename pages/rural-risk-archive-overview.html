@@ -832,6 +832,7 @@ body {
 .imp-progress .fa-circle-xmark { color:var(--danger); }
 .imp-result-list { max-height:220px; overflow:auto; margin-top:14px; text-align:left; }
 </style>
+    <link rel="stylesheet" href="ui-modal.css">
 </head>
 <body>
 
@@ -1024,13 +1025,18 @@ body {
                         </select>
                     </div>
                     <div class="filter-field" style="flex:1;min-width:120px">
-                        <select class="filter-select">
+                        <select class="filter-select" id="houseUsageQuickSelect">
                             <option value="">房屋用途</option>
-                            <option>自住</option>
-                            <option>出租</option>
-                            <option>生产经营</option>
-                            <option>闲置</option>
-                            <option>其他</option>
+                            <option>经营性自建房</option>
+                            <option>其他自建房</option>
+                        </select>
+                    </div>
+                    <div class="filter-field" style="flex:1;min-width:120px">
+                        <select class="filter-select" id="houseKindSelect">
+                            <option value="">房屋类型</option>
+                            <option>仅自住</option>
+                            <option>自住+经营</option>
+                            <option>农房辅助用房</option>
                         </select>
                     </div>
                     <button class="btn btn-primary"><i class="fa-solid fa-search"></i> 搜索</button>
@@ -1112,6 +1118,7 @@ body {
                                     <option>海湾镇</option>
                                     <option>西渡街道</option>
                                     <option>奉浦街道</option>
+                                    <option>头桥街道</option>
                                     <option>金海街道</option>
                                     <option>海湾旅游区</option>
                                 </select>
@@ -1690,12 +1697,12 @@ function formatSyncStatus(no) {
 }
 
 // 单条同步：把某记录的草稿推送到发布区
-function syncOneRecord(no) {
+async function syncOneRecord(no) {
     if (typeof publishDraftRecord !== 'function') { alert('数据层未就绪'); return; }
     const s = typeof getSyncStatus === 'function' ? getSyncStatus(no) : 'new';
     if (s === 'synced') { alert('该档案已是最新，无需同步'); return; }
     if (s === 'new') { alert('该档案还没有修改过，无需同步'); return; }
-    if (!confirm('确认将 ' + no + ' 的最新修改更新到房屋建筑档案？')) return;
+    if (!await uiConfirm('确认将 ' + no + ' 的最新修改更新到房屋建筑档案？')) return;
     const r = publishDraftRecord(no, 'user');
     if (r && r.ok) {
         alert('✅ ' + no + ' 已更新到房屋建筑档案');
@@ -1706,12 +1713,12 @@ function syncOneRecord(no) {
 }
 
 // 批量同步：把所有未同步草稿一次性推送
-function syncAllRecords() {
+async function syncAllRecords() {
     if (typeof getDraftedNos !== 'function' || typeof publishAllDrafts !== 'function') { alert('数据层未就绪'); return; }
     const drafted = getDraftedNos();
     const pending = drafted.filter(no => getSyncStatus(no) === 'pending');
     if (!pending.length) { alert('当前没有待更新的档案'); return; }
-    if (!confirm('确认把 ' + pending.length + ' 条修改一次性更新到房屋建筑档案？')) return;
+    if (!await uiConfirm('确认把 ' + pending.length + ' 条修改一次性更新到房屋建筑档案？')) return;
     const r = publishAllDrafts('user');
     alert('✅ 更新完成：共 ' + r.total + ' 条，成功 ' + r.ok + ' 条，失败 ' + r.fail + ' 条');
     refreshAllLists();
@@ -1972,7 +1979,7 @@ function initAdvancedFilterPanel() {
     });
 }
 
-// 客户端筛选：按关键字 + 风险等级过滤当前 Tab 的数据
+// 客户端筛选：按关键字 + 风险等级 + 镇/街道 + 村/居委过滤当前 Tab 的数据
 function applyFilter(tabKey, panel) {
     const keywordInput = panel.querySelector('.filter-quick-row input.filter-input');
     const levelSelect = panel.querySelector('.filter-quick-row select.filter-select');
@@ -1982,6 +1989,18 @@ function applyFilter(tabKey, panel) {
     if (levelText.indexOf('第三类') > -1) levelFilter = '第三类';
     else if (levelText.indexOf('第二类') > -1) levelFilter = '第二类';
     else if (levelText.indexOf('第一类') > -1) levelFilter = '第一类';
+
+    // 镇/街道 + 村/居委（联动下拉，本面板内的）
+    const townSel = panel.querySelector('#townSelect') || Array.from(panel.querySelectorAll('select.filter-select')).find(function(s) {
+        const lab = s.previousElementSibling;
+        return lab && lab.tagName === 'LABEL' && lab.textContent.indexOf('镇/街') > -1;
+    });
+    const villageSel = panel.querySelector('#villageSelect') || Array.from(panel.querySelectorAll('select.filter-select')).find(function(s) {
+        const lab = s.previousElementSibling;
+        return lab && lab.tagName === 'LABEL' && lab.textContent.indexOf('村/居') > -1;
+    });
+    const townFilter = (townSel && townSel.value || '').trim();
+    const villageFilter = (villageSel && villageSel.value || '').trim();
 
     const all = getAllHouseRecords().filter(r => r.houseType === '农村自建房');
     let filtered = all;
@@ -1994,6 +2013,45 @@ function applyFilter(tabKey, panel) {
     }
     if (levelFilter) {
         filtered = filtered.filter(r => r.riskLevel === levelFilter);
+    }
+    if (townFilter) {
+        filtered = filtered.filter(r => (r.street || '') === townFilter);
+    }
+    if (villageFilter) {
+        filtered = filtered.filter(r => (r.village || r.community || '') === villageFilter);
+    }
+
+    // 房屋类型：仅自住 / 自住+经营 / 农房辅助用房
+    const houseKindSel = panel.querySelector('#houseKindSelect');
+    const houseKind = (houseKindSel && houseKindSel.value || '').trim();
+    if (houseKind) {
+        filtered = filtered.filter(r => {
+            const usage = (r.overview && r.overview.usage || '').trim();
+            const specific = (r.overview && r.overview.specificUsage || '') + '|' + (r.usage && r.usage.specificUsage || '');
+            if (houseKind === '仅自住') {
+                // 自住且非兼经营
+                return usage === '自住' || usage === '仅自住';
+            }
+            if (houseKind === '自住+经营') {
+                return usage.indexOf('兼经营') > -1 || usage.indexOf('+经营') > -1 || usage === '生产经营';
+            }
+            if (houseKind === '农房辅助用房') {
+                // 辅助/仓储/杂物/农机/棚圈等非主房用途
+                return /辅助|仓储|杂物|农机|棚|圈舍|柴房|农具/.test(specific) || /辅助/.test(usage);
+            }
+            return true;
+        });
+    }
+
+    // 房屋用途：经营性自建房 / 其他自建房
+    const houseUsageSel = panel.querySelector('#houseUsageQuickSelect');
+    const houseUsage = (houseUsageSel && houseUsageSel.value || '').trim();
+    if (houseUsage) {
+        filtered = filtered.filter(r => {
+            const usage = (r.overview && r.overview.usage || '').trim();
+            const isOperating = usage.indexOf('经营') > -1 || usage === '生产经营';
+            return houseUsage === '经营性自建房' ? isOperating : !isOperating;
+        });
     }
 
     // ===== 整治情况区高级筛选（三态：是/否/空） =====
@@ -2053,6 +2111,18 @@ function applyFilter(tabKey, panel) {
 function resetFilter(tabKey, panel) {
     panel.querySelectorAll('input.filter-input').forEach(function(inp) { inp.value = ''; });
     panel.querySelectorAll('select.filter-select').forEach(function(sel) { sel.selectedIndex = 0; });
+    // 村/居委下拉在镇重置后应只保留占位项（避免残留上次联动的选项）
+    const villageSel = panel.querySelector('#villageSelect');
+    if (villageSel) villageSel.innerHTML = '<option value="">请选择村/居委</option>';
+    // 二级结构类型随结构类型重置：恢复占位项并禁用（避免残留砌体结构的二级选项）
+    panel.querySelectorAll('select.filter-select').forEach(function(sel) {
+        const prev = sel.previousElementSibling;
+        if (prev && prev.tagName === 'LABEL' && prev.textContent.indexOf('二级结构类型') > -1) {
+            sel.innerHTML = '<option value="" disabled selected hidden>请选择结构类型</option>';
+            sel.disabled = true;
+            sel.classList.add('placeholder-active');
+        }
+    });
     // 重新加载完整数据
     renderRuralArchiveRows();
 }
@@ -2256,6 +2326,39 @@ function initUsageLinkage() {
     });
 }
 
+// ===== 结构类型与二级结构类型联动 =====
+// 砌体结构：预制板/现浇板/木或轻钢楼屋盖/石板或石条
+// 其他结构类型（或未选）：二级结构类型禁用
+function initStructLinkage() {
+    const STRUCT_SUB_OPTIONS = {
+        '砌体结构': ['预制板', '现浇板', '木或轻钢楼屋盖', '石板或石条']
+    };
+    function applyStructOptions(mainSel, subSel) {
+        const opts = STRUCT_SUB_OPTIONS[mainSel.value] || [];
+        subSel.innerHTML = '<option value="" disabled selected hidden>请选择结构类型</option>' +
+            opts.map(function(o) { return '<option>' + o + '</option>'; }).join('');
+        subSel.disabled = opts.length === 0;
+        subSel.classList.add('placeholder-active');
+        updateSelectPlaceholderColor(subSel);
+    }
+    // 主面板+克隆面板统一处理（两个下拉均无 id，用 label 查找）
+    document.querySelectorAll('.advanced-filter-panel').forEach(function(panel) {
+        const selects = panel.querySelectorAll('select.filter-select');
+        let main = null, sub = null;
+        selects.forEach(function(sel) {
+            const prev = sel.previousElementSibling;
+            const label = prev && prev.tagName === 'LABEL' ? prev.textContent : '';
+            if (label.indexOf('二级结构类型') > -1) sub = sel;
+            else if (label.indexOf('结构类型') > -1) main = sel;
+        });
+        if (main && sub) {
+            main.addEventListener('change', function() { applyStructOptions(main, sub); });
+            // 初始：未选砌体结构时二级禁用
+            applyStructOptions(main, sub);
+        }
+    });
+}
+
 function openDetailEmbed(houseNo) {
     const overlay = document.getElementById('detailEmbedOverlay');
     const frame = document.getElementById('detailEmbedFrame');
@@ -2356,6 +2459,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 初始化房屋用途与具体用途联动
     initUsageLinkage();
+
+    // 初始化结构类型与二级结构类型联动
+    initStructLinkage();
 
     // 绑定各 Tab 分页按钮
     bindRuralPagination('all');
@@ -3111,4 +3217,5 @@ function buildHouseRecord(rec) {
 </script>
 
 
+    <script src="ui-modal.js"></script>
 </body></html>

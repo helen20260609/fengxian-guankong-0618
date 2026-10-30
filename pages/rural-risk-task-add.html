@@ -1293,6 +1293,7 @@ input.cat-filter {
     background: #166534;
 }
 </style>
+    <link rel="stylesheet" href="ui-modal.css">
 </head>
 <body>
 
@@ -1370,15 +1371,6 @@ input.cat-filter {
                         <option value="special">专项巡查</option>
                         <option value="temporary">临时巡查</option>
                         <option value="review">隐患复查</option>
-                    </select>
-                </div>
-                <div class="form-item col-2">
-                    <label class="form-label">紧急程度 <span class="required">*</span></label>
-                    <select class="form-select" id="urgencyLevel">
-                        <option value="">请选择</option>
-                        <option value="high">高</option>
-                        <option value="medium">中</option>
-                        <option value="low">低</option>
                     </select>
                 </div>
                 <div class="form-item col-2">
@@ -1611,10 +1603,6 @@ input.cat-filter {
                     <div class="form-input" style="background:var(--bg-hover);" id="confirmType">-</div>
                 </div>
                 <div class="form-item col-2">
-                    <label class="form-label">紧急程度</label>
-                    <div class="form-input" style="background:var(--bg-hover);" id="confirmUrgency">-</div>
-                </div>
-                <div class="form-item col-2">
                     <label class="form-label">任务时限</label>
                     <div class="form-input" style="background:var(--bg-hover);" id="confirmPeriod">-</div>
                 </div>
@@ -1809,7 +1797,6 @@ function loadTaskForEdit(id) {
 
     document.getElementById('taskName').value = task.name || '';
     document.getElementById('taskType').value = task.type || '';
-    document.getElementById('urgencyLevel').value = task.urgency || '';
     document.getElementById('taskStartDate').value = task.startDate || '';
     document.getElementById('taskEndDate').value = task.endDate || '';
     document.getElementById('taskDesc').value = task.desc || '';
@@ -2077,13 +2064,11 @@ function nextStep() {
     if (currentStep === 1) {
         const name = document.getElementById('taskName').value.trim();
         const type = document.getElementById('taskType').value;
-        const urgency = document.getElementById('urgencyLevel').value;
         const unit = document.getElementById('assignUnit').value;
         const start = document.getElementById('taskStartDate').value;
         const end = document.getElementById('taskEndDate').value;
         if (!name) { alert('请填写任务名称'); return; }
         if (!type) { alert('请选择任务类型'); return; }
-        if (!urgency) { alert('请选择紧急程度'); return; }
         if (!unit) { alert('请选择城建中心'); return; }
         if (!start || !end) { alert('请选择任务时限'); return; }
         // 根据任务类型切换Step2显示
@@ -2111,20 +2096,18 @@ function saveDraft() {
     alert('任务草稿已暂存！');
 }
 
-function confirmPublish() {
+async function confirmPublish() {
     const confirmMsg = isReturnedMode ? '确认重新提交该农村自建房巡查任务？提交后将重新进入审核流程。' : (isEditMode ? '确认保存对该农村自建房巡查任务的修改？' : '确认发布该农村自建房巡查任务？发布后任务将立即生效。');
-    if (!confirm(confirmMsg)) return;
+    if (!await uiConfirm(confirmMsg)) return;
 
     // 构造任务对象
     const name = document.getElementById('taskName').value.trim();
     const type = document.getElementById('taskType').value;
-    const urgency = document.getElementById('urgencyLevel').value;
     const startDate = document.getElementById('taskStartDate').value;
     const endDate = document.getElementById('taskEndDate').value;
     const desc = document.getElementById('taskDesc').value.trim();
 
     const typeMap = { routine: '日常巡查', special: '专项巡查', temporary: '临时巡查', review: '隐患复查' };
-    const urgencyMap = { high: '高', medium: '中', low: '低' };
     const status = isReturnedMode ? 'rejected' : (isEditMode ? '' : 'draft');
     const statusLabel = isReturnedMode ? '任务回退' : (isEditMode ? '' : '草稿');
     const statusClass = isReturnedMode ? 'rejected' : (isEditMode ? '' : 'draft');
@@ -2158,6 +2141,29 @@ function confirmPublish() {
     const houseCount = categoryHouseCount;
     const total = categoryHouseCount;
 
+    // 巡查房屋清单：一次任务涉及多套房，每套房生成一条清单；
+    // 清单内检查项按房屋风险分布生成（第一/二/三类 = 蓝/黄/红），一条风险作为一项
+    const selectedHouses = [];
+    selectedCategoryIds.forEach(catId => {
+        getCategorySelectedHouses(catId).forEach(p => selectedHouses.push(p));
+    });
+    const selectedProjects = selectedHouses.map((p, i) => {
+        const checkItems = buildHouseCheckItems(p.riskDistribution);
+        return {
+            id: p.id,
+            houseNo: 'FX-NC-ZF-' + String(i + 1).padStart(4, '0'),
+            name: p.name,
+            typeLabel: p.typeLabel,
+            enterprise: p.enterprise,
+            regionLabel: p.regionLabel,
+            address: p.address,
+            riskDistribution: { red: 0, yellow: 0, blue: 0 },
+            checkItems: checkItems,
+            status: 'pending'
+        };
+    });
+    // 新建任务全部房屋为待巡查：风险分布为0、隐患数为0，巡查上报后才更新
+
     // 人员名称
     const personNames = _selectedPersons.map(p => p.name).join('、');
     const firstPerson = _selectedPersons[0];
@@ -2169,9 +2175,8 @@ function confirmPublish() {
         name,
         type,
         typeLabel: typeMap[type] || '-',
-        urgency,
-        urgencyLabel: urgencyMap[urgency] || '-',
         houseCount,
+        selectedProjects,
         town,
         village,
         houseType: '',
@@ -2216,7 +2221,18 @@ function confirmPublish() {
             newTask.createBy = tasks[idx].createBy || newTask.createBy;
             newTask.inspected = tasks[idx].inspected || 0;
             newTask.total = total;
-            newTask.hiddenCount = tasks[idx].hiddenCount || 0;
+            // 保留已巡查房屋的巡查状态，隐患数按已巡查房屋的第二、三类检查项重算
+            const prevHouses = Array.isArray(tasks[idx].selectedProjects) ? tasks[idx].selectedProjects : [];
+            let inspectedHidden = 0;
+            newTask.selectedProjects.forEach(np => {
+                const prev = prevHouses.find(pp => pp.id === np.id);
+                if (prev && prev.status === 'inspected') {
+                    np.status = 'inspected';
+                    np.time = prev.time;
+                    inspectedHidden += (np.checkItems || []).filter(it => it.level !== 'blue').length;
+                }
+            });
+            newTask.hiddenCount = inspectedHidden;
             newTask.hiddenFixed = tasks[idx].hiddenFixed || 0;
             newTask.status = tasks[idx].status || status;
             newTask.statusLabel = tasks[idx].statusLabel || statusLabel;
@@ -2239,6 +2255,44 @@ function confirmPublish() {
     } else {
         window.location.href = 'patrol-task-management.html';
     }
+}
+
+// ===== 检查项生成：一条风险作为一项检查项，等级对应 第一类(蓝)/第二类(黄)/第三类(红) =====
+function buildHouseCheckItems(dist) {
+    const d = dist || {};
+    const pools = {
+        red: [
+            { main: '农村自建房结构', sub: '墙体/梁柱', content: '墙体、梁柱、基础构件缺陷', risk: '房屋结构用材不符合国家相关规范要求，构件破损形成安全隐患', accident: '坍塌、人员伤亡' },
+            { main: '农村自建房结构', sub: '构件（节点）', content: '连接节点不牢', risk: '焊接施工不符合国家相关规范要求，接头缺陷扩展', accident: '坍塌、人员伤亡' }
+        ],
+        yellow: [
+            { main: '农村自建房结构', sub: '墙体/梁柱', content: '强度不足', risk: '结构强度检测不符合国家相关规范要求', accident: '坍塌、人员伤亡' },
+            { main: '农村自建房结构', sub: '屋面', content: '防水层老化破损', risk: '屋面防水层老化导致渗漏，影响结构耐久性', accident: '渗漏、财产受损' }
+        ],
+        blue: [
+            { main: '农村自建房结构', sub: '日常检查', content: '外观及使用情况检查', risk: '未发现明显结构异常', accident: '-' }
+        ]
+    };
+    const items = [];
+    let seq = 0;
+    const push = (level, count) => {
+        // 原型演示：红/黄每级最多取2条、蓝色1条；正式环境应取房屋档案全量风险项
+        const n = Math.min(count, level === 'blue' ? 1 : 2);
+        for (let i = 0; i < n; i++) {
+            const tpl = pools[level][i % pools[level].length];
+            items.push({ id: ++seq, main: tpl.main, sub: tpl.sub, content: tpl.content, risk: tpl.risk, accident: tpl.accident, level: level, result: 'normal' });
+        }
+    };
+    push('red', (parseInt(d.red, 10) || 0) + (parseInt(d.orange, 10) || 0));
+    push('yellow', parseInt(d.yellow, 10) || 0);
+    push('blue', parseInt(d.blue, 10) || 0);
+    return items;
+}
+
+function countCheckItemsByLevel(items) {
+    const c = { red: 0, yellow: 0, blue: 0 };
+    (items || []).forEach(it => { if (c[it.level] !== undefined) c[it.level]++; });
+    return c;
 }
 
 // ===== Demo Data: Projects =====
@@ -2283,8 +2337,6 @@ function updateConfirmInfo() {
     const name = document.getElementById('taskName').value || '-';
     const typeMap = { routine: '日常巡查', special: '专项巡查', temporary: '临时巡查', review: '隐患复查' };
     const type = typeMap[document.getElementById('taskType').value] || '-';
-    const urgencyMap = { high: '高', medium: '中', low: '低' };
-    const urgency = urgencyMap[document.getElementById('urgencyLevel').value] || '-';
     const start = document.getElementById('taskStartDate').value || '-';
     const end = document.getElementById('taskEndDate').value || '-';
     const unit = document.getElementById('assignUnit').value;
@@ -2295,7 +2347,6 @@ function updateConfirmInfo() {
 
     document.getElementById('confirmName').textContent = name;
     document.getElementById('confirmType').textContent = type;
-    document.getElementById('confirmUrgency').textContent = urgency;
     document.getElementById('confirmPeriod').textContent = start !== '-' ? `${start} 至 ${end}` : '-';
     document.getElementById('confirmUnit').textContent = unitLabel;
     document.getElementById('confirmPerson').textContent = selectedPersonNames;
@@ -2635,9 +2686,9 @@ function renderCustomPatrolItems() {
                 <td style="text-align:center;">
                     <select class="cp-input" style="width:100%;min-width:70px;" onchange="updateCustomPatrolItem(${idx}, 'riskLevel', this.value)">
                         <option value="" ${!item.riskLevel ? 'selected' : ''}>请选择</option>
-                        <option value="第三类" ${item.riskLevel === '第三类' ? 'selected' : ''} style="color:#d93025;">第三类（红）</option>
-                        <option value="第二类" ${item.riskLevel === '第二类' ? 'selected' : ''} style="color:#f9ab00;">第二类（黄）</option>
-                        <option value="第一类" ${item.riskLevel === '第一类' ? 'selected' : ''} style="color:#1a73e8;">第一类（蓝）</option>
+                        <option value="第三类" ${item.riskLevel === '第三类' ? 'selected' : ''} style="color:#d93025;">第三类</option>
+                        <option value="第二类" ${item.riskLevel === '第二类' ? 'selected' : ''} style="color:#f9ab00;">第二类</option>
+                        <option value="第一类" ${item.riskLevel === '第一类' ? 'selected' : ''} style="color:#1a73e8;">第一类</option>
                     </select>
                 </td>
                 <td class="cp-action">
@@ -3016,5 +3067,6 @@ if (typeof renderHouseCategoryCards === 'function') renderHouseCategoryCards();
 if (typeof initEditMode === 'function') initEditMode();
 </script>
 
+    <script src="ui-modal.js"></script>
 </body>
 </html>

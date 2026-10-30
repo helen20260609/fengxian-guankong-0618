@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="./all.min.css">
 <link rel="stylesheet" href="./tp-common.css">
 <script src="../js/third-party-data.js"></script>
+<script src="../js/tp-friendly-tip.js"></script>
 <style>
 :root {
     --primary: #1a73e8;
@@ -501,11 +502,13 @@ function removeExpert(expertId) {
 
 function clearSelected() {
     if (!selectedExperts.length) return;
-    if (!confirm('确定要清空已选专家列表吗？')) return;
-    selectedExperts = [];
-    saveSelectedExperts();
-    renderSelected();
-    renderExpertList();
+    showConfirm('确定要清空已选专家列表吗？', '清空后需要重新选择专家。', '清 空').then(function(ok) {
+        if (!ok) return;
+        selectedExperts = [];
+        saveSelectedExperts();
+        renderSelected();
+        renderExpertList();
+    });
 }
 
 function showAllExperts() {
@@ -619,7 +622,6 @@ function toggleExpert(expertId) {
 }
 
 function confirmGroup() {
-    try {
         console.log('[tp-expert-select] confirmGroup start, selected=' + selectedExperts.length);
 
         var btn = document.getElementById('btnConfirmGroup');
@@ -629,17 +631,26 @@ function confirmGroup() {
             btn.style.opacity = '0.7';
         }
 
-        if (selectedExperts.length === 0) {
-            if (!confirm('尚未选择任何专家，是否直接关闭选择窗口？')) {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-check"></i> 确认选择';
-                    btn.style.opacity = '1';
-                }
-                return;
+        var restoreBtn = function() {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check"></i> 确认选择';
+                btn.style.opacity = '1';
             }
-        }
+        };
 
+        if (selectedExperts.length === 0) {
+            showConfirm('尚未选择任何专家', '是否直接关闭选择窗口？', '直接关闭', false).then(function(ok) {
+                if (!ok) { restoreBtn(); return; }
+                doConfirmGroupSelection();
+            });
+            return;
+        }
+        doConfirmGroupSelection();
+}
+
+function doConfirmGroupSelection() {
+    try {
         // 保存最终选择结果
         saveSelectedExperts();
         console.log('[tp-expert-select] selected experts saved to localStorage');

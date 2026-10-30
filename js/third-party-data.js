@@ -48,16 +48,16 @@ function createDefaultData() {
     ];
 
     const experts = [
-        { expertId: 'EXP-002', name: '王晓峰', gender: '男', birth: '1980-03-25', orgId: 'ORG-20260002', orgName: '上海华安风险评估中心', domain: '基坑', direction: '基坑监测', industryExpertGroup: '基坑与地下工程专家组', title: '教授级高工', titleOrg: '中国岩石力学学会', titleTime: '2018-09', years: '18', phone: '13800138002', email: 'wangxf@ha.com', address: '上海市静安区', workplace: '上海华安风险评估中心', status: '正常' },
-        { expertId: 'EXP-003', name: '张淑芬', gender: '女', birth: '1978-11-08', orgId: 'ORG-20260003', orgName: '上海水利安全研究院', domain: '交通', direction: '桥梁安全', industryExpertGroup: '交通基础设施安全专家组', title: '研究员', titleOrg: '交通运输部', titleTime: '2016-12', years: '12', phone: '13800138003', email: 'zhangsf@sl.com', address: '上海市徐汇区', workplace: '上海水利安全研究院', status: '正常' },
-        { expertId: 'EXP-004', name: '陈志强', gender: '男', birth: '1982-07-19', orgId: 'ORG-20260004', orgName: '上海安信消防技术有限公司', domain: '玻璃幕墙', direction: '消防检测', industryExpertGroup: '消防与应急救援专家组', title: '高级工程师', titleOrg: '上海市消防协会', titleTime: '2019-04', years: '10', phone: '13800138004', email: 'chenzq@ax.com', address: '上海市长宁区', workplace: '上海安信消防技术有限公司', status: '正常' },
-        { expertId: 'EXP-005', name: '刘红梅', gender: '女', birth: '1976-05-30', orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', domain: '燃气', direction: '燃气安全', industryExpertGroup: '城镇燃气安全专家组', title: '教授级高工', titleOrg: '中国城市燃气协会', titleTime: '2014-11', years: '20', phone: '13800138005', email: 'liuhm@rq.com', address: '上海市浦东新区', workplace: '上海燃气安全技术服务中心', status: '正常' },
-        { expertId: 'EXP-006', name: '赵建国', gender: '男', birth: '1979-09-14', orgId: 'ORG-20260006', orgName: '上海城市安全研究院', domain: '高空坠物', direction: '城市安全', industryExpertGroup: '城市运行安全专家组', title: '高级工程师', titleOrg: '上海市应急管理局', titleTime: '2017-08', years: '14', phone: '13800138006', email: 'zhaojg@cs.com', address: '上海市杨浦区', workplace: '上海城市安全研究院', status: '正常' },
-        { expertId: 'EXP-007', name: '孙丽华', gender: '女', birth: '1981-12-03', orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', domain: '城镇自建房', direction: '房屋鉴定', industryExpertGroup: '房屋安全鉴定专家组', title: '研究员', titleOrg: '住建部', titleTime: '2020-01', years: '11', phone: '13800138007', email: 'sunlh@fj.com', address: '上海市虹口区', workplace: '上海房屋安全鉴定中心', status: '正常' },
-        { expertId: 'EXP-008', name: '周海涛', gender: '男', birth: '1983-04-22', orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', domain: '农村自建房', direction: '村镇建筑', industryExpertGroup: '村镇建设安全专家组', title: '高级工程师', titleOrg: '上海市住建委', titleTime: '2021-05', years: '9', phone: '13800138008', email: 'zhouht@cz.com', address: '上海市闵行区', workplace: '上海村镇建设安全评估有限公司', status: '正常' },
-        { expertId: 'EXP-009', name: '杨秀英', gender: '女', birth: '1972-03-15', orgId: '', orgName: '', domain: '城镇自建房', direction: '结构检测', industryExpertGroup: '房屋安全鉴定专家组', title: '教授级高工', titleOrg: '中国土木工程学会', titleTime: '2010-08', years: '28', phone: '13800138009', email: 'yangxy@example.com', address: '上海市浦东新区', workplace: '上海市', status: '正常', expertType: '独立专家' },
-        { expertId: 'EXP-010', name: '黄志强', gender: '男', birth: '1968-07-21', orgId: '', orgName: '', domain: '基坑', direction: '地基处理', industryExpertGroup: '基坑与地下工程专家组', title: '高级工程师', titleOrg: '中国岩石力学与工程学会', titleTime: '2008-05', years: '32', phone: '13800138010', email: 'huangzq@example.com', address: '上海市徐汇区', workplace: '上海市', status: '正常', expertType: '独立专家' },
-        { expertId: 'EXP-011', name: '周涛', gender: '男', birth: '1975-11-30', orgId: '', orgName: '', domain: '交通', direction: '道路桥梁', industryExpertGroup: '交通基础设施安全专家组', title: '注册结构师', titleOrg: '住建部执业资格注册中心', titleTime: '2012-09', years: '24', phone: '13800138011', email: 'zhout@example.com', address: '上海市黄浦区', workplace: '上海市', status: '正常', expertType: '独立专家' }
+        { expertId: 'EXP-002', name: '王晓峰', gender: '男', birth: '1980-03-25', orgId: 'ORG-20260002', orgName: '上海华安风险评估中心', domain: '基坑', direction: '基坑监测', industryExpertGroup: '基坑与地下工程专家组', title: '教授级高工', titleOrg: '中国岩石力学学会', titleTime: '2018-09', years: '18', phone: '13800138002', email: 'wangxf@ha.com', address: '上海市静安区', workplace: '上海华安风险评估中心', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-003', name: '张淑芬', gender: '女', birth: '1978-11-08', orgId: 'ORG-20260003', orgName: '上海水利安全研究院', domain: '交通', direction: '桥梁安全', industryExpertGroup: '交通基础设施安全专家组', title: '研究员', titleOrg: '交通运输部', titleTime: '2016-12', years: '12', phone: '13800138003', email: 'zhangsf@sl.com', address: '上海市徐汇区', workplace: '上海水利安全研究院', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-004', name: '陈志强', gender: '男', birth: '1982-07-19', orgId: 'ORG-20260004', orgName: '上海安信消防技术有限公司', domain: '玻璃幕墙', direction: '消防检测', industryExpertGroup: '消防与应急救援专家组', title: '高级工程师', titleOrg: '上海市消防协会', titleTime: '2019-04', years: '10', phone: '13800138004', email: 'chenzq@ax.com', address: '上海市长宁区', workplace: '上海安信消防技术有限公司', serviceTime: '工作日 9:00-17:00；火灾应急随时响应', status: '正常' },
+        { expertId: 'EXP-005', name: '刘红梅', gender: '女', birth: '1976-05-30', orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', domain: '燃气', direction: '燃气安全', industryExpertGroup: '城镇燃气安全专家组', title: '教授级高工', titleOrg: '中国城市燃气协会', titleTime: '2014-11', years: '20', phone: '13800138005', email: 'liuhm@rq.com', address: '上海市浦东新区', workplace: '上海燃气安全技术服务中心', serviceTime: '全天候（燃气应急抢修响应）', status: '正常' },
+        { expertId: 'EXP-006', name: '赵建国', gender: '男', birth: '1979-09-14', orgId: 'ORG-20260006', orgName: '上海城市安全研究院', domain: '高空坠物', direction: '城市安全', industryExpertGroup: '城市运行安全专家组', title: '高级工程师', titleOrg: '上海市应急管理局', titleTime: '2017-08', years: '14', phone: '13800138006', email: 'zhaojg@cs.com', address: '上海市杨浦区', workplace: '上海城市安全研究院', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-007', name: '孙丽华', gender: '女', birth: '1981-12-03', orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', domain: '城镇自建房', direction: '房屋鉴定', industryExpertGroup: '房屋安全鉴定专家组', title: '研究员', titleOrg: '住建部', titleTime: '2020-01', years: '11', phone: '13800138007', email: 'sunlh@fj.com', address: '上海市虹口区', workplace: '上海房屋安全鉴定中心', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-008', name: '周海涛', gender: '男', birth: '1983-04-22', orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', domain: '农村自建房', direction: '村镇建筑', industryExpertGroup: '村镇建设安全专家组', title: '高级工程师', titleOrg: '上海市住建委', titleTime: '2021-05', years: '9', phone: '13800138008', email: 'zhouht@cz.com', address: '上海市闵行区', workplace: '上海村镇建设安全评估有限公司', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-009', name: '杨秀英', gender: '女', birth: '1972-03-15', orgId: '', orgName: '', domain: '城镇自建房', direction: '结构检测', industryExpertGroup: '房屋安全鉴定专家组', title: '教授级高工', titleOrg: '中国土木工程学会', titleTime: '2010-08', years: '28', phone: '13800138009', email: 'yangxy@example.com', address: '上海市浦东新区', workplace: '上海市', serviceTime: '周一至周五 9:00-18:00', status: '正常', expertType: '独立专家' },
+        { expertId: 'EXP-010', name: '黄志强', gender: '男', birth: '1968-07-21', orgId: '', orgName: '', domain: '基坑', direction: '地基处理', industryExpertGroup: '基坑与地下工程专家组', title: '高级工程师', titleOrg: '中国岩石力学与工程学会', titleTime: '2008-05', years: '32', phone: '13800138010', email: 'huangzq@example.com', address: '上海市徐汇区', workplace: '上海市', serviceTime: '工作日及周末可预约', status: '正常', expertType: '独立专家' },
+        { expertId: 'EXP-011', name: '周涛', gender: '男', birth: '1975-11-30', orgId: '', orgName: '', domain: '交通', direction: '道路桥梁', industryExpertGroup: '交通基础设施安全专家组', title: '注册结构师', titleOrg: '住建部执业资格注册中心', titleTime: '2012-09', years: '24', phone: '13800138011', email: 'zhout@example.com', address: '上海市黄浦区', workplace: '上海市', serviceTime: '全天候', status: '正常', expertType: '独立专家' }
     ];
 
     const credit = {};
@@ -102,7 +102,7 @@ function createDefaultData() {
 
     const auditFlow = {};  // key: orgId, value: { currentLevel, history, status } 审核流程状态
 
-    return { orgs, contracts, performances, experts, credit, projectGroups: [], auditConfig, auditFlow, version: 4, creditRules: getDefaultCreditRules().slice(), creditRuleVersion: 1, creditLastCalcTime: '' };
+    return { orgs, contracts, performances, experts, credit, auditConfig, auditFlow, version: 4, creditRules: getDefaultCreditRules().slice(), creditRuleVersion: 1, creditLastCalcTime: '', orgApplications: [], expertApplications: [], orgChangeRequests: [], notifications: [] };
 }
 
 function getDefaultExperts() {
@@ -111,7 +111,6 @@ function getDefaultExperts() {
 
 function migrateTPData(data) {
     if (!data) data = {};
-    if (!data.projectGroups) data.projectGroups = [];
     if (!data.experts) data.experts = [];
     if (!data.orgs) data.orgs = [];
     if (!data.contracts) data.contracts = [];
@@ -145,6 +144,9 @@ function migrateTPData(data) {
         saveTPData(data);
     }
     if (!data.orgApplications) data.orgApplications = [];
+    if (!data.expertApplications) data.expertApplications = [];
+    if (!data.orgChangeRequests) data.orgChangeRequests = [];
+    if (!data.notifications) data.notifications = [];
     return data;
 }
 
@@ -276,17 +278,6 @@ function queryOrgApplicationProgress(query) {
         return name && code ? (matchName && matchCode) : (matchName || matchCode);
     });
 }
-function queryOrgApplicationProgress(query) {
-    var name = (query && query.orgName || '').trim().toLowerCase();
-    var code = (query && query.orgCode || '').trim().toLowerCase();
-    var apps = getAllOrgApplications();
-    return apps.filter(function(a) {
-        var basic = a.basic || {};
-        var matchName = name && (basic.enterpriseName || '').toLowerCase().indexOf(name) !== -1;
-        var matchCode = code && (basic.creditCode || '').toLowerCase() === code;
-        return name && code ? (matchName && matchCode) : (matchName || matchCode);
-    });
-}
 function submitOrgApplication(application) {
     const data = getTPData();
     if (!data.orgApplications) data.orgApplications = [];
@@ -356,26 +347,28 @@ function auditOrgApplication(applicationId, level, operator, opinion, decision) 
     return app;
 }
 function promoteApplicationToOrg(app) {
-    if (!app || !app.basic) return;
-    const basic = app.basic;
+    if (!app) return;
+    const basic = app.basic || {};
     const data = getTPData();
-    const existing = data.orgs.find(o => o.orgCode === basic.creditCode);
+    const creditCode = basic.creditCode || app.creditCode || '';
+    const existing = creditCode && data.orgs.find(o => o.orgCode === creditCode);
     if (existing) return existing;
     const orgId = 'ORG-' + (data.orgs.length + 1).toString().padStart(5, '0');
     const newOrg = {
         orgId: orgId,
-        orgName: basic.enterpriseName || '',
-        orgCode: basic.creditCode || '',
-        legalPerson: basic.legalName || app.legal && app.legal.legalName || '',
-        phone: basic.phone || (app.legal && app.legal.phone) || '',
-        region: basic.address || basic.serviceArea || '',
-        field: basic.field || basic.businessScope || '',
+        orgName: basic.enterpriseName || app.orgName || '',
+        orgCode: creditCode,
+        legalPerson: basic.legalName || (app.legal && app.legal.legalName) || app.legalPerson || '',
+        phone: basic.legalPhone || basic.phone || (app.legal && app.legal.phone) || app.contact || '',
+        region: basic.address || basic.serviceArea || app.address || '',
+        field: basic.field || basic.businessScope || app.serviceScope || '',
         orgType: basic.orgType || '服务机构',
         qual: (app.qualifications && app.qualifications[0] && app.qualifications[0].level) || '乙级',
         status: '正常',
         creditLevel: 'A',
         score: 75,
-        established: basic.establishDate || ''
+        established: basic.establishDate || '',
+        changeHistory: [{ action: '新增', time: nowStr(), operator: '系统', remark: '机构申报审核通过，正式入库', diff: ['机构名称：' + (basic.enterpriseName || app.orgName || '-'), '统一代码：' + creditCode] }]
     };
     data.orgs.push(newOrg);
     // 将在线申请中填报的关联专家一并入库，并关联到新机构
@@ -401,6 +394,210 @@ function promoteApplicationToOrg(app) {
     }
     saveTPData(data);
     return newOrg;
+}
+
+// ---------- 机构信息变更申请 ----------
+function getAllOrgChangeRequests() { return (getTPData().orgChangeRequests || []).slice(); }
+function getOrgChangeRequestById(changeId) {
+    return getAllOrgChangeRequests().find(function(c) { return c.changeId === changeId; });
+}
+function getOrgChangeRequestsByOrgId(orgId) {
+    return getAllOrgChangeRequests().filter(function(c) { return c.orgId === orgId; });
+}
+function hasPendingOrgChangeRequest(orgId) {
+    return getAllOrgChangeRequests().some(function(c) { return c.orgId === orgId && (c.status === '待审核' || c.status === '审核中'); });
+}
+function queryOrgChangeRequests(query) {
+    var name = (query && query.orgName || '').trim().toLowerCase();
+    var code = (query && query.orgCode || '').trim().toLowerCase();
+    return getAllOrgChangeRequests().filter(function(c) {
+        var matchName = name && (c.orgName || '').toLowerCase().indexOf(name) !== -1;
+        var matchCode = code && (c.creditCode || '').toLowerCase() === code;
+        return name && code ? (matchName && matchCode) : (matchName || matchCode);
+    });
+}
+function submitOrgChangeRequest(req) {
+    var data = getTPData();
+    if (!data.orgChangeRequests) data.orgChangeRequests = [];
+    var org = (data.orgs || []).find(function(o) { return o.orgId === req.orgId; });
+    if (!org) throw new Error('未找到该机构，无法提交变更申请。');
+    if (hasPendingOrgChangeRequest(req.orgId)) throw new Error('该机构已有待审核的变更申请，请等待审核完成后再提交。');
+    if (!req.changes || !req.changes.length) throw new Error('未检测到变更内容。');
+    req.changeId = req.changeId || ('CHG-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100));
+    req.orgName = req.orgName || org.orgName || '';
+    req.creditCode = req.creditCode || org.orgCode || '';
+    req.status = '待审核';
+    req.submitTime = req.submitTime || nowStr();
+    if (!req.auditHistory) req.auditHistory = [];
+    req.auditHistory.push({ level: 0, decision: 'submit', operator: req.submitter || ('机构-' + (org.orgName || '')), opinion: '提交信息变更申请', time: nowStr() });
+    data.orgChangeRequests.push(req);
+    saveTPData(data);
+    return req;
+}
+function auditOrgChangeRequest(changeId, operator, opinion, decision) {
+    var data = getTPData();
+    if (!data.orgChangeRequests) data.orgChangeRequests = [];
+    var req = data.orgChangeRequests.find(function(c) { return c.changeId === changeId; });
+    if (!req) return null;
+    if (req.status !== '待审核' && req.status !== '审核中') return null;
+    if (!req.auditHistory) req.auditHistory = [];
+    req.auditHistory.push({ level: 1, decision: decision, operator: operator, opinion: opinion, time: nowStr() });
+    req.auditTime = nowStr();
+    req.auditor = operator;
+    req.auditOpinion = opinion || '';
+    if (decision === 'reject') {
+        req.status = '已驳回';
+    } else {
+        req.status = '已通过';
+        applyOrgChangeRequest(data, req, operator);
+    }
+    saveTPData(data);
+    return req;
+}
+function applyOrgChangeRequest(data, req, operator) {
+    var org = (data.orgs || []).find(function(o) { return o.orgId === req.orgId; });
+    if (!org) return;
+    (req.changes || []).forEach(function(c) { org[c.field] = c.newValue; });
+    addOrgChangeHistoryRecord(data, org.orgId, {
+        action: '信息变更',
+        time: nowStr(),
+        operator: operator || '管理员',
+        remark: (req.reason || '机构信息变更') + '（变更单号：' + req.changeId + '）',
+        diff: (req.changes || []).map(function(c) { return c.label + '：' + (c.oldValue || '空') + ' → ' + (c.newValue || '空'); })
+    });
+}
+function addOrgChangeHistoryRecord(data, orgId, record) {
+    var org = (data.orgs || []).find(function(o) { return o.orgId === orgId; });
+    if (!org) return;
+    if (!org.changeHistory) org.changeHistory = [];
+    org.changeHistory.unshift(record);
+}
+function getOrgChangeHistory(orgId) {
+    var org = getOrgById(orgId);
+    return (org && org.changeHistory) ? org.changeHistory.slice() : [];
+}
+function addOrgChangeHistory(orgId, record) {
+    var data = getTPData();
+    addOrgChangeHistoryRecord(data, orgId, record);
+    saveTPData(data);
+}
+
+// ---------- 专家在线申请 ----------
+function getAllExpertApplications() { return (getTPData().expertApplications || []).slice(); }
+function getExpertApplicationById(applicationId) { return getAllExpertApplications().find(a => a.applicationId === applicationId); }
+function queryExpertApplicationProgress(query) {
+    var name = (query && query.expertName || '').trim().toLowerCase();
+    var idCard = (query && query.idCard || '').trim().toLowerCase();
+    return getAllExpertApplications().filter(function(a) {
+        var basic = a.basic || {};
+        var matchName = name && (basic.name || '').toLowerCase().indexOf(name) !== -1;
+        var matchIdCard = idCard && (basic.idCard || '').toLowerCase() === idCard;
+        return name && idCard ? (matchName && matchIdCard) : (matchName || matchIdCard);
+    });
+}
+function submitExpertApplication(application) {
+    const data = getTPData();
+    if (!data.expertApplications) data.expertApplications = [];
+    const basic = application.basic || {};
+    const idCard = basic.idCard || '';
+    if (idCard) {
+        const existsApp = data.expertApplications.some(a => a.basic && a.basic.idCard === idCard && a.status !== '已驳回');
+        if (existsApp) throw new Error('该身份证号已有正在审核或已通过的申请，请勿重复提交。');
+        const existsExpert = (data.experts || []).some(e => e.idCard && e.idCard === idCard);
+        if (existsExpert) throw new Error('该身份证号的专家已入库，无需重复申请。');
+    }
+    application.applicationId = application.applicationId || ('EXA-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100));
+    application.status = application.status || '待审核';
+    application.submitTime = application.submitTime || nowStr();
+    if (!application.auditHistory) application.auditHistory = [];
+    if (!application.flowState) {
+        const config = getTPAuditConfig();
+        application.flowState = {
+            mode: config.mode || 'single',
+            levels: parseInt(config.levels || 1, 10),
+            currentLevel: 0,
+            status: 'pending'
+        };
+    }
+    data.expertApplications.push(application);
+    saveTPData(data);
+    return application;
+}
+function updateExpertApplication(application) {
+    const data = getTPData();
+    if (!data.expertApplications) data.expertApplications = [];
+    const idx = data.expertApplications.findIndex(a => a.applicationId === application.applicationId);
+    if (idx >= 0) data.expertApplications[idx] = application;
+    else data.expertApplications.push(application);
+    saveTPData(data);
+    return application;
+}
+function approveExpertApplication(applicationId, level, operator, opinion) {
+    return auditExpertApplication(applicationId, level, operator, opinion, 'pass');
+}
+function rejectExpertApplication(applicationId, level, operator, opinion) {
+    return auditExpertApplication(applicationId, level, operator, opinion, 'reject');
+}
+function auditExpertApplication(applicationId, level, operator, opinion, decision) {
+    var app = getExpertApplicationById(applicationId);
+    if (!app) return null;
+    if (!app.auditHistory) app.auditHistory = [];
+    if (!app.flowState) app.flowState = { mode: 'single', levels: 1, currentLevel: 0, status: 'pending' };
+    const lv = parseInt(level || 1, 10);
+    const cfg = getTPAuditConfig();
+    const maxLevel = parseInt(cfg.levels || 1, 10);
+    app.auditHistory.push({ level: lv, decision: decision, operator: operator, opinion: opinion, time: nowStr() });
+    app.flowState.currentLevel = lv;
+    if (decision === 'reject') {
+        app.status = '已驳回';
+        app.flowState.status = 'rejected';
+    } else if (decision === 'pass') {
+        if (lv >= maxLevel) {
+            app.status = '已通过';
+            app.flowState.status = 'approved';
+            app.approveTime = nowStr();
+            promoteApplicationToExpert(app);
+        } else {
+            app.status = '审核中';
+            app.flowState.status = 'auditing';
+        }
+    }
+    updateExpertApplication(app);
+    return app;
+}
+function promoteApplicationToExpert(app) {
+    if (!app || !app.basic) return;
+    const basic = app.basic;
+    const data = getTPData();
+    if (!data.experts) data.experts = [];
+    if (basic.idCard && data.experts.some(e => e.idCard === basic.idCard)) return;
+    const newExpert = {
+        expertId: 'EXP-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+        name: basic.name || '',
+        gender: basic.gender || '',
+        birth: basic.birth || '',
+        idCard: basic.idCard || '',
+        orgId: basic.orgId || '',
+        orgName: basic.workplace || '',
+        domain: basic.domain || '',
+        direction: basic.direction || '',
+        industryExpertGroup: basic.industryExpertGroup || '',
+        title: basic.title || '',
+        titleOrg: basic.titleOrg || '',
+        titleTime: basic.titleTime || '',
+        years: basic.years || '',
+        phone: basic.phone || '',
+        email: basic.email || '',
+        address: basic.address || '',
+        workplace: basic.workplace || '',
+        serviceTime: basic.serviceTime || '',
+        status: '正常',
+        expertType: basic.orgId ? '机构专家' : '独立专家',
+        source: '在线申请'
+    };
+    data.experts.push(newExpert);
+    saveTPData(data);
+    return newExpert;
 }
 
 // ---------- 机构批量导入 ----------
@@ -471,49 +668,6 @@ function addOrgsBatch(items) {
     return results;
 }
 
-// ---------- 项目组 ----------
-function getAllProjectGroups() { return (getTPData().projectGroups || []).slice(); }
-function getProjectGroupById(projectId) { return getAllProjectGroups().find(p => p.projectId === projectId); }
-function updateProjectGroup(project) {
-    const data = getTPData();
-    if (!data.projectGroups) data.projectGroups = [];
-    const idx = data.projectGroups.findIndex(p => p.projectId === project.projectId);
-    if (idx >= 0) data.projectGroups[idx] = project;
-    else data.projectGroups.push(project);
-    saveTPData(data);
-    return project;
-}
-function deleteProjectGroup(projectId) {
-    const data = getTPData();
-    if (!data.projectGroups) data.projectGroups = [];
-    data.projectGroups = data.projectGroups.filter(p => p.projectId !== projectId);
-    saveTPData(data);
-}
-function createProjectGroup(init) {
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
-    const projectId = init.projectId || ('PG-' + now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + '-' + String(Math.floor(Math.random() * 9000) + 1000));
-    return updateProjectGroup(Object.assign({
-        projectId: projectId,
-        projectName: '',
-        orgId: '',
-        orgName: '',
-        orgCode: '',
-        experts: [],
-        status: '待组建',
-        createdAt: dateStr,
-        contractId: '',
-        performanceId: '',
-        remark: ''
-    }, init));
-}
-function getProjectGroupsByOrg(orgId) {
-    return getAllProjectGroups().filter(p => p.orgId === orgId);
-}
-function getProjectGroupsByContract(contractId) {
-    return getAllProjectGroups().filter(p => p.contractId === contractId);
-}
 // ---------- URL 参数工具 ----------
 function getTPQueryParams() {
     const params = new URLSearchParams(location.search);
@@ -575,13 +729,6 @@ function goToTPExpertWorkload(expertId) {
     location.href = 'tp-expert-workload.html?expertId=' + encodeURIComponent(expertId || '')
         + '&name=' + encodeURIComponent(expert ? expert.name : '');
 }
-function goToTPExpertSelect(projectId) {
-    location.href = 'tp-expert-select.html?projectId=' + encodeURIComponent(projectId || '');
-}
-function goToTPProject(projectId) {
-    location.href = 'tp-expert-select.html?projectId=' + encodeURIComponent(projectId || '');
-}
-
 // ---------- 数据更新（增删改） ----------
 function updateOrg(org) {
     const data = getTPData();
@@ -597,6 +744,15 @@ function updateContract(contract) {
     if (idx >= 0) data.contracts[idx] = contract;
     else data.contracts.push(contract);
     saveTPData(data);
+}
+
+function deleteContractById(contractId) {
+    const data = getTPData();
+    const idx = data.contracts.findIndex(c => c.contractId === contractId);
+    if (idx >= 0) {
+        data.contracts.splice(idx, 1);
+        saveTPData(data);
+    }
 }
 
 function updatePerformance(performance) {
@@ -1028,4 +1184,84 @@ function runDailyCreditCalc() {
 function syncAllCredit() {
     runDailyCreditCalc();
     getAllOrgs().forEach(o => syncCredit(o.orgId));
+}
+
+// ==================== 报告交付提醒消息推送 ====================
+// 自动生成提醒任务：扫描未验收合同的服务期限，向机构推送系统消息 + 模拟短信，提醒按时上传鉴定报告
+function getAllNotifications() {
+    return getTPData().notifications || [];
+}
+function getNotificationsByOrgId(orgId) {
+    return getAllNotifications().filter(function(n) { return n.orgId === orgId; })
+        .sort(function(a, b) { return b.time > a.time ? 1 : -1; });
+}
+function getUnreadNotificationCount(orgId) {
+    return getAllNotifications().filter(function(n) { return n.orgId === orgId && !n.read; }).length;
+}
+function markNotificationRead(notificationId) {
+    var data = getTPData();
+    var n = (data.notifications || []).find(function(x) { return x.notificationId === notificationId; });
+    if (!n || n.read) return;
+    n.read = true;
+    n.readTime = nowStr();
+    saveTPData(data);
+}
+function markAllNotificationsRead(orgId) {
+    var data = getTPData();
+    var changed = false;
+    (data.notifications || []).forEach(function(n) {
+        if (n.orgId === orgId && !n.read) { n.read = true; n.readTime = nowStr(); changed = true; }
+    });
+    if (changed) saveTPData(data);
+}
+// 按合同服务期限自动生成提醒消息（按 合同+级别+日期 去重），返回本次新增条数
+function generateReportReminders() {
+    var data = getTPData();
+    if (!data.notifications) data.notifications = [];
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var dateKey = todayStr();
+    var created = 0;
+    (data.contracts || []).forEach(function(c) {
+        if (!c || c.status === '已验收') return;
+        if (c.reports && c.reports.length) return; // 已上传报告不再提醒
+        if (!c.servicePeriod) return;
+        var parts = c.servicePeriod.split('~');
+        if (parts.length < 2) return;
+        var deadline = new Date(parts[1].trim());
+        if (isNaN(deadline.getTime())) return;
+        deadline.setHours(0, 0, 0, 0);
+        var diffDays = Math.ceil((deadline - today) / (1000 * 60 * 60 * 24));
+        var level = null, levelText = '';
+        if (diffDays < 0) { level = 'overdue'; levelText = '报告已逾期 ' + Math.abs(diffDays) + ' 天'; }
+        else if (diffDays <= 1) { level = 'urgent'; levelText = '距交付期限仅剩 ' + diffDays + ' 天'; }
+        else if (diffDays <= 3) { level = 'warning'; levelText = '距交付期限剩 ' + diffDays + ' 天'; }
+        else if (diffDays <= 7) { level = 'notice'; levelText = '距交付期限剩 ' + diffDays + ' 天'; }
+        if (!level) return;
+        var dedupeKey = c.contractId + '|' + level + '|' + dateKey;
+        if (data.notifications.some(function(n) { return n.dedupeKey === dedupeKey; })) return;
+        var org = (data.orgs || []).find(function(o) { return o.orgId === c.orgId; }) || {};
+        var deadlineStr = parts[1].trim();
+        data.notifications.push({
+            notificationId: 'MSG-' + Date.now() + '-' + Math.floor(Math.random() * 900 + 100),
+            dedupeKey: dedupeKey,
+            orgId: c.orgId || '',
+            orgName: c.orgName || '',
+            type: '报告上传提醒',
+            level: level,
+            title: levelText + '，请按时上传鉴定报告',
+            content: '【报告上传提醒】' + (c.orgName || '') + '：贵机构承接的"' + (c.projectName || '') + '"（合同编号 ' + c.contractId + '）交付期限为 ' + deadlineStr + '，' + levelText + '，请及时完成鉴定工作并上传鉴定报告。',
+            contractId: c.contractId,
+            projectName: c.projectName || '',
+            deadline: deadlineStr,
+            diffDays: diffDays,
+            channels: ['system', 'sms'],
+            sms: { phone: org.phone || '', status: '已送达', time: nowStr() },
+            read: false,
+            time: nowStr()
+        });
+        created++;
+    });
+    if (created > 0) saveTPData(data);
+    return created;
 }

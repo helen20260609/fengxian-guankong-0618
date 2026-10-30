@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>农房回头看</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.review-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.page-hero { padding-bottom: 58px; }
+.page-hero .ph-sub { position: absolute; left: 50%; top: calc(34px + 16px + 36px); transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; z-index: 2; padding: 2px 8px; }
+.page-hero .ph-ticket { position: absolute; right: 14px; top: calc(34px + 16px); width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; cursor: pointer; z-index: 2; }
+.page-hero .ph-ticket:active { background: rgba(255,255,255,.3); }
+.page-hero .ph-ticket-badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #d93025; color: #fff; font-size: 10px; line-height: 16px; text-align: center; font-weight: 600; border: 1.5px solid #fff; }
+
+
+
+.search-section { padding: 12px 14px 6px; background: var(--card); border-bottom: 1px solid var(--border); position: relative; z-index: 1500; }
+.search-section .search-input-wrapper { position: relative; }
+.search-section input { width: 100%; height: 40px; border: 1px solid var(--border); border-radius: 20px; padding: 0 96px 0 36px; font-size: 14px; background: var(--bg); color: var(--text-primary); outline: none; box-sizing: border-box; }
+.search-section input:focus { border-color: var(--primary); }
+.search-section .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text2); font-size: 14px; }
+.search-btn { position: absolute; right: 4px; top: 4px; height: 32px; padding: 0 14px; border: none; border-radius: 16px; background: var(--primary); color: #fff; font-size: 13px; cursor: pointer; }
+.search-btn:active { opacity: .85; }
+
+/* 模糊搜索下拉 */
+.suggest-panel { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.12); max-height: 320px; overflow-y: auto; z-index: 2000; display: none; }
+.suggest-panel.show { display: block; }
+.suggest-item { padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:active { background: var(--bg); }
+.suggest-item .s-no { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.suggest-item .s-addr { font-size: 12px; color: var(--text2); line-height: 1.4; }
+.suggest-item .s-meta { font-size: 11px; color: var(--text2); margin-top: 3px; display: flex; gap: 8px; }
+.suggest-item .s-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; background: rgba(26,115,232,.1); color: var(--primary); }
+.suggest-item .s-tag.done { background: rgba(52,168,83,.1); color: #34a853; }
+.suggest-empty {
+    padding: 14px 16px; text-align: center; font-size: 13px;
+    color: #c62828; background: #ffebee;
+    border: 1px solid #ffcdd2; border-radius: 8px; margin: 8px;
+    font-weight: 600; line-height: 1.5;
+}
+.suggest-item .hl { color: var(--primary); font-weight: 600; }
+
+/* 区域联动筛选 */
+.filter-section { padding: 8px 14px 10px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+.filter-section .filter-label { font-size: 12px; color: var(--text2); flex-shrink: 0; }
+.filter-select { position: relative; flex: 1; min-width: 0; }
+.filter-select select { width: 100%; height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 28px 0 10px; font-size: 13px; background: var(--bg); color: var(--text-primary); outline: none; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.filter-select::after { content: '\f078'; font-family: 'Font Awesome 6 Free'; font-weight: 900; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 10px; color: var(--text2); pointer-events: none; }
+.filter-select select:focus { border-color: var(--primary); }
+.filter-reset { flex-shrink: 0; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text2); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.filter-reset:active { background: var(--bg); }
+.filter-count { font-size: 11px; color: var(--text2); flex-shrink: 0; min-width: 40px; text-align: right; }
+
+.map-wrap { position: relative; flex: 1; min-height: 0; }
+#reviewMap { position: absolute; inset: 0; }
+
+.house-spot { position: relative; }
+.house-spot .spot-pin { width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--primary); border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; }
+.house-spot .spot-pin i { transform: rotate(45deg); color: #fff; font-size: 14px; }
+.house-spot.spot-red .spot-pin { background: #d93025; }
+.house-spot.spot-orange .spot-pin { background: #e37400; }
+.house-spot.spot-yellow .spot-pin { background: #f9ab00; }
+.house-spot.spot-blue .spot-pin { background: #1a73e8; }
+.house-spot.spot-pulse::after { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 2px solid rgba(26,115,232,.5); animation: spotPulse 1.6s ease-out infinite; }
+@keyframes spotPulse { 0% { transform: scale(.5); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+/* 已排查过的点位：右上角绿色小勾 */
+.house-spot .spot-done { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; border-radius: 50%; background: #34a853; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; z-index: 2; }
+.house-spot .spot-done i { color: #fff; font-size: 9px; line-height: 1; }
+
+.info-card { position: absolute; left: 12px; right: 12px; bottom: calc(12px + var(--safe-bottom)); background: var(--card); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 14px; z-index: 1000; display: none; }
+.info-card.show { display: block; animation: cardUp .25s ease; }
+@keyframes cardUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.info-card .ic-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.info-card .ic-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.info-card .ic-close { color: var(--text2); font-size: 16px; padding: 2px 6px; cursor: pointer; }
+.info-card .ic-row { display: flex; font-size: 12px; margin-top: 6px; }
+.info-card .ic-value { flex: 1; color: var(--text-primary); }
+.info-card .ic-badges { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.info-card .ic-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; font-weight: 600; }
+.badge-red { background: rgba(217,48,37,.12); color: #d93025; }
+.badge-orange { background: rgba(227,116,0,.12); color: #e37400; }
+.badge-yellow { background: rgba(249,171,0,.15); color: #c68400; }
+.badge-blue { background: rgba(26,115,232,.12); color: #1a73e8; }
+.badge-gray { background: rgba(95,99,104,.12); color: #5f6368; }
+.info-card .ic-btn { margin-top: 12px; width: 100%; height: 38px; border: none; border-radius: 10px; background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.info-card .ic-btn:active { opacity: .85; }
+
+.map-empty {
+    position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%);
+    text-align: center; z-index: 500; pointer-events: none;
+    background: #c62828;
+    border-radius: 10px;
+    padding: 14px 22px;
+    box-shadow: 0 6px 20px rgba(198, 40, 40, .45);
+    color: #fff;
+    min-width: 200px;
+}
+.map-empty i { font-size: 28px; display: block; margin-bottom: 6px; color: #fff; }
+.map-empty p { font-size: 14px; font-weight: 600; line-height: 1.5; color: #fff; margin: 0; }
+
+.map-fab { position: absolute; right: 12px; bottom: calc(12px + var(--safe-bottom)); z-index: 1000; }
+.map-fab .mf-btn { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--card); box-shadow: 0 4px 14px rgba(0,0,0,.2); color: var(--primary); font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.map-fab .mf-btn:active { transform: scale(.94); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">农房回头看</div>
+        <div class="ph-sub">奉贤区农村自建房排查</div>
+        <div class="ph-ticket tap" onclick="App.go('pages/farm-review-list.html')">
+            <i class="fa-solid fa-clipboard-list"></i>
+            <span class="ph-ticket-badge" id="ticketBadge" style="display:none">0</span>
+        </div>
+    </div>
+
+
+
+    <div class="review-body">
+        <div class="search-section">
+            <div class="search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="houseNoInput" placeholder="输入唯一标识 / 地址" autocomplete="off">
+                <button class="search-btn" id="searchBtn">定位</button>
+                <div class="suggest-panel" id="suggestPanel"></div>
+            </div>
+        </div>
+
+        <!-- 区域联动筛选 -->
+        <div class="filter-section">
+            <div class="filter-select">
+                <select id="townSelect">
+                    <option value="">全部街镇</option>
+                </select>
+            </div>
+            <div class="filter-select">
+                <select id="villageSelect" disabled>
+                    <option value="">全部村居委</option>
+                </select>
+            </div>
+            <button class="filter-reset" id="filterReset">重置</button>
+        </div>
+
+        <div class="map-wrap">
+            <div id="reviewMap"></div>
+            <div class="map-empty" id="mapEmpty" style="display:none">
+                <i class="fa-solid fa-house-circle-xmark"></i>
+                <p>未找到该唯一标识<br>请检查后重新输入</p>
+            </div>
+            <div class="map-fab">
+                <button class="mf-btn" id="mfLocate" title="定位到我"><i class="fa-solid fa-location-crosshairs"></i></button>
+            </div>
+            <div class="info-card" id="infoCard">
+                <div class="ic-head">
+                    <div class="ic-title" id="icNo">—</div>
+                    <div class="ic-close tap" id="icClose"><i class="fa-solid fa-xmark"></i></div>
+                </div>
+                <div class="ic-row"><div class="ic-value" id="icPreJudge">—</div></div>
+                <div class="ic-row"><div class="ic-value" id="icAddr">—</div></div>
+                <button class="ic-btn" id="icEnter"><i class="fa-solid fa-clipboard-check"></i> 进入现场排查</button>
+            </div>
+        </div>
+    </div>
+
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="../../js/house-arch-data.js"></script>
+<script>
+(function() {
+    // ---------- 数据 ----------
+    initHouseArchSeed();
+
+    // 只显示"农房回头看"待排查任务对应的房屋落点
+    // 数据源：localStorage['farm-review-pending']（先同步加载，fetch 异步刷新）
+    var FENGXIAN_CENTER = [30.92, 121.47];
+
+    // 奉贤区各镇/街道中心坐标
+    var TOWN_CENTERS = {
+        '南桥镇':   [30.9200, 121.4700],
+        '奉城镇':   [30.9100, 121.6500],
+        '庄行镇':   [30.8900, 121.3800],
+        '金汇镇':   [30.9500, 121.5300],
+        '四团镇':   [30.9400, 121.7200],
+        '青村镇':   [30.8900, 121.5700],
+        '柘林镇':   [30.8300, 121.4200],
+        '西渡街道': [30.9800, 121.4500],
+        '头桥街道': [30.9600, 121.6800],
+        '奉浦街道': [30.9400, 121.4600],
+        '金海街道': [30.9100, 121.5000],
+        '海湾镇':   [30.8100, 121.5300],
+        '海湾旅游区': [30.8000, 121.5500]
+    };
+
+    // 基于字符串 hash 的伪随机数，保证同一 houseNo 每次得到相同坐标
+    function hashCode(str) {
+        var h = 0;
+        for (var i = 0; i < str.length; i++) {
+            h = ((h << 5) - h) + str.charCodeAt(i);
+            h |= 0;
+        }
+        return Math.abs(h);
+    }
+    // 在所属镇中心 ±0.012 度（约 2km）内散布；未识别镇回退到奉贤中心
+    function pseudoLatLng(no, town) {
+        var center = TOWN_CENTERS[town] || FENGXIAN_CENTER;
+        var h1 = hashCode(no + ':lat');
+        var h2 = hashCode(no + ':lng');
+        return {
+            lat: center[0] + ((h1 % 240) - 120) / 10000,
+            lng: center[1] + ((h2 % 240) - 120) / 10000
+        };
+    }
+
+    // 从排查记录构建房屋对象（坐标用档案的；隐患等级/镇村以排查记录为准）
+    // done=true 表示该房屋已完成排查（来源 farm-review-records）
+    function buildHouseFromReview(rec, done) {
+        var arch = (typeof getHouseRecord === 'function') ? getHouseRecord(rec.houseNo) : null;
+        var ll = (arch && arch.lat && arch.lng) ? { lat: arch.lat, lng: arch.lng } : pseudoLatLng(rec.houseNo, rec.town);
+        // 隐患等级兼容：优先顶层，其次 answers 内（H5 提交时写在 answers.hazardLevel）
+        var hz = rec.hazardLevel || (rec.answers && rec.answers.hazardLevel) || '';
+        var level = hz === '严重' ? '第三类' : (hz === '一般' ? '第二类' : '第一类');
+        return {
+            no: rec.houseNo,
+            name: rec.houseName || (arch && arch.name) || rec.houseNo,
+            owner: rec.owner || rec.houseOwner || (arch && arch.owner) || '',
+            address: rec.houseAddress || rec.address || (arch && arch.address) || '',
+            street: rec.town || (arch && arch.street) || '',
+            community: rec.village || (arch && arch.community) || '',
+            village: rec.village || (arch && arch.village) || '',
+            lat: ll.lat,
+            lng: ll.lng,
+            riskLevel: level,
+            risk: hz === '严重' ? 'danger' : (hz === '一般' ? 'major' : 'safe'),
+            preliminaryJudge: rec.initialJudgment || rec.inspectResult || rec.checkRemark || (arch && arch.preliminaryJudge) || '',
+            appraisalConclusion: rec.appraisalResult || (arch && arch.appraisalConclusion) || '',
+            district: rec.district || (arch && arch.district) || '',
+            groupName: rec.groupName || (arch && arch.groupName) || '',
+            roadName: rec.roadName || (arch && arch.roadName) || '',
+            buildingNo: rec.buildingNo || (arch && arch.buildingNo) || '',
+            // 基本信息（来自 PC 导入的待排查数据，供详情页只读展示）
+            overview: {
+                usage: rec.houseUsage || '',
+                specificUsage: rec.specificUsage || '',
+                otherUsage: rec.otherUsage || '',
+                floors: rec.floors || '',
+                buildingArea: rec.area || '',
+                builtYear: rec.buildYear || ''
+            },
+            done: !!done
+        };
+    }
+
+    // 推送快照覆盖：H5 冻结在推送那一刻，PC 后续保存不影响手机端
+    // 业务字段用快照覆盖；系统字段（状态/时间戳/推送计数/PC私有节）保留主记录最新值
+    function applySnapshot(rec) {
+        if (!rec || typeof rec !== 'object') return rec;
+        var snap = rec.pushedSnapshot;
+        if (!snap || typeof snap !== 'object') return rec;
+        var KEEP_KEYS = { houseNo: 1, status: 1, submitTime: 1, saveTime: 1, updateTime: 1, pushedTime: 1, pushCount: 1, checkin: 1, rectify: 1, pushedSnapshot: 1 };
+        var out = {};
+        Object.keys(rec).forEach(function(k) { out[k] = rec[k]; });
+        Object.keys(snap).forEach(function(k) {
+            if (KEEP_KEYS[k]) return;
+            out[k] = snap[k];
+        });
+        return out;
+    }
+
+    // 加载本地缓存（pending + records）
+    function loadLocalData() {
+        var pending = [], done = [];
+        try { pending = JSON.parse(localStorage.getItem('farm-review-pending') || '[]'); } catch (e) {}
+        try { done = JSON.parse(localStorage.getItem('farm-review-records') || '[]'); } catch (e) {}
+        return {
+            pending: pending.filter(function(r) { return r && r.houseNo; }),
+            done: done.filter(function(r) { return r && r.houseNo; })
+        };
+    }
+
+    function buildHouses(data) {
+        var all = {};
+        var list = [];
+        var doneMap = {};
+        // 已排查优先（同 houseNo 覆盖待排查）；草稿不算已排查，与 PC/服务端口径一致
+        (data.done || []).forEach(function(rec) {
+            if (rec && rec.status === 'draft') return; // 草稿房屋仍应显示为待排查
+            var h = buildHouseFromReview(rec, true);
+            all[h.no] = h;
+            doneMap[h.no] = true;
+        });
+        (data.pending || []).forEach(function(rec) {
+            if (doneMap[rec.houseNo]) return;
+            // 只显示已由管理员下发的任务（未下发的不出现在小程序待办，防止下发错误）
+            if (!(rec.dispatched === true || rec.dispatched === 'true')) return;
+            var h = buildHouseFromReview(rec, false);
+            all[h.no] = h;
+        });
+        Object.keys(all).forEach(function(no) { list.push(all[no]); });
+        return { all: all, list: list };
+    }
+
+    var localData = loadLocalData();
+    var built = buildHouses(localData);
+    var allHouses = built.all;
+    var houseList = built.list;
+
+    // 从服务端拉取最新数据（pending + records），合并到 localStorage 并刷新地图与下拉
+    var mapSyncSig = '';
+    function syncFromServer(isPoll) {
+        return Promise.all([
+            fetch('/api/farm-review-pending').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; }),
+            fetch('/api/farm-review-records').then(function(r) { return r.ok ? r.json() : []; }).catch(function() { return []; })
+        ]).then(function(results) {
+            var pendingServer = Array.isArray(results[0]) ? results[0] : [];
+            var doneServer = Array.isArray(results[1]) ? results[1] : [];
+            var cur = loadLocalData();
+            // 与本地合并去重（服务端优先）
+            var pendingMap = {}, doneMap = {};
+            cur.pending.forEach(function(r) { if (r && r.houseNo) pendingMap[r.houseNo] = r; });
+            pendingServer.forEach(function(r) { if (r && r.houseNo) pendingMap[r.houseNo] = r; });
+            cur.done.forEach(function(r) { if (r && r.houseNo) doneMap[r.houseNo] = r; });
+            doneServer.forEach(function(r) { if (r && r.houseNo) doneMap[r.houseNo] = r; });
+            // 本地缓存只保留非草稿记录：草稿不视为「已排查」，防止地图误标绿
+            var merged = {
+                pending: Object.keys(pendingMap).map(function(k) { return pendingMap[k]; }),
+                done: Object.keys(doneMap).map(function(k) { return doneMap[k]; }).filter(function(r) { return r && r.status !== 'draft'; })
+            };
+            try { localStorage.setItem('farm-review-pending', JSON.stringify(merged.pending)); } catch (e) {}
+            try { localStorage.setItem('farm-review-records', JSON.stringify(merged.done)); } catch (e) {}
+            // 推送快照覆盖：H5 冻结在推送那一刻，PC 后续保存不影响手机端
+            merged.done = merged.done.map(applySnapshot);
+            // 补偿：inspect 提交后 DELETE pending 失败的记录，趁同步时补删
+            flushPendingDeleteQueue();
+            // 补偿：inspect 提交后 POST records 失败的记录，趁同步时补推
+            flushRecordSaveQueue();
+            // 数据签名判断是否有变化，避免无谓重绘（含下发标记，下发/收回需触发重绘）
+            var sig = JSON.stringify([
+                merged.pending.map(function(r) { return [r.houseNo, r.dispatched ? 1 : 0, r.dispatchedTime]; }),
+                merged.done.map(function(r) { return [r.houseNo, r.submitTime, r.updateTime, r.pushedTime]; })
+            ]);
+            if (sig === mapSyncSig) return;
+            var hadOld = mapSyncSig !== '';
+            mapSyncSig = sig;
+            var rebuilt = buildHouses(merged);
+            allHouses = rebuilt.all;
+            houseList = rebuilt.list;
+            refreshMapAndFilters();
+            if (isPoll && hadOld) showMapSyncToast('PC端补填数据已同步');
+        }).catch(function() { /* 静默失败，使用本地缓存 */ });
+    }
+
+    // 轻提示
+    var mapSyncToastTimer = null;
+    function showMapSyncToast(text) {
+        var el = document.getElementById('mapSyncToast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'mapSyncToast';
+            el.style.cssText = 'position:fixed;left:50%;bottom:calc(40px + var(--safe-bottom));transform:translateX(-50%);background:rgba(32,33,36,.92);color:#fff;font-size:12px;padding:8px 16px;border-radius:20px;z-index:3000;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;';
+            document.body.appendChild(el);
+        }
+        el.textContent = text;
+        el.style.opacity = '1';
+        clearTimeout(mapSyncToastTimer);
+        mapSyncToastTimer = setTimeout(function() { el.style.opacity = '0'; }, 2400);
+    }
+
+    // 首次同步
+    syncFromServer(false);
+    // 停留期间每 30 秒轮询，PC 补充数据自动推送
+    setInterval(function() { syncFromServer(true); }, 30000);
+
+    // ---------- 待删除重试队列（inspect 提交后 DELETE pending 失败的补偿） ----------
+    function flushPendingDeleteQueue() {
+        var q = [];
+        try { q = JSON.parse(localStorage.getItem('farm-review-pending-delete') || '[]'); } catch (e) {}
+        if (!Array.isArray(q) || !q.length) return;
+        var remain = [];
+        var chain = Promise.resolve();
+        q.forEach(function(hn) {
+            chain = chain.then(function() {
+                return fetch('/api/farm-review-pending/' + encodeURIComponent(hn), { method: 'DELETE' })
+                    .then(function(r) { if (!r.ok) remain.push(hn); })
+                    .catch(function() { remain.push(hn); });
+            });
+        });
+        chain.then(function() {
+            try { localStorage.setItem('farm-review-pending-delete', JSON.stringify(remain)); } catch (e) {}
+        });
+    }
+
+    // ---------- records 保存重试队列（inspect 提交后 POST records 失败的补偿） ----------
+    function flushRecordSaveQueue() {
+        var q = {};
+        try { q = JSON.parse(localStorage.getItem('farm-review-record-save') || '{}'); } catch (e) {}
+        var keys = Object.keys(q);
+        if (!keys.length) return;
+        var remain = {};
+        var chain = Promise.resolve();
+        keys.forEach(function(hn) {
+            chain = chain.then(function() {
+                return fetch('/api/farm-review-records/' + encodeURIComponent(hn), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(q[hn])
+                }).then(function(r) {
+                    if (!r.ok) remain[hn] = q[hn];
+                }).catch(function() { remain[hn] = q[hn]; });
+            });
+        });
+        chain.then(function() {
+            try {
+                if (Object.keys(remain).length) {
+                    localStorage.setItem('farm-review-record-save', JSON.stringify(remain));
+                } else {
+                    localStorage.removeItem('farm-review-record-save');
+                }
+            } catch (e) {}
+        });
+    }
+
+    // ---------- 地图 ----------
+    var map = L.map('reviewMap', { zoomControl: false, attributionControl: false }).setView(FENGXIAN_CENTER, 12);
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+        maxZoom: 19, subdomains: '1234'
+    }).addTo(map);
+
+    function normalizeRisk(h) {
+        var lv = h.riskLevel || h.risk || '';
+        if (/第三类|重大|疑似危房|严重损坏/.test(lv)) return '第三类';
+        if (/第二类|一般损坏|一般隐患|较大/.test(lv)) return '第二类';
+        if (/第一类|完好|基本完好|安全|无风险/.test(lv)) return '第一类';
+        return '第一类';
+    }
+
+    function riskColor(h) {
+        var lv = normalizeRisk(h);
+        if (lv === '第三类') return 'red';
+        if (lv === '第二类') return 'yellow';
+        return 'blue';
+    }
+
+    // 风险色 hex（用于图斑填充/描边）
+    var RISK_HEX = { red: '#d93025', yellow: '#f9ab00', blue: '#1a73e8' };
+
+    // 基于种子生成伪房屋图斑（多边形轮廓），与 PC 大屏 gis-logic.js 同源
+    function generateHouseFootprintByRisk(lat, lng, risk, seed, scale) {
+        scale = scale || 0.0002;
+        function seededRandom(s) { var x = Math.sin(s) * 10000; return x - Math.floor(x); }
+        var rand = function(n) { return seededRandom(seed + n); };
+        var riskFactor = risk === 'danger' ? 1.6 : risk === 'major' ? 1.3 : risk === 'warning' ? 1.0 : 0.8;
+        var w = scale * (0.8 + rand(1) * 1.0) * riskFactor;
+        var hh = scale * (0.8 + rand(2) * 1.0) * riskFactor;
+        var angle = rand(3) * Math.PI;
+        var corners = [[-w/2, -hh/2], [w/2, -hh/2], [w/2, hh/2], [-w/2, hh/2]];
+        var jitter = function(n, mag) { return (rand(n) - 0.5) * mag; };
+        return corners.map(function(pt, i) {
+            var x = pt[0] + jitter(i * 10 + 1, scale * 0.12);
+            var y = pt[1] + jitter(i * 10 + 2, scale * 0.12);
+            var rx = x * Math.cos(angle) - y * Math.sin(angle);
+            var ry = x * Math.sin(angle) + y * Math.cos(angle);
+            return [lat + ry, lng + rx];
+        });
+    }
+
+    // 将 riskLevel 文本映射到 gis-logic 的风险键
+    function riskKey(h) {
+        var lv = normalizeRisk(h);
+        if (lv === '第三类') return 'danger';
+        if (lv === '第二类') return 'major';
+        return 'safe';
+    }
+
+    // 图斑样式：普通 / 高亮
+    function footprintStyle(h, highlight) {
+        var color = RISK_HEX[riskColor(h)];
+        return {
+            color: color,
+            weight: highlight ? 2.5 : 1.5,
+            fillColor: color,
+            fillOpacity: highlight ? 0.5 : (h.done ? 0.36 : 0.22),
+            opacity: highlight ? 1 : 0.8,
+            dashArray: h.done ? null : '4,3'
+        };
+    }
+
+    // 点位标记（水滴图标，保留原始点位）
+    function createIcon(h, highlight) {
+        var doneBadge = h.done ? '<div class="spot-done"><i class="fa-solid fa-check"></i></div>' : '';
+        return L.divIcon({
+            className: '',
+            html: '<div class="house-spot spot-' + riskColor(h) + (highlight ? ' spot-pulse' : '') + '"><div class="spot-pin"><i class="fa-solid fa-house"></i></div>' + doneBadge + '</div>',
+            iconSize: [34, 34],
+            iconAnchor: [17, 34]
+        });
+    }
+
+    // 每栋房：{ marker, polygon }
+    var markers = [];
+    var markerByNo = {};
+
+    function renderMarkers() {
+        // 清除旧图层（图斑 + 点位）
+        markers.forEach(function(m) {
+            if (map.hasLayer(m.polygon)) map.removeLayer(m.polygon);
+            if (map.hasLayer(m.marker)) map.removeLayer(m.marker);
+        });
+        markers = [];
+        markerByNo = {};
+        houseList.forEach(function(h, idx) {
+            var seed = (h.no || '').split('').reduce(function(s, c) { return s + c.charCodeAt(0); }, 0) + idx;
+            var latlngs = generateHouseFootprintByRisk(h.lat, h.lng, riskKey(h), seed, 0.0003);
+            var polygon = L.polygon(latlngs, footprintStyle(h, false)).addTo(map);
+            var marker = L.marker([h.lat, h.lng], { icon: createIcon(h, false) }).addTo(map);
+            polygon.on('click', function() { showHouse(h, true); });
+            marker.on('click', function() { showHouse(h, true); });
+            var entry = { polygon: polygon, marker: marker, houseNo: h.no };
+            markers.push(entry);
+            markerByNo[h.no] = entry;
+        });
+    }
+    renderMarkers();
+
+    // ---------- 区域联动筛选 ----------
+    var townSelect = document.getElementById('townSelect');
+    var villageSelect = document.getElementById('villageSelect');
+    var currentTown = '';
+    var currentVillage = '';
+
+    // 上海市奉贤区真实行政区划：街镇 → 村/居委 映射
+    var FENGXIAN_TOWN_VILLAGE = {
+        '南桥镇': ['光明村','杨王村','沈陆村','江海村','张弄村','吴塘村','五星村','八字村','南桥源社区','贝港社区','中街社区','育秀社区','阳光社区','正阳社区','解放社区','古华社区','运河社区'],
+        '奉城镇': ['高桥村','陈桥村','路口村','觉民村','爱民村','永益村','共耕村','胜利村','城东村','西门村','北门村','南门村','洪庙村','洪南村','洪西村','洪东村','协新村','朱新村','塘外村','卫季村','灯民村','幸福村','蔡建村','八字村','城东居委','南街居委','西街居委','北街居委','洪庙居委','塘外居委'],
+        '庄行镇': ['吕桥村','庄行村','汇安村','新叶村','渔沥村','长堤村','潘垫村','西校村','新华村','张塘村','存古村','杨溇村','长浜村','姚新村','芦泾村','东风村','庄行居委'],
+        '金汇镇': ['金汇村','东星村','金星村','新强村','白沙村','行前村','江苑居委','泰日居委','齐贤居委'],
+        '青村镇': ['青村社区','钱桥社区','南星村','北唐村','石海村','陶宅村','和中村','西吴村','岳和村','姚家村','朱店村','钟家村','新张村','元通村','方夏村','申隆一村','申隆二村','工农村','解放村','湾张村','花角村','吴房村','桃园村','沿钱村','李窑村','光明村'],
+        '柘林镇': ['柘林居委','新寺居委','胡桥居委','营房村','海湾村','华亭村','东海村','冯桥村','夹路村','新塘村','三桥村','农家村','南胜村','兴园村','临海村','下坊村','目华村'],
+        '四团镇': ['四团居委','平安居委','邵厂居委','三坎村','镇西村','大桥村','长堰村','平南村','平乐村','渔洋村','向阳村','龙尖村','前董村','新建村','民福村','中桥村','夏家村','红庄村','拾村村','五四村','小荡村','三团港村','横桥村','杨家宅村','平海村','天鹏村'],
+        '海湾镇': ['海兴社区','海棠社区','海农新村居委','星火居委','燎原居委','五四社区','新港村','海棠村','星火村','燎原村'],
+        '西渡街道': ['西渡居委','新南居委','文怡居委','水岸居委','浦江居委','北新居委','鸿宝居委','香榭居委','金港居委','灯塔村','刘港村','大同村','五宅村','益民村','金港村','南渡村','发展村','蒋桥村','关港村','北新村'],
+        '奉浦街道': ['奉浦居委','奉浦第二居委','国顺路居委','秋月居委','肖塘居委','高远居委','君望居委','陈湾村','公谊村','韩村村','九华村','吴塘村','八字桥村'],
+        '金海街道': ['金水苑社区','金水新苑社区','恒盛社区','恒贤社区','龙潭社区','少湖社区','文杏社区','韩树村','陈家村','屠家村','三长村','丁家村','齐贤村','石家村','欢河村'],
+        '海湾旅游区': ['海棠社区','海尚社区','新港村','海湾村','五四村'],
+        '头桥街道': ['头桥居委','幸福村','红旗村','冯家村','东新市村','南宋村','蔡家桥村','奉字村','联工村','陆家桥村','二桥村','蔡建村','戴家村','新北村','四平村','夏家村','石角村','陶家村']
+    };
+
+    // 基于真实行政区划渲染街镇下拉（按拼音排序）
+    function renderTownVillageOptions() {
+        var prevTown = townSelect.value;
+        townSelect.innerHTML = '<option value="">全部街镇</option>';
+        Object.keys(FENGXIAN_TOWN_VILLAGE).sort(function(a, b) {
+            return a.localeCompare(b, 'zh-CN');
+        }).forEach(function(town) {
+            var opt = document.createElement('option');
+            opt.value = town;
+            opt.textContent = town;
+            townSelect.appendChild(opt);
+        });
+        if (prevTown && FENGXIAN_TOWN_VILLAGE[prevTown]) {
+            townSelect.value = prevTown;
+            updateVillageOptions(prevTown);
+        }
+    }
+    renderTownVillageOptions();
+
+    // 服务端数据返回后刷新地图与筛选
+    function refreshMapAndFilters() {
+        renderMarkers();
+        renderTownVillageOptions();
+        applyFilter();
+    }
+
+    function updateVillageOptions(town) {
+        villageSelect.innerHTML = '<option value="">全部村居委</option>';
+        if (!town) {
+            villageSelect.disabled = true;
+            return;
+        }
+        var villages = (FENGXIAN_TOWN_VILLAGE[town] || []).slice();
+        villages.forEach(function(v) {
+            var opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = v;
+            villageSelect.appendChild(opt);
+        });
+        villageSelect.disabled = false;
+    }
+
+    function applyFilter() {
+        currentTown = townSelect.value;
+        currentVillage = villageSelect.value;
+
+        var filtered = houseList.filter(function(h) {
+            if (currentTown && (h.street || '') !== currentTown) return false;
+            if (currentVillage && (h.community || h.village || '') !== currentVillage) return false;
+            return true;
+        });
+
+        // 更新地图标记：显示/隐藏
+        var visibleNos = {};
+        filtered.forEach(function(h) { visibleNos[h.no] = true; });
+
+        markers.forEach(function(m) {
+            var no = m.houseNo;
+            if (visibleNos[no]) {
+                if (!map.hasLayer(m.polygon)) m.polygon.addTo(map);
+                if (!map.hasLayer(m.marker)) m.marker.addTo(map);
+            } else {
+                if (map.hasLayer(m.polygon)) map.removeLayer(m.polygon);
+                if (map.hasLayer(m.marker)) map.removeLayer(m.marker);
+            }
+        });
+
+        // 自动缩放视野
+        if (filtered.length > 0 && (currentTown || currentVillage)) {
+            var bounds = L.latLngBounds(filtered.map(function(h) { return [h.lat, h.lng]; }));
+            map.fitBounds(bounds.pad(0.3), { animate: true, duration: .6 });
+        } else if (!currentTown && !currentVillage && filtered.length > 0) {
+            // 未筛选时，视野适配所有可见点（覆盖 9 个镇）
+            var allBounds = L.latLngBounds(filtered.map(function(h) { return [h.lat, h.lng]; }));
+            map.fitBounds(allBounds.pad(0.15), { animate: true, duration: .6 });
+        } else if (!currentTown && !currentVillage) {
+            map.setView(FENGXIAN_CENTER, 12, { animate: true, duration: .4 });
+        }
+
+        // 如果当前信息卡不在筛选结果中，关闭它
+        if (currentHouse && !visibleNos[currentHouse.no]) {
+            infoCard.classList.remove('show');
+            currentHouse = null;
+        }
+        highlightMarker(null);
+    }
+
+    townSelect.addEventListener('change', function() {
+        updateVillageOptions(this.value);
+        villageSelect.value = '';
+        applyFilter();
+    });
+
+    villageSelect.addEventListener('change', function() {
+        applyFilter();
+    });
+
+    document.getElementById('filterReset').addEventListener('click', function() {
+        townSelect.value = '';
+        villageSelect.innerHTML = '<option value="">全部村居委</option>';
+        villageSelect.disabled = true;
+        applyFilter();
+    });
+
+    // ---------- 信息卡 ----------
+    var infoCard = document.getElementById('infoCard');
+    var currentHouse = null;
+
+    function showHouse(h, flyTo) {
+        currentHouse = h;
+        document.getElementById('icNo').textContent = h.no || '—';
+        document.getElementById('icAddr').textContent = h.address || '—';
+        var pj = document.getElementById('icPreJudge');
+        if (pj) {
+            var pjText = h.preliminaryJudge || '—';
+            // 只对明确的隐患判定套色：含"严重"→红，含"安全隐患"→黄，其余（备注/—）不套色
+            var cls = '';
+            if (pjText.indexOf('严重') > -1) cls = 'badge-red';
+            else if (pjText.indexOf('安全隐患') > -1) cls = 'badge-yellow';
+            pj.innerHTML = cls ? '<span class="ic-badge ' + cls + '">' + pjText + '</span>' : pjText;
+        }
+
+        // 根据是否已排查，切换按钮文案与跳转目标
+        var enterBtn = document.getElementById('icEnter');
+        if (enterBtn) {
+            if (h.done) {
+                enterBtn.innerHTML = '<i class="fa-solid fa-eye"></i> 查看排查详情';
+            } else {
+                enterBtn.innerHTML = '<i class="fa-solid fa-clipboard-check"></i> 进入现场排查';
+            }
+        }
+
+        infoCard.classList.add('show');
+        if (flyTo) {
+            map.flyTo([h.lat, h.lng], 16, { duration: .8 });
+        }
+        highlightMarker(h.no);
+    }
+
+    function highlightMarker(no) {
+        markers.forEach(function(m) {
+            var h = allHouses[m.houseNo];
+            var isHl = m.houseNo === no;
+            if (h) {
+                m.marker.setIcon(createIcon(h, isHl));
+                m.polygon.setStyle(footprintStyle(h, isHl));
+            }
+        });
+    }
+
+    document.getElementById('icClose').onclick = function() {
+        infoCard.classList.remove('show');
+        highlightMarker(null);
+    };
+
+    document.getElementById('icEnter').onclick = function() {
+        if (!currentHouse) return;
+        if (currentHouse.done) {
+            App.go('pages/farm-review-view.html?no=' + encodeURIComponent(currentHouse.no));
+        } else {
+            App.go('pages/farm-review-inspect.html?no=' + encodeURIComponent(currentHouse.no));
+        }
+    };
+
+    // ---------- 搜索定位 ----------
+    function locateHouse(no) {
+        no = (no || '').trim();
+        var emptyEl = document.getElementById('mapEmpty');
+        if (!no) { App.showToast('请输入唯一标识'); return; }
+        // 精确匹配
+        var h = allHouses[no];
+        // 模糊匹配：按编号末尾几位数字（如输入 "7" 或 "007" 都能匹配 310120000000000007）
+        if (!h) {
+            var digits = no.replace(/\D/g, '');
+            if (digits) {
+                var hit = Object.keys(allHouses).find(function(k) { return k.slice(-digits.length) === digits; });
+                if (hit) h = allHouses[hit];
+            }
+        }
+        if (!h) {
+            emptyEl.style.display = 'block';
+            infoCard.classList.remove('show');
+            setTimeout(function() { emptyEl.style.display = 'none'; }, 2500);
+            return;
+        }
+        emptyEl.style.display = 'none';
+        showHouse(h, true);
+    }
+
+    document.getElementById('searchBtn').onclick = function() {
+        locateHouse(document.getElementById('houseNoInput').value);
+    };
+    document.getElementById('houseNoInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') locateHouse(this.value);
+    });
+
+    // ---------- 地址模糊搜索 ----------
+    var suggestPanel = document.getElementById('suggestPanel');
+    var inputEl = document.getElementById('houseNoInput');
+    var suggestTimer = null;
+
+    function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function highlight(text, kw) {
+        var t = String(text || '');
+        if (!kw) return escHtml(t);
+        var idx = t.toLowerCase().indexOf(kw.toLowerCase());
+        if (idx < 0) return escHtml(t);
+        return escHtml(t.slice(0, idx)) + '<span class="hl">' + escHtml(t.slice(idx, idx + kw.length)) + '</span>' + escHtml(t.slice(idx + kw.length));
+    }
+
+    function searchHouses(kw) {
+        kw = (kw || '').trim();
+        if (!kw) return [];
+        var lower = kw.toLowerCase();
+        var hits = [];
+        Object.keys(allHouses).forEach(function(no) {
+            var h = allHouses[no];
+            var noMatch = String(h.no || '').toLowerCase().indexOf(lower) >= 0;
+            var addrMatch = String(h.address || '').toLowerCase().indexOf(lower) >= 0;
+            var nameMatch = String(h.name || '').toLowerCase().indexOf(lower) >= 0;
+            var villageMatch = String(h.village || h.community || '').toLowerCase().indexOf(lower) >= 0;
+            if (noMatch || addrMatch || nameMatch || villageMatch) {
+                // 打分：编号完全匹配 > 编号前缀 > 地址匹配 > 其他
+                var score = 0;
+                if (String(h.no) === kw) score += 100;
+                else if (noMatch) score += 50;
+                if (addrMatch) score += 20;
+                if (nameMatch) score += 10;
+                if (villageMatch) score += 5;
+                hits.push({ h: h, score: score });
+            }
+        });
+        hits.sort(function(a, b) { return b.score - a.score; });
+        return hits.slice(0, 15).map(function(x) { return x.h; });
+    }
+
+    function renderSuggest(list, kw) {
+        if (!kw) { suggestPanel.classList.remove('show'); return; }
+        if (!list.length) {
+            suggestPanel.innerHTML = '<div class="suggest-empty">⚠️ 未找到匹配的房屋<br><span style="font-size:11px;font-weight:400;opacity:.85;">请检查唯一标识后重新输入</span></div>';
+            suggestPanel.classList.add('show');
+            return;
+        }
+        suggestPanel.innerHTML = list.map(function(h) {
+            var doneTag = h.done ? '<span class="s-tag done">已排查</span>' : '<span class="s-tag">待排查</span>';
+            var townVillage = [h.street, h.village].filter(Boolean).join(' / ');
+            return '<div class="suggest-item" data-no="' + escHtml(h.no) + '">' +
+                '<div class="s-no">' + highlight(h.no, kw) + '</div>' +
+                '<div class="s-addr">' + highlight(h.address || '—', kw) + '</div>' +
+                '<div class="s-meta">' + doneTag + (townVillage ? '<span>' + escHtml(townVillage) + '</span>' : '') + '</div>' +
+            '</div>';
+        }).join('');
+        suggestPanel.classList.add('show');
+        suggestPanel.querySelectorAll('.suggest-item').forEach(function(el) {
+            el.addEventListener('click', function() {
+                var no = this.dataset.no;
+                inputEl.value = no;
+                suggestPanel.classList.remove('show');
+                locateHouse(no);
+            });
+        });
+    }
+
+    inputEl.addEventListener('input', function() {
+        var kw = this.value.trim();
+        if (suggestTimer) clearTimeout(suggestTimer);
+        if (!kw) { suggestPanel.classList.remove('show'); return; }
+        suggestTimer = setTimeout(function() {
+            var hits = searchHouses(kw);
+            renderSuggest(hits, kw);
+        }, 180);
+    });
+    inputEl.addEventListener('focus', function() {
+        var kw = this.value.trim();
+        if (kw) renderSuggest(searchHouses(kw), kw);
+    });
+    // 点击外部关闭下拉
+    document.addEventListener('click', function(e) {
+        if (!suggestPanel.contains(e.target) && e.target !== inputEl) {
+            suggestPanel.classList.remove('show');
+        }
+    });
+
+    // URL 带 no 参数直接定位
+    var urlNo = App.getQuery('no');
+    if (urlNo) {
+        document.getElementById('houseNoInput').value = urlNo;
+        locateHouse(urlNo);
+    }
+
+    // 更新工单角标（草稿数）
+    (function updateTicketBadge() {
+        var count = 0;
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && key.indexOf('farm-review-draft-') === 0) count++;
+        }
+        var badge = document.getElementById('ticketBadge');
+        if (count > 0) {
+            badge.textContent = count;
+            badge.style.display = 'block';
+        }
+    })();
+
+    // 定位到我
+    var myLatLng = null;
+    var myMarker = null;
+    function locateMe() {
+        function done(lat, lng) {
+            myLatLng = [lat, lng];
+            if (myMarker) { map.removeLayer(myMarker); }
+            myMarker = L.marker(myLatLng, {
+                icon: L.divIcon({ className: '', html: '<div style="width:16px;height:16px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 4px rgba(26,115,232,.25)"></div>', iconSize: [16, 16], iconAnchor: [8, 8] })
+            }).addTo(map);
+            map.flyTo(myLatLng, 14, { duration: .6 });
+        }
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(pos) {
+                done(pos.coords.latitude, pos.coords.longitude);
+            }, function() {
+                App.showToast('定位失败，请检查定位权限');
+            }, { timeout: 2500 });
+        } else {
+            App.showToast('当前设备不支持地理定位');
+        }
+    }
+    document.getElementById('mfLocate').onclick = locateMe;
+})();
+</script>
+</body>
+</html>

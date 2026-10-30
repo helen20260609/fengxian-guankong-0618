@@ -306,6 +306,30 @@
             cursor: pointer; transition: filter 0.2s;
         }
         .toast-btn:hover { filter: brightness(1.08); }
+        /* 流程进度条 */
+        .flow-steps { display: flex; align-items: flex-start; margin: 2px 0 18px; padding: 16px 8px 12px; background: rgba(0,0,0,0.02); border: 1px solid var(--border, #dadce0); border-radius: 8px; }
+        .flow-step { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; text-align: center; }
+        .flow-dot { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff; background: #c0c4cc; position: relative; z-index: 1; }
+        .flow-step.done .flow-dot { background: var(--success, #16a34a); }
+        .flow-step.active .flow-dot { background: var(--primary, #2563eb); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15); }
+        .flow-step.fail .flow-dot { background: var(--danger, #dc2626); }
+        .flow-line { position: absolute; top: 13px; left: calc(-50% + 14px); right: calc(50% + 14px); height: 2px; background: #dde1e6; }
+        .flow-step:first-child .flow-line { display: none; }
+        .flow-step.done .flow-line { background: var(--success, #16a34a); }
+        .flow-step.fail .flow-line { background: var(--danger, #dc2626); }
+        .flow-label { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--text-primary, #202124); white-space: nowrap; }
+        .flow-step.pending .flow-label { font-weight: 400; color: var(--text-secondary, #5f6368); }
+        .flow-time { font-size: 11px; color: var(--text-secondary, #5f6368); margin-top: 2px; min-height: 14px; white-space: nowrap; }
+        /* 统计分析 */
+        .stats-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+        .stat-card { background: #fff; border: 1px solid var(--border, #dadce0); border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 14px; }
+        .stat-icon { width: 46px; height: 46px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+        .stat-icon.blue { background: #e8f0fe; color: var(--primary, #2563eb); }
+        .stat-icon.purple { background: #f1eafe; color: #7c3aed; }
+        .stat-icon.orange { background: #fdf1e3; color: #d97706; }
+        .stat-icon.green { background: #e9f7ee; color: var(--success, #16a34a); }
+        .stat-card .stat-num { font-size: 26px; font-weight: 700; color: var(--text-primary, #202124); line-height: 1.2; }
+        .stat-card .stat-name { font-size: 13px; color: var(--text-secondary, #5f6368); margin: 6px 0 0 6px; display: inline-block; }
     </style>
 </head>
 <body>
@@ -342,6 +366,8 @@ function hideToast() {
         <button class="btn btn-primary" onclick="openCreateModal()"><i class="fas fa-plus"></i> 新建申请</button>
     </div>
 
+    <div class="stats-summary" id="statsSummary" style="margin-bottom:14px;"></div>
+
     <div class="filter-card dispatch-filter">
         <div class="filter-row">
             <div class="filter-item">
@@ -373,7 +399,7 @@ function hideToast() {
                 </select>
             </div>
             <div class="filter-actions">
-                <button class="list-btn list-btn-primary" onclick="renderTaskList()"><i class="fas fa-search"></i> 查询</button>
+                <button class="list-btn list-btn-primary" onclick="renderTaskList(true)"><i class="fas fa-search"></i> 查询</button>
                 <button class="list-btn list-btn-outline" onclick="resetFilter()"><i class="fas fa-undo"></i> 重置</button>
             </div>
         </div>
@@ -403,6 +429,7 @@ function hideToast() {
                 </table>
             </div>
             <div id="emptyTip" class="empty-tip" style="display:none;">暂无申请记录</div>
+            <div class="list-pagination" id="taskPagination"></div>
         </div>
     </div>
 </div>
@@ -504,9 +531,10 @@ function hideToast() {
                 <div class="form-group" style="flex:1;margin-bottom:0;">
                     <input type="text" id="expertKeyword" placeholder="" style="width:100%;">
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="renderExpertCandidates()"><i class="fas fa-search"></i> 搜索</button>
+                <button class="btn btn-primary btn-sm" onclick="renderExpertCandidates(true)"><i class="fas fa-search"></i> 搜索</button>
             </div>
             <div id="expertCandidateList"></div>
+            <div class="list-pagination" id="pickerPagination" style="margin-top:10px;"></div>
         </div>
         <div class="modal-footer">
             <span style="flex:1;color:var(--text-secondary);font-size:13px;">已选 <span id="selectedExpertCount">0</span> <span id="selectedUnit">人</span></span>
@@ -534,13 +562,13 @@ function hideToast() {
         <div class="modal-body">
             <div class="form-row-full">
                 <div class="form-group">
-                    <label>评估结论 <span class="required">*</span></label>
+                    <label id="feedbackConclusionLabel">评估结论 <span class="required">*</span></label>
                     <textarea id="feedbackConclusion" placeholder="请输入评估结论，例如：经现场勘查，该房屋整体结构基本安全..."></textarea>
                 </div>
             </div>
             <div class="form-row-full">
                 <div class="form-group">
-                    <label>评估报告 / 附件材料</label>
+                    <label id="feedbackAttachmentLabel">评估报告 / 附件材料</label>
                     <input type="file" id="feedbackAttachments" multiple onchange="handleFeedbackAttachments(this)">
                     <div class="selected-list" id="feedbackAttachmentList"></div>
                 </div>
@@ -608,6 +636,9 @@ function hideToast() {
     var taskList = [];
     var currentTaskId = null;
     var tempSelectedExperts = [];
+    var pickerPage = 1;
+    var pickerPageSize = 8;
+    var pickerFiltered = [];
     var feedbackTaskId = null;
     var taskTempAttachments = [];
     var feedbackTempAttachments = [];
@@ -962,6 +993,7 @@ function hideToast() {
         task.experts = tempSelectedExperts.slice();
         task.status = 'assigned';
         task.updateTime = new Date().toISOString().slice(0,19).replace('T',' ');
+        task.assignTime = task.updateTime;
         saveTasks(function() {
             closeTaskModal();
             renderTaskList();
@@ -1059,7 +1091,7 @@ function hideToast() {
             return;
         }
         document.getElementById('expertKeyword').value = '';
-        renderExpertCandidates();
+        renderExpertCandidates(true);
         document.getElementById('expertModal').classList.add('show');
     }
 
@@ -1071,7 +1103,8 @@ function hideToast() {
         return getPickerTargetType() === 'org' ? getOrgList() : getExpertList();
     }
 
-    function renderExpertCandidates() {
+    function renderExpertCandidates(resetPage) {
+        if (resetPage) pickerPage = 1;
         var keyword = document.getElementById('expertKeyword').value.trim();
         var domain = document.getElementById('taskDomain').value;
         var direction = document.getElementById('taskDirection').value;
@@ -1086,15 +1119,21 @@ function hideToast() {
                    (e.org || '').toLowerCase().includes(lower) ||
                    (e.title || '').toLowerCase().includes(lower);
         });
+        pickerFiltered = list;
         var container = document.getElementById('expertCandidateList');
         document.getElementById('expertModalTitle').innerHTML = '<i class="fas fa-' + (isOrg ? 'building' : 'user-tie') + '"></i> ' + (isOrg ? '选择鉴定机构' : '选择专家');
         document.getElementById('expertKeyword').placeholder = isOrg ? '搜索机构名称、机构类型、资质等级' : '搜索姓名、单位、职称';
         document.getElementById('selectedUnit').textContent = isOrg ? '家' : '人';
         if (!list.length) {
             container.innerHTML = '<div class="empty-tip">未找到符合条件的' + (isOrg ? '鉴定机构' : '专家') + '</div>';
+            renderPickerPagination(0);
             return;
         }
-        container.innerHTML = list.map(function(e) {
+        var totalPages = Math.ceil(list.length / pickerPageSize) || 1;
+        if (pickerPage > totalPages) pickerPage = totalPages;
+        var start = (pickerPage - 1) * pickerPageSize;
+        var pageData = list.slice(start, start + pickerPageSize);
+        container.innerHTML = pageData.map(function(e) {
             var selected = tempSelectedExperts.some(function(s) { return s.id === e.id; });
             var meta = isOrg
                 ? (e.org + ' · ' + e.domain + ' · 资质：' + e.direction + ' · ' + e.phone)
@@ -1111,6 +1150,27 @@ function hideToast() {
             '</div>';
         }).join('');
         updateSelectedCount();
+        renderPickerPagination(totalPages);
+    }
+
+    function renderPickerPagination(totalPages) {
+        var container = document.getElementById('pickerPagination');
+        if (!container) return;
+        if (!pickerFiltered.length || totalPages <= 1) { container.innerHTML = ''; return; }
+        var html = '<span class="page-info">共 ' + pickerFiltered.length + ' 条</span>';
+        html += '<button class="page-btn" ' + (pickerPage === 1 ? 'disabled' : '') + ' onclick="goPickerPage(' + (pickerPage - 1) + ')">上一页</button>';
+        for (var i = 1; i <= totalPages; i++) {
+            html += '<button class="page-btn ' + (i === pickerPage ? 'active' : '') + '" onclick="goPickerPage(' + i + ')" ' + (i === pickerPage ? 'disabled' : '') + '>' + i + '</button>';
+        }
+        html += '<button class="page-btn" ' + (pickerPage === totalPages ? 'disabled' : '') + ' onclick="goPickerPage(' + (pickerPage + 1) + ')">下一页</button>';
+        container.innerHTML = html;
+    }
+
+    function goPickerPage(page) {
+        var totalPages = Math.ceil(pickerFiltered.length / pickerPageSize) || 1;
+        if (page < 1 || page > totalPages) return;
+        pickerPage = page;
+        renderExpertCandidates();
     }
 
     function encodeName(name) {
@@ -1164,7 +1224,8 @@ function hideToast() {
         renderSelectedExperts();
     }
 
-    function renderTaskList() {
+    function renderTaskList(resetPage) {
+        if (resetPage) taskPage = 1;
         var code = document.getElementById('filterCode').value.trim();
         var status = document.getElementById('filterStatus').value;
         var domain = document.getElementById('filterDomain').value;
@@ -1176,15 +1237,21 @@ function hideToast() {
             if (applyType && t.applyType !== applyType) return false;
             return true;
         });
+        taskFiltered = filtered;
         var tbody = document.getElementById('taskTableBody');
         var empty = document.getElementById('emptyTip');
         if (!filtered.length) {
             tbody.innerHTML = '';
             empty.style.display = 'block';
+            renderTaskPagination(0);
             return;
         }
         empty.style.display = 'none';
-        tbody.innerHTML = filtered.map(function(t) {
+        var totalPages = Math.ceil(filtered.length / taskPageSize) || 1;
+        if (taskPage > totalPages) taskPage = totalPages;
+        var start = (taskPage - 1) * taskPageSize;
+        var pageData = filtered.slice(start, start + taskPageSize);
+        tbody.innerHTML = pageData.map(function(t) {
             var statusText = { pending: '待分派', assigned: '已分派', feedback: '已反馈', rejected: '已驳回' }[t.status] || t.status;
             var statusClass = { pending: 'pending', assigned: 'assigned', feedback: 'feedback', rejected: 'rejected' }[t.status] || 'pending';
             var applyTypeText = { expert: '专家评估', org: '机构鉴定' }[t.applyType] || '专家评估';
@@ -1207,6 +1274,92 @@ function hideToast() {
                 '</td>' +
             '</tr>';
         }).join('');
+        renderTaskPagination(totalPages);
+        renderStats();
+    }
+
+    var taskPage = 1;
+    var taskPageSize = 10;
+    var taskFiltered = [];
+
+    function renderTaskPagination(totalPages) {
+        var container = document.getElementById('taskPagination');
+        if (!taskFiltered.length) { container.innerHTML = ''; return; }
+        var html = '<span class="page-info">共 ' + taskFiltered.length + ' 条</span>';
+        html += '<button class="page-btn" ' + (taskPage === 1 ? 'disabled' : '') + ' onclick="goTaskPage(' + (taskPage - 1) + ')">上一页</button>';
+        for (var i = 1; i <= totalPages; i++) {
+            html += '<button class="page-btn ' + (i === taskPage ? 'active' : '') + '" onclick="goTaskPage(' + i + ')" ' + (i === taskPage ? 'disabled' : '') + '>' + i + '</button>';
+        }
+        html += '<button class="page-btn" ' + (taskPage === totalPages ? 'disabled' : '') + ' onclick="goTaskPage(' + (taskPage + 1) + ')">下一页</button>';
+        container.innerHTML = html;
+    }
+
+    function goTaskPage(page) {
+        var totalPages = Math.ceil(taskFiltered.length / taskPageSize) || 1;
+        if (page < 1 || page > totalPages) return;
+        taskPage = page;
+        renderTaskList();
+    }
+
+    // 统计分析：顶部汇总卡片（不受列表筛选影响，统计全部任务）
+    function renderStats() {
+        var summaryEl = document.getElementById('statsSummary');
+        if (!summaryEl || typeof taskList === 'undefined') return;
+        var expertTasks = taskList.filter(function(t) { return t.applyType !== 'org'; });
+        var orgTasks = taskList.filter(function(t) { return t.applyType === 'org'; });
+        var doneCount = taskList.filter(function(t) { return t.status === 'feedback'; }).length;
+        summaryEl.innerHTML =
+            '<div class="stat-card"><div class="stat-icon blue"><i class="fas fa-tasks"></i></div><div><span class="stat-num">' + taskList.length + '</span><span class="stat-name">评估鉴定任务总数</span></div></div>' +
+            '<div class="stat-card"><div class="stat-icon purple"><i class="fas fa-user-tie"></i></div><div><span class="stat-num">' + expertTasks.length + '</span><span class="stat-name">专家评估（次）</span></div></div>' +
+            '<div class="stat-card"><div class="stat-icon orange"><i class="fas fa-building"></i></div><div><span class="stat-num">' + orgTasks.length + '</span><span class="stat-name">机构鉴定（次）</span></div></div>' +
+            '<div class="stat-card"><div class="stat-icon green"><i class="fas fa-check-circle"></i></div><div><span class="stat-num">' + doneCount + '</span><span class="stat-name">已完成反馈</span></div></div>';
+    }
+
+    // 流程进度条：提交 → 分派 → 接受 → 评估/鉴定 → 反馈 → 完成
+    function renderFlowSteps(task) {
+        var isOrg = task.applyType === 'org';
+        var respList = Object.keys(task.responses || {}).map(function(k) { return task.responses[k]; });
+        var accepted = respList.filter(function(r) { return r.action === 'accepted'; });
+        var declined = respList.filter(function(r) { return r.action === 'declined'; });
+        var acceptTime = accepted.length ? (accepted[0].time || '') : '';
+        var steps = [
+            { label: '提交申请', time: task.createTime || '' },
+            { label: '分派', time: task.assignTime || acceptTime || (task.status !== 'pending' ? (task.updateTime || '') : '') },
+            { label: isOrg ? '机构接受' : '专家接受', time: acceptTime },
+            { label: isOrg ? '机构鉴定' : '专家评估', time: '' },
+            { label: '结果反馈', time: (task.feedback && task.feedback.time) || '' },
+            { label: '完成', time: (task.feedback && task.feedback.time) || '' }
+        ];
+        // states: done / active / fail / pending
+        var states = ['pending', 'pending', 'pending', 'pending', 'pending', 'pending'];
+        if (task.status === 'rejected') {
+            states = ['done', 'fail', 'pending', 'pending', 'pending', 'pending'];
+            steps[1].time = (task.rejection && task.rejection.time) || steps[1].time;
+        } else if (task.status === 'pending') {
+            states = ['done', 'active', 'pending', 'pending', 'pending', 'pending'];
+        } else if (task.status === 'feedback') {
+            states = ['done', 'done', 'done', 'done', 'done', 'done'];
+        } else { // assigned
+            if (accepted.length) {
+                states = ['done', 'done', 'done', 'active', 'pending', 'pending'];
+            } else if (declined.length) {
+                states = ['done', 'done', 'fail', 'pending', 'pending', 'pending'];
+                steps[2].time = declined[0].time || '';
+            } else {
+                states = ['done', 'done', 'active', 'pending', 'pending', 'pending'];
+            }
+        }
+        var html = '<div class="flow-steps">';
+        steps.forEach(function(s, i) {
+            var st = states[i];
+            var icon = st === 'done' ? '✓' : (st === 'fail' ? '✕' : (i + 1));
+            html += '<div class="flow-step ' + st + '">' +
+                '<div class="flow-line"></div>' +
+                '<div class="flow-dot">' + icon + '</div>' +
+                '<div class="flow-label">' + s.label + '</div>' +
+            '</div>';
+        });
+        return html + '</div>';
     }
 
     function viewResult(id) {
@@ -1217,7 +1370,7 @@ function hideToast() {
         var applyTypeText = { expert: '专家评估', org: '机构鉴定' }[task.applyType] || '专家评估';
         var targetLabel = task.applyType === 'org' ? '已选鉴定机构' : '已选专家';
         var countLabel = task.applyType === 'org' ? '所需机构数' : '所需人数';
-        var html = '<div class="form-row"><div class="form-group"><label>需求编号</label><div class="value">' + (task.code || task.id) + '</div></div><div class="form-group"><label>状态</label><div class="value">' + statusText + '</div></div></div>' +
+        var html = renderFlowSteps(task) + '<div class="form-row"><div class="form-group"><label>需求编号</label><div class="value">' + (task.code || task.id) + '</div></div><div class="form-group"><label>状态</label><div class="value">' + statusText + '</div></div></div>' +
             '<div class="form-row"><div class="form-group"><label>申请类型</label><div class="value">' + applyTypeText + '</div></div><div class="form-group"><label>需求名称</label><div class="value">' + task.name + '</div></div></div>' +
             '<div class="form-row"><div class="form-group"><label>专业领域</label><div class="value">' + task.domain + '</div></div><div class="form-group"><label>专业</label><div class="value">' + (task.direction || '不限') + '</div></div></div>' +
             '<div class="form-row-full"><div class="form-group"><label>评估目的</label><div class="value">' + (task.purpose || '—') + '</div></div></div>' +
@@ -1226,11 +1379,18 @@ function hideToast() {
             '<div class="form-row"><div class="form-group"><label>请求来源</label><div class="value">' + (task.requestSource || '—') + '</div></div><div class="form-group"><label>请求人 / 单位</label><div class="value">' + (task.requester || '—') + '</div></div></div>' +
             '<div class="form-row"><div class="form-group"><label>请求方联系方式</label><div class="value">' + (task.contact || '—') + '</div></div></div>' +
             '<div class="form-row-full"><div class="form-group"><label>' + targetLabel + '</label><div class="selected-list">' + (task.experts || []).map(function(e) {
-                return '<span class="selected-chip">' + e.name + '（' + e.title + '）</span>';
+                var badge = '';
+                if (task.status !== 'pending') {
+                    var resp = (task.responses || {})[e.name];
+                    if (resp && resp.action === 'accepted') badge = ' <span style="color:var(--success);font-size:11px;" title="已于 ' + (resp.time || '—') + (task.applyType === 'org' ? ' 接受委托' : ' 接受邀请') + '">✓ 已接受</span>';
+                    else if (resp && resp.action === 'declined') badge = ' <span style="color:var(--danger);font-size:11px;" title="谢绝原因：' + (resp.reason || '—') + '">✕ 已谢绝</span>';
+                    else badge = ' <span style="opacity:0.6;font-size:11px;" title="' + (task.applyType === 'org' ? '机构尚未响应委托' : '专家尚未响应邀请') + '">待响应</span>';
+                }
+                return '<span class="selected-chip">' + e.name + (e.title ? '（' + e.title + '）' : '') + badge + '</span>';
             }).join('') + '</div></div></div>';
         if ((task.attachments || []).length) {
             html += '<div class="form-row-full"><div class="form-group"><label>附件材料</label><div class="selected-list">' + task.attachments.map(function(a, i) {
-                return '<span class="selected-chip" style="cursor:pointer;" onclick="downloadTaskAttachment(\'apply\',' + i + ')" title="点击下载"><i class="fas fa-file"></i> ' + a.name + ' <i class="fas fa-download" style="font-size:11px;opacity:0.6;"></i></span>';
+                return '<span class="selected-chip" style="cursor:pointer;" onclick="viewTaskAttachment(\'apply\',' + i + ')" title="点击在线查看"><i class="fas fa-file"></i> ' + a.name + ' <i class="fas fa-eye" style="font-size:11px;opacity:0.6;"></i></span>';
             }).join('') + '</div></div></div>';
         }
         if (task.remark) {
@@ -1243,14 +1403,20 @@ function hideToast() {
                 '<div>驳回原因：' + (task.rejection.reason || '—') + '</div></div>';
         }
         if (task.feedback) {
+            var isOrgFb = task.applyType === 'org';
             html += '<div class="feedback-log"><div class="feedback-log-title"><i class="fas fa-paper-plane"></i> 反馈记录</div>' +
                 '<div>反馈时间：' + task.feedback.time + '</div>' +
                 '<div>反馈方式：' + ({ postMessage: '站内消息回传', link: '生成结果链接' }[task.feedback.type] || '—') + '</div>' +
                 '<div>接收方：' + (task.feedback.receiver || '—') + '</div>' +
-                '<div>评估结论：' + (task.feedback.conclusion || '—') + '</div>' +
+                '<div>' + (isOrgFb ? '鉴定结论' : '评估结论') + '：' + (task.feedback.conclusion || '—') + '</div>' +
                 '<div>备注：' + (task.feedback.remark || '—') + '</div>';
             if ((task.feedback.attachments || []).length) {
-                html += '<div>反馈附件：' + task.feedback.attachments.map(function(a, i){ return '<a href="javascript:void(0)" onclick="downloadTaskAttachment(\'fb\',' + i + ')" style="color:var(--primary);">' + a.name + '</a>'; }).join('、') + '</div>';
+                html += '<div>' + (isOrgFb ? '鉴定成果附件' : '反馈附件') + '：' + task.feedback.attachments.map(function(a, i){
+                    var gb = '';
+                    if (a.group === 'plan') gb = '<span style="display:inline-block;padding:0 6px;border-radius:8px;font-size:11px;background:var(--primary);color:#fff;margin-right:2px;">鉴定计划</span>';
+                    else if (a.group === 'report') gb = '<span style="display:inline-block;padding:0 6px;border-radius:8px;font-size:11px;background:var(--success);color:#fff;margin-right:2px;">鉴定报告</span>';
+                    return gb + '<a href="javascript:void(0)" onclick="viewTaskAttachment(\'fb\',' + i + ')" style="color:var(--primary);cursor:pointer;" title="点击在线查看">' + a.name + '</a>';
+                }).join('、') + '</div>';
             }
             html += '</div>';
         }
@@ -1266,20 +1432,25 @@ function hideToast() {
         document.getElementById('resultModal').classList.remove('show');
     }
 
-    // 下载附件（有内容直接下载，无内容提示）
-    function downloadTaskAttachment(kind, idx) {
+    // 在线查看附件：转 Blob 新窗口打开（图片/PDF 等浏览器可直接预览的类型）
+    function viewTaskAttachment(kind, idx) {
         var task = window._viewResultTask;
         if (!task) return;
         var list = kind === 'fb' ? (task.feedback && task.feedback.attachments) : task.attachments;
         var file = (list || [])[idx];
         if (!file) return;
-        if (!file.data) { showToast('warning', '无法下载', '该附件只有文件名记录，未包含文件内容（可能是早期数据）'); return; }
-        var a = document.createElement('a');
-        a.href = file.data;
-        a.download = file.name || '附件';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        if (!file.data) { showToast('warning', '暂无法在线查看', '该附件只有文件名记录，未包含文件内容（可能是早期数据）'); return; }
+        try {
+            var parts = file.data.split(',');
+            var mime = (parts[0].match(/data:(.*?)(;|$)/) || [])[1] || 'application/octet-stream';
+            var bin = atob(parts[1]);
+            var arr = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            var blobUrl = URL.createObjectURL(new Blob([arr], { type: mime }));
+            window.open(blobUrl, '_blank');
+        } catch (err) {
+            window.open(file.data, '_blank');
+        }
     }
 
     function resetFilter() {
@@ -1287,13 +1458,22 @@ function hideToast() {
         document.getElementById('filterApplyType').value = '';
         document.getElementById('filterStatus').innerHTML = '<option value="">全部</option><option value="pending">待分派</option><option value="assigned">已分派</option><option value="feedback">已反馈</option><option value="rejected">已驳回</option>';
         document.getElementById('filterDomain').value = '';
-        renderTaskList();
+        renderTaskList(true);
     }
 
     function openFeedbackModal(id) {
         feedbackTaskId = id;
         var task = taskList.find(function(t) { return t.id === id; });
         document.getElementById('feedbackModalTitle').textContent = task && task.applyType === 'org' ? '反馈机构鉴定结果' : '反馈专家评估结果';
+        var isOrgTask = !!(task && task.applyType === 'org');
+        document.getElementById('feedbackConclusionLabel').innerHTML = (isOrgTask ? '鉴定结论' : '评估结论') + ' <span class="required">*</span>';
+        document.getElementById('feedbackConclusion').placeholder = isOrgTask
+            ? '请输入鉴定结论，例如：经现场检测鉴定，该房屋承重结构满足安全使用要求，鉴定等级为B级...'
+            : '请输入评估结论，例如：经现场勘查，该房屋整体结构基本安全...';
+        document.getElementById('feedbackAttachmentLabel').textContent = isOrgTask ? '鉴定计划 / 鉴定报告' : '评估报告 / 附件材料';
+        document.getElementById('feedbackRemark').placeholder = isOrgTask
+            ? '请输入反馈说明，例如：已按要求完成鉴定，鉴定计划与鉴定报告请查收'
+            : '请输入反馈说明，例如：已按要求安排专家，请查收';
         document.getElementById('feedbackConclusion').value = '';
         document.getElementById('feedbackRemark').value = '';
         feedbackTempAttachments = [];
@@ -1311,7 +1491,7 @@ function hideToast() {
         if (!task) return;
         var conclusion = document.getElementById('feedbackConclusion').value.trim();
         var remark = document.getElementById('feedbackRemark').value.trim();
-        if (!conclusion) { showToast('warning', '请完善信息', '请输入评估结论'); return; }
+        if (!conclusion) { showToast('warning', '请完善信息', task.applyType === 'org' ? '请输入鉴定结论' : '请输入评估结论'); return; }
 
         if (window.parent !== window) {
             window.parent.postMessage({

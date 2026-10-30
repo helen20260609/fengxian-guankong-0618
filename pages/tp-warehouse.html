@@ -8,6 +8,7 @@
 <script src="./echarts.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="../js/third-party-data.js"></script>
+<script src="../js/tp-friendly-tip.js"></script>
 <style>
 :root {
     --primary: #1a73e8;
@@ -316,7 +317,7 @@ body.tp-embed .modal-close { display: none !important; }
         <!-- 待审在线申请 -->
         <div id="pendingApplicationsSection" style="margin-bottom: 20px;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);"><i class="fas fa-inbox" style="color: var(--primary); margin-right: 8px;"></i>待审在线申请</div>
+                <div style="font-size: 15px; font-weight: 600; color: var(--text-primary);"><i class="fas fa-inbox" style="color: var(--primary); margin-right: 8px;"></i>机构在线申请</div>
                 <span id="pendingApplicationsCount" style="font-size: 13px; color: var(--text-secondary);">0 条</span>
             </div>
             <table class="data-table" style="width: 100%; border-collapse: collapse;">
@@ -357,7 +358,7 @@ body.tp-embed .modal-close { display: none !important; }
         <div class="pagination" id="orgTablePagination" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
             <button class="page-btn" onclick="goPage(-1)" id="pagePrev">上一页</button>
             <span id="pageNumbers"></span>
-            <button class="page-btn" onclick="goPage(1)" id="pageNext">下一页</button>
+            <button class="page-btn" onclick="goPage(0)" id="pageNext">下一页</button>
         </div>
     </div>
 </div>
@@ -403,6 +404,7 @@ body.tp-embed .modal-close { display: none !important; }
         <div class="form-actions" style="margin: 0 20px 20px; padding-top: 16px; justify-content: flex-end; gap: 12px;">
             <button class="btn btn-outline" onclick="closeAuditOpinionModal()"><i class="fas fa-times"></i> 取消</button>
             <button class="btn btn-danger" id="btnConfirmReject" onclick="confirmAuditOpinion('reject')"><i class="fas fa-times-circle"></i> 驳回</button>
+            <button class="btn btn-primary" id="btnConfirmVerify" onclick="confirmAuditOpinion('verify')" style="background: var(--warning); display: none;"><i class="fas fa-search"></i> 发起核验</button>
             <button class="btn btn-primary" id="btnConfirmPass" onclick="confirmAuditOpinion('pass')"><i class="fas fa-check-circle"></i> 通过</button>
         </div>
     </div>
@@ -517,6 +519,16 @@ body.tp-embed .modal-close { display: none !important; }
                                 <input type="text" placeholder="请输入联系电话">
                             </div>
                         </div>
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label>企业法人证明 <span class="required">*</span></label>
+                                <div class="file-upload" id="legalCertUpload">
+                                    <label class="file-upload-btn" for="legalCertFileModal">选择文件</label>
+                                    <input type="file" id="legalCertFileModal" accept=".jpg,.jpeg,.png,.pdf">
+                                    <span class="file-upload-text">请上传企业法人证明文件（JPG/PNG/PDF）</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -555,14 +567,21 @@ body.tp-embed .modal-close { display: none !important; }
                                 <select id="serviceAreaModal">
                                     <option value="">请选择服务区域</option>
                                     <option>黄浦区</option>
-                                    <option>静安区</option>
                                     <option>徐汇区</option>
                                     <option>长宁区</option>
-                                    <option>浦东新区</option>
-                                    <option>杨浦区</option>
+                                    <option>静安区</option>
+                                    <option>普陀区</option>
                                     <option>虹口区</option>
+                                    <option>杨浦区</option>
                                     <option>闵行区</option>
+                                    <option>宝山区</option>
+                                    <option>嘉定区</option>
+                                    <option>浦东新区</option>
+                                    <option>金山区</option>
+                                    <option>松江区</option>
+                                    <option>青浦区</option>
                                     <option>奉贤区</option>
+                                    <option>崇明区</option>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -727,6 +746,7 @@ body.tp-embed .modal-close { display: none !important; }
                         <button class="btn btn-outline" id="btnResetModal" onclick="resetFormModal()"><i class="fas fa-undo"></i> 重置</button>
                     </div>
                     <div class="form-actions-right" id="modalAuditButtons" style="display: none; gap: 10px;">
+                        <button class="btn btn-outline" id="btnAuditVerifyModal" onclick="auditVerifyModal()" style="border-color: var(--warning); color: var(--warning);"><i class="fas fa-search"></i> 发起核验</button>
                         <button class="btn btn-danger" id="btnAuditRejectModal" onclick="auditRejectModal()"><i class="fas fa-times-circle"></i> 驳回</button>
                         <button class="btn btn-primary" id="btnAuditPassModal" onclick="auditPassModal()"><i class="fas fa-check-circle"></i> 通过</button>
                     </div>
@@ -864,6 +884,7 @@ bindFileUpload('socialSecurityFileModal');
 // bindFileUpload('qualificationFileModal'); // 资质证书改为底部批量上传，无需全局绑定
 bindFileUpload('calibrationFileModal');
 bindFileUpload('businessLicenseFileModal');
+bindFileUpload('legalCertFileModal');
 
 // 资质证书单条文件上传显示文件名（保留以备扩展，当前已不再使用）
 function updateQualFileName(input) {
@@ -957,13 +978,14 @@ function saveFormModal() {
     }
 }
 function submitFormModal() {
-    if (confirm('确定要提交审核吗？提交后将进入材料审核中心。')) {
-        alert('提交成功！已发送至材料审核中心。');
-        closeOrgModal();
-    }
+    showConfirm('确定要提交审核吗？', '提交后将进入材料审核中心。', '提 交', false).then(function(ok) {
+        if (!ok) return;
+        showTip('提交成功！已发送至材料审核中心。', 'success', function() { closeOrgModal(); });
+    });
 }
 function resetFormModal() {
-    if (confirm('确定要重置所有表单内容吗？')) {
+    showConfirm('确定要重置所有表单内容吗？', '已填写的内容将被清空。', '重 置').then(function(ok) {
+        if (!ok) return;
         var inputs = document.querySelectorAll('#orgModal input, #orgModal textarea');
         inputs.forEach(function(input) {
             if (input.type !== 'button' && input.type !== 'submit') {
@@ -980,10 +1002,11 @@ function resetFormModal() {
             else if (fileInput && fileInput.classList.contains('qual-file')) span.textContent = '未选择';
             else if (fileInput && fileInput.id === 'qualificationBatchFileModal') span.textContent = '可一次选择多个资质证书扫描件（PDF或图片），请确保文件名与证书名称对应';
             else if (fileInput && fileInput.id === 'businessLicenseFileModal') span.textContent = '请上传营业执照扫描件（JPG/PNG/PDF）';
+            else if (fileInput && fileInput.id === 'legalCertFileModal') span.textContent = '请上传企业法人证明文件（JPG/PNG/PDF）';
             else if (fileInput) span.textContent = '请上传设备校准/检定证书';
         });
         switchTabModal(0);
-    }
+    });
 }
 
 // 当前弹窗模式: add | view | edit | audit
@@ -1058,10 +1081,14 @@ var orgTablePage = 1;
 var orgTablePageSize = 10;
 var allOrgRows = [];
 
-// 渲染待审在线申请列表
+// 渲染机构在线申请列表（含全部状态：待审核 / 审核中 / 核验中 / 已通过 / 已驳回）
 function renderPendingApplications() {
-    var apps = getAllOrgApplications().filter(function(a) {
-        return a.status !== '已通过';
+    var apps = getAllOrgApplications().slice().sort(function(a, b) {
+        var done = { '已通过': 1, '已驳回': 1 };
+        var da = done[a.status] ? 1 : 0;
+        var db = done[b.status] ? 1 : 0;
+        if (da !== db) return da - db;
+        return (b.submitTime || '').localeCompare(a.submitTime || '');
     });
     var tbody = document.getElementById('pendingApplicationsBody');
     var count = document.getElementById('pendingApplicationsCount');
@@ -1070,7 +1097,7 @@ function renderPendingApplications() {
     if (count) count.textContent = apps.length + ' 条';
 
     if (apps.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 13px;">暂无待审在线申请</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 13px;">暂无在线申请</td></tr>';
         return;
     }
 
@@ -1078,7 +1105,9 @@ function renderPendingApplications() {
     apps.forEach(function(app) {
         var basic = app.basic || {};
         var status = app.status || '待审核';
-        var statusClass = status === '审核中' ? 'status-pending' : (status === '已驳回' ? 'status-rejected' : 'status-pending');
+        var statusClass = status === '已通过' ? 'status-normal'
+            : (status === '已驳回' ? 'status-rejected'
+            : (status === '核验中' ? 'status-update' : 'status-pending'));
         var levelBadge = '';
         if (config.mode === 'multi' && config.levels > 1 && app.flowState) {
             var lv = app.flowState.currentLevel || 0;
@@ -1096,7 +1125,10 @@ function renderPendingApplications() {
             '<td style="padding: 14px 16px;"><span class="status-badge ' + statusClass + '">' + status + '</span>' + levelBadge + '</td>' +
             '<td style="padding: 14px 16px; text-align: center;">' +
             '<a href="#" class="table-link" onclick="viewOrg(\'' + app.applicationId + '\'); return false;">查看</a>' +
-            '<a href="#" class="table-link" onclick="auditOrg(\'' + app.applicationId + '\'); return false;">审核</a>' +
+            ((status === '待审核' || status === '审核中' || status === '核验中') ?
+                '<a href="#" class="table-link" onclick="auditOrg(\'' + app.applicationId + '\'); return false;">审核</a>' : '') +
+            (status === '已驳回' ?
+                '<a href="#" class="table-link" onclick="resubmitApplication(\'' + app.applicationId + '\'); return false;">重新提交</a>' : '') +
             '</td>';
         tbody.appendChild(tr);
     });
@@ -1157,24 +1189,26 @@ function renderOrgTable() {
         var status = org.status || '正常';
         var statusClass = status === '正常' ? 'status-normal' : 'status-update';
 
-        // 多级审核进度
+        // 审核状态（任何模式下都显示：待审核 / 审核中 / 核验中 / 已通过 / 已驳回）
         var config = getTPAuditConfig();
         var flow = getTPAuditFlow(org.orgId);
-        var auditBadge = '';
-        if (config.mode === 'multi' && config.levels > 1) {
-            var auditStatusText = '未开始';
-            var auditBadgeClass = 'status-pending';
-            if (flow.status === 'approved') {
-                auditStatusText = '已通过';
-                auditBadgeClass = 'status-normal';
-            } else if (flow.status === 'rejected') {
-                auditStatusText = '已驳回';
-                auditBadgeClass = 'status-rejected';
-            } else if (flow.currentLevel > 0) {
-                auditStatusText = '审核中 ' + flow.currentLevel + '/' + config.levels;
-            }
-            auditBadge = '<span class="status-badge ' + auditBadgeClass + '" style="margin-left: 6px;">' + auditStatusText + '</span>';
+        var auditStatusText = '待审核';
+        var auditBadgeClass = 'status-pending';
+        if (flow.status === 'approved') {
+            auditStatusText = '已通过';
+            auditBadgeClass = 'status-normal';
+        } else if (flow.status === 'rejected') {
+            auditStatusText = '已驳回';
+            auditBadgeClass = 'status-rejected';
+        } else if (flow.status === 'verifying') {
+            auditStatusText = '核验中';
+            auditBadgeClass = 'status-update';
+        } else if ((flow.currentLevel || 0) > 0 || (flow.history && flow.history.length)) {
+            auditStatusText = (config.mode === 'multi' && config.levels > 1)
+                ? '审核中 ' + (flow.currentLevel || 0) + '/' + config.levels
+                : '审核中';
         }
+        var auditBadge = '<span class="status-badge ' + auditBadgeClass + '" style="margin-left: 6px;">' + auditStatusText + '</span>';
 
         var tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid var(--border)';
@@ -1216,12 +1250,12 @@ function renderOrgPagination() {
 
 // 分页跳转
 function goPage(page) {
-    if (typeof page === 'number' && page > 0) {
-        orgTablePage = page;
-    } else if (page === -1) {
+    if (page === -1) {
         orgTablePage--;
-    } else if (page === 1) {
+    } else if (page === 0) {
         orgTablePage++;
+    } else if (typeof page === 'number' && page > 0) {
+        orgTablePage = page;
     }
     var total = Math.ceil(allOrgRows.length / orgTablePageSize) || 1;
     if (orgTablePage < 1) orgTablePage = 1;
@@ -1229,11 +1263,13 @@ function goPage(page) {
     renderOrgTable();
 }
 
-// 模拟变更历史数据
+// 初始化变更历史：优先读取共享数据层持久化的历史，否则使用默认首条记录
 function initOrgHistoryData() {
     Object.keys(orgDataMap).forEach(function(id) {
         var org = orgDataMap[id];
         if (!org || org.history) return;
+        var persisted = (typeof getOrgChangeHistory === 'function') ? getOrgChangeHistory(id) : [];
+        if (persisted.length) { org.history = persisted; return; }
         org.history = [
             { action: '新增', time: '2026-03-12 09:30', operator: '管理员-系统', remark: '机构首次入库登记', diff: ['机构名称：' + (org.enterpriseName || '-'), '统一代码：' + (org.creditCode || '-')] }
         ];
@@ -1818,9 +1854,10 @@ function auditOrg(id) {
 
 // 删除机构
 function deleteOrg(id) {
-    if (confirm('确定要删除该机构吗？此操作不可恢复。')) {
-        alert('删除成功（ID: ' + id + '）');
-    }
+    showConfirm('确定要删除该机构吗？', '删除后数据不可恢复，请谨慎操作。', '删 除').then(function(ok) {
+        if (!ok) return;
+        showTip('删除成功（ID: ' + id + '）', 'success');
+    });
 }
 
 // 打开独立变更历史弹窗
@@ -1852,8 +1889,8 @@ function renderHistoryTo(container, id) {
         return;
     }
     var map = {
-        '新增': 'add', '编辑': 'edit', '审核通过': 'audit', '审核驳回': 'reject',
-        '删除': 'delete', '启用': 'enable', '停用': 'disable', '提交审核': 'edit'
+        '新增': 'add', '编辑': 'edit', '信息变更': 'edit', '审核通过': 'audit', '审核驳回': 'reject',
+        '发起核验': 'reject', '删除': 'delete', '启用': 'enable', '停用': 'disable', '提交审核': 'edit'
     };
     container.innerHTML = '<div class="timeline">' + history.map(function(r) {
         var cls = map[r.action] || 'edit';
@@ -1876,13 +1913,14 @@ function renderHistoryTo(container, id) {
     }).join('') + '</div>';
 }
 
-// 添加变更历史记录
+// 添加变更历史记录（内存 + 持久化到共享数据层，跨页面可追溯）
 function addOrgHistoryRecord(id, record) {
     initOrgHistoryData();
     var data = orgDataMap[id];
     if (!data) return;
     if (!data.history) data.history = [];
     data.history.unshift(record);
+    if (typeof addOrgChangeHistory === 'function') addOrgChangeHistory(id, record);
 }
 
 // 获取当前时间字符串
@@ -1896,6 +1934,29 @@ function getCurrentTimeString() {
     return y + '-' + m + '-' + d + ' ' + h + ':' + min;
 }
 
+// 机构驳回后重新提交：补充资料后重新进入审核流程
+function resubmitApplication(applicationId) {
+    var app = getOrgApplicationById(applicationId);
+    if (!app) { alert('未找到该申请记录'); return; }
+    if (app.status !== '已驳回') { alert('仅已驳回的申请可重新提交'); return; }
+    var lastReject = (app.auditHistory || []).filter(function(h) { return h.decision === 'reject'; }).pop();
+    var reason = lastReject && lastReject.opinion ? '上次驳回原因：' + lastReject.opinion : '提交后将重新进入审核流程。';
+    showConfirm('确认重新提交该申请吗？', reason, '重新提交', false).then(function(ok) {
+        if (!ok) return;
+        app.status = '待审核';
+        app.flowState = app.flowState || { mode: 'single', levels: 1, currentLevel: 0, status: 'pending' };
+        app.flowState.currentLevel = 0;
+        app.flowState.status = 'pending';
+        if (!app.auditHistory) app.auditHistory = [];
+        app.auditHistory.push({ level: 0, decision: 'resubmit', operator: '机构-' + ((app.basic && app.basic.legalName) || '申请人'), opinion: '补充资料后重新提交', time: getCurrentTimeString() });
+        app.submitTime = getCurrentTimeString();
+        updateOrgApplication(app);
+        showTip('已重新提交，等待审核。', 'success');
+        renderPendingApplications();
+        renderOrgTable();
+    });
+}
+
 // 审核通过：打开通用意见弹窗
 function auditPassModal() {
     openAuditOpinionModal('pass');
@@ -1904,6 +1965,14 @@ function auditPassModal() {
 // 审核驳回：打开通用意见弹窗
 function auditRejectModal() {
     openAuditOpinionModal('reject');
+}
+
+// 核验事项常用语
+var VERIFY_PRESETS = ['申请资料与原件扫描件不一致，需比对核验', '法人身份信息待核实，发起实名核验', '资质证书真伪待向发证机关核验', '企业法人证明文件存疑，需补充核验', '联系电话无法接通，需电话核验', '注册地址存疑，需现场核验'];
+
+// 发起核验：审核人员对存疑资料发起核验，记录核验事项
+function auditVerifyModal() {
+    openAuditOpinionModal('verify');
 }
 
 // 打开通用审核意见弹窗
@@ -1916,6 +1985,7 @@ function openAuditOpinionModal(decision) {
     var levelInfo = document.getElementById('auditLevelInfo');
     var btnPass = document.getElementById('btnConfirmPass');
     var btnReject = document.getElementById('btnConfirmReject');
+    var btnVerify = document.getElementById('btnConfirmVerify');
 
     var config = getTPAuditConfig();
     var flow = getTPAuditFlow(currentOrgId);
@@ -1923,21 +1993,28 @@ function openAuditOpinionModal(decision) {
     var levelDisplay = config.mode === 'multi' ? (currentLevel + 1) : 1;
     var totalLevels = config.levels || 1;
     var isPass = decision === 'pass';
+    var isVerify = decision === 'verify';
 
     if (title) {
-        title.innerHTML = '<i class="fas fa-clipboard-check" style="color: ' + (isPass ? 'var(--success)' : 'var(--danger)') + ';"></i> ' +
-            (isPass ? '审核通过意见' : '审核驳回意见') + (config.mode === 'multi' ? '（第' + levelDisplay + '/' + totalLevels + '级）' : '');
+        var titleIcon = isVerify ? 'var(--warning)' : (isPass ? 'var(--success)' : 'var(--danger)');
+        var titleText = isVerify ? '发起核验' : (isPass ? '审核通过意见' : '审核驳回意见');
+        title.innerHTML = '<i class="fas ' + (isVerify ? 'fa-search' : 'fa-clipboard-check') + '" style="color: ' + titleIcon + ';"></i> ' +
+            titleText + (config.mode === 'multi' && !isVerify ? '（第' + levelDisplay + '/' + totalLevels + '级）' : '');
     }
 
     if (levelInfo) {
-        levelInfo.style.display = config.mode === 'multi' ? 'block' : 'none';
-        levelInfo.querySelector('span').textContent = '当前为第 ' + levelDisplay + ' 级审核，共 ' + totalLevels + ' 级' + (isPass ? '，通过后将' + (levelDisplay >= totalLevels ? '完成终审' : '进入下一级审核') : '');
+        levelInfo.style.display = (config.mode === 'multi' || isVerify) ? 'block' : 'none';
+        levelInfo.querySelector('span').textContent = isVerify
+            ? '对存疑的申请资料发起核验，核验期间审核流程暂停，核验完成后再作出通过或驳回结论'
+            : '当前为第 ' + levelDisplay + ' 级审核，共 ' + totalLevels + ' 级' + (isPass ? '，通过后将' + (levelDisplay >= totalLevels ? '完成终审' : '进入下一级审核') : '');
     }
 
     // 填充常用语
     if (select) {
         select.innerHTML = '<option value="">-- 选择常用语快速填充 --</option>';
-        var presets = isPass ? (config.presetPass || []) : (config.presetReject || []);
+        var presets = isVerify
+            ? VERIFY_PRESETS
+            : (isPass ? (config.presetPass || []) : (config.presetReject || []));
         presets.forEach(function(p) {
             var opt = document.createElement('option');
             opt.value = p;
@@ -1948,11 +2025,16 @@ function openAuditOpinionModal(decision) {
 
     if (textarea) {
         textarea.value = '';
+        textarea.placeholder = isVerify ? '核验事项说明（选填，默认：' + VERIFY_PRESETS[0] + '）' : '请输入审核意见';
         setTimeout(function() { textarea.focus(); }, 100);
     }
 
+    var reqSpan = document.getElementById('auditOpinionRequired');
+    if (reqSpan) reqSpan.style.display = isVerify ? 'none' : '';
+
     if (btnPass) btnPass.style.display = isPass ? 'inline-flex' : 'none';
-    if (btnReject) btnReject.style.display = isPass ? 'none' : 'inline-flex';
+    if (btnReject) btnReject.style.display = (!isPass && !isVerify) ? 'inline-flex' : 'none';
+    if (btnVerify) btnVerify.style.display = isVerify ? 'inline-flex' : 'none';
 
     modal.classList.add('active');
 }
@@ -1973,9 +2055,47 @@ function confirmAuditOpinion(decision) {
     var textarea = document.getElementById('auditOpinionText');
     var opinion = textarea ? textarea.value.trim() : '';
     var config = getTPAuditConfig();
+    if (decision === 'verify' && !opinion) {
+        opinion = VERIFY_PRESETS[0];
+        if (textarea) textarea.value = opinion;
+    }
     if (config.requiredOpinion && !opinion) {
         alert('请输入审核意见');
         if (textarea) textarea.focus();
+        return;
+    }
+
+    // 发起核验：仅记录核验事项，不改变审核结论，审核人员后续仍可通过或驳回
+    if (decision === 'verify') {
+        var vOperator = '审核员-当前用户';
+        var vNow = getCurrentTimeString();
+        if (currentApplicationId) {
+            var vApp = getOrgApplicationById(currentApplicationId);
+            if (vApp) {
+                if (!vApp.auditHistory) vApp.auditHistory = [];
+                vApp.auditHistory.push({ level: (vApp.flowState && vApp.flowState.currentLevel || 0), decision: 'verify', operator: vOperator, opinion: opinion, time: vNow });
+                vApp.status = '核验中';
+                updateOrgApplication(vApp);
+            }
+        } else {
+            var vId = currentOrgId || '';
+            var vFlow = getTPAuditFlow(vId);
+            if (!vFlow.history) vFlow.history = [];
+            vFlow.history.push({ level: (vFlow.currentLevel || 0) + 1, decision: 'verify', opinion: opinion, operator: vOperator, time: vNow });
+            vFlow.status = 'verifying';
+            saveTPAuditFlow(vId, vFlow);
+            addOrgHistoryRecord(vId, {
+                action: '发起核验',
+                time: vNow,
+                operator: vOperator,
+                remark: '对申请资料发起核验',
+                diff: ['核验事项：' + opinion]
+            });
+        }
+        alert('核验已发起：' + opinion + '\n核验完成后可继续审核（通过或驳回）。');
+        closeAuditOpinionModal();
+        renderPendingApplications();
+        renderOrgTable();
         return;
     }
 

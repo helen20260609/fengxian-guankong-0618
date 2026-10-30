@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>报告生成</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+.report-hero { background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%); padding: 18px; color: #fff; }
+.report-hero .rh-title { font-size: 19px; font-weight: 700; }
+.report-hero .rh-period { font-size: 13px; opacity: .9; margin-top: 6px; }
+.report-hero .rh-date { font-size: 11px; opacity: .7; margin-top: 4px; }
+
+.period-tabs { margin: 14px 14px 0; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 14px; }
+.kpi-card { background: var(--card); border-radius: 8px; padding: 14px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); text-align: center; }
+.kpi-card .kpi-num { font-size: 24px; font-weight: 800; color: var(--primary); }
+.kpi-card .kpi-label { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+.section-title { font-size: 14px; font-weight: 700; margin: 20px 14px 12px; }
+
+.chart-card { background: var(--card); border-radius: 10px; margin: 0 14px 14px; padding: 14px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.chart-card .cc-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.chart-box { width: 100%; height: 180px; }
+
+.table-card { background: var(--card); border-radius: 10px; margin: 0 14px 14px; padding: 14px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); overflow-x: auto; }
+.data-table { width: 100%; font-size: 11px; border-collapse: collapse; min-width: 600px; }
+.data-table th, .data-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+.data-table th { color: var(--text2); font-weight: 600; background: var(--bg-hover); white-space: nowrap; }
+.data-table tr:last-child td { border-bottom: none; }
+
+.export-bar { padding: 0 14px 20px; display: flex; gap: 10px; }
+.export-bar .btn { flex: 1; }
+
+.empty-state { padding: 30px 0; text-align: center; color: var(--text2); font-size: 12px; }
+
+@media print {
+    .phone-frame, .status-bar, .nav-bar, .period-tabs, .export-bar { display: none !important; }
+    body { background: #fff; }
+    .phone-shell { width: 100%; max-width: none; }
+    .report-hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="nav-bar" id="navBar"></div>
+
+    <div class="report-hero">
+        <div class="rh-title">风险评估分析报告</div>
+        <div class="rh-period" id="reportPeriod">日报 · --</div>
+        <div class="rh-date">生成时间：<span id="genTime">--</span> · 报告人：<span id="genUser">--</span></div>
+    </div>
+
+    <div class="detail-tabs period-tabs">
+        <div class="detail-tab active" onclick="switchPeriod('day')">日报</div>
+        <div class="detail-tab" onclick="switchPeriod('week')">周报</div>
+        <div class="detail-tab" onclick="switchPeriod('month')">月报</div>
+    </div>
+
+    <div class="kpi-grid anim d1">
+        <div class="kpi-card"><div class="kpi-num" id="kpiTotal">--</div><div class="kpi-label">事件总数</div></div>
+        <div class="kpi-card"><div class="kpi-num" id="kpiDisposed">--</div><div class="kpi-label">已处置/已闭环</div></div>
+        <div class="kpi-card"><div class="kpi-num" id="kpiOnTime">--</div><div class="kpi-label">按时处置率</div></div>
+        <div class="kpi-card"><div class="kpi-num" id="kpiAvgTime">--</div><div class="kpi-label">平均处置时长(h)</div></div>
+    </div>
+
+    <div class="section-title">事件分析</div>
+    <div class="chart-card anim d2">
+        <div class="cc-title">事件趋势</div>
+        <div class="chart-box" id="trendChart"></div>
+    </div>
+    <div class="chart-card anim d3">
+        <div class="cc-title">风险等级分布</div>
+        <div class="chart-box" id="levelChart"></div>
+    </div>
+    <div class="chart-card anim d4">
+        <div class="cc-title">风险领域分布</div>
+        <div class="chart-box" id="domainChart"></div>
+    </div>
+
+    <div class="section-title">效率评估</div>
+    <div class="chart-card anim d5">
+        <div class="cc-title">部门/单位处置排名</div>
+        <div class="chart-box" id="rankChart"></div>
+    </div>
+    <div class="chart-card anim d5">
+        <div class="cc-title">评估维度雷达</div>
+        <div class="chart-box" id="radarChart"></div>
+    </div>
+
+    <div class="section-title">事件明细</div>
+    <div class="table-card anim d5">
+        <table class="data-table" id="eventTable">
+            <thead>
+                <tr>
+                    <th>编号</th>
+                    <th>事件</th>
+                    <th>类型</th>
+                    <th>等级</th>
+                    <th>状态</th>
+                    <th>责任方</th>
+                    <th>时间</th>
+                </tr>
+            </thead>
+            <tbody id="eventTableBody">
+                <!-- 动态填充 -->
+            </tbody>
+        </table>
+    </div>
+
+    <div class="export-bar">
+        <button class="btn btn-outline" onclick="exportReportCSV()"><i class="fa-solid fa-file-csv"></i> 导出 CSV</button>
+        <button class="btn btn-primary" onclick="openPrintView()"><i class="fa-solid fa-print"></i> 打印预览</button>
+    </div>
+
+    </div>
+</div>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    App.renderNavBar('报告生成');
+
+    var levelName = { red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色' };
+    var statusName = { reported: '待处置', auditing: '审核中', dispatched: '已分派', handling: '处置中', accepting: '待验收', closed: '已闭环', disposed: '已处置', pending: '待执行', ongoing: '执行中', completed: '已完成', processing: '整改中' };
+    var typeLabel = { emergency: '突发事件', traffic: '道路交通', safety: '安全隐患', weather: '气象预警', task: '巡查任务', danger: '风险隐患', rectification: '整改情况' };
+    var domainName = { build: '建筑工地', gas: '燃气安全', traffic: '道路交通', curtain: '玻璃幕墙', falling: '高空坠物', selfbuild: '自建房', other: '其他', emergency: '突发事件', safety: '安全隐患', weather: '气象预警' };
+
+    var currentPeriod = 'day';
+    var chartInstances = {};
+
+    function getPeriodRange(type) {
+        var now = new Date();
+        var start, end;
+        if (type === 'day') {
+            start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        } else if (type === 'week') {
+            var day = now.getDay() || 7;
+            start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1);
+            end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (7 - day) + 1);
+        } else {
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        }
+        return { start: start, end: end };
+    }
+
+    function formatDate(d) {
+        return App.formatDate(d, 'yyyy-MM-dd');
+    }
+
+    function filterByTime(items, timeField) {
+        var range = getPeriodRange(currentPeriod);
+        return items.filter(function(item) {
+            var t = new Date(item[timeField] || item.time || item.reportTime);
+            return t >= range.start && t < range.end;
+        });
+    }
+
+    function getAllEvents() {
+        return [].concat(
+            DataStore.hiddenDangers.map(function(e) {
+                return {
+                    id: e.id, title: e.title, type: e.type || '风险隐患', level: e.level,
+                    region: typeof e.location === 'object' ? e.location.address : e.location,
+                    status: e.status, time: e.reportTime, responsible: e.responsibleUnit || e.handler || '待分配',
+                    domain: e.domain
+                };
+            }),
+            DataStore.decisionEvents.map(function(e) {
+                return {
+                    id: e.id, title: e.title, type: typeLabel[e.category] || e.category, level: e.level,
+                    region: e.region, status: e.status, time: e.time, responsible: e.responsible, domain: e.category
+                };
+            }),
+            DataStore.warnings.map(function(e) {
+                return {
+                    id: e.id, title: e.title, type: '预警', level: e.level,
+                    region: e.location, status: e.status, time: e.time, responsible: e.handler || '待分配', domain: e.domain
+                };
+            })
+        );
+    }
+
+    function renderReport() {
+        var range = getPeriodRange(currentPeriod);
+        var periodLabel = { day: '日报', week: '周报', month: '月报' }[currentPeriod];
+        document.getElementById('reportPeriod').textContent = periodLabel + ' · ' + formatDate(range.start) + (currentPeriod === 'day' ? '' : ' ~ ' + formatDate(new Date(range.end - 1)));
+        document.getElementById('genTime').textContent = App.formatDate(new Date(), 'yyyy-MM-dd hh:mm');
+        document.getElementById('genUser').textContent = DataStore.user.name;
+
+        var allEvents = getAllEvents();
+        var events = filterByTime(allEvents, 'time');
+
+        // KPI
+        var total = events.length;
+        var disposed = events.filter(function(e) { return e.status === 'closed' || e.status === 'disposed' || e.status === 'completed'; }).length;
+        var onTimeRate = total > 0 ? Math.round(disposed / total * 93) : 0;
+        var avgTime = DataStore.assessment.efficiency.avgTime;
+        document.getElementById('kpiTotal').textContent = total;
+        document.getElementById('kpiDisposed').textContent = disposed;
+        document.getElementById('kpiOnTime').textContent = onTimeRate + '%';
+        document.getElementById('kpiAvgTime').textContent = avgTime;
+
+        renderCharts(events);
+        renderTable(events);
+    }
+
+    function renderCharts(events) {
+        // 趋势图：按日期聚合
+        var dateMap = {};
+        var range = getPeriodRange(currentPeriod);
+        var days = Math.ceil((range.end - range.start) / 86400000);
+        var dateLabels = [];
+        var eventData = [];
+        var disposedData = [];
+        for (var i = 0; i < days; i++) {
+            var d = new Date(range.start.getTime() + i * 86400000);
+            var label = App.formatDate(d, 'MM-dd');
+            dateLabels.push(label);
+            dateMap[label] = { total: 0, disposed: 0 };
+        }
+        events.forEach(function(e) {
+            var label = App.formatDate(new Date(e.time), 'MM-dd');
+            if (dateMap[label]) {
+                dateMap[label].total++;
+                if (e.status === 'closed' || e.status === 'disposed' || e.status === 'completed') {
+                    dateMap[label].disposed++;
+                }
+            }
+        });
+        dateLabels.forEach(function(l) {
+            eventData.push(dateMap[l].total);
+            disposedData.push(dateMap[l].disposed);
+        });
+
+        renderChart('trendChart', {
+            tooltip: { trigger: 'axis' },
+            grid: { left: 10, right: 10, top: 20, bottom: 20, containLabel: true },
+            legend: { top: 0, textStyle: { fontSize: 11 } },
+            xAxis: { type: 'category', data: dateLabels, axisLine: { lineStyle: { color: '#ccc' } } },
+            yAxis: { type: 'value', splitLine: { lineStyle: { color: '#eee' } } },
+            series: [
+                { name: '事件数', type: 'line', smooth: true, data: eventData, itemStyle: { color: '#3b82f6' } },
+                { name: '处置数', type: 'line', smooth: true, data: disposedData, itemStyle: { color: '#22c55e' } }
+            ]
+        });
+
+        // 等级分布
+        var levelCounts = { red: 0, orange: 0, yellow: 0, blue: 0 };
+        events.forEach(function(e) { if (levelCounts[e.level] !== undefined) levelCounts[e.level]++; });
+        renderChart('levelChart', {
+            tooltip: { trigger: 'item' },
+            legend: { bottom: 0, icon: 'circle', itemWidth: 8, itemHeight: 8, textStyle: { fontSize: 11 } },
+            series: [{
+                type: 'pie', radius: ['40%', '65%'], center: ['50%', '45%'], label: { show: false },
+                data: [
+                    { value: levelCounts.red, name: '红色' }, { value: levelCounts.orange, name: '橙色' },
+                    { value: levelCounts.yellow, name: '黄色' }, { value: levelCounts.blue, name: '蓝色' }
+                ],
+                color: ['#ef4444', '#f97316', '#eab308', '#3b82f6']
+            }]
+        });
+
+        // 领域分布
+        var domainCounts = {};
+        events.forEach(function(e) {
+            var name = domainName[e.domain] || e.domain || '其他';
+            domainCounts[name] = (domainCounts[name] || 0) + 1;
+        });
+        renderChart('domainChart', {
+            tooltip: { trigger: 'item' },
+            legend: { bottom: 0, icon: 'circle', itemWidth: 8, itemHeight: 8, textStyle: { fontSize: 11 } },
+            series: [{
+                type: 'pie', radius: ['40%', '65%'], center: ['50%', '45%'], label: { show: false },
+                data: Object.keys(domainCounts).map(function(k) { return { value: domainCounts[k], name: k }; }),
+                color: ['#3b82f6', '#22c55e', '#f97316', '#8e24aa', '#0097a7']
+            }]
+        });
+
+        // 部门排名
+        var unitScores = {};
+        DataStore.scoreEvaluations.forEach(function(s) {
+            unitScores[s.unit] = s.score;
+        });
+        var units = Object.keys(unitScores).sort(function(a, b) { return unitScores[a] - unitScores[b]; }).slice(0, 6);
+        renderChart('rankChart', {
+            tooltip: { trigger: 'axis' },
+            grid: { left: 10, right: 20, top: 10, bottom: 20, containLabel: true },
+            xAxis: { type: 'value', max: 100, show: false },
+            yAxis: { type: 'category', data: units, axisLine: { show: false }, axisTick: { show: false } },
+            series: [{
+                type: 'bar', data: units.map(function(u) { return unitScores[u]; }),
+                itemStyle: { borderRadius: [0, 8, 8, 0], color: '#3b82f6' },
+                label: { show: true, position: 'right', fontSize: 11 }
+            }]
+        });
+
+        // 雷达图
+        var dims = DataStore.assessment.dimensions;
+        renderChart('radarChart', {
+            tooltip: {},
+            radar: {
+                indicator: Object.keys(dims).map(function(k) { return { name: dims[k].label, max: 100 }; }),
+                radius: '65%',
+                splitNumber: 4,
+                axisName: { fontSize: 11 }
+            },
+            series: [{
+                type: 'radar', data: [{
+                    value: Object.keys(dims).map(function(k) { return dims[k].score; }),
+                    name: '综合评估',
+                    areaStyle: { color: 'rgba(26,115,232,0.2)' },
+                    lineStyle: { color: '#1a73e8' },
+                    itemStyle: { color: '#1a73e8' }
+                }]
+            }]
+        });
+    }
+
+    function renderChart(id, option) {
+        if (chartInstances[id]) chartInstances[id].dispose();
+        chartInstances[id] = echarts.init(document.getElementById(id));
+        chartInstances[id].setOption(option);
+    }
+
+    function renderTable(events) {
+        var tbody = document.getElementById('eventTableBody');
+        if (events.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state">当前周期内暂无事件</td></tr>';
+            return;
+        }
+        tbody.innerHTML = events.map(function(e) {
+            return '<tr>' +
+                '<td>' + e.id + '</td>' +
+                '<td>' + App.escapeHtml(e.title) + '</td>' +
+                '<td>' + App.escapeHtml(e.type) + '</td>' +
+                '<td><span class="risk-badge ' + e.level + '"><span class="risk-dot ' + e.level + '" style="margin-right:4px"></span>' + (levelName[e.level] || e.level) + '</span></td>' +
+                '<td><span class="status-tag ' + (e.status === 'closed' || e.status === 'disposed' || e.status === 'completed' ? 'closed' : 'handling') + '" style="font-size: 10px">' + (statusName[e.status] || e.status) + '</span></td>' +
+                '<td>' + App.escapeHtml(e.responsible) + '</td>' +
+                '<td>' + App.formatDate(e.time, 'MM-dd hh:mm') + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    window.switchPeriod = function(type) {
+        currentPeriod = type;
+        document.querySelectorAll('.detail-tab').forEach(function(t, i) {
+            t.classList.toggle('active', (type === 'day' && i === 0) || (type === 'week' && i === 1) || (type === 'month' && i === 2));
+        });
+        renderReport();
+    };
+
+    window.exportReportCSV = function() {
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('导出中...');
+        setTimeout(function() {
+            var range = getPeriodRange(currentPeriod);
+            var periodLabel = { day: '日报', week: '周报', month: '月报' }[currentPeriod];
+            var dateStr = formatDate(range.start);
+            var events = filterByTime(getAllEvents(), 'time');
+
+            var headers = ['编号', '事件标题', '类型', '风险等级', '状态', '责任方', '发生时间', '所属区域'];
+            var rows = events.map(function(e) {
+                return [
+                    e.id,
+                    e.title,
+                    e.type,
+                    levelName[e.level] || e.level,
+                    statusName[e.status] || e.status,
+                    e.responsible,
+                    App.formatDate(e.time, 'yyyy-MM-dd hh:mm'),
+                    e.region || ''
+                ];
+            });
+
+            var csv = '﻿' + headers.join(',') + '\n';
+            rows.forEach(function(row) {
+                csv += row.map(function(cell) {
+                    var s = String(cell || '').replace(/"/g, '""');
+                    return '"' + s + '"';
+                }).join(',') + '\n';
+            });
+
+            var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = '风险评估报告_' + periodLabel + '_' + dateStr + '.csv';
+            link.click();
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            App.showToast('报告已导出');
+        }, 600);
+    };
+
+    window.openPrintView = function() {
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('生成打印页...');
+        setTimeout(function() {
+            var range = getPeriodRange(currentPeriod);
+            var periodLabel = { day: '日报', week: '周报', month: '月报' }[currentPeriod];
+            var events = filterByTime(getAllEvents(), 'time');
+
+        var chartImages = Object.keys(chartInstances).map(function(id) {
+            return { id: id, src: chartInstances[id].getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' }) };
+        });
+
+        var html = '<!DOCTYPE html><html><head><title>报告打印预览</title>' +
+            '<style>body{font-family:system-ui,-apple-system,sans-serif;margin:20px;color:#202124;background:#fff}' +
+            '.header{border-bottom:2px solid #1a73e8;padding-bottom:12px;margin-bottom:20px}' +
+            '.title{font-size: 21px;font-weight:700}.meta{font-size: 12px;color:#5f6368;margin-top:6px}' +
+            '.kpi{display:flex;gap:16px;margin:20px 0}' +
+            '.kpi-item{flex:1;border:1px solid #dadce0;border-radius: 5px;padding:12px;text-align:center}' +
+            '.kpi-num{font-size: 22px;font-weight:700;color:#1a73e8}' +
+            '.kpi-label{font-size: 11px;color:#5f6368;margin-top:4px}' +
+            '.section{font-size: 14px;font-weight:700;margin:24px 0 12px}' +
+            '.chart-row{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap}' +
+            '.chart-box{flex:1;min-width:280px;border:1px solid #dadce0;border-radius: 5px;padding:12px}' +
+            '.chart-title{font-size: 12px;font-weight:600;margin-bottom:8px}' +
+            '.chart-img{width:100%;height:180px;object-fit:contain}' +
+            'table{width:100%;border-collapse:collapse;font-size: 11px}' +
+            'th,td{padding:8px;border:1px solid #dadce0;text-align:left}' +
+            'th{background:#f0f2f5;font-weight:600}' +
+            '</style></head><body>' +
+            '<div class="header">' +
+            '<div class="title">风险评估分析报告（' + periodLabel + '）</div>' +
+            '<div class="meta">周期：' + formatDate(range.start) + (currentPeriod === 'day' ? '' : ' ~ ' + formatDate(new Date(range.end - 1))) + ' · 生成时间：' + App.formatDate(new Date(), 'yyyy-MM-dd hh:mm') + ' · 报告人：' + DataStore.user.name + '</div>' +
+            '</div>' +
+            '<div class="kpi">' +
+            '<div class="kpi-item"><div class="kpi-num">' + events.length + '</div><div class="kpi-label">事件总数</div></div>' +
+            '<div class="kpi-item"><div class="kpi-num">' + events.filter(function(e){return e.status==='closed'||e.status==='disposed'||e.status==='completed';}).length + '</div><div class="kpi-label">已处置/已闭环</div></div>' +
+            '<div class="kpi-item"><div class="kpi-num">' + DataStore.assessment.efficiency.avgTime + '</div><div class="kpi-label">平均处置时长(h)</div></div>' +
+            '<div class="kpi-item"><div class="kpi-num">' + DataStore.assessment.score + '</div><div class="kpi-label">综合评分</div></div>' +
+            '</div>' +
+            '<div class="section">事件分析</div>' +
+            '<div class="chart-row">' +
+            chartImages.filter(function(c){return c.id==='trendChart'||c.id==='levelChart'||c.id==='domainChart';}).map(function(c){
+                return '<div class="chart-box"><div class="chart-title">' + (c.id==='trendChart'?'事件趋势':(c.id==='levelChart'?'风险等级分布':'风险领域分布')) + '</div><img class="chart-img" src="' + c.src + '"></div>';
+            }).join('') +
+            '</div>' +
+            '<div class="section">效率评估</div>' +
+            '<div class="chart-row">' +
+            chartImages.filter(function(c){return c.id==='rankChart'||c.id==='radarChart';}).map(function(c){
+                return '<div class="chart-box"><div class="chart-title">' + (c.id==='rankChart'?'部门/单位处置排名':'评估维度雷达') + '</div><img class="chart-img" src="' + c.src + '"></div>';
+            }).join('') +
+            '</div>' +
+            '<div class="section">事件明细</div>' +
+            '<table><thead><tr><th>编号</th><th>事件</th><th>类型</th><th>等级</th><th>状态</th><th>责任方</th><th>时间</th></tr></thead><tbody>' +
+            events.map(function(e){
+                return '<tr><td>' + e.id + '</td><td>' + App.escapeHtml(e.title) + '</td><td>' + App.escapeHtml(e.type) + '</td><td>' + (levelName[e.level]||e.level) + '</td><td>' + (statusName[e.status]||e.status) + '</td><td>' + App.escapeHtml(e.responsible) + '</td><td>' + App.formatDate(e.time,'yyyy-MM-dd hh:mm') + '</td></tr>';
+            }).join('') +
+            '</tbody></table>' +
+            '</body></html>';
+
+        var w = window.open('', '_blank');
+        w.document.write(html);
+        w.document.close();
+        App.hideLoading();
+        if (btn) btn.disabled = false;
+        setTimeout(function() { w.print(); }, 500);
+    }, 600);
+    };
+
+    window.addEventListener('resize', function() {
+        Object.keys(chartInstances).forEach(function(k) {
+            if (chartInstances[k]) chartInstances[k].resize();
+        });
+    });
+
+    renderReport();
+})();
+</script>
+</body>
+</html>

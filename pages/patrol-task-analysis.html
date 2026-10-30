@@ -800,6 +800,7 @@ body {
     .center-column, .right-column { min-height: auto; min-width: 0; }
 }
 </style>
+    <link rel="stylesheet" href="ui-modal.css">
 </head>
 <body>
 
@@ -1050,6 +1051,17 @@ body {
         <div class="panel-card">
             <div class="panel-header">
                 <div class="panel-title">
+                    <i class="fas fa-building"></i>
+                    按结构类型分析
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box" id="structureChart" style="height: 240px;"></div>
+            </div>
+        </div>
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
                     <i class="fas fa-trophy"></i>
                     镇/街道巡查完成排名
                 </div>
@@ -1210,11 +1222,33 @@ function isRectifyTask(t) {
 }
 
 function riskLevelFromTask(t) {
-    const level = String(t.riskLevel || t.urgency || '');
+    const level = String(t.riskLevel || '');
     if (/重大|高|一级|red|major|high/i.test(level)) return 'major';
     if (/较大|中|二级|orange|large|medium/i.test(level)) return 'large';
     if (/一般|低|三级|yellow|general|low/i.test(level)) return 'low';
     return 'low';
+}
+
+// 稳定抖动：同一房屋每次刷新位置一致（替代 Math.random 漂移）
+function stableJitter(key, scale) {
+    let h = 0;
+    const s = String(key);
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return ((h % 1000) / 1000 - 0.5) * 2 * scale;
+}
+
+// 房屋隐患条目数（红/黄检查项）
+function countHouseHazards(p) {
+    const items = Array.isArray(p.checkItems) ? p.checkItems : [];
+    return items.filter(c => c && (c.level === 'red' || c.level === 'yellow')).length;
+}
+
+// 房屋最高风险等级：红→major（重大），黄→large（较大）
+function houseRiskLevel(p) {
+    const items = Array.isArray(p.checkItems) ? p.checkItems : [];
+    if (items.some(c => c && c.level === 'red')) return 'major';
+    if (items.some(c => c && c.level === 'yellow')) return 'large';
+    return null;
 }
 
 function generateMockData() {
@@ -1227,14 +1261,31 @@ function generateMockData() {
     });
 
     tasks.forEach(t => {
-        const region = t.town || '南桥镇';
+        const projects0 = Array.isArray(t.selectedProjects) ? t.selectedProjects : [];
+        // 任务缺 town 时，以房屋清单中首个有镇的房屋归属为准
+        const region = t.town || ((projects0.find(p => p.town) || {}).town) || '南桥镇';
         if (!regionMap[region]) regionMap[region] = { name: region, taskTotal: 0, taskDone: 0, riskCount: 0, rectifyTotal: 0, rectifyDone: 0 };
         const r = regionMap[region];
         r.taskTotal++;
         if (isTaskCompleted(t)) r.taskDone++;
-        r.riskCount += (parseInt(t.hiddenCount, 10) || 0);
-        r.rectifyTotal += (parseInt(t.hiddenCount, 10) || 0);
-        r.rectifyDone += (parseInt(t.hiddenFixed, 10) || 0);
+        const projects = projects0;
+        if (projects.length === 0) {
+            // 无房屋清单的任务：沿用任务级静态隐患字段
+            r.riskCount += (parseInt(t.hiddenCount, 10) || 0);
+            r.rectifyTotal += (parseInt(t.hiddenCount, 10) || 0);
+            r.rectifyDone += (parseInt(t.hiddenFixed, 10) || 0);
+            return;
+        }
+        // 有房屋清单：按填报结果（红/黄检查项）派生隐患与整改统计
+        projects.forEach(p => {
+            const pRegion = p.town || region;
+            if (!regionMap[pRegion]) regionMap[pRegion] = { name: pRegion, taskTotal: 0, taskDone: 0, riskCount: 0, rectifyTotal: 0, rectifyDone: 0 };
+            const pr = regionMap[pRegion];
+            const hazardCnt = countHouseHazards(p);
+            pr.riskCount += hazardCnt;
+            pr.rectifyTotal += hazardCnt;
+            // 整改完成数暂无填报数据来源，保持 0（未整改）
+        });
     });
 
     // 没有真实数据时给出默认演示数据，保证页面不空
@@ -1263,41 +1314,61 @@ function generateMockData() {
         };
     }
 
-    // 根据真实任务生成地图点位（按任务或关联房屋）
+    // 根据真实任务生成地图点位：按房屋清单派生（坐标优先用填报的 GPS 位置信息）
     let pointId = 1;
     const points = [];
     tasks.forEach(t => {
-        const region = t.town || '南桥镇';
-        const base = townCoordinates[region] || townCoordinates['南桥镇'];
         const person = t.person || '待分配';
-        const time = t.createTime || (t.startDate ? t.startDate + ' 08:00' : '-');
+        const taskTime = t.createTime || (t.startDate ? t.startDate + ' 08:00' : '-');
         const projects = Array.isArray(t.selectedProjects) ? t.selectedProjects : [];
-        const projectList = projects.length > 0 ? projects : [{ id: t.id, name: t.name || (region + '巡查任务') }];
 
-        projectList.forEach((p, idx) => {
-            const offset = (idx + 1) * 0.003;
-            const lat = base.lat + (Math.random() - 0.5) * 0.008 + offset * (idx % 2 === 0 ? 1 : -1);
-            const lng = base.lng + (Math.random() - 0.5) * 0.008 + offset * (idx % 2 === 0 ? -1 : 1);
-
-            let type = 'task';
-            if (isRiskTask(t)) type = 'risk';
-            else if (isRectifyTask(t)) type = 'rectify';
-
-            let level = riskLevelFromTask(t);
-            let status = isTaskCompleted(t) ? 'done' : 'pending';
-            if (type === 'rectify' && !isTaskCompleted(t)) status = 'doing';
-
+        if (projects.length === 0) {
+            // 无房屋清单：任务级点位（街镇中心 + 稳定偏移）
+            const region = t.town || '南桥镇';
+            const base = townCoordinates[region] || townCoordinates['南桥镇'];
             points.push({
                 id: pointId++,
-                name: p.name || (region + ' ' + (type === 'task' ? '巡查点' : type === 'risk' ? '风险点' : '整改点')),
-                type: type,
-                level: type === 'risk' || type === 'rectify' ? level : undefined,
-                status: type === 'task' || type === 'rectify' ? status : undefined,
-                lat: parseFloat(lat.toFixed(6)),
-                lng: parseFloat(lng.toFixed(6)),
-                time: time,
+                name: t.name || (region + '巡查任务'),
+                type: 'task',
+                status: isTaskCompleted(t) ? 'done' : 'pending',
+                lat: parseFloat((base.lat + stableJitter(t.id + '-lat', 0.006)).toFixed(6)),
+                lng: parseFloat((base.lng + stableJitter(t.id + '-lng', 0.006)).toFixed(6)),
+                time: taskTime,
                 person: person,
                 region: region
+            });
+            return;
+        }
+
+        projects.forEach(p => {
+            const region = p.town || t.town || '南桥镇';
+            const base = townCoordinates[region] || townCoordinates['南桥镇'];
+            const key = String(p.houseNo || p.id || p.name || pointId);
+            const hasGps = p.lng != null && p.lat != null && p.lng !== '' && p.lat !== ''
+                && isFinite(Number(p.lng)) && isFinite(Number(p.lat));
+            const lat = parseFloat((hasGps ? Number(p.lat) : base.lat + stableJitter(key + '-lat', 0.008)).toFixed(6));
+            const lng = parseFloat((hasGps ? Number(p.lng) : base.lng + stableJitter(key + '-lng', 0.008)).toFixed(6));
+            const name = p.name || p.address || (region + '巡查房屋');
+            const time = p.time || taskTime;
+            const inspected = p.status === 'inspected' || (Array.isArray(p.checkItems) && p.checkItems.length > 0);
+            const level = houseRiskLevel(p);
+
+            // 巡查任务图层：每房屋一个巡查点（已巡查/待巡查）
+            points.push({
+                id: pointId++, name: name, type: 'task',
+                status: inspected ? 'done' : 'pending',
+                lat: lat, lng: lng, time: time, person: person, region: region
+            });
+            if (!level) return;
+            // 风险隐患图层：按房屋最高隐患等级着色（红=重大，黄=较大）
+            points.push({
+                id: pointId++, name: name, type: 'risk', level: level,
+                lat: lat, lng: lng, time: time, person: person, region: region
+            });
+            // 整改情况图层：有隐患即待整改
+            points.push({
+                id: pointId++, name: name, type: 'rectify', level: level, status: 'doing',
+                lat: lat, lng: lng, time: time, person: person, region: region
             });
         });
     });
@@ -1536,6 +1607,21 @@ function initCharts() {
         }]
     });
 
+    // 按结构类型分析：枚举值与农村自建房档案的结构类型一致
+    const structureChart = echarts.init(document.getElementById('structureChart'));
+    structureChart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: '3%', right: '12%', top: 10, bottom: 0, containLabel: true },
+        xAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+        yAxis: { type: 'category', data: ['其他', '木结构', '混杂结构', '钢结构', '砖木', '砖混'], axisLabel: { fontSize: 11 } },
+        series: [{
+            type: 'bar',
+            data: [3, 5, 8, 6, 14, 30],
+            barWidth: 12,
+            itemStyle: { color: '#1a73e8', borderRadius: [0, 3, 3, 0] },
+            label: { show: true, position: 'right', fontSize: 11 }
+        }]
+    });
     const lineChart = echarts.init(document.getElementById('lineChart'));
     lineChart.setOption({
         tooltip: { trigger: 'axis' },
@@ -1553,9 +1639,22 @@ function initCharts() {
 
     window.addEventListener('resize', () => {
         pieChart.resize();
+        structureChart.resize();
         lineChart.resize();
         if (mapManager) mapManager.invalidateSize();
     });
+}
+
+// 图层计数：按实际点位数更新（替代写死的演示数字）
+function updateLayerCounts() {
+    const counts = { task: 0, risk: 0, rectify: 0 };
+    mockData.points.forEach(p => { if (counts[p.type] != null) counts[p.type]++; });
+    const el1 = document.getElementById('taskCount');
+    const el2 = document.getElementById('riskCount');
+    const el3 = document.getElementById('rectifyCount');
+    if (el1) el1.textContent = counts.task;
+    if (el2) el2.textContent = counts.risk;
+    if (el3) el3.textContent = counts.rectify;
 }
 
 function initMap() {
@@ -1581,6 +1680,12 @@ function initMap() {
 
     mapManager.markers = [];
     renderMapMarkers();
+    updateLayerCounts();
+
+    // 有真实点位时自动缩放至点位范围
+    if (mockData.points.length > 0) {
+        mapManager.fitBounds(mockData.points.map(p => [p.lat, p.lng]), { padding: [40, 40], maxZoom: 14 });
+    }
 
     mapManager.on('click', function(e) {
         if (e.originalEvent && e.originalEvent.target.closest('.info-popup')) return;
@@ -1693,4 +1798,5 @@ init();
 </script>
 
 
+    <script src="ui-modal.js"></script>
 </body></html>

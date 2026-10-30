@@ -1,0 +1,1358 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>城镇自建房 - 风险控制效果评估</title>
+    <link rel="stylesheet" href="./all.min.css">
+    <script src="../js/urban-house-arch-data.js"></script>
+    <script src="./echarts.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+            --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+            --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+            --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+            --dot-red: #d93025; --dot-yellow: #f9c846; --dot-blue: #1a73e8;
+        }
+        :root[data-theme="dark"] {
+            --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+            --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+            --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+            --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+            --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+            --dot-red: #ef4444; --dot-yellow: #facc15; --dot-blue: #3b82f6;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        /* ===== Page Header ===== */
+        .page-header { margin-bottom: 16px; }
+        .page-title {
+            font-size: 18px; font-weight: 700;
+            display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+        }
+        .page-title i { color: var(--primary); }
+        .page-desc {
+            font-size: 13px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        /* ===== Filter Bar ===== */
+        .filter-bar {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 12px;
+            margin-bottom: 16px; box-shadow: 0 1px 3px var(--shadow);
+        }
+        .filter-row {
+            display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+            justify-content: space-between;
+        }
+        .filter-row:last-child { margin-bottom: 0; }
+        .filter-left { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex: 1; }
+        .filter-right { display: flex; gap: 10px; align-items: center; margin-left: auto; }
+        .filter-select, .filter-input {
+            background: var(--input-bg); border: 1px solid var(--input-border);
+            border-radius: 6px; padding: 7px 12px; color: var(--text-primary);
+            font-size: 13px; outline: none; min-width: 120px;
+        }
+        .filter-input { min-width: 200px; }
+        .filter-date { min-width: 140px; }
+        .date-sep { font-size: 13px; color: var(--text-secondary); }
+        .filter-select:focus, .filter-input:focus { border-color: var(--primary); }
+        .btn {
+            padding: 7px 14px; border-radius: 6px; font-size: 13px;
+            cursor: pointer; transition: all 0.3s; border: none;
+            display: inline-flex; align-items: center; gap: 6px; font-weight: 500;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline {
+            background: transparent; border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+        /* ===== KPI Cards ===== */
+        .kpi-wrapper {
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px;
+            margin-bottom: 16px;
+        }
+        @media (max-width: 1400px) { .kpi-wrapper { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 900px) { .kpi-wrapper { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) { .kpi-wrapper { grid-template-columns: 1fr; } }
+        .kpi-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px 16px;
+            box-shadow: 0 1px 3px var(--shadow);
+            transition: all 0.3s; position: relative; overflow: hidden;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+        .kpi-card.green-top  { border-top: 3px solid var(--success); }
+        .kpi-card.blue-top   { border-top: 3px solid var(--primary); }
+        .kpi-card.orange-top { border-top: 3px solid var(--warning); }
+        .kpi-card.red-top    { border-top: 3px solid var(--danger); }
+        .kpi-card.purple-top { border-top: 3px solid #7c3aed; }
+        .kpi-card.teal-top   { border-top: 3px solid var(--secondary); }
+        .kpi-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .kpi-card-label {
+            font-size: 14px; font-weight: 700;
+        }
+        .kpi-card-label.green  { color: var(--success); }
+        .kpi-card-label.blue   { color: var(--primary); }
+        .kpi-card-label.orange { color: var(--warning); }
+        .kpi-card-label.red    { color: var(--danger); }
+        .kpi-card-label.purple { color: #7c3aed; }
+        .kpi-card-label.teal   { color: var(--secondary); }
+        .kpi-card-icon {
+            width: 30px; height: 30px; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; flex-shrink: 0;
+        }
+        .kpi-card-icon.green  { background: rgba(30,142,62,0.12); color: var(--success); }
+        .kpi-card-icon.blue   { background: rgba(26,115,232,0.12); color: var(--primary); }
+        .kpi-card-icon.orange { background: rgba(227,116,0,0.12); color: var(--warning); }
+        .kpi-card-icon.red    { background: rgba(217,48,37,0.12); color: var(--danger); }
+        .kpi-card-icon.purple { background: rgba(124,58,237,0.12); color: #7c3aed; }
+        .kpi-card-icon.teal   { background: rgba(0,151,167,0.12); color: var(--secondary); }
+        .kpi-card-main {
+            display: flex; align-items: baseline; gap: 8px;
+        }
+        .kpi-card-value {
+            font-size: 26px; font-weight: 700; line-height: 1;
+        }
+        .kpi-card-unit { font-size: 13px; color: var(--text-secondary); }
+        .kpi-card-sub {
+            font-size: 12px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        /* ===== Rank Dimension Pills ===== */
+        .rank-dims { display: flex; gap: 6px; flex-wrap: wrap; }
+        .rank-dim-btn {
+            padding: 5px 12px; border-radius: 999px; font-size: 12px;
+            border: 1px solid var(--border); background: var(--bg-card);
+            color: var(--text-secondary); cursor: pointer;
+            transition: all 0.2s; font-weight: 500;
+        }
+        .rank-dim-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .rank-dim-btn.active {
+            background: var(--primary); color: #fff; border-color: var(--primary);
+        }
+        .rank-table th.sortable { cursor: pointer; user-select: none; }
+        .rank-table th.sortable:hover { color: var(--primary); }
+        .rank-table th.sorted { color: var(--primary); }
+        .rank-table th.sorted::after { content: ' ↓'; font-size: 11px; }
+        .rank-table td.col-sorted {
+            background: rgba(26,115,232,0.06); font-weight: 600;
+        }
+        /* 排名表格内容居中 */
+        .rank-table th, .rank-table td { text-align: center !important; }
+        .rank-table .rank-num { margin: 0 auto; }
+
+        /* ===== Section / Tabs ===== */
+        .section { margin-bottom: 16px; }
+        .section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .section-title {
+            font-size: 15px; font-weight: 700;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .section-title i { color: var(--primary); }
+        .tab-bar {
+            display: flex; gap: 4px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 6px; margin-bottom: 16px;
+            box-shadow: 0 1px 3px var(--shadow);
+        }
+        .tab-item {
+            flex: 1; padding: 9px 14px; border-radius: 8px;
+            font-size: 13px; font-weight: 500; color: var(--text-secondary);
+            cursor: pointer; transition: all 0.25s; text-align: center;
+            border: 1px solid transparent;
+        }
+        .tab-item:hover {
+            background: var(--bg-hover); color: var(--text-primary);
+        }
+        .tab-item.active {
+            background: var(--primary); color: #fff; font-weight: 600;
+            box-shadow: 0 2px 8px rgba(26,115,232,0.3);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ===== Card / Chart ===== */
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; box-shadow: 0 1px 3px var(--shadow);
+            margin-bottom: 16px; overflow: hidden;
+        }
+        .card-header {
+            padding: 14px 18px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-title {
+            font-size: 14px; font-weight: 600;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .card-title i { color: var(--primary); }
+        .card-body { padding: 18px; }
+        .chart-row {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+            margin-bottom: 16px;
+        }
+        @media (max-width: 1100px) { .chart-row { grid-template-columns: 1fr; } }
+        .chart-box { width: 100%; height: 320px; }
+        .chart-box.tall { height: 380px; }
+
+        /* ===== Table ===== */
+        .table-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 10px; overflow: auto;
+            box-shadow: 0 1px 3px var(--shadow);
+        }
+        .data-table {
+            width: 100%; border-collapse: separate; border-spacing: 0;
+        }
+        .data-table th {
+            padding: 12px 16px; text-align: left;
+            font-size: 12px; font-weight: 600; color: var(--text-secondary);
+            border-bottom: 1px solid var(--border); background: var(--bg-dark);
+            white-space: nowrap; position: sticky; top: 0; z-index: 10;
+        }
+        .data-table td {
+            padding: 12px 16px; font-size: 13px;
+            border-bottom: 1px solid var(--border); color: var(--text-primary);
+            background: var(--bg-card); white-space: nowrap;
+        }
+        .data-table tr:hover td { background: var(--bg-hover); }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table td.text-right { text-align: right; }
+        .data-table td.text-center { text-align: center; }
+        .rank-num {
+            width: 22px; height: 22px; border-radius: 4px;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; color: #fff;
+        }
+        .rank-num.top1 { background: #f59e0b; }
+        .rank-num.top2 { background: #94a3b8; }
+        .rank-num.top3 { background: #b45309; }
+        .rank-num.other { background: var(--border); color: var(--text-secondary); }
+
+        .risk-tag {
+            padding: 3px 10px; border-radius: 4px; font-size: 12px;
+            font-weight: 600; display: inline-flex; align-items: center; gap: 4px;
+            white-space: nowrap;
+        }
+        .risk-tag.red { background: rgba(217,48,37,0.15); color: var(--danger); }
+        .risk-tag.orange { background: rgba(227,116,0,0.15); color: var(--warning); }
+        .risk-tag.yellow { background: rgba(249,200,70,0.25); color: #c78000; }
+        .risk-tag.blue { background: rgba(26,115,232,0.15); color: var(--primary); }
+        .risk-tag.green { background: rgba(30,142,62,0.15); color: var(--success); }
+
+        /* ===== Empty State ===== */
+        .empty-tip {
+            text-align: center; padding: 40px 20px; color: var(--text-secondary);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <div class="filter-row">
+        <div class="filter-left">
+            <select class="filter-select" id="filterTown">
+                <option value="">全部镇/街道</option>
+            </select>
+            <select class="filter-select" id="filterVillage">
+                <option value="">全部社区/居委</option>
+            </select>
+            <select class="filter-select" id="filterStructure">
+                <option value="">全部结构形式</option>
+                <option value="砖混结构">砖混结构</option>
+                <option value="框架结构">框架结构</option>
+                <option value="砖木结构">砖木结构</option>
+            </select>
+            <select class="filter-select" id="filterYear">
+                <option value="">全部建筑年代</option>
+                <option value="before1980">1980年以前</option>
+                <option value="1980-1990">1980-1990年</option>
+                <option value="1990-2000">1990-2000年</option>
+                <option value="2000-2010">2000-2010年</option>
+                <option value="after2010">2010年以后</option>
+            </select>
+            <select class="filter-select" id="filterRiskLevel">
+                <option value="">全部风险等级</option>
+                <option value="疑似危房" style="color: #d93025;">疑似危房</option>
+                <option value="疑似严重损坏房" style="color: #e65100;">疑似严重损坏房</option>
+                <option value="疑似一般损坏房" style="color: #c78000;">疑似一般损坏房</option>
+                <option value="完好房（基本完好房）" style="color: #1a73e8;">完好房（基本完好房）</option>
+            </select>
+            <select class="filter-select" id="filterPeriod" onchange="onPeriodChange()">
+                <option value="">全部周期</option>
+                <option value="month">本月</option>
+                <option value="quarter">本季度</option>
+                <option value="year">本年度</option>
+                <option value="custom">自定义</option>
+            </select>
+            <input type="date" class="filter-input filter-date" id="filterDateStart" style="display:none" title="开始日期">
+            <span class="date-sep" id="dateSep" style="display:none">至</span>
+            <input type="date" class="filter-input filter-date" id="filterDateEnd" style="display:none" title="结束日期">
+        </div>
+        <div class="filter-right">
+            <button class="btn btn-primary" onclick="refreshEval()"><i class="fa-solid fa-search"></i> 查询评估</button>
+            <button class="btn btn-outline" onclick="resetFilters()"><i class="fa-solid fa-rotate-right"></i> 重置</button>
+            <button class="btn btn-outline" onclick="exportReport()"><i class="fa-solid fa-download"></i> 导出报告</button>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="kpi-wrapper" id="kpiWrapper">
+    <div class="kpi-card green-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label green">整改完成率</span>
+            <div class="kpi-card-icon green"><i class="fa-solid fa-check-double"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value green" id="kpiCompleteRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span>已整改隐患占比</span>
+        </div>
+    </div>
+    <div class="kpi-card blue-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label blue">整改及时率</span>
+            <div class="kpi-card-icon blue"><i class="fa-solid fa-clock-rotate-left"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value blue" id="kpiTimelyRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span>按期完成整改占比</span>
+        </div>
+    </div>
+    <div class="kpi-card purple-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label purple">整改有效率</span>
+            <div class="kpi-card-icon purple"><i class="fa-solid fa-shield-virus"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value purple" id="kpiEffectiveRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span>验收合格且未复发</span>
+        </div>
+    </div>
+    <div class="kpi-card orange-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label orange">隐患复发率</span>
+            <div class="kpi-card-icon orange"><i class="fa-solid fa-rotate"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value orange" id="kpiRecurrenceRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span>越低越好</span>
+        </div>
+    </div>
+    <div class="kpi-card teal-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label teal">危房解危率</span>
+            <div class="kpi-card-icon teal"><i class="fa-solid fa-house-medical"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value teal" id="kpiReliefRate">0</span>
+            <span class="kpi-card-unit">%</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span>C级/D级危房整治销号</span>
+        </div>
+    </div>
+</div>
+
+<!-- Drilling Tabs -->
+<div class="tab-bar">
+    <div class="tab-item active" data-tab="overview" onclick="switchTab('overview')">
+        <i class="fa-solid fa-chart-pie"></i> 总体看板
+    </div>
+    <div class="tab-item" data-tab="trend" onclick="switchTab('trend')">
+        <i class="fa-solid fa-chart-area"></i> 趋势分析
+    </div>
+    <div class="tab-item" data-tab="rank" onclick="switchTab('rank')">
+        <i class="fa-solid fa-trophy"></i> 排名对比
+    </div>
+    <div class="tab-item" data-tab="heatmap" onclick="switchTab('heatmap')">
+        <i class="fa-solid fa-map"></i> 风险热力
+    </div>
+</div>
+
+<!-- Tab: Overview -->
+<div class="tab-content active" id="tab-overview">
+    <div class="chart-row">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-chart-pie"></i> 风险等级分布</div>
+            </div>
+            <div class="card-body"><div class="chart-box" id="chartRiskDist"></div></div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fa-solid fa-chart-bar"></i> 治理状态构成</div>
+            </div>
+            <div class="card-body"><div class="chart-box" id="chartGovernDist"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab: Trend -->
+<div class="tab-content" id="tab-trend">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fa-solid fa-chart-line"></i> 风险控制效果趋势</div>
+        </div>
+        <div class="card-body"><div class="chart-box tall" id="chartTrend"></div></div>
+    </div>
+</div>
+
+<!-- Tab: Rank -->
+<div class="tab-content" id="tab-rank">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fa-solid fa-trophy"></i> 镇/街道风险控制效果排名</div>
+            <div class="rank-dims" id="rankDims">
+                <button class="rank-dim-btn active" data-dim="completeRate">整改完成率</button>
+                <button class="rank-dim-btn" data-dim="timelyRate">整改及时率</button>
+                <button class="rank-dim-btn" data-dim="effectiveRate">整改有效率</button>
+                <button class="rank-dim-btn" data-dim="reliefRate">危房解危率</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="chart-box" id="chartRank"></div>
+            <div class="table-card" style="margin-top: 14px;">
+                <table class="data-table rank-table">
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>镇/街道</th>
+                            <th class="text-right sortable" data-dim="completeRate">整改完成率</th>
+                            <th class="text-right sortable" data-dim="timelyRate">整改及时率</th>
+                            <th class="text-right sortable" data-dim="effectiveRate">整改有效率</th>
+                            <th class="text-right sortable" data-dim="reliefRate">危房解危率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rankTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab: Heatmap -->
+<div class="tab-content" id="tab-heatmap">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fa-solid fa-map-location-dot"></i> 风险热力分布</div>
+        </div>
+        <div class="card-body"><div class="chart-box tall" id="chartHeatmap"></div></div>
+    </div>
+</div>
+
+<script>
+// ===== Theme Sync =====
+(function() {
+    var s = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', s);
+})();
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.action === 'setTheme') {
+        document.documentElement.setAttribute('data-theme', e.data.theme);
+        localStorage.setItem('theme', e.data.theme);
+    }
+});
+
+// ===== Globals =====
+let currentTab = 'overview';
+let allRecords = [];
+let filteredRecords = [];
+let chartInstances = {};
+let rankDim = 'completeRate';
+
+const RANK_DIMS = {
+    completeRate: { label: '整改完成率',   fmt: v => fmtPct(v) + '%' },
+    timelyRate:   { label: '整改及时率',   fmt: v => fmtPct(v) + '%' },
+    effectiveRate:{ label: '整改有效率',   fmt: v => fmtPct(v) + '%' },
+    reliefRate:   { label: '危房解危率',   fmt: v => fmtPct(v) + '%' }
+};
+
+// ===== Helpers =====
+function fmtPct(v) { return (v * 100).toFixed(1); }
+function fmtNum(n) { return n.toLocaleString('zh-CN'); }
+
+function isRural(r) { return r.houseType === '城镇自建房'; }
+
+function yearGroup(y) {
+    if (!y) return '未知';
+    const year = parseInt(y, 10);
+    if (year < 1980) return '1980年以前';
+    if (year < 1990) return '1980-1990年';
+    if (year < 2000) return '1990-2000年';
+    if (year < 2010) return '2000-2010年';
+    return '2010年以后';
+}
+
+function structureLabel(r) {
+    return (r.structure && r.structure.structureType) || (r.category ? r.category + '结构' : '未知');
+}
+
+function townLabel(r) {
+    if (typeof FENGXIAN_TOWN_VILLAGES !== 'undefined' && r.street && FENGXIAN_TOWN_VILLAGES[r.street]) {
+        return r.street;
+    }
+    if (typeof FENGXIAN_TOWN_VILLAGES !== 'undefined') {
+        const towns = Object.keys(FENGXIAN_TOWN_VILLAGES);
+        const seq = parseInt(String(r.no || '').replace(/\D/g, ''), 10) || 1;
+        return towns[(seq - 1) % towns.length];
+    }
+    return r.street || '未知';
+}
+function villageLabel(r) {
+    const t = townLabel(r);
+    if (typeof FENGXIAN_TOWN_VILLAGES === 'undefined') return r.village || r.community || '未知';
+    const validVillages = FENGXIAN_TOWN_VILLAGES[t] || ['未知'];
+    if (r.village && validVillages.includes(r.village)) return r.village;
+    if (r.community && validVillages.includes(r.community)) return r.community;
+    const seq = parseInt(String(r.no || '').replace(/\D/g, ''), 10) || 1;
+    return validVillages[(seq - 1) % validVillages.length];
+}
+
+function passFilter(r) {
+    const ft = document.getElementById('filterTown').value;
+    const fv = document.getElementById('filterVillage').value;
+    const fs = document.getElementById('filterStructure').value;
+    const fy = document.getElementById('filterYear').value;
+    const fr = document.getElementById('filterRiskLevel').value;
+    const fp = document.getElementById('filterPeriod').value;
+    const riskDisplay = r.riskDisplayLevel || (typeof HAZARD_TO_RISK_LEVEL !== 'undefined' ? HAZARD_TO_RISK_LEVEL[r.riskLevel] : r.riskLevel) || '未知';
+    if (ft && townLabel(r) !== ft) return false;
+    if (fv && villageLabel(r) !== fv) return false;
+    if (fs && structureLabel(r) !== fs) return false;
+    if (fy && yearGroup(r.year) !== fy) return false;
+    if (fr && riskDisplay !== fr) return false;
+    // 统计周期筛选：以整改期限(rectDeadline)为日期依据
+    if (fp) {
+        const dateStr = r.rectDeadline || r.completeDate || '';
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return false;
+        const now = new Date();
+        const y = now.getFullYear(), m = now.getMonth();
+        let start, end;
+        if (fp === 'month') {
+            start = new Date(y, m, 1);
+            end = new Date(y, m + 1, 0, 23, 59, 59);
+        } else if (fp === 'quarter') {
+            const qm = Math.floor(m / 3) * 3;
+            start = new Date(y, qm, 1);
+            end = new Date(y, qm + 3, 0, 23, 59, 59);
+        } else if (fp === 'year') {
+            start = new Date(y, 0, 1);
+            end = new Date(y, 11, 31, 23, 59, 59);
+        } else if (fp === 'custom') {
+            const s = document.getElementById('filterDateStart').value;
+            const e = document.getElementById('filterDateEnd').value;
+            start = s ? new Date(s + 'T00:00:00') : null;
+            end = e ? new Date(e + 'T23:59:59') : null;
+            if (start && d < start) return false;
+            if (end && d > end) return false;
+            return true;
+        }
+        if (fp !== 'custom') {
+            if (start && d < start) return false;
+            if (end && d > end) return false;
+        }
+    }
+    return true;
+}
+
+function computeMetrics(records) {
+    const total = records.length;
+    if (!total) {
+        return {
+            total, completeRate: 0, timelyRate: 0, effectiveRate: 0,
+            recurrenceRate: 0, reliefRate: 0
+        };
+    }
+    // 需要整改的房屋：原始风险为非安全，且总任务>0
+    const riskTasks = records.filter(r => (r.originalRisk || r.risk) !== 'safe' && r.totalTask > 0);
+    const completeRate = riskTasks.length
+        ? riskTasks.reduce((s, r) => s + ((r.doneTask || 0) / r.totalTask), 0) / riskTasks.length
+        : 0;
+
+    const timelyRate = riskTasks.length
+        ? riskTasks.reduce((s, r) => {
+            const onTime = r.governance === 'done'
+                ? (r.completeDate && r.rectDeadline ? new Date(r.completeDate) <= new Date(r.rectDeadline) : true)
+                : false;
+            return s + (onTime ? 1 : 0);
+        }, 0) / riskTasks.length
+        : 0;
+
+    const effectiveRate = riskTasks.length
+        ? riskTasks.reduce((s, r) => {
+            const effective = r.governance === 'done' && r.closeStatus === '已通过' && !r.overdue;
+            return s + (effective ? 1 : 0);
+        }, 0) / riskTasks.length
+        : 0;
+
+    const recurrenceRate = riskTasks.length
+        ? riskTasks.reduce((s, r) => {
+            const recurrence = r.patrolRecords && r.patrolRecords.some(p => p.foundProblems && p.foundProblems.trim());
+            return s + (recurrence ? 1 : 0);
+        }, 0) / riskTasks.length
+        : 0;
+
+    // 危房：以原始风险等级（销号前）判定 C/D 级危房
+    const dangerHouses = records.filter(r => {
+        const originalLevel = r.originalRiskLevel || r.riskLevel;
+        const riskDisplay = typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[originalLevel] ? HAZARD_TO_RISK_LEVEL[originalLevel] : originalLevel;
+        return riskDisplay === '疑似危房';
+    });
+    const reliefRate = dangerHouses.length
+        ? dangerHouses.filter(r => r.closeStatus === '已通过').length / dangerHouses.length
+        : 0;
+
+    return {
+        total, completeRate, timelyRate, effectiveRate,
+        recurrenceRate, reliefRate
+    };
+}
+
+function groupBy(records, keyFn) {
+    const groups = {};
+    records.forEach(r => {
+        const k = keyFn(r);
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(r);
+    });
+    return groups;
+}
+
+function groupByDimension(records, mode) {
+    switch (mode) {
+        case 'town': return groupBy(records, townLabel);
+        case 'village': return groupBy(records, villageLabel);
+        case 'type': return groupBy(records, r => r.houseType || r.category || '未知');
+        case 'year': return groupBy(records, r => yearGroup(r.year));
+        case 'structure': return groupBy(records, structureLabel);
+        case 'risk': {
+            const riskDisplayOf = r => {
+                if (r.riskDisplayLevel) return r.riskDisplayLevel;
+                const level = r.originalRiskLevel || r.riskLevel || '未知';
+                return typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
+            };
+            return groupBy(records, riskDisplayOf);
+        }
+        default: return groupBy(records, townLabel);
+    }
+}
+
+function populateFilters(selectedTown) {
+    const towns = Object.keys(FENGXIAN_TOWN_VILLAGES || {}).sort();
+    const townSel = document.getElementById('filterTown');
+    const villageSel = document.getElementById('filterVillage');
+
+    townSel.innerHTML = '<option value="">全部镇/街道</option>' + towns.map(t => `<option value="${t}">${t}</option>`).join('');
+    if (selectedTown) {
+        townSel.value = selectedTown;
+    }
+
+    const villages = selectedTown
+        ? ((FENGXIAN_TOWN_VILLAGES || {})[selectedTown] || [])
+        : Object.values(FENGXIAN_TOWN_VILLAGES || {}).flat();
+    villageSel.innerHTML = '<option value="">全部社区/居委</option>' + [...new Set(villages)].sort().map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+function updateVillageOptions() {
+    const townSel = document.getElementById('filterTown');
+    const villageSel = document.getElementById('filterVillage');
+    const currentVillage = villageSel.value;
+    const selectedTown = townSel.value;
+
+    const villages = selectedTown
+        ? ((FENGXIAN_TOWN_VILLAGES || {})[selectedTown] || [])
+        : Object.values(FENGXIAN_TOWN_VILLAGES || {}).flat();
+    const sortedVillages = [...new Set(villages)].sort();
+    villageSel.innerHTML = '<option value="">全部社区/居委</option>' + sortedVillages.map(v => `<option value="${v}">${v}</option>`).join('');
+
+    // 如果当前选中的社区/居委仍在可用范围内，则保留选中状态
+    if (currentVillage && sortedVillages.includes(currentVillage)) {
+        villageSel.value = currentVillage;
+    } else {
+        villageSel.value = '';
+    }
+}
+
+// ===== Rendering =====
+function renderKpis(metrics) {
+    document.getElementById('kpiCompleteRate').textContent = fmtPct(metrics.completeRate);
+    document.getElementById('kpiTimelyRate').textContent = fmtPct(metrics.timelyRate);
+    document.getElementById('kpiEffectiveRate').textContent = fmtPct(metrics.effectiveRate);
+    document.getElementById('kpiRecurrenceRate').textContent = fmtPct(metrics.recurrenceRate);
+    document.getElementById('kpiReliefRate').textContent = fmtPct(metrics.reliefRate);
+}
+
+function renderRankTable(townMetrics) {
+    const tbody = document.getElementById('rankTableBody');
+    const dimMeta = RANK_DIMS[rankDim];
+    const sorted = Object.entries(townMetrics)
+        .map(([name, m]) => ({
+            name,
+            completeRate: m.completeRate,
+            timelyRate: m.timelyRate,
+            effectiveRate: m.effectiveRate,
+            reliefRate: m.reliefRate
+        }))
+        .sort((a, b) => b[rankDim] - a[rankDim])
+        .slice(0, 10);
+    tbody.innerHTML = sorted.map((row, idx) => {
+        const rankCls = idx === 0 ? 'top1' : (idx === 1 ? 'top2' : (idx === 2 ? 'top3' : 'other'));
+        const hi = k => rankDim === k ? ' class="text-right col-sorted"' : ' class="text-right"';
+        return `<tr>
+            <td><span class="rank-num ${rankCls}">${idx + 1}</span></td>
+            <td>${row.name}</td>
+            <td${hi('completeRate')}>${fmtPct(row.completeRate)}%</td>
+            <td${hi('timelyRate')}>${fmtPct(row.timelyRate)}%</td>
+            <td${hi('effectiveRate')}>${fmtPct(row.effectiveRate)}%</td>
+            <td${hi('reliefRate')}>${fmtPct(row.reliefRate)}%</td>
+        </tr>`;
+    }).join('');
+
+    // 表头排序状态
+    document.querySelectorAll('#tab-rank th.sortable').forEach(th => {
+        th.classList.toggle('sorted', th.dataset.dim === rankDim);
+    });
+    // 维度按钮状态
+    document.querySelectorAll('#rankDims .rank-dim-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.dim === rankDim);
+    });
+}
+
+// ===== Charts =====
+function getThemeColors() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+        text: isDark ? '#94a3b8' : '#5f6368',
+        axis: isDark ? '#1e3a5f' : '#dadce0',
+        bg: 'transparent'
+    };
+}
+
+function disposeChart(id) {
+    if (chartInstances[id]) { chartInstances[id].dispose(); delete chartInstances[id]; }
+}
+
+function initChart(id, option) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    disposeChart(id);
+    const c = echarts.init(el);
+    const theme = getThemeColors();
+    option.backgroundColor = theme.bg;
+    if (option.title) option.title.textStyle = { color: theme.text, fontSize: 14 };
+    const axisCommon = { axisLine: { lineStyle: { color: theme.axis } }, axisLabel: { color: theme.text }, splitLine: { lineStyle: { color: theme.axis } } };
+    if (option.xAxis) {
+        if (Array.isArray(option.xAxis)) option.xAxis.forEach(a => Object.assign(a, axisCommon));
+        else Object.assign(option.xAxis, axisCommon);
+    }
+    if (option.yAxis) {
+        if (Array.isArray(option.yAxis)) option.yAxis.forEach(a => Object.assign(a, axisCommon));
+        else Object.assign(option.yAxis, axisCommon);
+    }
+    if (option.legend) option.legend.textStyle = { color: theme.text };
+    if (option.tooltip) option.tooltip.backgroundColor = document.documentElement.getAttribute('data-theme') === 'dark' ? 'rgba(17,34,64,0.95)' : 'rgba(255,255,255,0.95)';
+    c.setOption(option);
+    chartInstances[id] = c;
+    return c;
+}
+
+function renderRiskDist(records) {
+    // 风险等级已统一至数据层；销号房屋使用原始风险等级回溯
+    const riskDisplayOf = r => {
+        if (r.riskDisplayLevel) return r.riskDisplayLevel;
+        const level = r.originalRiskLevel || r.riskLevel || '未知';
+        return typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
+    };
+    const groups = groupBy(records, riskDisplayOf);
+    const order = ['疑似危房', '疑似严重损坏房', '疑似一般损坏房', '完好房（基本完好房）'];
+    const colorMap = {
+        '疑似危房': '#d93025',
+        '疑似严重损坏房': '#e65100',
+        '疑似一般损坏房': '#f9c846',
+        '完好房（基本完好房）': '#1a73e8'
+    };
+    const data = order.filter(k => groups[k]).map(k => ({ value: groups[k].length, name: k, itemStyle: { color: colorMap[k] } }));
+    initChart('chartRiskDist', {
+        tooltip: { trigger: 'item', formatter: function(p) { return p.name + ': ' + p.value + ' (' + p.percent.toFixed(1) + '%)'; } },
+        legend: { bottom: 0, textStyle: { color: getThemeColors().text } },
+        color: ['#d93025', '#e65100', '#f9c846', '#1a73e8'],
+        series: [{
+            type: 'pie', radius: ['40%', '65%'], center: ['50%', '45%'],
+            label: { color: getThemeColors().text },
+            data
+        }]
+    });
+}
+
+function renderGovernDist(records) {
+    const groups = groupBy(records, r => r.governStatus || '未知');
+    const colorMap = {
+        '逾期未整治': '#d93025',
+        '待整治': '#f59e0b',
+        '整治中': '#1a73e8',
+        '已治理': '#1e8e3e',
+        '已治理': '#1e8e3e',
+        '未知': '#94a3b8'
+    };
+    const data = Object.entries(groups).map(([k, v]) => ({ value: v.length, name: k, itemStyle: { color: colorMap[k] || '#94a3b8' } }));
+    initChart('chartGovernDist', {
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        legend: { bottom: 0, textStyle: { color: getThemeColors().text } },
+        series: [{
+            type: 'pie', radius: '60%', center: ['50%', '45%'],
+            label: { color: getThemeColors().text },
+            roseType: 'radius', data
+        }]
+    });
+}
+
+function renderTrend(records) {
+    const months = ['2024-07','2024-08','2024-09','2024-10','2024-11','2024-12','2025-01','2025-02','2025-03','2025-04','2025-05','2025-06'];
+    const baseComplete = 0.55;
+    const baseTimely = 0.60;
+    const baseEffective = 0.50;
+    const complete = months.map((_, i) => (baseComplete + i * 0.03 + Math.random() * 0.05) * 100);
+    const timely = months.map((_, i) => (baseTimely + i * 0.025 + Math.random() * 0.05) * 100);
+    const effective = months.map((_, i) => (baseEffective + i * 0.028 + Math.random() * 0.05) * 100);
+    initChart('chartTrend', {
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['整改完成率', '整改及时率', '整改有效率'], textStyle: { color: getThemeColors().text } },
+        grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
+        xAxis: { type: 'category', boundaryGap: false, data: months },
+        yAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+        series: [
+            { name: '整改完成率', type: 'line', smooth: true, data: complete, areaStyle: { color: 'rgba(26,115,232,0.15)' }, itemStyle: { color: '#1a73e8' } },
+            { name: '整改及时率', type: 'line', smooth: true, data: timely, areaStyle: { color: 'rgba(0,151,167,0.15)' }, itemStyle: { color: '#0097a7' } },
+            { name: '整改有效率', type: 'line', smooth: true, data: effective, areaStyle: { color: 'rgba(30,142,62,0.15)' }, itemStyle: { color: '#1e8e3e' } }
+        ]
+    });
+}
+
+function renderRankChart(records) {
+    const groups = groupBy(records, townLabel);
+    const townMetrics = {};
+    Object.entries(groups).forEach(([k, v]) => { townMetrics[k] = computeMetrics(v); });
+    const dimMeta = RANK_DIMS[rankDim];
+    const sorted = Object.entries(townMetrics)
+        .map(([name, m]) => ({
+            name,
+            value: m[rankDim],
+            completeRate: m.completeRate,
+            timelyRate: m.timelyRate,
+            effectiveRate: m.effectiveRate,
+            reliefRate: m.reliefRate
+        }))
+        .sort((a, b) => a.value - b.value)
+        .slice(-10);
+    const minVal = Math.max(0, Math.floor((sorted[0] ? sorted[0].value : 0) * 10) / 10 - 0.05);
+    const maxVal = Math.min(1, Math.ceil((sorted[sorted.length - 1] ? sorted[sorted.length - 1].value : 1) * 10) / 10 + 0.05);
+    const displayVal = v => v * 100;
+    const displayMin = Math.max(0, Math.floor(minVal * 100 / 10) * 10);
+    const displayMax = Math.min(100, Math.ceil(maxVal * 100 / 10) * 10);
+    initChart('chartRank', {
+        tooltip: {
+            trigger: 'axis', axisPointer: { type: 'shadow' },
+            formatter: p => {
+                const d = sorted[p[0].dataIndex];
+                return `${d.name}<br/>整改完成率: ${fmtPct(d.completeRate)}%<br/>整改及时率: ${fmtPct(d.timelyRate)}%<br/>整改有效率: ${fmtPct(d.effectiveRate)}%<br/>危房解危率: ${fmtPct(d.reliefRate)}%`;
+            }
+        },
+        grid: { left: '3%', right: '8%', bottom: '3%', top: '5%', containLabel: true },
+        xAxis: {
+            type: 'value', min: displayMin, max: displayMax,
+            axisLabel: { formatter: '{value}%' }
+        },
+        yAxis: { type: 'category', data: sorted.map(x => x.name) },
+        series: [{
+            type: 'bar', data: sorted.map(x => displayVal(x.value).toFixed(1)),
+            itemStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                    { offset: 0, color: '#1a73e8' }, { offset: 1, color: '#0d47a1' }
+                ]),
+                borderRadius: [0, 4, 4, 0]
+            },
+            label: {
+                show: true, position: 'right',
+                formatter: p => p.value + '%'
+            }
+        }]
+    });
+    renderRankTable(townMetrics);
+}
+
+function renderHeatmap(records) {
+    // 行政社区 × 风险等级矩阵；销号房屋使用原始风险等级
+    const riskDisplayOf = r => {
+        if (r.riskDisplayLevel) return r.riskDisplayLevel;
+        const level = r.originalRiskLevel || r.riskLevel || '未知';
+        return typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
+    };
+    const villages = [...new Set(records.map(villageLabel))].sort();
+    const levels = ['疑似危房', '疑似严重损坏房', '疑似一般损坏房', '完好房（基本完好房）'];
+    const data = [];
+    villages.forEach((v, y) => {
+        levels.forEach((lvl, x) => {
+            const count = records.filter(r => villageLabel(r) === v && riskDisplayOf(r) === lvl).length;
+            data.push([x, y, count]);
+        });
+    });
+    initChart('chartHeatmap', {
+        tooltip: { position: 'top', formatter: p => `${villages[p.value[1]]}<br/>${levels[p.value[0]]}: ${p.value[2]}户` },
+        grid: { left: '18%', right: '8%', top: '8%', bottom: '12%' },
+        xAxis: { type: 'category', data: levels, splitArea: { show: true } },
+        yAxis: { type: 'category', data: villages, splitArea: { show: true } },
+        visualMap: {
+            min: 0, max: Math.max(1, ...data.map(d => d[2])),
+            calculable: true,
+            inRange: { color: ['#fff5f0', '#fcbba1', '#fb6a4a', '#cb181d'] },
+            right: 0, top: 'center', textStyle: { color: getThemeColors().text }
+        },
+        series: [{
+            type: 'heatmap', data,
+            label: { show: true, color: getThemeColors().text },
+            emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' } }
+        }]
+    });
+}
+
+function renderCharts() {
+    const metrics = computeMetrics(filteredRecords);
+    renderKpis(metrics);
+
+    if (currentTab === 'overview') {
+        renderRiskDist(filteredRecords);
+        renderGovernDist(filteredRecords);
+    } else if (currentTab === 'trend') {
+        renderTrend(filteredRecords);
+    } else if (currentTab === 'rank') {
+        renderRankChart(filteredRecords);
+    } else if (currentTab === 'heatmap') {
+        renderHeatmap(filteredRecords);
+    }
+}
+
+// ===== Tab Switch =====
+function switchTab(tabId) {
+    currentTab = tabId;
+    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.tab-item[data-tab="${tabId}"]`).classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+    // Wait for display to apply
+    setTimeout(renderCharts, 50);
+}
+
+// 排名维度切换
+function setRankDim(dim) {
+    rankDim = dim;
+    if (currentTab === 'rank') renderCharts();
+}
+
+// ===== Filter Actions =====
+function onPeriodChange() {
+    const v = document.getElementById('filterPeriod').value;
+    const isCustom = v === 'custom';
+    document.getElementById('filterDateStart').style.display = isCustom ? '' : 'none';
+    document.getElementById('filterDateEnd').style.display = isCustom ? '' : 'none';
+    document.getElementById('dateSep').style.display = isCustom ? '' : 'none';
+    if (!isCustom) refreshEval();
+}
+
+function refreshEval() {
+    filteredRecords = allRecords.filter(passFilter);
+    renderCharts();
+}
+
+function resetFilters() {
+    document.getElementById('filterTown').value = '';
+    document.getElementById('filterVillage').value = '';
+    document.getElementById('filterStructure').value = '';
+    document.getElementById('filterYear').value = '';
+    document.getElementById('filterRiskLevel').value = '';
+    document.getElementById('filterPeriod').value = '';
+    document.getElementById('filterDateStart').value = '';
+    document.getElementById('filterDateEnd').value = '';
+    document.getElementById('filterDateStart').style.display = 'none';
+    document.getElementById('filterDateEnd').style.display = 'none';
+    document.getElementById('dateSep').style.display = 'none';
+    refreshEval();
+}
+
+function exportReport() {
+    // 弹出格式选择
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    modal.innerHTML = `
+        <div style="background:var(--bg-card);border-radius:12px;padding:28px 32px;min-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+            <div style="font-size:16px;font-weight:600;margin-bottom:20px;color:var(--text-primary);">
+                <i class="fa-solid fa-file-export" style="margin-right:8px;color:var(--primary);"></i>导出评估报告
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <button class="btn btn-primary" style="justify-content:center;padding:10px;" onclick="doExport('excel');this.closest('div[style*=fixed]').remove();">
+                    <i class="fa-solid fa-file-excel"></i> 导出 Excel (.xlsx)
+                </button>
+                <button class="btn btn-primary" style="justify-content:center;padding:10px;background:#2b579a;" onclick="doExport('word');this.closest('div[style*=fixed]').remove();">
+                    <i class="fa-solid fa-file-word"></i> 导出 Word (.doc)
+                </button>
+                <button class="btn btn-primary" style="justify-content:center;padding:10px;background:#d93025;" onclick="doExport('pdf');this.closest('div[style*=fixed]').remove();">
+                    <i class="fa-solid fa-file-pdf"></i> 导出 PDF (.pdf)
+                </button>
+                <button class="btn btn-outline" style="justify-content:center;padding:10px;margin-top:4px;" onclick="this.closest('div[style*=fixed]').remove();">
+                    取消
+                </button>
+            </div>
+        </div>
+    `;
+    modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+}
+
+// ===== 收集报告数据 =====
+function collectReportData() {
+    const metrics = computeMetrics(filteredRecords);
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const genTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    // 筛选条件
+    const filters = [];
+    const ft = document.getElementById('filterTown').value;
+    const fv = document.getElementById('filterVillage').value;
+    const fs = document.getElementById('filterStructure').value;
+    const fy = document.getElementById('filterYear').value;
+    const fr = document.getElementById('filterRiskLevel').value;
+    const fp = document.getElementById('filterPeriod').value;
+    if (ft) filters.push('镇/街道：' + ft);
+    if (fv) filters.push('社区/居委：' + fv);
+    if (fs) filters.push('结构形式：' + fs);
+    if (fy) filters.push('建筑年代：' + document.getElementById('filterYear').selectedOptions[0].text);
+    if (fr) filters.push('风险等级：' + fr);
+    if (fp) {
+        const pMap = { month: '本月', quarter: '本季度', year: '本年度', custom: '自定义' };
+        let pText = pMap[fp] || fp;
+        if (fp === 'custom') {
+            const s = document.getElementById('filterDateStart').value;
+            const e = document.getElementById('filterDateEnd').value;
+            if (s || e) pText += '（' + (s || '起') + ' 至 ' + (e || '今') + '）';
+        }
+        filters.push('统计周期：' + pText);
+    }
+
+    // 风险等级分布
+    const riskDisplayOf = r => {
+        if (r.riskDisplayLevel) return r.riskDisplayLevel;
+        const level = r.originalRiskLevel || r.riskLevel || '未知';
+        return typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[level] ? HAZARD_TO_RISK_LEVEL[level] : level;
+    };
+    const riskGroups = groupBy(filteredRecords, riskDisplayOf);
+    const riskDist = ['疑似危房', '疑似严重损坏房', '疑似一般损坏房', '完好房（基本完好房）'].filter(k => riskGroups[k]).map(k => ({
+        level: k, count: riskGroups[k].length
+    }));
+
+    // 治理状态分布
+    const governGroups = groupBy(filteredRecords, r => r.governStatus || '未知');
+    const governDist = Object.entries(governGroups).map(([k, v]) => ({ status: k, count: v.length }));
+
+    // 镇/街道排名
+    const townGroups = groupBy(filteredRecords, townLabel);
+    const townRank = Object.entries(townGroups).map(([name, recs]) => {
+        const m = computeMetrics(recs);
+        return {
+            name,
+            total: m.total,
+            completeRate: m.completeRate,
+            timelyRate: m.timelyRate,
+            effectiveRate: m.effectiveRate,
+            reliefRate: m.reliefRate
+        };
+    }).sort((a, b) => b.completeRate - a.completeRate);
+
+    return { metrics, genTime, filters, riskDist, governDist, townRank, recordCount: filteredRecords.length };
+}
+
+function doExport(format) {
+    const data = collectReportData();
+    if (format === 'excel') exportExcel(data);
+    else if (format === 'word') exportWord(data);
+    else if (format === 'pdf') exportPdf(data);
+}
+
+// ===== Excel 导出 =====
+function exportExcel(data) {
+    const wb = XLSX.utils.book_new();
+
+    // Sheet1: 综合指标
+    const kpiRows = [
+        ['城镇自建房风险控制效果评估报告'],
+        ['生成时间', data.genTime],
+        ['评估范围', data.filters.length ? data.filters.join('；') : '全部'],
+        ['纳入档案数', data.recordCount + ' 条'],
+        [],
+        ['指标', '数值'],
+        ['整改完成率', fmtPct(data.metrics.completeRate) + '%'],
+        ['整改及时率', fmtPct(data.metrics.timelyRate) + '%'],
+        ['整改有效率', fmtPct(data.metrics.effectiveRate) + '%'],
+        ['隐患复发率', fmtPct(data.metrics.recurrenceRate) + '%'],
+        ['危房解危率', fmtPct(data.metrics.reliefRate) + '%']
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(kpiRows);
+    ws1['!cols'] = [{ wch: 20 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws1, '综合指标');
+
+    // Sheet2: 风险等级分布
+    const riskRows = [['风险等级', '数量', '占比']];
+    const totalRisk = data.riskDist.reduce((s, r) => s + r.count, 0);
+    data.riskDist.forEach(r => {
+        riskRows.push([r.level, r.count, totalRisk ? (r.count / totalRisk * 100).toFixed(1) + '%' : '0%']);
+    });
+    const ws2 = XLSX.utils.aoa_to_sheet(riskRows);
+    ws2['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws2, '风险等级分布');
+
+    // Sheet3: 治理状态
+    const governRows = [['治理状态', '数量', '占比']];
+    const totalGovern = data.governDist.reduce((s, g) => s + g.count, 0);
+    data.governDist.forEach(g => {
+        governRows.push([g.status, g.count, totalGovern ? (g.count / totalGovern * 100).toFixed(1) + '%' : '0%']);
+    });
+    const ws3 = XLSX.utils.aoa_to_sheet(governRows);
+    ws3['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws3, '治理状态');
+
+    // Sheet4: 镇/街道排名
+    const rankRows = [['排名', '镇/街道', '档案数', '整改完成率', '整改及时率', '整改有效率', '危房解危率']];
+    data.townRank.forEach((r, i) => {
+        rankRows.push([
+            i + 1, r.name, r.total,
+            fmtPct(r.completeRate) + '%',
+            fmtPct(r.timelyRate) + '%',
+            fmtPct(r.effectiveRate) + '%',
+            fmtPct(r.reliefRate) + '%'
+        ]);
+    });
+    const ws4 = XLSX.utils.aoa_to_sheet(rankRows);
+    ws4['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws4, '镇街道排名');
+
+    XLSX.writeFile(wb, '城镇自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.xlsx');
+}
+
+// ===== Word 导出 =====
+function exportWord(data) {
+    const fmtPctV = v => fmtPct(v) + '%';
+    const html = buildReportHtml(data);
+
+    const blob = new Blob(['\ufeff' + html], { type: 'application/msword;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = '城镇自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.doc';
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+// ===== 构建报告 HTML（Word/PDF 共用） =====
+function buildReportHtml(data) {
+    const fmtPctV = v => fmtPct(v) + '%';
+    let rankHtml = '';
+    data.townRank.forEach((r, i) => {
+        rankHtml += '<tr><td>' + (i+1) + '</td><td>' + r.name + '</td><td>' + r.total + '</td><td>'
+            + fmtPctV(r.completeRate) + '</td><td>' + fmtPctV(r.timelyRate) + '</td><td>'
+            + fmtPctV(r.effectiveRate) + '</td><td>' + fmtPctV(r.reliefRate) + '</td></tr>';
+    });
+
+    let riskHtml = '';
+    const totalRisk = data.riskDist.reduce((s, r) => s + r.count, 0);
+    data.riskDist.forEach(r => {
+        riskHtml += '<tr><td>' + r.level + '</td><td>' + r.count + '</td><td>'
+            + (totalRisk ? (r.count / totalRisk * 100).toFixed(1) + '%' : '0%') + '</td></tr>';
+    });
+
+    let governHtml = '';
+    const totalGovern = data.governDist.reduce((s, g) => s + g.count, 0);
+    data.governDist.forEach(g => {
+        governHtml += '<tr><td>' + g.status + '</td><td>' + g.count + '</td><td>'
+            + (totalGovern ? (g.count / totalGovern * 100).toFixed(1) + '%' : '0%') + '</td></tr>';
+    });
+
+    const html = `
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>城镇自建房风险控制效果评估报告</title>
+<style>
+body { font-family: 'Microsoft YaHei', SimSun, serif; margin: 40px; color: #333; }
+h1 { font-size: 22px; text-align: center; color: #1a73e8; margin-bottom: 8px; }
+.meta { text-align: center; color: #666; font-size: 13px; margin-bottom: 24px; }
+h2 { font-size: 16px; color: #1a73e8; border-left: 4px solid #1a73e8; padding-left: 10px; margin-top: 28px; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+th { background: #e8f0fe; padding: 8px 10px; text-align: left; font-weight: 600; border: 1px solid #dadce0; }
+td { padding: 7px 10px; border: 1px solid #dadce0; }
+.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+.kpi-item { background: #f8f9fa; border-radius: 8px; padding: 14px; text-align: center; }
+.kpi-label { font-size: 12px; color: #666; margin-bottom: 6px; }
+.kpi-value { font-size: 22px; font-weight: 700; color: #1a73e8; }
+.filter-info { background: #f1f3f4; border-radius: 6px; padding: 10px 14px; font-size: 13px; color: #555; margin-top: 8px; }
+</style></head><body>
+<h1>城镇自建房风险控制效果评估报告</h1>
+<div class="meta">生成时间：${data.genTime}</div>
+${data.filters.length ? '<div class="filter-info">评估范围：' + data.filters.join('；') + '</div>' : '<div class="filter-info">评估范围：全部</div>'}
+<p style="font-size:13px;color:#555;">纳入评估档案总数：<strong>${data.recordCount}</strong> 条</p>
+
+<h2>一、核心指标</h2>
+<div class="kpi-grid">
+    <div class="kpi-item"><div class="kpi-label">整改完成率</div><div class="kpi-value">${fmtPctV(data.metrics.completeRate)}</div></div>
+    <div class="kpi-item"><div class="kpi-label">整改及时率</div><div class="kpi-value">${fmtPctV(data.metrics.timelyRate)}</div></div>
+    <div class="kpi-item"><div class="kpi-label">整改有效率</div><div class="kpi-value">${fmtPctV(data.metrics.effectiveRate)}</div></div>
+    <div class="kpi-item"><div class="kpi-label">隐患复发率</div><div class="kpi-value">${fmtPctV(data.metrics.recurrenceRate)}</div></div>
+    <div class="kpi-item"><div class="kpi-label">危房解危率</div><div class="kpi-value">${fmtPctV(data.metrics.reliefRate)}</div></div>
+</div>
+
+<h2>二、风险等级分布</h2>
+<table><tr><th>风险等级</th><th>数量</th><th>占比</th></tr>${riskHtml}</table>
+
+<h2>三、治理状态构成</h2>
+<table><tr><th>治理状态</th><th>数量</th><th>占比</th></tr>${governHtml}</table>
+
+<h2>四、镇/街道排名</h2>
+<table><tr><th>排名</th><th>镇/街道</th><th>档案数</th><th>整改完成率</th><th>整改及时率</th><th>整改有效率</th><th>危房解危率</th></tr>${rankHtml}</table>
+
+<div style="margin-top:40px;font-size:12px;color:#999;text-align:center;">—— 本报告由系统自动生成 ——</div>
+</body></html>`;
+
+    return html;
+}
+
+// ===== PDF 导出（html2canvas 方案，支持中文） =====
+async function exportPdf(data) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();   // 210mm
+    const ph = doc.internal.pageSize.getHeight();  // 297mm
+    const margin = 10; // mm
+    const contentW = pw - margin * 2;              // 190mm
+
+    // 构建报告 HTML 容器
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:794px;background:#fff;z-index:-1;';
+    container.innerHTML = buildReportHtml(data);
+    document.body.appendChild(container);
+
+    // 提示加载中
+    const loading = document.createElement('div');
+    loading.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:99999;';
+    loading.innerHTML = '<div style="background:var(--bg-card,#fff);border-radius:10px;padding:20px 32px;font-size:15px;color:var(--text-primary,#333);"><i class="fa-solid fa-spinner fa-spin" style="margin-right:8px;"></i>正在生成 PDF...</div>';
+    document.body.appendChild(loading);
+
+    try {
+        const canvas = await html2canvas(container, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.92);
+        const imgW = contentW;
+        const imgH = canvas.height * imgW / canvas.width;
+        const pageContentH = ph - margin * 2;
+        const totalPages = Math.ceil(imgH / pageContentH);
+
+        for (let i = 0; i < totalPages; i++) {
+            if (i > 0) doc.addPage();
+            const srcY = i * pageContentH * (canvas.width / imgW);
+            const srcH = Math.min(pageContentH * (canvas.width / imgW), canvas.height - srcY);
+
+            // 截取当前页区域
+            const pageCanvas = document.createElement('canvas');
+            pageCanvas.width = canvas.width;
+            pageCanvas.height = srcH;
+            const ctx = pageCanvas.getContext('2d');
+            ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+            const pageImg = pageCanvas.toDataURL('image/jpeg', 0.92);
+
+            const drawH = srcH * imgW / canvas.width;
+            doc.addImage(pageImg, 'JPEG', margin, margin, imgW, drawH);
+        }
+
+        doc.save('城镇自建房风险控制效果评估报告_' + data.genTime.replace(/[:\s]/g, '-') + '.pdf');
+    } catch (err) {
+        console.error('PDF生成失败:', err);
+        alert('PDF 生成失败：' + err.message);
+    } finally {
+        container.remove();
+        loading.remove();
+    }
+}
+
+// ===== Init =====
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof initHouseArchSeed === 'function' && typeof getAllHouseRecords === 'function') {
+        initHouseArchSeed();
+        allRecords = getAllHouseRecords().filter(isRural);
+        populateFilters();
+        document.getElementById('filterTown').addEventListener('change', function() {
+            updateVillageOptions();
+            refreshEval();
+        });
+        document.getElementById('filterVillage').addEventListener('change', refreshEval);
+        document.getElementById('filterDateStart').addEventListener('change', refreshEval);
+        document.getElementById('filterDateEnd').addEventListener('change', refreshEval);
+        // 排名维度切换
+        document.querySelectorAll('#rankDims .rank-dim-btn').forEach(btn => {
+            btn.addEventListener('click', () => setRankDim(btn.dataset.dim));
+        });
+        document.querySelectorAll('#tab-rank th.sortable').forEach(th => {
+            th.addEventListener('click', () => setRankDim(th.dataset.dim));
+        });
+        filteredRecords = allRecords.slice();
+        renderCharts();
+    }
+
+    window.addEventListener('resize', function() {
+        Object.values(chartInstances).forEach(c => c && c.resize());
+    });
+});
+</script>
+
+</body>
+</html>

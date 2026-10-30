@@ -271,6 +271,38 @@ body.tp-embed { padding: 12px !important; }
 .pagination .btn { padding: 6px 12px; font-size: 13px; }
 .pagination .page-info { font-size: 13px; color: var(--text-secondary); }
 
+/* 友好提示框 */
+.tip-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 99999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.tip-overlay.show { display: flex; }
+.tip-box {
+    background: var(--bg-card);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 400px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    animation: tipPop .18s ease-out;
+}
+@keyframes tipPop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.tip-body { padding: 28px 24px 20px; text-align: center; }
+.tip-icon { font-size: 40px; margin-bottom: 12px; }
+.tip-icon.success { color: var(--success); }
+.tip-icon.warning { color: var(--warning); }
+.tip-icon.info { color: var(--primary); }
+.tip-message { font-size: 15px; color: var(--text-primary); line-height: 1.6; }
+.tip-detail { margin-top: 8px; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.tip-footer { padding: 0 24px 22px; display: flex; gap: 12px; justify-content: center; }
+.tip-footer .btn { min-width: 96px; }
+
 /* 模态框 */
 .modal-overlay {
     position: fixed;
@@ -415,30 +447,24 @@ body.tp-embed { padding: 12px !important; }
                 </div>
                 <div class="filter-item">
                     <label>时间范围</label>
-                    <select id="filterTimeRange">
-                        <option value="">全部</option>
-                        <option value="2026">2026年</option>
-                        <option value="2025">2025年</option>
-                        <option value="last6">近6个月</option>
-                        <option value="last3">近3个月</option>
-                    </select>
+                    <input type="date" id="filterStartDate" style="min-width:150px;">
+                    <span style="color:var(--text-secondary, #5f6368);">至</span>
+                    <input type="date" id="filterEndDate" style="min-width:150px;">
                 </div>
                 <div class="filter-item">
                     <label>合同金额</label>
-                    <select id="filterAmountRange">
-                        <option value="">全部</option>
-                        <option value="0-50">50万以下</option>
-                        <option value="50-100">50-100万</option>
-                        <option value="100-200">100-200万</option>
-                        <option value="200+">200万以上</option>
-                    </select>
+                    <input type="number" id="filterAmountMin" placeholder="最低" min="0" style="min-width:90px;width:90px;">
+                    <span style="color:var(--text-secondary, #5f6368);">至</span>
+                    <input type="number" id="filterAmountMax" placeholder="最高" min="0" style="min-width:90px;width:90px;">
+                    <span style="color:var(--text-secondary, #5f6368);">万元</span>
                 </div>
                 <div class="filter-item">
                     <label>验收结论</label>
                     <select id="filterConclusion">
                         <option value="">全部</option>
+                        <option>优秀</option>
+                        <option>良好</option>
                         <option>合格</option>
-                        <option>基本合格</option>
                         <option>不合格</option>
                         <option>待验收</option>
                     </select>
@@ -526,6 +552,46 @@ window.addEventListener('message', function(e) {
     }
 });
 
+/* ===== 友好提示与确认框 ===== */
+var tipCallback = null;
+function showTip(message, type, callback) {
+    if (!type) {
+        if (/成功|已提交|已保存|完成|已通过|已删除/.test(message)) type = 'success';
+        else if (/请|暂无|不能|没有|尚未|失败/.test(message)) type = 'warning';
+        else type = 'info';
+    }
+    var iconMap = { success: 'fa-check-circle', warning: 'fa-exclamation-circle', info: 'fa-info-circle' };
+    var icon = document.getElementById('tipIcon');
+    icon.className = 'tip-icon ' + type;
+    icon.innerHTML = '<i class="fas ' + (iconMap[type] || iconMap.info) + '"></i>';
+    document.getElementById('tipMessage').textContent = message;
+    document.getElementById('tipDetail').style.display = 'none';
+    tipCallback = callback || null;
+    document.getElementById('tipModal').classList.add('show');
+}
+function closeTip() {
+    document.getElementById('tipModal').classList.remove('show');
+    if (tipCallback) { var cb = tipCallback; tipCallback = null; cb(); }
+}
+window.alert = function(msg) { showTip(String(msg)); };
+
+var confirmResolve = null;
+function showConfirm(message, detail, okText) {
+    return new Promise(function(resolve) {
+        document.getElementById('confirmMessage').textContent = message;
+        var d = document.getElementById('confirmDetail');
+        if (detail) { d.textContent = detail; d.style.display = 'block'; }
+        else { d.style.display = 'none'; }
+        document.getElementById('confirmOkBtn').textContent = okText || '确 定';
+        confirmResolve = resolve;
+        document.getElementById('confirmModal').classList.add('show');
+    });
+}
+function closeConfirmModal(result) {
+    document.getElementById('confirmModal').classList.remove('show');
+    if (confirmResolve) { var r = confirmResolve; confirmResolve = null; r(!!result); }
+}
+
 // 机构信息查询跳转
 function getOrgNameById(orgId) {
     var org = getOrgById(orgId);
@@ -535,7 +601,7 @@ function getOrgNameById(orgId) {
 // 领域配置
 var domains = ['建筑工地','基坑','交通','玻璃幕墙','燃气','高空坠物','城镇自建房','农村自建房'];
 var serviceTypes = ['应急咨询','安全评估','检测检验','隐患排查'];
-var conclusions = ['合格','基本合格','不合格','待验收'];
+var conclusions = ['优秀','良好','合格','不合格','待验收'];
 var clients = ['奉贤区住房城乡建设委','奉贤区应急管理局','奉贤区交通运输局','奉贤区城管执法局','奉贤区市场监管局','南桥镇人民政府','奉城镇人民政府','庄行镇人民政府','金汇镇人民政府','青村镇人民政府','柘林镇人民政府','四团镇人民政府','海湾镇人民政府','西渡街道办事处','奉浦街道办事处','金海街道办事处','上海市奉贤区燃气管理所','上海市奉贤区建筑管理所','上海市奉贤区市政公路管理所','上海市奉贤区住房保障和房屋管理局'];
 
 // 生成模拟数据
@@ -700,9 +766,49 @@ var modalPendingProofFiles = [];
 var trendChart, domainChart, clientChart;
 var currentChartTab = 'list';
 
+// 统一记录字段：录入/导入页写入的数据与共享数据层字段对齐
+function normalizePerformanceRecord(item) {
+    if (!item) return item;
+    if (!item.description && item.desc) item.description = item.desc;
+    item.amount = parseFloat(item.amount) || 0;
+    item.proofFiles = (item.proofFiles || []).map(function(f) {
+        return (typeof f === 'string') ? { name: f, size: 0, data: '' } : f;
+    });
+    return item;
+}
+
 function loadPerformanceData() {
-    var list = currentOrgId ? getPerformancesByOrg(currentOrgId) : getAllPerformances();
-    if (Array.isArray(list) && list.length > 0) return list.slice();
+    var storeList = currentOrgId ? getPerformancesByOrg(currentOrgId) : getAllPerformances();
+    var merged = [];
+    (Array.isArray(storeList) ? storeList : []).forEach(function(item) {
+        merged.push(normalizePerformanceRecord(item));
+    });
+    // 合并录入/导入页持久化的记录（含新增记录及对共享记录的编辑，本地版本优先）
+    var raw = localStorage.getItem('performanceData');
+    if (raw) {
+        try {
+            var local = JSON.parse(raw);
+            if (Array.isArray(local)) {
+                var org = (currentOrgId && typeof getOrgById === 'function') ? getOrgById(currentOrgId) : null;
+                var newOnes = [];
+                local.forEach(function(item) {
+                    if (!item) return;
+                    if (currentOrgId) {
+                        var belong = item.orgId ? item.orgId === currentOrgId : (org && item.orgName === org.orgName);
+                        if (!belong) return;
+                    }
+                    var norm = normalizePerformanceRecord(item);
+                    var idx = -1;
+                    for (var i = 0; i < merged.length; i++) {
+                        if (String(merged[i].id) === String(norm.id)) { idx = i; break; }
+                    }
+                    if (idx >= 0) merged[idx] = norm; else newOnes.push(norm);
+                });
+                merged = newOnes.concat(merged);
+            }
+        } catch (e) {}
+    }
+    if (merged.length > 0) return merged;
     var defaults = generateData();
     if (currentOrgId) {
         defaults.forEach(function(item) { item.orgId = currentOrgId; });
@@ -712,7 +818,27 @@ function loadPerformanceData() {
 }
 
 function savePerformanceData() {
-    localStorage.setItem('performanceData', JSON.stringify(allData));
+    if (!currentOrgId) {
+        localStorage.setItem('performanceData', JSON.stringify(allData));
+        return;
+    }
+    // 嵌入模式：仅替换属于当前机构的本地记录，避免覆盖其他机构的数据
+    var org = (typeof getOrgById === 'function') ? getOrgById(currentOrgId) : null;
+    var rest = [];
+    var raw = localStorage.getItem('performanceData');
+    if (raw) {
+        try {
+            var local = JSON.parse(raw);
+            if (Array.isArray(local)) {
+                rest = local.filter(function(item) {
+                    if (!item) return false;
+                    var belong = item.orgId ? item.orgId === currentOrgId : (org && item.orgName === org.orgName);
+                    return !belong;
+                });
+            }
+        } catch (e) {}
+    }
+    localStorage.setItem('performanceData', JSON.stringify(rest.concat(allData)));
 }
 
 function getAuditListData() {
@@ -833,7 +959,7 @@ function getChartThemeColors() {
 function updateStats() {
     var total = filteredData.length;
     var amount = filteredData.reduce(function(s, item) { return s + item.amount; }, 0);
-    var passCount = filteredData.filter(function(item) { return item.conclusion === '合格'; }).length;
+    var passCount = filteredData.filter(function(item) { return ['优秀','良好','合格'].indexOf(item.conclusion) >= 0; }).length;
     var passRate = total > 0 ? (passCount / total * 100).toFixed(1) : 0;
 
     var currentPeriod = filteredData.filter(function(item) { return item.startMonth >= '2026-01'; });
@@ -1009,7 +1135,7 @@ function renderTable() {
         var tr = document.createElement('tr');
         var statusClass = getAuditStatusClass(item.auditStatus);
         var conclusionClass = getConclusionClass(item.conclusion);
-        var orgName = item.orgId ? getOrgNameById(item.orgId) : getOrgName();
+        var orgName = item.orgId ? getOrgNameById(item.orgId) : (item.orgName || getOrgName());
         var actionLinks = '<a class="table-link" onclick="openPerformanceDetail(\'' + item.id + '\')">查看</a>' +
             '<a class="table-link" onclick="editPerformance(\'' + item.id + '\')">编辑</a>' +
             '<a class="table-link" onclick="openPerformanceAudit(\'' + item.id + '\')">审核</a>';
@@ -1030,10 +1156,11 @@ function renderTable() {
 }
 
 function getConclusionClass(conclusion) {
-    if (conclusion === '合格') return 'success';
-    if (conclusion === '基本合格') return 'warning';
+    if (conclusion === '优秀') return 'success';
+    if (conclusion === '良好') return 'info';
+    if (conclusion === '合格') return 'warning';
     if (conclusion === '不合格') return 'danger';
-    return 'info';
+    return 'grey';
 }
 
 function getAuditStatusClass(status) {
@@ -1048,7 +1175,7 @@ function getAuditStatusOptions() {
 }
 
 function viewProofFiles(id) {
-    var item = allData.find(function(i) { return i.id === id; });
+    var item = allData.find(function(i) { return String(i.id) === String(id); });
     if (!item || !item.proofFiles || item.proofFiles.length === 0) {
         alert('暂无证明材料');
         return;
@@ -1063,13 +1190,16 @@ function viewProofFiles(id) {
 }
 
 function deletePerformance(id) {
-    if (!confirm('确定删除该条业绩记录？')) return;
-    var idx = allData.findIndex(function(i) { return i.id === id; });
-    if (idx >= 0) {
-        allData.splice(idx, 1);
-        savePerformanceData();
-        applyFilters();
-    }
+    showConfirm('确定删除该条业绩记录吗？', '删除后数据将无法恢复，请谨慎操作。', '删 除').then(function(ok) {
+        if (!ok) return;
+        var idx = allData.findIndex(function(i) { return String(i.id) === String(id); });
+        if (idx >= 0) {
+            allData.splice(idx, 1);
+            savePerformanceData();
+            applyFilters();
+            showTip('业绩记录已删除', 'success');
+        }
+    });
 }
 
 function openPerformanceFormModal() {
@@ -1119,6 +1249,7 @@ function closeIframeModal() {
 // 接收 iframe 内页面通知
 window.addEventListener('message', function(e) {
     if (e.data && e.data.action === 'performanceEntrySaved') {
+        allData = loadPerformanceData();
         applyFilters();
         closeIframeModal();
     } else if (e.data && e.data.action === 'closeModal') {
@@ -1127,7 +1258,7 @@ window.addEventListener('message', function(e) {
 });
 
 function openPerformanceDetail(id, mode) {
-    modalPerformanceRecord = allData.find(function(i) { return i.id === id; });
+    modalPerformanceRecord = allData.find(function(i) { return String(i.id) === String(id); });
     if (!modalPerformanceRecord) return;
     modalMode = mode === 'edit' ? 'edit' : 'view';
     if (modalMode === 'edit') {
@@ -1142,7 +1273,7 @@ function editPerformance(id) {
 }
 
 function openPerformanceAudit(id) {
-    modalPerformanceRecord = allData.find(function(i) { return i.id === id; });
+    modalPerformanceRecord = allData.find(function(i) { return String(i.id) === String(id); });
     if (!modalPerformanceRecord) return;
     modalPendingProofFiles = (modalPerformanceRecord.proofFiles || []).slice();
     document.getElementById('performanceModalTitle').textContent = '业绩审核';
@@ -1310,14 +1441,6 @@ function getSelectOptions(values, selected) {
     }).join('');
 }
 
-function getOrgName() {
-    var raw = localStorage.getItem('orgInfo');
-    if (raw) {
-        try { var info = JSON.parse(raw); if (info.name) return info.name; } catch (e) {}
-    }
-    return '上海建科咨询有限公司';
-}
-
 function renderModalProofFiles(list, editable) {
     if (!list || list.length === 0) {
         return '<div style="color:var(--text-secondary);font-size:13px;">暂无证明材料</div>';
@@ -1461,8 +1584,12 @@ function goPerformancePage(page) {
 function applyFilters() {
     var domain = document.getElementById('filterDomain').value;
     var type = document.getElementById('filterServiceType').value;
-    var timeRange = document.getElementById('filterTimeRange').value;
-    var amountRange = document.getElementById('filterAmountRange').value;
+    var startDate = document.getElementById('filterStartDate').value;
+    var endDate = document.getElementById('filterEndDate').value;
+    if (startDate && endDate && startDate > endDate) { var tmpDate = startDate; startDate = endDate; endDate = tmpDate; }
+    var amountMin = parseFloat(document.getElementById('filterAmountMin').value);
+    var amountMax = parseFloat(document.getElementById('filterAmountMax').value);
+    if (!isNaN(amountMin) && !isNaN(amountMax) && amountMin > amountMax) { var tmpAmount = amountMin; amountMin = amountMax; amountMax = tmpAmount; }
     var conclusion = document.getElementById('filterConclusion').value;
     var keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
 
@@ -1471,18 +1598,16 @@ function applyFilters() {
         if (type && item.serviceType !== type) return false;
         if (conclusion && item.conclusion !== conclusion) return false;
         if (keyword && item.projectName.toLowerCase().indexOf(keyword) === -1 && item.client.toLowerCase().indexOf(keyword) === -1) return false;
-        if (timeRange) {
-            if (timeRange === '2026' && !item.startMonth.startsWith('2026')) return false;
-            if (timeRange === '2025' && !item.startMonth.startsWith('2025')) return false;
-            if (timeRange === 'last6' && item.startMonth < '2026-01') return false;
-            if (timeRange === 'last3' && item.startMonth < '2026-04') return false;
+        if (startDate || endDate) {
+            // 服务时段与所选区间有交集即命中
+            var timeParts = (item.serviceTime || '').split('~');
+            var itemStart = (timeParts[0] || '').trim();
+            var itemEnd = (timeParts[1] || '').trim() || itemStart;
+            if (startDate && itemEnd < startDate) return false;
+            if (endDate && itemStart > endDate) return false;
         }
-        if (amountRange) {
-            if (amountRange === '0-50' && item.amount >= 50) return false;
-            if (amountRange === '50-100' && (item.amount < 50 || item.amount > 100)) return false;
-            if (amountRange === '100-200' && (item.amount < 100 || item.amount > 200)) return false;
-            if (amountRange === '200+' && item.amount < 200) return false;
-        }
+        if (!isNaN(amountMin) && item.amount < amountMin) return false;
+        if (!isNaN(amountMax) && item.amount > amountMax) return false;
         return true;
     });
 
@@ -1493,8 +1618,10 @@ function applyFilters() {
 function resetFilters() {
     document.getElementById('filterDomain').value = '';
     document.getElementById('filterServiceType').value = '';
-    document.getElementById('filterTimeRange').value = '';
-    document.getElementById('filterAmountRange').value = '';
+    document.getElementById('filterStartDate').value = '';
+    document.getElementById('filterEndDate').value = '';
+    document.getElementById('filterAmountMin').value = '';
+    document.getElementById('filterAmountMax').value = '';
     document.getElementById('filterConclusion').value = '';
     document.getElementById('filterKeyword').value = '';
     filteredData = allData.slice();
@@ -1668,6 +1795,35 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <div class="modal-body" id="performanceModalBody"></div>
     </div>
+</div>
+
+<!-- 友好提示框 -->
+<div class="tip-overlay" id="tipModal">
+        <div class="tip-box">
+            <div class="tip-body">
+                <div class="tip-icon info" id="tipIcon"><i class="fas fa-info-circle"></i></div>
+                <div class="tip-message" id="tipMessage"></div>
+                <div class="tip-detail" id="tipDetail" style="display:none;"></div>
+            </div>
+            <div class="tip-footer">
+                <button class="btn btn-primary" onclick="closeTip()">确 定</button>
+            </div>
+        </div>
+</div>
+
+<!-- 操作确认框 -->
+<div class="tip-overlay" id="confirmModal">
+        <div class="tip-box">
+            <div class="tip-body">
+                <div class="tip-icon warning"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="tip-message" id="confirmMessage" style="font-weight:600;"></div>
+                <div class="tip-detail" id="confirmDetail" style="display:none;"></div>
+            </div>
+            <div class="tip-footer">
+                <button class="btn" onclick="closeConfirmModal(false)">取 消</button>
+                <button class="btn btn-danger" id="confirmOkBtn" onclick="closeConfirmModal(true)">确 定</button>
+            </div>
+        </div>
 </div>
 
 </body>

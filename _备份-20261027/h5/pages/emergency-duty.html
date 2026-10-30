@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>应急值班信息</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+/* 页面容器 */
+.phone-shell { display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.content-sheet.page-body-sheet { flex: 1; overflow-y: auto; overflow-x: hidden; margin-top: 0; padding: 14px 0 0; border-radius: 0; box-shadow: none; border: none; background: transparent; }
+.content-sheet.page-body-sheet::-webkit-scrollbar { display: none; }
+
+/* 顶部导航 */
+.page-hero .ph-sub { display: none; }
+
+/* 搜索与快捷筛选区 */
+.content-sheet .search-bar { align-items: center; gap: 10px; margin: 0 14px 12px; background: transparent; box-shadow: none; border: none; padding: 0; }
+.content-sheet .search-input-wrapper { display: flex; align-items: center; background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); min-height: 40px; position: relative; flex: 1; margin-left: 14px; }
+.content-sheet .search-input-wrapper input { background: transparent; border-color: transparent; height: 40px; padding-top: 0; padding-bottom: 0; flex: 1; width: 100%; min-width: 0; }
+.content-sheet .filter-trigger { margin-right: 14px; }
+.content-sheet .filter-trigger {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 14px;
+    background: var(--card);
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 8px var(--shadow);
+    cursor: pointer;
+    position: relative;
+    transition: all .15s;
+}
+.content-sheet .filter-trigger:active { transform: scale(.96); }
+.content-sheet .filter-trigger .badge-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    border: 1.5px solid var(--card);
+    display: none;
+}
+
+/* 月份切换栏 */
+.month-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0;
+    background: var(--card);
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+}
+.month-bar .nav-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    background: rgba(var(--primary-rgb),.08);
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+}
+.month-bar .month-text { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.month-bar .today-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    height: 32px;
+    border-radius: 6px;
+    color: var(--primary);
+    background: rgba(var(--primary-rgb),.08);
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* 日历视图 */
+.calendar-view { display: block; margin: 0; background: var(--card); border-radius: 0; box-shadow: none; border: none; border-bottom: 1px solid var(--border); padding: 0; }
+
+/* 星期表头 */
+.week-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    padding: 8px 0;
+    background: #f5f5f5;
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.week-header .wh-day { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.week-header .wh-day.weekend { color: var(--text2); opacity: .7; }
+
+/* 日期网格 */
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; padding: 0; background: #fff; }
+.calendar-day {
+    aspect-ratio: 1;
+    border-radius: 0;
+    padding: 6px 0 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: all .15s;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+}
+.calendar-day:active { background: var(--bg-hover); }
+.calendar-day.other-month { background: #fafafa; cursor: default; }
+.calendar-day.other-month .day-num { color: #bfbfbf; }
+.calendar-day .day-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+.calendar-day.today .day-num,
+.calendar-day.selected .day-num {
+    background: #1677ff;
+    color: #fff;
+    font-weight: 600;
+}
+.calendar-day .day-indicators {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 6px;
+    height: 6px;
+}
+.calendar-day .duty-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.calendar-day .duty-dot.shortage { background: #ff4d4f; }
+.calendar-day .leader-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #1565c0;
+}
+
+/* 角色配色 */
+.role-leader { background: #e3f2fd; color: #1565c0; }
+.role-leader .duty-dot { background: #1565c0; }
+.role-captain { background: #fff3e0; color: #e65100; }
+.role-captain .duty-dot { background: #e65100; }
+.role-officer { background: #e8f5e9; color: #2e7d32; }
+.role-officer .duty-dot { background: #2e7d32; }
+.role-support { background: #f3e5f5; color: #7b1fa2; }
+.role-support .duty-dot { background: #7b1fa2; }
+
+/* 人员卡片流区域 */
+.personnel-area {
+    margin: 0;
+    padding: 16px 0;
+    background: #fff;
+    border-radius: 0;
+    box-shadow: none;
+}
+.personnel-area .pa-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding: 0 16px;
+}
+.personnel-area .pa-date {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.personnel-area .pa-count {
+    font-size: 12px;
+    color: var(--text2);
+}
+.personnel-area .pa-empty {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--text2);
+    font-size: 13px;
+}
+.personnel-area .pa-empty i { font-size: 32px; display: block; margin-bottom: 8px; opacity: .4; }
+
+.person-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f2f2f2;
+}
+.person-card:last-child { border-bottom: none; }
+.person-card .pc-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 500;
+    color: #fff;
+    flex-shrink: 0;
+    background: rgba(26,115,232,.12);
+    color: var(--primary);
+}
+.person-card .pc-main { flex: 1; min-width: 0; }
+.person-card .pc-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.person-card .pc-name { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.person-card .pc-role-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text2);
+    background: var(--bg-hover);
+}
+.person-card .pc-role-tag.role-leader { background: #e3f2fd; color: #1565c0; }
+.person-card .pc-role-tag.role-captain { background: #fff3e0; color: #e65100; }
+.person-card .pc-role-tag.role-officer { background: #e8f5e9; color: #2e7d32; }
+.person-card .pc-role-tag.role-support { background: #f3e5f5; color: #7b1fa2; }
+.person-card .pc-info { font-size: 13px; color: var(--text2); line-height: 1.4; }
+.person-card .pc-info .phone { color: var(--text-primary); font-weight: 500; }
+.person-card .pc-info .phone-icon { font-size: 11px; margin-right: 4px; color: var(--text2); }
+.person-card .pc-call {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: var(--success);
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    text-decoration: none;
+}
+
+/* 加载与空状态 */
+.loading { text-align: center; padding: 16px; color: var(--text2); font-size: 13px; }
+.loading i { margin-right: 6px; }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text2); }
+.empty-state i { font-size: 48px; margin-bottom: 12px; opacity: .5; }
+.empty-state .empty-title { font-size: 15px; color: var(--text-primary); margin-bottom: 6px; }
+.empty-state .empty-desc { font-size: 13px; }
+.bottom-spacer { height: 20px; }
+
+/* 抽屉 */
+.modal-sheet {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 80%;
+    display: flex !important;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: transform .25s ease, opacity .25s ease;
+    z-index: 1001;
+    background: var(--card);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.modal-sheet.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.modal-mask { display: none; opacity: 0; transition: opacity .25s ease; z-index: 1000; }
+.modal-mask.show { display: block; opacity: 1; }
+.sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sheet-title { font-size: 16px; font-weight: 700; }
+.sheet-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--text2); cursor: pointer; }
+.sheet-body { padding: 16px; flex: 1; overflow-y: auto; min-height: 0; }
+.sheet-body::-webkit-scrollbar { display: none; }
+.filter-section { margin-bottom: 18px; }
+.filter-section .filter-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px; }
+.filter-section .filter-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.filter-chip { padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text-primary); cursor: pointer; transition: all .15s; }
+.filter-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.sheet-footer { display: flex; gap: 12px; padding: 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.sheet-footer .btn { flex: 1; height: 44px; border-radius: 10px; }
+
+/* 日期详情弹窗 */
+.detail-sheet .date-header { text-align: center; margin-bottom: 16px; }
+.detail-sheet .date-header .dh-date { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.detail-sheet .date-header .dh-week { font-size: 13px; color: var(--text2); margin-top: 2px; }
+.detail-sheet .detail-duties { display: flex; flex-direction: column; gap: 10px; }
+.detail-sheet .detail-empty { text-align: center; padding: 30px; color: var(--text2); font-size: 13px; }
+
+/* 深色模式适配 */
+:root[data-theme="dark"] .calendar-day.other-month { background: rgba(255,255,255,.03); }
+:root[data-theme="dark"] .role-leader { background: rgba(21,101,192,.2); color: #90caf9; }
+:root[data-theme="dark"] .role-captain { background: rgba(230,81,0,.2); color: #ffcc80; }
+:root[data-theme="dark"] .role-officer { background: rgba(46,125,50,.2); color: #a5d6a7; }
+:root[data-theme="dark"] .role-support { background: rgba(123,31,162,.2); color: #ce93d8; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="phone-shell">
+        <div class="top-sticky">
+            <div class="status-bar light">
+                <span class="sb-time" id="statusTime">9:41</span>
+                <span class="sb-icons">
+                    <i class="fa-solid fa-signal"></i>
+                    <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                    <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+                </span>
+            </div>
+            <div class="page-hero">
+                <div class="ph-back" onclick="App.back()">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </div>
+                <div class="ph-title">应急值班信息</div>
+            </div>
+        </div>
+
+        <div class="content-sheet page-body-sheet">
+            <!-- 搜索与快捷标签 -->
+            <div class="search-bar">
+                <div class="search-input-wrapper" style="flex:1">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="搜索姓名 / 职务 / 电话" autocomplete="off">
+                </div>
+                <div class="filter-trigger" id="filterTrigger" onclick="openDrawer()">
+                    <i class="fa-solid fa-filter"></i> 筛选
+                    <span class="badge-dot" id="filterDot"></span>
+                </div>
+            </div>
+
+            <!-- 月份切换栏 -->
+            <div class="month-bar" id="monthBar">
+                <button class="nav-btn" onclick="changeMonth(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+                <div class="month-text" id="monthText">2026 年 7 月</div>
+                <button class="today-btn" onclick="goToday()">今</button>
+                <button class="nav-btn" onclick="changeMonth(1)"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+
+            <!-- 日历视图 -->
+            <div class="calendar-view" id="calendarView">
+                <div class="week-header">
+                    <div class="wh-day weekend">日</div>
+                    <div class="wh-day">一</div>
+                    <div class="wh-day">二</div>
+                    <div class="wh-day">三</div>
+                    <div class="wh-day">四</div>
+                    <div class="wh-day">五</div>
+                    <div class="wh-day weekend">六</div>
+                </div>
+                <div class="calendar-grid" id="calendarGrid"></div>
+            </div>
+
+            <!-- 值班人员卡片流 -->
+            <div class="personnel-area" id="personnelArea">
+                <div class="pa-header">
+                    <div class="pa-date" id="paDate">--</div>
+                    <div class="pa-count" id="paCount">--</div>
+                </div>
+                <div id="paBody"></div>
+            </div>
+
+            <div class="bottom-spacer"></div>
+        </div>
+
+        <!-- 筛选抽屉 -->
+        <div class="modal-mask" id="drawerOverlay" onclick="closeDrawer()"></div>
+        <div class="modal-sheet" id="drawer">
+            <div class="sheet-header">
+                <div class="sheet-title">筛选条件</div>
+                <div class="sheet-close" onclick="closeDrawer()"><i class="fa-solid fa-times"></i></div>
+            </div>
+            <div class="sheet-body" id="drawerBody"></div>
+            <div class="sheet-footer">
+                <button class="btn btn-outline" onclick="resetFilters()">重置</button>
+                <button class="btn btn-primary" onclick="confirmFilters()">确定</button>
+            </div>
+        </div>
+
+        <!-- 日期详情弹窗 -->
+        <div class="modal-mask" id="detailOverlay" onclick="closeDetail()"></div>
+        <div class="modal-sheet detail-sheet" id="detailSheet">
+            <div class="sheet-header">
+                <div class="sheet-title" id="detailTitle">值班详情</div>
+                <div class="sheet-close" onclick="closeDetail()"><i class="fa-solid fa-times"></i></div>
+            </div>
+            <div class="sheet-body" id="detailBody"></div>
+        </div>
+    </div>
+    <div class="phone-home-indicator"></div>
+</div>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function(){
+    'use strict';
+
+    // 值班角色定义与配色
+    var ROLE_CONFIG = {
+        leader: { label: '领导岗', class: 'leader', colorClass: 'role-leader' },
+        captain: { label: '值班长', class: 'captain', colorClass: 'role-captain' },
+        officer: { label: '业务岗', class: 'officer', colorClass: 'role-officer' },
+        support: { label: '保障岗', class: 'support', colorClass: 'role-support' }
+    };
+
+    // 模拟应急值班数据（按日期分配）
+    var DUTY_DATA = generateMockDutyData();
+
+    function generateMockDutyData() {
+        var data = [];
+        var captains = [
+            { name: '李明华', position: '值班长', phone: '13900139001' },
+            { name: '孙涛', position: '值班长', phone: '13900139002' },
+            { name: '王强', position: '值班长', phone: '13900139003' }
+        ];
+        var officers = [
+            { name: '王志强', position: '业务岗', phone: '13700137001' },
+            { name: '陈秀英', position: '业务岗', phone: '13600136001' },
+            { name: '周杰', position: '业务岗', phone: '13600136002' },
+            { name: '郑伟', position: '业务岗', phone: '13700137002' }
+        ];
+        var supports = [
+            { name: '刘伟', position: '保障岗', phone: '13500135001' },
+            { name: '吴敏', position: '保障岗', phone: '13500135002' },
+            { name: '赵军', position: '保障岗', phone: '13500135003' }
+        ];
+        var leaders = [
+            { name: '张建国', position: '带班领导', phone: '13800138001' },
+            { name: '赵红梅', position: '带班领导', phone: '13800138002' }
+        ];
+
+        function pick(list, idx) {
+            return list[idx % list.length];
+        }
+
+        var today = new Date();
+        var startDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+        var endDate = new Date(today.getFullYear(), today.getMonth() + 3, 0);
+
+        for (var d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            var dateStr = formatDate(d, 'yyyy-MM-dd');
+            var day = d.getDay();
+            var isWeekend = day === 0 || day === 6;
+            var dayDuties = [];
+            var seed = dateStr.replace(/-/g, '');
+
+            // 每日固定：值班长 + 业务岗 + 保障岗
+            dayDuties.push({ id: dateStr + '-0', date: dateStr, role: 'captain', ...pick(captains, parseInt(seed, 10)) });
+            dayDuties.push({ id: dateStr + '-1', date: dateStr, role: 'officer', ...pick(officers, parseInt(seed, 10) + 1) });
+            dayDuties.push({ id: dateStr + '-2', date: dateStr, role: 'support', ...pick(supports, parseInt(seed, 10) + 2) });
+
+            // 工作日增加带班领导
+            if (!isWeekend) {
+                dayDuties.push({ id: dateStr + '-3', date: dateStr, role: 'leader', ...pick(leaders, parseInt(seed, 10) + 3) });
+            }
+
+            data.push({ date: dateStr, duties: dayDuties });
+        }
+        return data;
+    }
+
+    // 状态
+    var currentDate = new Date();
+    var searchKeyword = '';
+    var selectedRoles = [];
+    var filterDateStart = '';
+    var filterDateEnd = '';
+    var selectedDate = '';
+
+    // 初始化
+    function init() {
+        var todayStr = formatDate(new Date(), 'yyyy-MM-dd');
+        selectedDate = todayStr;
+        renderCalendar();
+        renderDayPersonnel(todayStr);
+        updateTime();
+        setInterval(updateTime, 60000);
+        bindEvents();
+        renderDrawer();
+    }
+
+    function updateTime() {
+        var now = new Date();
+        var h = now.getHours();
+        var m = now.getMinutes();
+        document.getElementById('statusTime').textContent = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    }
+
+    function formatDate(date, fmt) {
+        var o = {
+            'M+': date.getMonth() + 1,
+            'd+': date.getDate(),
+            'h+': date.getHours(),
+            'm+': date.getMinutes(),
+            's+': date.getSeconds()
+        };
+        if (/(y+)/.test(fmt)) {
+            fmt = fmt.replace(RegExp.$1, (date.getFullYear() + '').substr(4 - RegExp.$1.length));
+        }
+        for (var k in o) {
+            if (new RegExp('(' + k + ')').test(fmt)) {
+                var v = o[k] + '';
+                fmt = fmt.replace(RegExp.$1, RegExp.$1.length === 1 ? v : ('00' + v).substr(v.length));
+            }
+        }
+        return fmt;
+    }
+
+    function parseDate(dateStr) {
+        return new Date(dateStr.replace(/-/g, '/'));
+    }
+
+    function getMonthData(year, month) {
+        var firstDay = new Date(year, month, 1);
+        var lastDay = new Date(year, month + 1, 0);
+        var start = new Date(firstDay);
+        start.setDate(start.getDate() - firstDay.getDay());
+        var end = new Date(lastDay);
+        end.setDate(end.getDate() + (6 - lastDay.getDay()));
+        return { start: start, end: end };
+    }
+
+    function getDutiesByDate(dateStr) {
+        var found = DUTY_DATA.find(function(item) { return item.date === dateStr; });
+        return found ? found.duties : [];
+    }
+
+    function filterDuties(duties) {
+        return duties.filter(function(duty) {
+            if (searchKeyword) {
+                var text = (duty.name + duty.position + duty.phone).toLowerCase();
+                if (text.indexOf(searchKeyword) === -1) return false;
+            }
+            if (selectedRoles.length > 0 && selectedRoles.indexOf(duty.role) === -1) return false;
+            return true;
+        });
+    }
+
+    function isDateInRange(dateStr) {
+        if (!filterDateStart && !filterDateEnd) return true;
+        if (filterDateStart && dateStr < filterDateStart) return false;
+        if (filterDateEnd && dateStr > filterDateEnd) return false;
+        return true;
+    }
+
+    // 渲染日历
+    window.renderCalendar = function() {
+        var year = currentDate.getFullYear();
+        var month = currentDate.getMonth();
+        document.getElementById('monthText').textContent = year + ' 年 ' + (month + 1) + ' 月';
+
+        var range = getMonthData(year, month);
+        var grid = document.getElementById('calendarGrid');
+        grid.innerHTML = '';
+
+        var today = new Date();
+        var todayStr = formatDate(today, 'yyyy-MM-dd');
+
+        for (var d = new Date(range.start); d <= range.end; d.setDate(d.getDate() + 1)) {
+            var dateStr = formatDate(d, 'yyyy-MM-dd');
+            var isCurrentMonth = d.getMonth() === month;
+            var isToday = dateStr === todayStr;
+            var dayEl = document.createElement('div');
+            dayEl.className = 'calendar-day';
+            if (!isCurrentMonth) dayEl.classList.add('other-month');
+            if (isToday) dayEl.classList.add('today');
+            if (selectedDate === dateStr) dayEl.classList.add('selected');
+
+            var dayNum = document.createElement('div');
+            dayNum.className = 'day-num';
+            dayNum.textContent = d.getDate();
+            dayEl.appendChild(dayNum);
+
+            if (isCurrentMonth && isDateInRange(dateStr)) {
+                var duties = filterDuties(getDutiesByDate(dateStr));
+                var indicators = document.createElement('div');
+                indicators.className = 'day-indicators';
+
+                // 人手不足：≤1 人值班
+                if (duties.length <= 1) {
+                    var dot = document.createElement('span');
+                    dot.className = 'duty-dot shortage';
+                    indicators.appendChild(dot);
+                }
+
+                // 领导带班
+                if (duties.some(function(d) { return d.role === 'leader'; })) {
+                    var badge = document.createElement('span');
+                    badge.className = 'leader-badge';
+                    dayEl.appendChild(badge);
+                }
+
+                if (indicators.childNodes.length > 0) {
+                    dayEl.appendChild(indicators);
+                }
+            }
+
+            if (isCurrentMonth) {
+                dayEl.onclick = (function(ds) { return function() { openDetail(ds); }; })(dateStr);
+            }
+
+            grid.appendChild(dayEl);
+        }
+    };
+
+    // 渲染某日值班人员卡片
+    function renderDayPersonnel(dateStr) {
+        var duties = filterDuties(getDutiesByDate(dateStr));
+        var dateObj = parseDate(dateStr);
+        var weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+        document.getElementById('paDate').textContent = (dateObj.getMonth() + 1) + ' 月 ' + dateObj.getDate() + ' 日 ' + weekDays[dateObj.getDay()];
+        document.getElementById('paCount').textContent = duties.length + ' 人值班';
+
+        var body = document.getElementById('paBody');
+        body.innerHTML = '';
+
+        if (duties.length === 0) {
+            body.innerHTML = '<div class="pa-empty"><i class="fa-regular fa-folder-open"></i>当日无值班安排</div>';
+            return;
+        }
+
+        duties.forEach(function(duty) {
+            body.appendChild(createPersonCard(duty));
+        });
+    }
+
+    function createPersonCard(duty) {
+        var config = ROLE_CONFIG[duty.role];
+        var card = document.createElement('div');
+        card.className = 'person-card';
+        card.innerHTML =
+            '<div class="pc-avatar">' + App.escapeHtml(duty.name.charAt(0)) + '</div>' +
+            '<div class="pc-main">' +
+                '<div class="pc-name-row">' +
+                    '<span class="pc-name">' + App.escapeHtml(duty.name) + '</span>' +
+                    '<span class="pc-role-tag ' + config.colorClass + '">' + App.escapeHtml(config.label) + '</span>' +
+                '</div>' +
+                '<div class="pc-info">' + App.escapeHtml(duty.position) + ' · <i class="fa-solid fa-phone phone-icon"></i>电话 <span class="phone">' + App.escapeHtml(formatPhone(duty.phone)) + '</span></div>' +
+            '</div>' +
+            '<a class="pc-call" href="tel:' + duty.phone + '" onclick="event.stopPropagation();App.showToast(\'正在呼叫 ' + App.escapeHtml(duty.name) + ' ' + App.escapeHtml(duty.phone) + '\')">' +
+                '<i class="fa-solid fa-phone"></i>' +
+            '</a>';
+        return card;
+    }
+
+    function formatPhone(phone) {
+        if (!phone) return '';
+        var s = phone.replace(/\s/g, '');
+        if (s.length === 11) {
+            return s.replace(/(\d{3})(\d{4})(\d{4})/, '$1 $2 $3');
+        }
+        return phone;
+    }
+
+    // 月份切换
+    window.changeMonth = function(delta) {
+        currentDate.setMonth(currentDate.getMonth() + delta);
+        renderCalendar();
+    };
+
+    window.goToday = function() {
+        currentDate = new Date();
+        var todayStr = formatDate(new Date(), 'yyyy-MM-dd');
+        selectedDate = todayStr;
+        renderCalendar();
+        renderDayPersonnel(todayStr);
+    };
+
+    // 日期详情（日历点击联动下方卡片流）
+    window.openDetail = function(dateStr) {
+        selectedDate = dateStr;
+        renderCalendar();
+        renderDayPersonnel(dateStr);
+    };
+
+    window.closeDetail = function() {
+        // 弹窗已废弃，保留空方法防止旧引用报错
+    };
+
+    // 筛选抽屉
+    window.openDrawer = function() {
+        renderDrawer();
+        document.getElementById('drawerOverlay').classList.add('show');
+        document.getElementById('drawer').classList.add('show');
+    };
+
+    window.closeDrawer = function() {
+        document.getElementById('drawerOverlay').classList.remove('show');
+        document.getElementById('drawer').classList.remove('show');
+    };
+
+    function renderDrawer() {
+        var html = '';
+
+        // 日期范围
+        html += '<div class="filter-section">';
+        html += '<div class="filter-title">日期范围</div>';
+        html += '<div class="form-item" style="margin-bottom:10px"><input type="date" id="drawerStart" value="' + filterDateStart + '"></div>';
+        html += '<div class="form-item" style="margin-bottom:0"><input type="date" id="drawerEnd" value="' + filterDateEnd + '"></div>';
+        html += '</div>';
+
+        // 值班角色
+        html += '<div class="filter-section">';
+        html += '<div class="filter-title">值班角色</div>';
+        html += '<div class="filter-options">';
+        Object.keys(ROLE_CONFIG).forEach(function(key) {
+            var active = selectedRoles.indexOf(key) !== -1 ? ' active' : '';
+            html += '<span class="filter-chip' + active + '" onclick="selectRoleChip(this, \'' + key + '\')">' + ROLE_CONFIG[key].label + '</span>';
+        });
+        html += '</div></div>';
+
+        document.getElementById('drawerBody').innerHTML = html;
+    }
+
+    window.selectRoleChip = function(el, role) {
+        el.classList.toggle('active');
+        var idx = selectedRoles.indexOf(role);
+        if (idx === -1) {
+            selectedRoles.push(role);
+        } else {
+            selectedRoles.splice(idx, 1);
+        }
+    };
+
+    window.confirmFilters = function() {
+        filterDateStart = document.getElementById('drawerStart').value;
+        filterDateEnd = document.getElementById('drawerEnd').value;
+        updateFilterDot();
+        closeDrawer();
+        renderCalendar();
+        renderDayPersonnel(selectedDate);
+    };
+
+    window.resetFilters = function() {
+        selectedRoles = [];
+        filterDateStart = '';
+        filterDateEnd = '';
+        renderDrawer();
+        updateFilterDot();
+    };
+
+    function updateFilterDot() {
+        var hasFilter = selectedRoles.length > 0 || filterDateStart || filterDateEnd;
+        document.getElementById('filterDot').style.display = hasFilter ? 'block' : 'none';
+        var trigger = document.getElementById('filterTrigger');
+        if (hasFilter) trigger.classList.add('active');
+        else trigger.classList.remove('active');
+    }
+
+    // 事件绑定
+    function bindEvents() {
+        document.getElementById('searchInput').addEventListener('input', App.debounce(function() {
+            searchKeyword = document.getElementById('searchInput').value.trim().toLowerCase();
+            renderCalendar();
+            renderDayPersonnel(selectedDate);
+        }, 300));
+    }
+
+    init();
+})();
+</script>
+</body>
+</html>
