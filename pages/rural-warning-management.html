@@ -286,8 +286,11 @@ body {
     vertical-align: middle;
     font-size: 13px;
 }
+.data-table td:nth-child(1),
 .data-table td:nth-child(3),
 .data-table td:nth-child(4),
+.data-table td:nth-child(6),
+.data-table td:nth-child(7),
 .data-table td:nth-child(8) {
     max-width: 180px;
     overflow: hidden;
@@ -608,6 +611,30 @@ body {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.35; transform: scale(0.8); }
 }
+
+/* ===== 零星隐患登记弹窗 ===== */
+.btn-warn { background: #f59e0b; color: #fff; }
+.btn-warn:hover { background: #d97706; }
+.sp-modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 1200; }
+.sp-modal-mask.show { display: flex; }
+.sp-modal { width: 640px; max-width: 94vw; max-height: 88vh; overflow: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.sp-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.sp-close { background: none; border: none; color: var(--text-secondary); font-size: 16px; cursor: pointer; }
+.sp-modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.sp-row { display: flex; gap: 12px; }
+.sp-row .sp-field { flex: 1; }
+.sp-field { display: flex; flex-direction: column; gap: 6px; }
+.sp-field label { font-size: 12px; color: var(--text-secondary); }
+.sp-field label em { color: #e5484d; font-style: normal; }
+.sp-field input, .sp-field select, .sp-field textarea { height: 34px; padding: 0 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); font-size: 13px; outline: none; box-sizing: border-box; width: 100%; }
+.sp-field textarea { height: auto; padding: 8px 10px; resize: vertical; font-family: inherit; }
+.sp-field input:focus, .sp-field select:focus, .sp-field textarea:focus { border-color: var(--primary); }
+.sp-results { max-height: 160px; overflow: auto; }
+.sp-result-item { padding: 8px 10px; font-size: 12px; color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; margin-top: 6px; cursor: pointer; }
+.sp-result-item:hover { border-color: var(--primary); background: rgba(26,115,232,.06); }
+.sp-result-empty { padding: 8px 10px; font-size: 12px; color: var(--text-secondary); }
+.sp-selected { padding: 8px 10px; font-size: 12px; color: var(--text-primary); border: 1px dashed var(--primary); border-radius: 6px; margin-top: 6px; background: rgba(26,115,232,.06); }
+.sp-modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--border); }
 </style>
     <link rel="stylesheet" href="ui-modal.css">
 </head>
@@ -700,7 +727,40 @@ body {
             <option value="已驳回">已驳回</option>
         </select>
     </div>
+    <div class="filter-group">
+        <span class="filter-label">上报来源</span>
+        <select id="filter-source" class="filter-select">
+            <option value="">全部</option>
+            <option value="__task__">专项排查（任务派生）</option>
+            <option value="群众举报">群众举报</option>
+            <option value="电话投诉">电话投诉</option>
+            <option value="网络留言">网络留言</option>
+            <option value="上级转办">上级转办</option>
+            <option value="巡查人员上报">巡查人员上报</option>
+            <option value="排查发现">排查发现</option>
+            <option value="其他">其他</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <span class="filter-label">镇/街道</span>
+        <select id="filter-street" class="filter-select">
+            <option value="">全部</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <span class="filter-label">村/居委</span>
+        <select id="filter-community" class="filter-select">
+            <option value="">全部</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <span class="filter-label">上报时间</span>
+        <input type="date" id="filter-date-start" class="filter-select" style="min-width:140px;">
+        <span style="color:var(--text-secondary);">至</span>
+        <input type="date" id="filter-date-end" class="filter-select" style="min-width:140px;">
+    </div>
     <div style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn btn-warn" id="btn-register"><i class="fa-solid fa-plus"></i> 零星隐患登记</button>
         <button class="btn btn-primary" id="btn-search"><i class="fa-solid fa-search"></i> 查询</button>
         <button class="btn btn-default" id="btn-reset"><i class="fa-solid fa-undo"></i> 重置</button>
     </div>
@@ -747,6 +807,7 @@ body {
                 <th>结构类型</th>
                 <th>隐患地址</th>
                 <th>上报来源</th>
+                <th>关联任务</th>
                 <th>上报时间</th>
                 <th>产权人</th>
                 <th>状态</th>
@@ -766,7 +827,55 @@ body {
     </div>
 </div>
 
-<script src="../js/house-arch-data.js"></script>
+<!-- ===== 零星隐患登记弹窗 ===== -->
+<div class="sp-modal-mask" id="sp-modal">
+    <div class="sp-modal">
+        <div class="sp-modal-head">
+            <span><i class="fa-solid fa-clipboard-list" style="color:var(--primary);margin-right:8px;"></i>零星隐患登记</span>
+            <button class="sp-close" id="sp-close-x" type="button"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="sp-modal-body">
+            <div class="sp-row">
+                <div class="sp-field"><label>受理编号</label><input id="sp-accept-no" readonly></div>
+                <div class="sp-field"><label>上报渠道</label>
+                    <select id="sp-channel">
+                        <option>群众举报</option>
+                        <option>电话投诉</option>
+                        <option>网络留言</option>
+                        <option>上级转办</option>
+                        <option>其他</option>
+                    </select>
+                </div>
+            </div>
+            <div class="sp-row">
+                <div class="sp-field"><label>投诉人姓名</label><input id="sp-reporter" placeholder="可匿名"></div>
+                <div class="sp-field"><label>联系电话</label><input id="sp-phone" placeholder="选填"></div>
+            </div>
+            <div class="sp-field">
+                <label>房屋定位 <em>*</em></label>
+                <input id="sp-search" placeholder="输入房屋编号 / 名称 / 地址 / 产权人搜索，点击结果选定">
+                <div class="sp-results" id="sp-results"></div>
+                <div class="sp-selected" id="sp-selected" style="display:none;"></div>
+            </div>
+            <div class="sp-row">
+                <div class="sp-field"><label>隐患部位 <em>*</em></label><select id="sp-part"></select></div>
+                <div class="sp-field"><label>隐患类型</label><select id="sp-type"></select></div>
+            </div>
+            <div class="sp-row">
+                <div class="sp-field"><label>隐患等级</label>
+                    <select id="sp-level"><option>第二类</option><option>第三类</option></select>
+                </div>
+                <div class="sp-field"><label>现场照片</label><input id="sp-photos" type="file" multiple accept="image/*"></div>
+            </div>
+            <div class="sp-field"><label>隐患描述</label><textarea id="sp-desc" rows="3" placeholder="描述隐患位置、形态、影响等"></textarea></div>
+        </div>
+        <div class="sp-modal-foot">
+            <button class="btn btn-default" id="sp-cancel" type="button">取消</button>
+            <button class="btn btn-primary" id="sp-save" type="button"><i class="fa-solid fa-check"></i> 保存登记</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function() {
     const PAGE_SIZE = 10;
@@ -775,6 +884,26 @@ body {
     let currentPage = 1;
     let currentTab = 'all';
     let viewMode = 'business'; // 'business' | 'admin'
+    let taskNameMap = {}; // 任务ID -> 任务名称（关联任务列）
+
+    function loadTaskNameMap() {
+        try {
+            const list = JSON.parse(localStorage.getItem('patrolTasks') || '[]');
+            taskNameMap = {};
+            list.forEach(t => { if (t && t.id != null) taskNameMap[String(t.id)] = t.name || ('任务 ' + t.id); });
+        } catch (e) { taskNameMap = {}; }
+    }
+
+    // 镇/村下拉：从当前台账数据动态汇总
+    function populateRegionFilters() {
+        const streetSel = document.getElementById('filter-street');
+        const commSel = document.getElementById('filter-community');
+        if (!streetSel || !commSel) return;
+        const streets = [...new Set(allHazards.map(r => r.street).filter(Boolean))].sort();
+        const comms = [...new Set(allHazards.map(r => r.community).filter(Boolean))].sort();
+        streets.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; streetSel.appendChild(o); });
+        comms.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; commSel.appendChild(o); });
+    }
 
     // 管理员视图下各阶段显示文案（保持原始状态 key 不变，仅 UI 去动作化）
     const ADMIN_STAGE_LABELS = {
@@ -922,6 +1051,7 @@ body {
                 const name = rec.name + ' ' + h.part + h.type;
                 rows.push({
                     id: rec.no + '-' + hIdx,
+                    hzIdx: hIdx,
                     hazardNo: hazardNo,
                     hazardName: name,
                     hazardType: hazardType,
@@ -938,6 +1068,8 @@ body {
                     houseNo: rec.no,
                     riskLevel: topRiskLevel,
                     structureType: normalizeStructureType((rec.structure && rec.structure.structureType) || rec.category),
+                    street: rec.street || '',
+                    taskId: h._taskId || '',
                     taskSourced: !!h._taskId
                 });
             });
@@ -964,7 +1096,9 @@ body {
         return `<span class="risk-badge ${cls}">${getRiskLevelDisplay(level)}</span>`;
     }
 
-    function getActionButtons(status, houseNo, taskSourced) {
+    function getActionButtons(status, houseNo, taskSourced, hzIdx) {
+        // 多隐患房屋：把隐患在档案中的索引带给流转页，保证各页展示、操作的是台账行对应的那条隐患
+        const hz = (typeof hzIdx === 'number') ? '&hz=' + hzIdx : '';
         // 管理员视图：所有行只提供查看详情入口
         if (viewMode === 'admin') {
             return `<button class="action-link" onclick="window.location.href='rural-warning-detail.html?no=${houseNo}'">查看详情</button>`;
@@ -974,18 +1108,18 @@ body {
             return `<button class="action-link" onclick="window.location.href='rural-warning-detail.html?no=${houseNo}'">查看</button>`;
         }
         const s = status.key;
-        const detail = `<button class="action-link" onclick="window.location.href='rural-warning-detail.html?no=${houseNo}'">查看</button>`;
+        const detail = `<button class="action-link" onclick="window.location.href='rural-warning-detail.html?no=${houseNo}${hz}'">查看</button>`;
         if (s === 'pending-audit') {
-            return `<button class="action-link" onclick="window.location.href='rural-warning-audit.html?no=${houseNo}'">核实</button>`;
+            return `<button class="action-link" onclick="window.location.href='rural-warning-audit.html?no=${houseNo}${hz}'">核实</button>`;
         }
         if (s === 'pending-dispatch') {
-            return `<button class="action-link" onclick="window.location.href='rural-warning-dispatch.html?no=${houseNo}'">分发</button>`;
+            return `<button class="action-link" onclick="window.location.href='rural-warning-dispatch.html?no=${houseNo}${hz}'">分发</button>`;
         }
         if (s === 'handling') {
-            return `<button class="action-link" onclick="window.location.href='rural-warning-handle.html?no=${houseNo}'">处置</button>`;
+            return `<button class="action-link" onclick="window.location.href='rural-warning-handle.html?no=${houseNo}${hz}'">处置</button>`;
         }
         if (s === 'pending-accept') {
-            return `<button class="action-link" onclick="window.location.href='rural-warning-acceptance.html?no=${houseNo}'">验收</button>`;
+            return `<button class="action-link" onclick="window.location.href='rural-warning-acceptance.html?no=${houseNo}${hz}'">验收</button>`;
         }
         // 已销号等终态：仅提供"查看"（进入 detail 纯查看页）
         return detail;
@@ -1021,6 +1155,13 @@ body {
             .catch(function() {});
     }
 
+    // 关联任务列：任务来源隐患可点击跳任务详情，零星隐患标注来源
+    function renderTaskCell(row) {
+        if (!row.taskId) return '<span style="color:var(--text-secondary);font-size:12px;">零星上报</span>';
+        const name = taskNameMap[String(row.taskId)] || ('任务 ' + row.taskId);
+        return `<a href="rural-risk-task-detail.html?id=${encodeURIComponent(row.taskId)}" style="color:var(--primary);text-decoration:none;" title="查看关联任务">${name}</a>`;
+    }
+
     function renderTable() {
         const tbody = document.getElementById('hazard-table-body');
         const start = (currentPage - 1) * PAGE_SIZE;
@@ -1041,10 +1182,11 @@ body {
                 <td>${row.structureType}</td>
                 <td>${row.address}</td>
                 <td>${row.source}</td>
+                <td>${renderTaskCell(row)}</td>
                 <td>${formatDateTime(row.reportTime)}</td>
                 <td>${row.ownerName}</td>
                 <td><span class="status-tag ${row.status.cls}">${statusLabel}</span>${unreadBadge}</td>
-                <td><div class="actions">${getActionButtons(row.status, row.houseNo, row.taskSourced)}</div></td>
+                <td><div class="actions">${getActionButtons(row.status, row.houseNo, row.taskSourced, row.hzIdx)}</div></td>
             `;
             tbody.appendChild(tr);
         });
@@ -1081,6 +1223,11 @@ body {
         const riskVal = document.getElementById('filter-risk').value;
         const statusVal = document.getElementById('filter-status').value;
         const structureVal = document.getElementById('filter-structure').value;
+        const sourceVal = document.getElementById('filter-source').value;
+        const streetVal = document.getElementById('filter-street').value;
+        const communityVal = document.getElementById('filter-community').value;
+        const dateStart = document.getElementById('filter-date-start').value;
+        const dateEnd = document.getElementById('filter-date-end').value;
 
         filteredHazards = allHazards.filter(row => {
             if (currentTab !== 'all' && row.status.key !== currentTab) return false;
@@ -1089,6 +1236,13 @@ body {
             if (riskVal && getRiskLevelDisplay(row.riskLevel) !== riskVal) return false;
             if (statusVal && row.status.label !== statusVal) return false;
             if (structureVal && row.structureType !== structureVal) return false;
+            if (sourceVal === '__task__') { if (!row.taskSourced) return false; }
+            else if (sourceVal && row.source !== sourceVal) return false;
+            if (streetVal && row.street !== streetVal) return false;
+            if (communityVal && row.community !== communityVal) return false;
+            const d = String(row.reportTime || '').slice(0, 10);
+            if (dateStart && d < dateStart) return false;
+            if (dateEnd && d > dateEnd) return false;
             return true;
         });
         currentPage = 1;
@@ -1201,6 +1355,11 @@ body {
         document.getElementById('filter-risk').value = '';
         document.getElementById('filter-structure').value = '';
         document.getElementById('filter-status').value = '';
+        document.getElementById('filter-source').value = '';
+        document.getElementById('filter-street').value = '';
+        document.getElementById('filter-community').value = '';
+        document.getElementById('filter-date-start').value = '';
+        document.getElementById('filter-date-end').value = '';
         filterRows();
     });
 
@@ -1234,7 +1393,8 @@ body {
             status: { key: 'pending-accept', label: '待验收', cls: 'accept' },
             houseNo: 'NF-2025-00022',
             riskLevel: '第二类',
-            structureType: '砖混'
+            structureType: '砖混',
+            street: '西渡街道'
         },
         {
             id: 'NF-2025-00080-0',
@@ -1253,7 +1413,8 @@ body {
             status: { key: 'pending-accept', label: '待验收', cls: 'accept' },
             houseNo: 'NF-2025-00080',
             riskLevel: '第二类',
-            structureType: '砖木'
+            structureType: '砖木',
+            street: '奉城镇'
         }
     );
     // 默认按状态分流：待核实(pending) -> 待核实；处置中(doing/overdue) -> 处置中；完成(done) -> 待验收；销号 -> 已销号；驳回 -> 已驳回
@@ -1283,6 +1444,8 @@ body {
             }
         }
     });
+    loadTaskNameMap();
+    populateRegionFilters();
     filteredHazards = allHazards.slice();
     updateTabCounts();
     renderTable();
@@ -1309,6 +1472,115 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 </script>
 
 
+
+<script>
+// ===== 零星隐患登记（群众举报等零星渠道入口） =====
+(function() {
+    const SP_PARTS = ['承重墙','屋面','地基基础','木构架','楼梯间','阳台','外墙','梁柱','楼板','排水系统','其他'];
+    const SP_TYPES = ['裂缝','变形','倾斜','渗漏','脱落','锈蚀','沉降','其他'];
+    let spSelectedHouse = null;
+
+    function fillSelect(id, items, placeholder) {
+        const sel = document.getElementById(id);
+        sel.innerHTML = (placeholder ? `<option value="">${placeholder}</option>` : '') + items.map(v => `<option>${v}</option>`).join('');
+    }
+    function nextAcceptNo() {
+        const d = new Date();
+        const ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+        const seq = parseInt(localStorage.getItem('sporadicAcceptSeq') || '0', 10) + 1;
+        localStorage.setItem('sporadicAcceptSeq', String(seq));
+        return 'SL' + ymd + '-' + String(seq).padStart(3, '0');
+    }
+    function spOpen() {
+        fillSelect('sp-part', SP_PARTS, '请选择');
+        fillSelect('sp-type', SP_TYPES, null);
+        document.getElementById('sp-accept-no').value = nextAcceptNo();
+        document.getElementById('sp-modal').classList.add('show');
+    }
+    function spReset() {
+        spSelectedHouse = null;
+        ['sp-reporter','sp-phone','sp-search','sp-desc'].forEach(id => { document.getElementById(id).value = ''; });
+        document.getElementById('sp-channel').value = '群众举报';
+        document.getElementById('sp-level').value = '第二类';
+        document.getElementById('sp-results').innerHTML = '';
+        const s = document.getElementById('sp-selected');
+        s.style.display = 'none'; s.innerHTML = '';
+        document.getElementById('sp-photos').value = '';
+    }
+    function spClose() { document.getElementById('sp-modal').classList.remove('show'); spReset(); }
+    function spSearch(kw) {
+        const box = document.getElementById('sp-results');
+        if (!kw || typeof getAllHouseRecords !== 'function') { box.innerHTML = ''; return; }
+        const list = getAllHouseRecords()
+            .filter(r => (r.houseType || r.category) === '农村自建房')
+            .filter(r => [r.no, r.name, r.address, r.owner].some(v => String(v || '').includes(kw)))
+            .slice(0, 8);
+        box.innerHTML = list.map(r =>
+            `<div class="sp-result-item" data-no="${r.no}"><b>${r.no}</b> ${r.name}｜${r.address}｜产权人：${r.owner || '-'}</div>`
+        ).join('') || '<div class="sp-result-empty">无匹配房屋</div>';
+        box.querySelectorAll('.sp-result-item').forEach(el => {
+            el.addEventListener('click', function() {
+                spSelectedHouse = getHouseRecord(this.dataset.no);
+                const s = document.getElementById('sp-selected');
+                s.style.display = 'block';
+                s.innerHTML = `<b>${spSelectedHouse.no}</b> ${spSelectedHouse.name}｜${spSelectedHouse.address}｜${(spSelectedHouse.structure && spSelectedHouse.structure.structureType) || spSelectedHouse.category || ''}`;
+                box.innerHTML = '';
+                document.getElementById('sp-search').value = '';
+            });
+        });
+    }
+    function spSave() {
+        if (!spSelectedHouse) { alert('请先搜索并选择房屋'); return; }
+        const part = document.getElementById('sp-part').value;
+        if (!part) { alert('请选择隐患部位'); return; }
+        const channel = document.getElementById('sp-channel').value || '群众举报';
+        const acceptNo = document.getElementById('sp-accept-no').value;
+        const files = document.getElementById('sp-photos').files;
+        const photoNames = files && files.length ? Array.from(files).map(f => f.name) : [];
+        const now = new Date();
+        const ts = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0')
+            + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        patchHouseRecord(spSelectedHouse.no, function(rec) {
+            if (!Array.isArray(rec.hazards)) rec.hazards = [];
+            rec.hazards.push({
+                part: part,
+                type: document.getElementById('sp-type').value || '其他',
+                level: document.getElementById('sp-level').value || '第二类',
+                desc: document.getElementById('sp-desc').value.trim(),
+                photos: photoNames,
+                reportTime: ts,
+                source: channel,
+                _sporadic: true,
+                acceptNo: acceptNo,
+                reporter: document.getElementById('sp-reporter').value.trim(),
+                reporterPhone: document.getElementById('sp-phone').value.trim()
+            });
+            // 重置房屋级流转起点，使零星隐患进入 核实→分发→处置→验收 流程
+            // governance 与 governStatus 必须同步改：normalize 会优先用 governStatus 反推 governance
+            rec.governance = 'pending';
+            rec.governStatus = '待整治';
+            rec.auditStatus = '待审核';
+            rec.closeStatus = '';
+        });
+        alert('登记成功，受理编号：' + acceptNo + '\n该隐患已进入待核实队列。');
+        // 等待服务端写盘完成再刷新：POST 是异步的，立即 reload 会取消请求，
+        // 刷新后服务端旧数据会整条覆盖本地刚登记的隐患（服务端优先合并）
+        const done = function() { location.reload(); };
+        if (typeof flushHouseArchToServer === 'function') {
+            flushHouseArchToServer().then(done, done);
+        } else {
+            done();
+        }
+    }
+
+    document.getElementById('btn-register').addEventListener('click', spOpen);
+    document.getElementById('sp-close-x').addEventListener('click', spClose);
+    document.getElementById('sp-cancel').addEventListener('click', spClose);
+    document.getElementById('sp-save').addEventListener('click', spSave);
+    document.getElementById('sp-search').addEventListener('input', function() { spSearch(this.value.trim()); });
+    document.getElementById('sp-modal').addEventListener('click', function(e) { if (e.target === this) spClose(); });
+})();
+</script>
 
     <script src="ui-modal.js"></script>
 </body></html>

@@ -55,6 +55,19 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
 .photo-item .del { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--danger); color: #fff; border: none; cursor: pointer; font-size: 11px; line-height: 20px; }
 .photo-add { width: 110px; height: 78px; border: 1px dashed var(--border); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-sub); cursor: pointer; font-size: 12px; }
 .photo-add:hover { border-color: var(--primary); color: var(--primary); }
+.file-add { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: 1px dashed var(--border); border-radius: 6px; color: var(--text-sub); font-size: 13px; cursor: pointer; }
+.file-add:hover { border-color: var(--primary); color: var(--primary); }
+.file-item { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px; background: #f7f8fa; font-size: 13px; }
+.file-item .fname { color: var(--text-main); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-item .fsize { color: var(--text-sub); font-size: 12px; }
+.file-item .fop { color: var(--primary); cursor: pointer; }
+.file-item .fdel { color: var(--danger); cursor: pointer; }
+.stage-row-view { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fafbfc; margin-bottom: 8px; font-size: 13px; }
+.stage-row-view .stage-name { font-weight: 600; color: var(--text-main); margin-right: 8px; }
+.stage-badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #f0f1f3; color: var(--text-sub); }
+.stage-badge.done { background: #e8f5e9; color: var(--success); }
+.stage-row-view img { width: 72px; height: 54px; object-fit: cover; border-radius: 4px; margin: 6px 6px 0 0; cursor: zoom-in; border: 1px solid var(--border); }
+.stage-row-view .file-item { margin: 6px 6px 0 0; }
 .action-bar { display: flex; gap: 12px; justify-content: flex-end; }
 .btn { height: 38px; padding: 0 22px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-main); font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .btn:hover { border-color: var(--primary); color: var(--primary); }
@@ -97,6 +110,10 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
             <div class="lbl" style="font-size:12px;color:var(--text-sub);margin-bottom:6px;">总体处置要求</div>
             <div class="req-box" id="s-req">-</div>
         </div>
+        <div style="margin-top:10px;">
+            <div class="lbl" style="font-size:12px;color:var(--text-sub);margin-bottom:6px;">验收标准</div>
+            <div class="req-box" id="s-std">-</div>
+        </div>
     </div>
 
     <div id="accept-banner" style="display:none;"></div>
@@ -106,14 +123,27 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
         <div class="info-grid" style="margin-bottom:14px;">
             <div class="info-item"><div class="lbl">实际处置方式</div><div class="val" id="r-method">-</div></div>
             <div class="info-item"><div class="lbl">提交验收时间</div><div class="val" id="r-time">-</div></div>
+            <div class="info-item"><div class="lbl">填报方式</div><div class="val" id="r-reporter">-</div></div>
         </div>
         <div class="form-row">
             <label>处置情况说明</label>
             <div class="req-box" id="r-note">-</div>
         </div>
         <div class="form-row">
-            <label>施工过程照片（<span id="r-count">0</span> 张）</label>
+            <label>施工过程 / 整改后照片（<span id="r-count">0</span> 张）</label>
             <div class="photo-wall" id="r-photos"></div>
+            </div>
+            <div class="form-row" id="r-plan-row" style="display:none;">
+            <label>施工方案</label>
+            <div id="r-plan"></div>
+        </div>
+        <div class="form-row" id="r-test-row" style="display:none;">
+            <label>检测报告</label>
+            <div id="r-test"></div>
+        </div>
+        <div class="form-row" id="r-stages-row" style="display:none;">
+            <label>处置环节记录</label>
+            <div id="r-stages"></div>
         </div>
     </div>
 
@@ -144,6 +174,11 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
             </div>
             <input type="file" id="f-photo" accept="image/*" multiple style="display:none;">
         </div>
+        <div class="form-row">
+            <label>竣工验收报告</label>
+            <div id="report-row"></div>
+            <input type="file" id="f-report" accept=".pdf,image/*" style="display:none;">
+        </div>
         <div class="action-bar">
             <button class="btn btn-success" onclick="submitAcceptance()"><i class="fa-solid fa-circle-check"></i>确认验收结论</button>
         </div>
@@ -162,8 +197,45 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
 <script src="./rural-audit-seed.js"></script>
 <script>
 const ST_META = { '待验收': { cls: 'wait-check' }, '已完成': { cls: 'done' }, '处置中': { cls: 'wait-check' } };
+const STAGES = [
+    { key: 'appraise', name: '安全鉴定', optional: true, fields: [
+        { k: 'orgName', label: '鉴定机构名称' }, { k: 'time', label: '鉴定时间' },
+        { k: 'principal', label: '鉴定负责人' }, { k: 'conclusion', label: '鉴定结论' }
+    ]},
+    { key: 'evaluate', name: '安全评估', optional: true, fields: [
+        { k: 'orgName', label: '评估机构名称' }, { k: 'time', label: '评估时间' },
+        { k: 'principal', label: '评估负责人' }, { k: 'conclusion', label: '评估结论' }
+    ]},
+    { key: 'plan', name: '整治计划', optional: true, fields: [
+        { k: 'startTime', label: '计划开始时间' }, { k: 'endTime', label: '计划完成时间' },
+        { k: 'principal', label: '负责人信息' }, { k: 'phone', label: '联系电话' },
+        { k: 'scheme', label: '整治方案' },
+        { k: 'hardIso', label: '是否采取硬隔离' }, { k: 'noIsoReason', label: '未硬隔离原因说明' }
+    ]},
+    { key: 'rectify', name: '整治措施', optional: false }
+];
+const RECTIFY_FIELDS = {
+    mgmt: [
+        { k: 'measure', label: '管理措施' }, { k: 'startTime', label: '开始时间' }, { k: 'endTime', label: '结束时间' },
+        { k: 'principal', label: '负责人' }, { k: 'phone', label: '联系电话' }
+    ],
+    eng: [
+        { k: 'measure', label: '工程措施' }, { k: 'planDetail', label: '细化工程措施方案' },
+        { k: 'startTime', label: '开始时间' }, { k: 'endTime', label: '结束时间' },
+        { k: 'principal', label: '负责人' }, { k: 'phone', label: '联系电话' }, { k: 'company', label: '施工单位' }
+    ]
+};
+
+const ACCEPT_STD = {
+    '危房改造申请': '申请材料齐全、程序合规；改造期间居住安全有保障，无人员伤亡。',
+    '临时搬离': '人员全部搬离，房屋腾空并设置警示标识、封闭管理；无人员返回居住。',
+    '简易加固': '加固部位施工完成，裂缝封闭、构件固定牢固；房屋无新增险情；现场清理完毕。',
+    '专业加固': '专业单位按方案施工完成，加固部位验收合格；结构承载力满足安全使用要求；施工及检测资料齐全。',
+    '拆除重建': '危房已拆除，场地平整无安全隐患；重建符合规划及建设标准。'
+};
 let task = null, pkg = null, sub = null;
 let acceptPhotos = [];
+let reportFile = null;
 
 function getParams() {
     const q = new URLSearchParams(location.search);
@@ -204,9 +276,44 @@ function archiveHouse() {
                 taskName: task.name, subName: sub.name, method: (sub.handleReport && sub.handleReport.method) || sub.method,
                 handleNote: sub.handleReport ? sub.handleReport.note : '',
                 processPhotos: sub.handleReport ? sub.handleReport.processPhotos || [] : [],
+                planFile: (sub.handleReport && sub.handleReport.planFile) || null,
+                testFile: (sub.handleReport && sub.handleReport.testFile) || null,
+                stages: (sub.handleReport && sub.handleReport.stages) || {},
                 acceptNote: sub.acceptance.note, acceptPhotos: sub.acceptance.photos || [],
+                reportFile: sub.acceptance.reportFile || null,
                 acceptOrg: sub.acceptance.org, archiveTime: sub.acceptance.time
             };
+            // 处置环节结构化数据回写房屋治理链（幂等：sourceKey = 任务ID/子任务ID，重复验收不重复追加）
+            const hr = sub.handleReport || {}, sg = hr.stages || {}, sk = task.id + '/' + sub.id;
+            const rep = (hr.reporter && hr.reporter.type === 'proxy' && hr.reporter.proxyName) ? hr.reporter.proxyName : (sub.person || '');
+            const rt = hr.submitTime || '';
+            if (sg.appraise && sg.appraise.fields) {
+                const f = sg.appraise.fields;
+                rec.assessmentRecords = Array.isArray(rec.assessmentRecords) ? rec.assessmentRecords : [];
+                if (!rec.assessmentRecords.some(x => x.sourceKey === sk)) rec.assessmentRecords.push({
+                    id: 'ASS-' + no + '-' + String(rec.assessmentRecords.length + 1).padStart(2, '0'), sourceKey: sk,
+                    rows: [f.orgName || '', '', f.time || '', f.principal || '', f.conclusion || '', '', '—', '', rep, rt],
+                    reporter: rep, reportTime: rt, createdAt: rt
+                });
+            }
+            if (sg.evaluate && sg.evaluate.fields) {
+                const f = sg.evaluate.fields;
+                rec.evaluationRecords = Array.isArray(rec.evaluationRecords) ? rec.evaluationRecords : [];
+                if (!rec.evaluationRecords.some(x => x.sourceKey === sk)) rec.evaluationRecords.push({
+                    id: 'EVA-' + no + '-' + String(rec.evaluationRecords.length + 1).padStart(2, '0'), sourceKey: sk,
+                    rows: [f.orgName || '', '', f.time || '', f.principal || '', f.conclusion || '', '', '—', '', rep, rt],
+                    reporter: rep, reportTime: rt, createdAt: rt
+                });
+            }
+            if (sg.plan && sg.plan.fields) {
+                const f = sg.plan.fields;
+                rec.planRecords = Array.isArray(rec.planRecords) ? rec.planRecords : [];
+                if (!rec.planRecords.some(x => x.sourceKey === sk)) rec.planRecords.push({
+                    id: 'PLAN-' + no + '-' + String(rec.planRecords.length + 1).padStart(2, '0'), sourceKey: sk,
+                    rows: [f.startTime || '', f.endTime || '', f.principal || '', f.phone || '', f.scheme || '', f.hardIso || '', f.noIsoReason || '', '—', '—', '—', '', rep, rt],
+                    reporter: rep, reportTime: rt, status: '进行中', remark: ''
+                });
+            }
         });
     });
 }
@@ -221,17 +328,76 @@ function renderHeader() {
     document.getElementById('s-time').textContent = pkg.dispatchTime || '-';
     document.getElementById('s-count').textContent = (sub.houseNos || []).length + ' 栋';
     document.getElementById('s-req').textContent = pkg.requirement || '无';
+    document.getElementById('s-std').textContent = ACCEPT_STD[sub.method] || '按处置要求整改到位，确保房屋使用安全，验收资料齐全。';
 }
 function renderReport() {
     const r = sub.handleReport || {};
     document.getElementById('r-method').textContent = r.method || sub.method;
     document.getElementById('r-time').textContent = r.submitTime || '-';
+    document.getElementById('r-reporter').textContent = (r.reporter && r.reporter.type === 'proxy' && r.reporter.proxyName) ? `村委/乡镇代报（${r.reporter.proxyName}）` : '责任人本人填报';
     document.getElementById('r-note').textContent = r.note || '无';
     document.getElementById('r-count').textContent = (r.processPhotos || []).length;
     document.getElementById('r-photos').innerHTML = (r.processPhotos || []).map(p => `
         <div class="photo-item"><img src="${p}" onclick="preview('${encodeURIComponent(p)}')"></div>
     `).join('') || '<span style="color:var(--text-sub);font-size:13px;">未上传</span>';
+    const rp = document.getElementById('r-plan-row');
+    if (r.planFile) { rp.style.display = 'block'; document.getElementById('r-plan').innerHTML = fileItemHtml(r.planFile, 'viewPlanFile', false); }
+    else { rp.style.display = 'none'; }
+    const rt = document.getElementById('r-test-row');
+    if (r.testFile) { rt.style.display = 'block'; document.getElementById('r-test').innerHTML = fileItemHtml(r.testFile, 'viewTestFile', false); }
+    else { rt.style.display = 'none'; }
+    const rs = document.getElementById('r-stages-row');
+    if (r.stages && Object.keys(r.stages).length) {
+        rs.style.display = 'block';
+        document.getElementById('r-stages').innerHTML = STAGES.filter(s => hasStageData(s, r.stages[s.key])).map(s => {
+            const st = r.stages[s.key];
+            return `<div class="stage-row-view"><span class="stage-name">${s.name}</span><span class="stage-badge" style="font-size:11px;">${s.optional ? '视情' : '必选'}</span>${stageViewFields(s, st)}</div>`;
+        }).join('');
+    } else { rs.style.display = 'none'; }
 }
+
+function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function normRectArr(v) { return Array.isArray(v) ? v : (v && typeof v === 'object' ? [v] : []); }
+function hasStageData(s, st) {
+    if (!st) return false;
+    if (s.fields && st.fields && s.fields.some(f => st.fields[f.k])) return true;
+    if (s.key === 'rectify' && st.types && (st.types.mgmt || st.types.eng)) return true;
+    return false;
+}
+function stageViewFields(s, st) {
+    let html = '';
+    if (s.fields && st.fields) {
+        const pairs = s.fields.filter(f => st.fields[f.k]).map(f => `${f.label}：${st.fields[f.k]}`);
+        if (pairs.length) html += `<div style="margin-top:4px;font-size:12px;color:var(--text-sub);">${esc(pairs.join('；'))}</div>`;
+    }
+    if (s.key === 'rectify' && st.types) {
+        [['mgmt', '管理措施'], ['eng', '工程措施']].forEach(t => {
+            if (!st.types[t[0]]) return;
+            normRectArr(st[t[0]]).forEach((d, i) => {
+                const pairs = RECTIFY_FIELDS[t[0]].filter(f => d[f.k]).map(f => `${f.label}：${d[f.k]}`);
+                if (pairs.length) html += `<div style="margin-top:4px;font-size:12px;color:var(--text-sub);">【${t[1]} ${i + 1}】${esc(pairs.join('；'))}</div>`;
+            });
+        });
+    }
+    return html;
+}
+function isImageFile(f) { return /^image\//.test(f.type || '') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name || ''); }
+function fileItemHtml(f, viewFn, delFn) {
+    const icon = isImageFile(f) ? 'fa-image' : 'fa-file-pdf';
+    return `<span class="file-item"><i class="fa-solid ${icon}" style="color:var(--primary);"></i><span class="fname" title="${esc(f.name)}">${esc(f.name)}</span><span class="fsize">${fmtSize(f.size || 0)}</span><span class="fop" onclick="${viewFn}()">查看</span>${delFn ? `<span class="fdel" onclick="${delFn}()">移除</span>` : ''}</span>`;
+}
+function openFile(f) {
+    if (!f) return;
+    if (isImageFile(f)) preview(encodeURIComponent(f.dataUrl)); else window.open(f.dataUrl, '_blank');
+}
+function viewPlanFile() { openFile(sub.handleReport && sub.handleReport.planFile); }
+function viewTestFile() { openFile(sub.handleReport && sub.handleReport.testFile); }
+function renderReportFileRow() {
+    document.getElementById('report-row').innerHTML = reportFile ? fileItemHtml(reportFile, 'viewReportFile', 'delReportFile')
+        : `<span class="file-add" onclick="document.getElementById('f-report').click()"><i class="fa-solid fa-file-arrow-up"></i>上传竣工验收报告（PDF / 图片，≤5MB）</span>`;
+}
+function viewReportFile() { openFile(reportFile || (sub.acceptance && sub.acceptance.reportFile)); }
+function delReportFile() { reportFile = null; renderReportFileRow(); }
 function renderHouses() {
     const arch = JSON.parse(localStorage.getItem('houseArchData') || '{}');
     const proj = (task.selectedProjects || []);
@@ -298,15 +464,24 @@ document.getElementById('f-photo').addEventListener('change', function (e) {
     });
     e.target.value = '';
 });
+document.getElementById('f-report').addEventListener('change', function (e) {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast('文件不能超过 5MB', 'warn'); return; }
+    const rd = new FileReader();
+    rd.onload = () => { reportFile = { name: f.name, size: f.size, type: f.type, dataUrl: rd.result }; renderReportFileRow(); toast('竣工验收报告已上传'); };
+    rd.readAsDataURL(f);
+});
 
 async function submitAcceptance() {
     const result = document.querySelector('input[name="result"]:checked').value;
     const note = document.getElementById('f-note').value.trim();
     if (!note) { toast('请填写验收记录', 'warn'); return; }
     if (!acceptPhotos.length) { toast('请至少上传 1 张验收照片', 'warn'); return; }
-    const ok = await uiConfirm(`确认验收结论为【${result}】？\n\n${result === '通过' ? '通过后将自动更新房屋风险等级与整治状态，并归档整治档案。' : '不通过将退回责任人重新处置。'}`, { title: '竣工验收' });
+    const ok = await uiConfirm(`确认验收结论为【${result}】？\n\n验收照片：${acceptPhotos.length} 张\n竣工验收报告：${reportFile ? '已上传（' + reportFile.name + '）' : '未上传'}\n\n${result === '通过' ? '通过后将自动更新房屋风险等级与整治状态，并归档整治档案。' : '不通过将退回责任人重新处置。'}`, { title: '竣工验收' });
     if (!ok) return;
-    sub.acceptance = { result: result, note: note, photos: acceptPhotos.slice(), time: now(), org: pkg.receiverName, person: '验收工作组' };
+    sub.acceptance = { result: result, note: note, photos: acceptPhotos.slice(), reportFile: reportFile, time: now(), org: pkg.receiverName, person: '验收工作组' };
     if (result === '通过') {
         sub.status = '已完成';
         archiveHouse();
@@ -326,7 +501,7 @@ function renderBanner() {
     if (sub.status !== '已完成' || !sub.acceptance) { el.style.display = 'none'; return; }
     const a = sub.acceptance;
     el.style.display = 'block';
-    el.innerHTML = `<div class="accept-banner pass"><i class="fa-solid fa-circle-check"></i>验收通过 · ${esc(a.org)} · ${esc(a.time)} &nbsp;｜&nbsp; ${esc(a.note)} &nbsp;｜&nbsp; 房屋风险等级已更新为「已整治」，整治档案已归档</div>`;
+    el.innerHTML = `<div class="accept-banner pass"><i class="fa-solid fa-circle-check"></i>验收通过 · ${esc(a.org)} · ${esc(a.time)} &nbsp;｜&nbsp; ${esc(a.note)}${a.reportFile ? ` &nbsp;｜&nbsp; <span class="fop" style="color:var(--primary);cursor:pointer;" onclick="viewReportFile()"><i class="fa-solid fa-file-lines"></i> 竣工验收报告</span>` : ''} &nbsp;｜&nbsp; 房屋风险等级已更新为「已整治」，整治档案已归档</div>`;
 }
 function renderTimeline() {
     document.getElementById('timeline').innerHTML = (sub.updates || []).slice().reverse().map(u => `
@@ -368,6 +543,8 @@ function init() {
     renderReport();
     renderHouses();
     document.getElementById('form-card').style.display = sub.status === '待验收' ? 'block' : 'none';
+    reportFile = (sub.acceptance && sub.acceptance.reportFile) || null;
+    renderReportFileRow();
     renderPhotoWall();
     renderTimeline();
 }

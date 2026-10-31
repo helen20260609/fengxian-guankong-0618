@@ -72,6 +72,25 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
 .pager button:disabled { opacity: 0.45; cursor: not-allowed; }
 .empty-tip { padding: 60px 0; text-align: center; color: var(--text-sub); }
 .empty-tip .fa-solid { font-size: 40px; opacity: 0.3; display: block; margin-bottom: 12px; }
+/* 视图切换（任务包列表 / 分级跟踪视图） */
+.view-tabs { display: flex; gap: 10px; margin-bottom: 14px; }
+.view-tab { border: 1px solid var(--border); background: var(--bg-card); padding: 10px 20px; border-radius: 8px; font-size: 14px; cursor: pointer; color: var(--text-sub); display: flex; align-items: center; gap: 8px; }
+.view-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+/* 角色演示切换条 */
+.role-bar { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.role-label { font-size: 13px; color: var(--text-sub); }
+.role-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.role-btn { border: none; background: var(--bg-card); padding: 8px 18px; font-size: 13px; cursor: pointer; color: var(--text-main); }
+.role-btn + .role-btn { border-left: 1px solid var(--border); }
+.role-btn.active { background: var(--primary); color: #fff; }
+.role-tip { font-size: 12px; color: var(--text-sub); }
+.town-row { cursor: pointer; }
+.village-row td { background: rgba(26,115,232,0.03); }
+.village-row td:first-child { padding-left: 34px; }
+.mini-tag { display: inline-block; padding: 1px 8px; border-radius: 9px; font-size: 12px; margin-right: 4px; white-space: nowrap; }
+.mini-tag.pending { background: rgba(227,116,0,0.1); color: var(--warning); }
+.mini-tag.doing { background: rgba(26,115,232,0.1); color: var(--primary); }
+.mini-tag.done { background: rgba(24,128,56,0.1); color: var(--success); }
 </style>
 </head>
 <body>
@@ -102,6 +121,11 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
             <div class="kpi-sub">全部子任务完成进度</div>
         </div>
     </div>
+    <div class="view-tabs">
+        <button class="view-tab active" data-view="list"><i class="fa-solid fa-list-check"></i>任务包列表</button>
+        <button class="view-tab" data-view="track"><i class="fa-solid fa-route"></i>分级跟踪视图</button>
+    </div>
+    <div id="view-list">
     <div class="panel">
         <div class="status-tabs">
             <button class="tab-item active" data-tab="pending">待分发 <span class="tab-count" id="tab-pending">0</span></button>
@@ -141,6 +165,27 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
             暂无待分发的任务包（审核通过的排查任务将在此汇集）
         </div>
         <div class="pager" id="pager"></div>
+    </div>
+    </div>
+    <div id="view-track" style="display:none;">
+        <div class="panel">
+            <div class="role-bar">
+                <span class="role-label">演示视角</span>
+                <div class="role-seg">
+                    <button class="role-btn active" data-role="district">区房管局</button>
+                    <button class="role-btn" data-role="town">乡镇政府</button>
+                    <button class="role-btn" data-role="village">村委会</button>
+                </div>
+                <span class="role-tip" id="role-tip"></span>
+            </div>
+            <div class="filter-bar" id="track-scope" style="display:none;">
+                <div class="filter-item">
+                    <label id="scope-label">乡镇</label>
+                    <select id="scope-select"></select>
+                </div>
+            </div>
+            <div id="track-body"></div>
+        </div>
     </div>
 </div>
 <script src="./ui-modal.js"></script>
@@ -190,6 +235,8 @@ function riskDist(t) {
 function pkgStatus(t) {
     const p = packages[t.id];
     if (!p) return { key: 'pending', label: '待分发', cls: 'pending' };
+    if (p.dispatchMode === 'package' && p.status === 'sent') return { key: 'wait-receive', label: '已下发待接收', cls: 'doing' };
+    if (p.dispatchMode === 'package' && p.status === 'received') return { key: 'wait-decompose', label: '已接收待分解', cls: 'doing' };
     const subs = p.subTasks || [];
     const done = subs.filter(s => s.status === '已完成').length;
     if (subs.length && done === subs.length) return { key: 'done', label: '已完成', cls: 'done' };
@@ -263,7 +310,7 @@ function renderTable() {
             <td><span class="status-tag ${st.cls}">${st.label}</span></td>
             <td>${p ? `<div class="progress-wrap"><div class="progress-bar"><i style="width:${progress}%"></i></div><span class="progress-text">${st.done || 0}/${st.total || 0} 子任务</span></div>` : '<span style="color:var(--text-sub);">-</span>'}</td>
             <td>${p
-                ? `<button class="action-link" onclick="goDetail(${t.id})">任务跟踪</button>`
+                ? `<button class="action-link${st.key === 'wait-receive' || st.key === 'wait-decompose' ? ' send' : ''}" onclick="goDetail(${t.id})">${st.key === 'wait-receive' ? '<i class="fa-solid fa-inbox"></i>前往接收' : st.key === 'wait-decompose' ? '<i class="fa-solid fa-code-branch"></i>前往分解' : '任务跟踪'}</button>`
                 : `<button class="action-link send" onclick="goDetail(${t.id})"><i class="fa-solid fa-paper-plane"></i>一键下发</button>`}
             </td>
         </tr>`;
@@ -281,6 +328,214 @@ function renderPager() {
     pg.innerHTML = html;
 }
 function goPage(p) { curPage = p; renderTable(); }
+
+// ================= 分级跟踪视图（区 / 乡镇 / 村委） =================
+let curView = 'list';
+let curRole = 'district';
+let scopeVal = '';
+const expandedTowns = new Set();
+
+function trackPkgs() {
+    return Object.entries(packages)
+        .map(([key, p]) => ({ p, t: tasks.find(x => String(x.id) === String(p.taskId || key)) }))
+        .filter(x => x.t);
+}
+// 任务包覆盖房屋数：已分解按子任务累计，未分解按入库隐患房屋数
+function pkgHouses(p, t) {
+    const subs = p.subTasks || [];
+    return subs.length ? subs.reduce((n, s) => n + (s.houseNos || []).length, 0) : dispatchHouses(t).length;
+}
+function subStats(subs) {
+    const done = subs.filter(s => s.status === '已完成').length;
+    return { done, total: subs.length };
+}
+function statusTags(subs) {
+    const order = ['待接收', '处置中', '验收中', '已完成'];
+    const cnt = {};
+    subs.forEach(s => { cnt[s.status] = (cnt[s.status] || 0) + 1; });
+    return order.filter(k => cnt[k]).map(k =>
+        `<span class="mini-tag ${k === '已完成' ? 'done' : k === '待接收' ? 'pending' : 'doing'}">${k} ${cnt[k]}</span>`).join('');
+}
+function houseRiskLevel(h) {
+    const items = (h && h.checkItems || []).filter(ci => ci.level === 'red' || ci.level === 'yellow');
+    if (items.some(ci => ci.level === 'red')) return 'red';
+    if (items.length) return 'yellow';
+    return '';
+}
+function progressCell(done, total) {
+    if (!total) return '<span style="color:var(--text-sub);">-</span>';
+    const rate = Math.round(done / total * 100);
+    return `<div class="progress-wrap"><div class="progress-bar"><i style="width:${rate}%"></i></div><span class="progress-text">${done}/${total} 子任务</span></div>`;
+}
+function groupMetrics(list) {
+    const allSubs = list.flatMap(x => x.p.subTasks || []);
+    const houses = list.reduce((n, x) => n + pkgHouses(x.p, x.t), 0);
+    return { allSubs, houses, st: subStats(allSubs) };
+}
+
+function renderTrackView() {
+    const tipMap = {
+        district: '全区视角：按乡镇汇总下发进度，点击乡镇行可展开所辖各村',
+        town: '乡镇视角：查看所辖各村任务包的总体进度',
+        village: '村委视角：查看每户隐患房屋的整治完成情况'
+    };
+    document.getElementById('role-tip').textContent = tipMap[curRole];
+    const scope = document.getElementById('track-scope');
+    if (curRole === 'district') {
+        scope.style.display = 'none';
+        renderDistrictView();
+    } else if (curRole === 'town') {
+        scope.style.display = 'flex';
+        document.getElementById('scope-label').textContent = '乡镇';
+        const towns = [...new Set(trackPkgs().map(x => x.t.town).filter(Boolean))];
+        const sel = document.getElementById('scope-select');
+        sel.innerHTML = towns.map(t => `<option>${t}</option>`).join('');
+        if (!towns.includes(scopeVal)) scopeVal = towns[0] || '';
+        sel.value = scopeVal;
+        renderTownView(scopeVal);
+    } else {
+        scope.style.display = 'flex';
+        document.getElementById('scope-label').textContent = '行政村';
+        const villages = [...new Set(trackPkgs().map(x => x.t.village).filter(Boolean))];
+        const sel = document.getElementById('scope-select');
+        sel.innerHTML = villages.map(v => `<option>${v}</option>`).join('');
+        if (!villages.includes(scopeVal)) scopeVal = villages[0] || '';
+        sel.value = scopeVal;
+        renderVillageView(scopeVal);
+    }
+}
+
+function renderDistrictView() {
+    const towns = {};
+    trackPkgs().forEach(x => { const k = x.t.town || '-'; (towns[k] = towns[k] || []).push(x); });
+    const names = Object.keys(towns);
+    const body = document.getElementById('track-body');
+    if (!names.length) {
+        body.innerHTML = '<div class="empty-tip"><i class="fa-solid fa-route"></i>暂无已下发的任务包</div>';
+        return;
+    }
+    let html = `<table class="data-table"><thead><tr>
+        <th style="width:220px;">乡镇 / 行政村</th><th>任务包</th><th>隐患房屋</th><th>子任务完成</th><th>完成率</th><th>子任务状态分布</th>
+        </tr></thead><tbody>`;
+    names.forEach(tn => {
+        const list = towns[tn];
+        const m = groupMetrics(list);
+        const open = expandedTowns.has(tn);
+        html += `<tr class="town-row" onclick="toggleTown('${tn}')">
+            <td><i class="fa-solid fa-chevron-${open ? 'down' : 'right'}" style="color:var(--text-sub);margin-right:6px;"></i><b>${esc(tn)}</b></td>
+            <td>${list.length} 个</td><td>${m.houses} 栋</td>
+            <td>${m.st.total ? m.st.done + ' / ' + m.st.total : '-'}</td>
+            <td>${progressCell(m.st.done, m.st.total)}</td>
+            <td>${statusTags(m.allSubs) || '<span style="color:var(--text-sub);">待分解</span>'}</td>
+        </tr>`;
+        if (open) {
+            const byVillage = {};
+            list.forEach(x => { const k = x.t.village || '-'; (byVillage[k] = byVillage[k] || []).push(x); });
+            Object.keys(byVillage).forEach(vn => {
+                const vm = groupMetrics(byVillage[vn]);
+                html += `<tr class="village-row">
+                    <td>${esc(vn)}</td>
+                    <td>${byVillage[vn].length} 个</td><td>${vm.houses} 栋</td>
+                    <td>${vm.st.total ? vm.st.done + ' / ' + vm.st.total : '-'}</td>
+                    <td>${progressCell(vm.st.done, vm.st.total)}</td>
+                    <td>${statusTags(vm.allSubs) || '<span style="color:var(--text-sub);">待分解</span>'}</td>
+                </tr>`;
+            });
+        }
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+}
+
+function renderTownView(town) {
+    const rows = trackPkgs().filter(x => x.t.town === town);
+    const byVillage = {};
+    rows.forEach(x => { const k = x.t.village || '-'; (byVillage[k] = byVillage[k] || []).push(x); });
+    const names = Object.keys(byVillage);
+    const body = document.getElementById('track-body');
+    if (!names.length) {
+        body.innerHTML = '<div class="empty-tip"><i class="fa-solid fa-route"></i>该乡镇暂无已下发的任务包</div>';
+        return;
+    }
+    let html = `<table class="data-table"><thead><tr>
+        <th>行政村</th><th>任务包</th><th>隐患房屋</th><th>子任务完成</th><th>完成率</th><th>子任务状态分布</th>
+        </tr></thead><tbody>`;
+    names.forEach(vn => {
+        const m = groupMetrics(byVillage[vn]);
+        html += `<tr>
+            <td><b>${esc(vn)}</b></td>
+            <td>${byVillage[vn].length} 个</td><td>${m.houses} 栋</td>
+            <td>${m.st.total ? m.st.done + ' / ' + m.st.total : '-'}</td>
+            <td>${progressCell(m.st.done, m.st.total)}</td>
+            <td>${statusTags(m.allSubs) || '<span style="color:var(--text-sub);">待分解</span>'}</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    body.innerHTML = html;
+}
+
+function renderVillageView(village) {
+    const rows = trackPkgs().filter(x => x.t.village === village);
+    const body = document.getElementById('track-body');
+    let html = `<table class="data-table"><thead><tr>
+        <th>房屋地址</th><th>户主</th><th>风险等级</th><th>所属子任务</th><th>责任人</th><th>处置方式</th><th>完成时限</th><th>状态</th>
+        </tr></thead><tbody>`;
+    let count = 0;
+    rows.forEach(({ p, t }) => {
+        const subs = p.subTasks || [];
+        if (!subs.length) {
+            count++;
+            html += `<tr><td colspan="8" style="color:var(--text-sub);"><i class="fa-solid fa-box-open" style="margin-right:6px;"></i>任务包「${esc(t.name)}」已于 ${esc(p.dispatchTime || '-')} 下发至 ${esc(p.receiverName || '-')}，待接收单位分解到户</td></tr>`;
+            return;
+        }
+        subs.forEach(s => {
+            (s.houseNos || []).forEach((no, i) => {
+                count++;
+                const h = getHouseRecord(no) || {};
+                // 风险等级优先取当前档案；已验收房屋档案风险已消除，回落到下发时任务快照
+                let lv = houseRiskLevel(h);
+                if (!lv) lv = houseRiskLevel((t.selectedProjects || []).find(x => x.houseNo === no));
+                const owner = h.owner || (s.role === '户主' ? s.person : '') || '-';
+                const addr = h.address || (s.houseNames || [])[i] || no;
+                html += `<tr>
+                    <td>${esc(addr)}</td>
+                    <td>${esc(owner)}</td>
+                    <td>${lv === 'red' ? '<span class="dist-badge red">第三类</span>' : lv === 'yellow' ? '<span class="dist-badge yellow">第二类</span>' : '-'}</td>
+                    <td>${esc(s.name)}</td>
+                    <td>${esc(s.person || '-')} <span style="color:var(--text-sub);font-size:12px;">${esc(s.role || '')}</span></td>
+                    <td>${esc(s.method || '-')}</td>
+                    <td>${esc(s.deadline || '-')}</td>
+                    <td><span class="status-tag ${s.status === '已完成' ? 'done' : s.status === '待接收' ? 'pending' : 'doing'}">${esc(s.status || '-')}</span></td>
+                </tr>`;
+            });
+        });
+    });
+    if (!count) html += `<tr><td colspan="8" style="text-align:center;color:var(--text-sub);padding:40px 0;">该村暂无已下发的任务包</td></tr>`;
+    html += '</tbody></table>';
+    body.innerHTML = html;
+}
+
+function toggleTown(tn) {
+    if (expandedTowns.has(tn)) expandedTowns.delete(tn); else expandedTowns.add(tn);
+    renderTrackView();
+}
+
+document.querySelectorAll('.view-tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.view-tab').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    curView = b.dataset.view;
+    document.getElementById('view-list').style.display = curView === 'list' ? 'block' : 'none';
+    document.getElementById('view-track').style.display = curView === 'track' ? 'block' : 'none';
+    if (curView === 'track') { scopeVal = ''; renderTrackView(); }
+}));
+document.querySelectorAll('.role-btn').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.role-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    curRole = b.dataset.role;
+    scopeVal = '';
+    renderTrackView();
+}));
+document.getElementById('scope-select').addEventListener('change', e => { scopeVal = e.target.value; renderTrackView(); });
 
 function goDetail(id) { window.location.href = 'rural-hazard-dispatch-detail.html?id=' + id; }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }

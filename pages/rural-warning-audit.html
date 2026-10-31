@@ -3,7 +3,7 @@
 <html lang="zh-CN" data-theme="light"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>农村自建房 - 风险隐患核实</title>
+<title>农村自建房 - 零星隐患核实</title>
 <link rel="stylesheet" href="./all.min.css">
 <link rel="stylesheet" href="./leaflet.css" />
 <script src="../js/house-arch-data.js"></script>
@@ -1411,7 +1411,7 @@ body {
     <div>
         <div class="page-title" style="margin-top:8px">
             <i class="fa-solid fa-clipboard-check"></i>
-            <span>风险隐患核实</span>
+            <span>零星隐患核实</span>
             <a href="rural-warning-management.html" class="btn btn-secondary page-title-btn" id="backToWarningMgmtBtn">
                 <i class="fa-solid fa-arrow-left"></i> 返回风险隐患管理
             </a>
@@ -1753,6 +1753,11 @@ body {
                         <label class="form-label">核实意见 <span class="required">*</span></label>
                         <textarea class="form-textarea" id="pass-opinion" placeholder="请输入核实意见..."></textarea>
                     </div>
+                    <div class="form-group" style="margin-top: 12px;">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;color:var(--text-primary,#333);">
+                            <input type="checkbox" id="pass-to-task"> 同时转为专项排查线索（核实通过后自动生成专项排查任务，可继续按任务组织排查）
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -2044,6 +2049,7 @@ function submitAudit() {
         return;
     }
     var timeStr = getNowStr();
+    var redirectUrl = 'rural-warning-management.html';
 
     if (decision === 'pass') {
         var level = document.getElementById('pass-level-select').value;
@@ -2059,7 +2065,19 @@ function submitAudit() {
         rec.riskDisplayLevel = level;
         setHouseRecord(no, rec);
         clearAuditDraft(no);
-        showToast('success', '核实通过', '隐患等级已确认为「' + level + '」，\n该隐患进入待分发流程');
+        // 勾选"转专项排查线索"时，生成专项排查任务并跳转到任务详情
+        var toTask = document.getElementById('pass-to-task');
+        if (toTask && toTask.checked) {
+            var newTaskId = createPatrolTaskFromHazard(rec, no, opinion);
+            if (newTaskId) {
+                redirectUrl = 'rural-risk-task-detail.html?id=' + newTaskId;
+                showToast('success', '核实通过', '隐患等级已确认为「' + level + '」，\n已生成专项排查任务，即将跳转任务详情');
+            } else {
+                showToast('success', '核实通过', '隐患等级已确认为「' + level + '」，\n该隐患进入待分发流程');
+            }
+        } else {
+            showToast('success', '核实通过', '隐患等级已确认为「' + level + '」，\n该隐患进入待分发流程');
+        }
     } else {
         var reason = document.getElementById('reject-reason').value.trim();
         if (!reason) { showToast('warning', '请填写驳回/退回原因', ''); return; }
@@ -2071,7 +2089,64 @@ function submitAudit() {
         clearAuditDraft(no);
         showToast('success', '已驳回', '该隐患已退回上报人补充，\n状态更新为「已驳回」');
     }
-    setTimeout(function() { window.location.href = 'rural-warning-management.html'; }, 1500);
+    // 等待服务端写盘完成再跳转：POST 是异步的，页面卸载可能取消请求，
+    // 导致跳转后服务端旧数据整条覆盖本地刚更新的记录（服务端优先合并）
+    var doJump = function() { window.location.href = redirectUrl; };
+    setTimeout(function() {
+        if (typeof flushHouseArchToServer === 'function') {
+            flushHouseArchToServer().then(doJump, doJump);
+        } else {
+            doJump();
+        }
+    }, 1500);
+}
+
+// 由零星隐患核实通过生成专项排查任务（写入 patrolTasks，结构与巡查任务管理一致）
+function createPatrolTaskFromHazard(rec, no, opinion) {
+    try {
+        var tasks = JSON.parse(localStorage.getItem('patrolTasks') || '[]');
+        var maxId = tasks.reduce(function(m, t) { return Math.max(m, Number(t.id) || 0); }, 0);
+        var id = maxId + 1;
+        var now = new Date();
+        var ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        tasks.push({
+            id: id,
+            name: '零星举报专项排查-' + (rec.name || no),
+            type: 'temporary',
+            typeLabel: '临时巡查',
+            town: rec.street || '',
+            village: rec.community || '',
+            unit: '', unitName: '',
+            person: '',
+            total: 1,
+            archiveCount: 1,
+            status: 'processing',
+            startDate: ymd,
+            endDate: '',
+            desc: '由零星隐患核实通过转入（' + no + '）。核实意见：' + opinion,
+            createTime: ymd,
+            createBy: '核实转入',
+            source: 'sporadic',
+            selectedProjects: [{
+                id: 1,
+                houseNo: no,
+                name: rec.name || no,
+                town: rec.street || '',
+                village: rec.community || '',
+                address: rec.address || '',
+                structure: (rec.structure && rec.structure.structureType) || rec.category || '',
+                year: rec.builtYear || rec.year || '',
+                floors: rec.floors || '',
+                area: rec.buildingArea || rec.area || '',
+                owner: rec.owner || '',
+                phone: rec.phone || '',
+                status: 'pending',
+                source: 'manual'
+            }]
+        });
+        localStorage.setItem('patrolTasks', JSON.stringify(tasks));
+        return id;
+    } catch (e) { return null; }
 }
 
 function toggleExpertPanel() {
@@ -2704,32 +2779,34 @@ function loadData() {
         const riskClass = rec.riskClassification || {};
         const structure = rec.structure || {};
         const usage = rec.usage || {};
-        const firstHazard = (rec.hazards && rec.hazards[0]) || {};
+        // 多隐患房屋：按台账行携带的 hz 索引定位对应隐患，缺省取第一条
+        const hzIdx = Math.max(0, parseInt(getUrlParam('hz') || '0', 10) || 0);
+        const firstHazard = (rec.hazards && (rec.hazards[hzIdx] || rec.hazards[0])) || {};
         const firstInspection = (rec.inspectionRecords && rec.inspectionRecords[0]) || {};
-        const reportTime = firstInspection.reportTime || (firstInspection.checkDate ? firstInspection.checkDate + ' 09:00' : '2025-06-01 09:00');
+        const reportTime = firstHazard.reportTime || firstInspection.reportTime || (firstInspection.checkDate ? firstInspection.checkDate + ' 09:00' : '2025-06-01 09:00');
 
         // 基础信息
-        setText('base-riskName', riskInfo.riskName || rec.name + ' 风险隐患');
-        setText('base-riskType', riskInfo.riskType || firstHazard.type || '结构隐患');
+        setText('base-riskName', firstHazard.part ? (rec.name + ' ' + firstHazard.part + (firstHazard.type || '')) : (riskInfo.riskName || rec.name + ' 风险隐患'));
+        setText('base-riskType', firstHazard.type || riskInfo.riskType || '结构隐患');
         setHtml('base-riskLevel', renderBadge(riskInfo.riskLevel || rec.riskLevel || '第二类'));
         setText('base-houseName', rec.name);
         setText('base-address', rec.address);
         setText('base-influence', riskInfo.spatialLocation || rec.address);
-        setText('base-source', riskInfo.discoveryMethod || '排查发现');
+        setText('base-source', firstHazard.source || riskInfo.discoveryMethod || '排查发现');
         setText('base-reportTime', formatDateTime(reportTime));
         setText('base-reporter', rec.owner);
         setText('base-dutyUnit', rec.responsibleDept || (rec.street + '城建中心'));
         setText('base-owner', rec.owner);
-        setText('base-desc', riskInfo.riskDesc || (firstHazard.part || '') + '存在' + (riskInfo.riskType || '安全隐患') + '，需进一步处置');
+        setText('base-desc', firstHazard.desc || riskInfo.riskDesc || (firstHazard.part || '') + '存在' + (riskInfo.riskType || '安全隐患') + '，需进一步处置');
 
         // 隐患状态流转步骤条
         renderHazardStatusFlow(rec, reportTime);
 
         // 风险详情
-        setText('risk-part', riskInfo.riskPart || firstHazard.part || '-');
-        setText('risk-type', riskInfo.riskType || firstHazard.type || '-');
+        setText('risk-part', firstHazard.part || riskInfo.riskPart || '-');
+        setText('risk-type', firstHazard.type || riskInfo.riskType || '-');
         setHtml('risk-class-level', renderRiskLevelBadge(riskClass.level || rec.riskLevel || '第二类'));
-        setText('risk-desc', riskInfo.riskDesc || '-');
+        setText('risk-desc', firstHazard.desc || riskInfo.riskDesc || '-');
         setText('risk-basis', riskClass.basis || '依据《农村住房危险性鉴定标准》综合评定');
         setText('risk-assessTime', formatDateTime(riskClass.assessTime || firstInspection.checkDate));
         setText('risk-assessor', riskClass.assessor || firstInspection.checker || '-');

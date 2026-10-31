@@ -729,9 +729,19 @@ body {
   <i class="fa-solid fa-clipboard-check"></i>
   <span>风险巡查任务详情</span>
   </div>
-  <a href="patrol-task-management.html" class="back-btn">
-  <i class="fa-solid fa-arrow-left"></i> 返回风险巡查任务
+  <a href="patrol-task-management.html" class="back-btn" id="backBtn">
+  <i class="fa-solid fa-arrow-left"></i> <span id="backBtnText">返回风险巡查任务</span>
   </a>
+  <script>
+  // 按来源页动态调整返回目标：从专项隐患上报列表进入时返回上报列表
+  (function () {
+    if (new URLSearchParams(location.search).get('from') !== 'report') return;
+    var b = document.getElementById('backBtn');
+    if (b) b.href = 'rural-hazard-report-list.html';
+    var t = document.getElementById('backBtnText');
+    if (t) t.textContent = '返回专项隐患上报';
+  })();
+  </script>
  </div>
 
  <div class="detail-layout">
@@ -1544,13 +1554,14 @@ function deriveIssuesFromScope(scope, t) {
 function makeTimelineData(t) {
  const createTime = t.createTime || '2025-06-01 09:30';
  const date = createTime.split(' ')[0];
+ const addDays = (ds, n) => { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
  return [
   { title: '任务创建', operator: t.createBy || '系统管理员', time: createTime, desc: '创建巡查任务：' + t.name, type: 'completed' },
   { title: '任务下发', operator: t.createBy || '系统管理员', time: date + ' 10:15', desc: '将任务下发至' + (t.unitName || '巡查单位'), type: 'completed' },
   { title: '任务接收', operator: t.person || '巡查人员', time: date + ' 10:20', desc: '接收任务，确认巡查范围和时间安排', type: 'completed' },
   { title: '人员分配', operator: t.person || '巡查人员', time: date + ' 14:00', desc: '分配巡查人员：' + (t.person || '待分配'), type: 'completed' },
-  { title: '开始执行', operator: t.person || '巡查人员', time: date + ' 08:30', desc: '开始现场巡查', type: t.status === 'completed' ? 'completed' : 'active' },
-  { title: '问题上报', operator: t.person || '巡查人员', time: date + ' 09:00', desc: '上报隐患情况', type: t.status === 'completed' ? 'completed' : 'active' }
+  { title: '开始执行', operator: t.person || '巡查人员', time: addDays(date, 1) + ' 08:30', desc: '开始现场巡查', type: t.status === 'completed' ? 'completed' : 'active' },
+  { title: '问题上报', operator: t.person || '巡查人员', time: addDays(date, 1) + ' 09:00', desc: '上报隐患情况', type: t.status === 'completed' ? 'completed' : 'active' }
  ];
 }
 
@@ -1620,10 +1631,11 @@ if (storedTask) {
 function getFlowStepTimes() {
  const createTime = taskData.createTime && taskData.createTime !== '-' ? taskData.createTime : '-';
  const date = createTime.includes(' ') ? createTime.split(' ')[0] : createTime;
+ const addDays = (ds, n) => { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
  return {
   draft: createTime,
   issued: date !== '-' ? `${date} 10:15` : '-',
-  processing: date !== '-' ? `${date} 08:30` : '-',
+  processing: date !== '-' ? `${addDays(date, 1)} 08:30` : '-',
   completed: taskData.finishTime || (taskData.status === 'completed' && date !== '-' ? `${date} 18:00` : '-')
  };
 }
@@ -1684,6 +1696,9 @@ function renderFlow() {
 
  const lineWidth = (currentIndex / (flowSteps.length - 1)) * 100;
  document.getElementById('flowLineProgress').style.width = lineWidth + '%';
+
+ const labelEl = document.getElementById('currentStatusLabel');
+ if (labelEl) labelEl.textContent = taskData.statusLabel || (flowSteps[currentIndex] ? flowSteps[currentIndex].label : '-');
 
  const stepsHtml = flowSteps.map((step, idx) => {
   let stateClass = '';

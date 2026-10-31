@@ -167,6 +167,12 @@ function syncHouseArchFromServer() {
         var serverCount = Object.keys(serverData).length;
         if (serverCount === 0) return false;
         var local = __getHouseArchStorage();
+        if (__localDirty) {
+            // 拉取在飞期间本地已有写入：本地优先回写服务端，不吃本地新数据
+            __localDirty = false;
+            __postToServer(local);
+            return true;
+        }
         // 服务端优先合并：服务端有的覆盖，本地独有的保留
         var merged = Object.assign({}, local, serverData);
         __syncToServerEnabled = false; // 合并写回本地时不要再回写服务端
@@ -177,6 +183,20 @@ function syncHouseArchFromServer() {
         }
         return true;
     }).catch(function() { return false; });
+}
+
+// 将本地缓存完整写回服务端并返回 Promise。
+// 供「保存后立即跳转/刷新」的场景等待落盘，避免 fire-and-forget 的 POST
+// 被页面卸载取消、随后被服务端旧数据整条覆盖导致新登记数据丢失。
+function flushHouseArchToServer() {
+    if (typeof fetch !== 'function') return Promise.resolve(false);
+    try {
+        return fetch('/api/house-arch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(__getHouseArchStorage())
+        }).then(function (r) { return !!(r && r.ok); }).catch(function () { return false; });
+    } catch (e) { return Promise.resolve(false); }
 }
 function __getCloseApplyStorage() {
     try { const raw = localStorage.getItem(CLOSE_APPLY_KEY); return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
@@ -547,7 +567,11 @@ function getAllHouseRecords() {
 }
 
 // 设置单条记录并返回所有记录
+// 本地脏标记：sync 拉取在飞期间发生的本地写入，合并时改为本地优先，
+// 避免旧快照把刚写入的登记/核实数据整条覆盖丢失（TOCTOU 竞态修复）
+let __localDirty = false;
 function setHouseRecord(no, record) {
+    __localDirty = true;
     const all = getHouseArchStorage();
     all[no] = normalizeHouseRecord(record);
     setHouseArchStorage(all);
