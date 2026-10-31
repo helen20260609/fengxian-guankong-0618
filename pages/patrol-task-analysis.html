@@ -8,6 +8,7 @@
 <script src="./echarts.min.js"></script>
 <link rel="stylesheet" href="./leaflet.css">
 <script src="./leaflet.js"></script>
+<script src="rural-risk-checklist.js"></script>
 <style>
 /* ===== Theme Variables ===== */
 :root {
@@ -169,6 +170,42 @@ body {
     gap: 6px;
 }
 .map-floating-title i { color: var(--primary); }
+/* 浮动面板可折叠：折叠后缩为圆形图标按钮（图层控制→左下角，图例说明→右下角） */
+.map-floating-title { cursor: pointer; user-select: none; }
+.map-floating-title .panel-caret {
+    margin-left: auto;
+    color: #5f6368;
+    font-size: 11px;
+    transition: transform .2s;
+}
+.map-floating-layer, .map-floating-legend { transition: width .2s, height .2s, border-radius .2s, padding .2s; }
+.map-floating-layer.collapsed,
+.map-floating-legend.collapsed {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.map-floating-layer.collapsed { top: auto; bottom: 16px; left: 16px; }
+.map-floating-legend.collapsed { bottom: 30px; right: 16px; } /* 避开右下角 Leaflet  attribution */
+.map-floating-layer.collapsed > *:not(.map-floating-title),
+.map-floating-legend.collapsed > *:not(.map-floating-title) { display: none; }
+.map-floating-layer.collapsed .map-floating-title,
+.map-floating-legend.collapsed .map-floating-title {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.map-floating-layer.collapsed .panel-label,
+.map-floating-legend.collapsed .panel-label,
+.map-floating-layer.collapsed .panel-caret,
+.map-floating-legend.collapsed .panel-caret { display: none; }
 .map-floating-layer .layer-list { gap: 8px; }
 .map-floating-layer .layer-item {
     padding: 10px;
@@ -713,13 +750,14 @@ body {
     border-radius: 3px;
 }
 
-/* ===== Trend Panel ===== */
-.trend-panel {
-    height: 220px;
-    min-height: 220px;
+/* ===== 中栏分析双图行 ===== */
+.analysis-row {
+    display: flex;
+    gap: 16px;
 }
-.trend-panel .chart-box {
-    height: 150px;
+.analysis-row .panel-card {
+    flex: 1;
+    min-width: 0;
 }
 
 /* ===== Buttons ===== */
@@ -798,6 +836,7 @@ body {
     #mapContainer { height: 500px; flex: none; } /* 单列布局下显式高度，防止 flex 塌陷 */
     .time-axis-panel { left: 12px; right: 12px; }
     .center-column, .right-column { min-height: auto; min-width: 0; }
+    .analysis-row { flex-direction: column; }
 }
 </style>
     <link rel="stylesheet" href="ui-modal.css">
@@ -918,14 +957,15 @@ body {
         </div>
     </div>
 
-    <!-- Center: Map + Trend -->
+    <!-- Center: Map + 结构/风险类型分析 -->
     <div class="center-column">
         <div class="panel-card map-wrapper">
             <div id="mapContainer" style="z-index: 1;">
                 <!-- Floating Layer Control -->
             <div class="map-floating-layer">
-                <div class="map-floating-title">
-                    <i class="fas fa-layer-group"></i> 图层控制
+                <div class="map-floating-title" onclick="toggleMapPanel(this)" title="图层控制">
+                    <i class="fas fa-layer-group"></i> <span class="panel-label">图层控制</span>
+                    <i class="fas fa-chevron-up panel-caret"></i>
                 </div>
                 <div class="layer-list">
                     <div class="layer-item active" onclick="toggleLayer(this, &#39;task&#39;)">
@@ -957,8 +997,9 @@ body {
 
             <!-- Floating Legend -->
             <div class="map-floating-legend">
-                <div class="map-floating-title">
-                    <i class="fas fa-map-signs"></i> 图例说明
+                <div class="map-floating-title" onclick="toggleMapPanel(this)" title="图例说明">
+                    <i class="fas fa-map-signs"></i> <span class="panel-label">图例说明</span>
+                    <i class="fas fa-chevron-up panel-caret"></i>
                 </div>
                 <div class="legend-section">
                     <div class="legend-subtitle">风险等级（填充色）</div>
@@ -1020,34 +1061,8 @@ body {
     </div>
         </div>
 
-    <!-- Trend Chart -->
-    <div class="panel-card trend-panel">
-        <div class="panel-header">
-            <div class="panel-title">
-                <i class="fas fa-chart-line"></i>
-                近7天农村自建房巡查发现趋势
-            </div>
-        </div>
-        <div class="panel-body" style="padding-top: 0;">
-            <div class="chart-box" id="lineChart"></div>
-        </div>
-    </div>
-</div>
-
-    <!-- Right: Distribution + Rank -->
-    <div class="right-column">
-        <div class="panel-card">
-            <div class="panel-header">
-                <div class="panel-title">
-                    <i class="fas fa-chart-pie"></i>
-                    风险等级分布
-                </div>
-            </div>
-            <div class="panel-body">
-                <div class="chart-box" id="pieChart" style="height: 220px;"></div>
-            </div>
-        </div>
-
+    <!-- 结构类型 / 风险类型分析 -->
+    <div class="analysis-row">
         <div class="panel-card">
             <div class="panel-header">
                 <div class="panel-title">
@@ -1056,10 +1071,38 @@ body {
                 </div>
             </div>
             <div class="panel-body">
-                <div class="chart-box" id="structureChart" style="height: 240px;"></div>
+                <div class="chart-box" id="structureChart" style="height: 260px;"></div>
             </div>
         </div>
         <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fas fa-layer-group"></i>
+                    按风险类型分析
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box" id="riskTypeChart" style="height: 260px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <!-- Right: Distribution + Rank -->
+    <div class="right-column">
+        <div class="panel-card" style="flex: none;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fas fa-chart-pie"></i>
+                    风险等级分布
+                </div>
+            </div>
+            <div class="panel-body" style="flex: none; padding: 12px 20px;">
+                <div class="chart-box" id="pieChart" style="height: 220px;"></div>
+            </div>
+        </div>
+
+        <div class="panel-card" style="flex: 1; min-height: 0;">
             <div class="panel-header">
                 <div class="panel-title">
                     <i class="fas fa-trophy"></i>
@@ -1249,6 +1292,29 @@ function houseRiskLevel(p) {
     if (items.some(c => c && c.level === 'red')) return 'major';
     if (items.some(c => c && c.level === 'yellow')) return 'large';
     return null;
+}
+
+// 按风险类型（清单 10 类，见 rural-risk-checklist.js RURAL_EXTRA_HAZARD_TYPES）聚合红/黄隐患数；无真实数据时给演示数据
+function aggregateRiskTypes() {
+    const counts = {};
+    getTasksFromStorage().forEach(t => {
+        (Array.isArray(t.selectedProjects) ? t.selectedProjects : []).forEach(p => {
+            (Array.isArray(p.checkItems) ? p.checkItems : []).forEach(c => {
+                if (c && (c.level === 'red' || c.level === 'yellow') && c.riskType && c.riskType !== '无' && c.riskType !== '-') {
+                    // riskType 可能为组合值（如「房屋整体沉降倾斜、房屋塌陷变形」），拆分后分别计数
+                    String(c.riskType).split('、').forEach(k => {
+                        k = k.trim();
+                        if (k) counts[k] = (counts[k] || 0) + 1;
+                    });
+                }
+            });
+        });
+    });
+    const entries = Object.keys(counts).map(k => [k, counts[k]]).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (!entries.length) {
+        return [['场地周边安全风险', 1], ['使用不当隐患', 2], ['楼梯损伤变形', 3], ['阳台开裂变形', 4], ['房屋塌陷变形', 5], ['房屋整体沉降倾斜', 6], ['楼面开裂变形', 7], ['梁柱开裂变形', 8], ['墙体开裂变形', 10], ['其他安全问题', 12]];
+    }
+    return entries.reverse(); // 返回升序数组，图表按需自行排序
 }
 
 function generateMockData() {
@@ -1462,6 +1528,12 @@ function initRankList() {
     }).join('');
 }
 
+// 地图浮动面板（图层控制 / 图例说明）折叠展开
+function toggleMapPanel(titleEl) {
+    const panel = titleEl.closest('.map-floating-layer, .map-floating-legend');
+    if (panel) panel.classList.toggle('collapsed');
+}
+
 function toggleLayer(el, layer) {
     el.classList.toggle('active');
     if (mapManager && mapManager.markers) {
@@ -1622,25 +1694,31 @@ function initCharts() {
             label: { show: true, position: 'right', fontSize: 11 }
         }]
     });
-    const lineChart = echarts.init(document.getElementById('lineChart'));
-    lineChart.setOption({
-        tooltip: { trigger: 'axis' },
-        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'category', data: ['06-24', '06-25', '06-26', '06-27', '06-28', '06-29', '06-30'] },
-        yAxis: { type: 'value' },
+    // 按风险类型分析：红/黄检查项按 riskType（清单 10 类）聚合，环形图 + 右侧可滚动图例（类别多时也能完整展示）
+    const rtEntries = aggregateRiskTypes().slice().sort((a, b) => b[1] - a[1]);
+    const rtColors = ['#e65100', '#f9a825', '#8e24aa', '#1a73e8', '#00897b', '#d81b60', '#5e35b1', '#43a047', '#fb8c00', '#6d4c41'];
+    const riskTypeChart = echarts.init(document.getElementById('riskTypeChart'));
+    riskTypeChart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}：{c} 条（{d}%）' },
+        legend: {
+            type: 'scroll', orient: 'vertical', right: 0, top: 'middle',
+            itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 },
+            pageTextStyle: { fontSize: 11 }
+        },
         series: [{
-            type: 'line',
-            data: [15, 22, 18, 25, 30, 28, 35],
-            smooth: true,
-            itemStyle: { color: '#1a73e8' },
-            areaStyle: { color: 'rgba(26,115,232,0.1)' }
+            type: 'pie',
+            radius: ['42%', '68%'],
+            center: ['36%', '50%'],
+            data: rtEntries.map((e, i) => ({ value: e[1], name: e[0], itemStyle: { color: rtColors[i % rtColors.length] } })),
+            label: { show: false },
+            emphasis: { label: { show: true, fontSize: 12, fontWeight: 600, formatter: '{b}\n{c} 条' } }
         }]
     });
 
     window.addEventListener('resize', () => {
         pieChart.resize();
         structureChart.resize();
-        lineChart.resize();
+        riskTypeChart.resize();
         if (mapManager) mapManager.invalidateSize();
     });
 }
