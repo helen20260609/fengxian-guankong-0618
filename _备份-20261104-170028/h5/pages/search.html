@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>搜索</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.search-header { padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+.search-header .back-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 17px; color: var(--text-primary); }
+.search-header .search-input-wrapper { flex: 1; }
+.search-header .search-input-wrapper input { width: 100%; padding: 9px 12px 9px 38px; border: 1px solid var(--input-border); border-radius: 20px; font-size: var(--font-sm); background: var(--input-bg); color: var(--text-primary); }
+.search-header .search-input-wrapper .search-icon { left: 12px; }
+
+.history-section { padding: 14px; }
+.history-section .hs-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.history-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.history-tags .ht { padding: 6px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); font-size: 11px; color: var(--text2); }
+
+.result-section { padding: 0 14px 20px; }
+.result-section .rs-title { font-size: 13px; font-weight: 700; margin: 16px 0 10px; }
+
+.result-card { background: var(--card); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.result-card .rc-type { font-size: 10px; color: var(--primary); font-weight: 600; margin-bottom: 4px; }
+.result-card .rc-title { font-size: 13px; font-weight: 600; }
+.result-card .rc-desc { font-size: 11px; color: var(--text2); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="search-header">
+        <div class="back-btn tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="search-input-wrapper">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <input type="text" id="searchInput" placeholder="搜索风险点、报告、法规..." autofocus>
+        </div>
+    </div>
+
+    <div class="history-section" id="historySection">
+        <div class="hs-title">历史搜索</div>
+        <div class="history-tags">
+            <span class="ht tap" onclick="setKeyword('脚手架')">脚手架</span>
+            <span class="ht tap" onclick="setKeyword('燃气泄漏')">燃气泄漏</span>
+            <span class="ht tap" onclick="setKeyword('基坑')">基坑</span>
+            <span class="ht tap" onclick="setKeyword('JGJ311')">JGJ311</span>
+        </div>
+    </div>
+
+    <div class="result-section" id="resultSection" style="display:none">
+        <div class="rs-title">风险清单结果</div>
+        <div id="riskResults"></div>
+
+        <div class="rs-title">隐患/任务结果</div>
+        <div id="otherResults"></div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    window.setKeyword = function(kw) {
+        document.getElementById('searchInput').value = kw;
+        handleSearch();
+    };
+
+    window.handleSearch = function() {
+        var kw = document.getElementById('searchInput').value.trim();
+        document.getElementById('historySection').style.display = kw ? 'none' : 'block';
+        document.getElementById('resultSection').style.display = kw ? 'block' : 'none';
+        if (!kw) return;
+
+        // 风险清单
+        var riskResults = RiskData.search(kw).slice(0, 10);
+        var riskContainer = document.getElementById('riskResults');
+        riskContainer.innerHTML = '';
+        if (riskResults.length === 0) {
+            riskContainer.innerHTML = '<div class="empty-state" style="padding:20px"><div class="empty-desc">未找到相关风险</div></div>';
+        } else {
+            riskResults.forEach(function(item) {
+                var html = '<div class="result-card tap" onclick="App.go(\'risk-detail.html?id=' + item.id + '\')">' +
+                    '<div class="rc-type">风险清单 · ' + App.escapeHtml(item.main) + '</div>' +
+                    '<div class="rc-title">' + App.escapeHtml(item.riskIdentify.length > 40 ? item.riskIdentify.slice(0,40) + '…' : item.riskIdentify) + '</div>' +
+                    '<div class="rc-desc">' + App.escapeHtml(item.content) + '</div>' +
+                    '</div>';
+                riskContainer.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // 隐患/任务
+        var otherContainer = document.getElementById('otherResults');
+        otherContainer.innerHTML = '';
+        var hdResults = DataStore.hiddenDangers.filter(function(h) {
+            return h.title.indexOf(kw) !== -1;
+        });
+        var taskResults = DataStore.inspectionTasks.filter(function(t) {
+            return t.title.indexOf(kw) !== -1;
+        });
+        if (hdResults.length === 0 && taskResults.length === 0) {
+            otherContainer.innerHTML = '<div class="empty-state" style="padding:20px"><div class="empty-desc">未找到相关隐患或任务</div></div>';
+        } else {
+            hdResults.forEach(function(h) {
+                var html = '<div class="result-card tap" onclick="App.go(\'hidden-danger-detail.html?id=' + h.id + '\')">' +
+                    '<div class="rc-type">隐患</div>' +
+                    '<div class="rc-title">' + App.escapeHtml(h.title) + '</div>' +
+                    '<div class="rc-desc">' + App.escapeHtml(h.location.address) + '</div>' +
+                    '</div>';
+                otherContainer.insertAdjacentHTML('beforeend', html);
+            });
+            taskResults.forEach(function(t) {
+                var html = '<div class="result-card tap" onclick="App.go(\'inspection-execute.html?id=' + t.id + '\')">' +
+                    '<div class="rc-type">巡查任务</div>' +
+                    '<div class="rc-title">' + App.escapeHtml(t.title) + '</div>' +
+                    '<div class="rc-desc">' + App.escapeHtml(t.requirements) + '</div>' +
+                    '</div>';
+                otherContainer.insertAdjacentHTML('beforeend', html);
+            });
+        }
+    };
+
+    document.getElementById('searchInput').addEventListener('input', App.debounce(handleSearch, 400));
+})();
+</script>
+</body>
+</html>

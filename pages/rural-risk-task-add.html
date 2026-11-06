@@ -1550,6 +1550,19 @@ input.cat-filter {
             </div>
         </div>
 
+        <!-- 关联预防措施（按所选风险清单自动带入，6.1.2.9.4） -->
+        <div class="section-card" style="margin-bottom:16px;">
+            <div class="section-header">
+                <i class="fa-solid fa-shield-halved"></i>
+                关联预防措施
+                <span style="font-size:12px;font-weight:400;color:var(--text-secondary);margin-left:8px;">（按所选风险清单自动带入，随任务下发，指导责任单位规范执行）</span>
+                <span id="carriedMeasureCount" style="margin-left:auto;font-size:12px;color:var(--primary);font-weight:600;"></span>
+            </div>
+            <div class="section-body">
+                <div id="carriedMeasurePanel"></div>
+            </div>
+        </div>
+
         <!-- 选择检查项 -->
         <div class="section-card" style="margin-bottom:16px;">
             <div class="section-header">
@@ -1712,6 +1725,7 @@ input.cat-filter {
     </div>
 </div>
 
+<script src="./rural-risk-data.js"></script>
 <script src="./org-data.js"></script>
 <script src="./org-modal.js"></script>
 
@@ -2355,6 +2369,10 @@ function updateConfirmInfo() {
     // 统一展示：所有任务类型都显示街镇+检查项/风险清单+房屋类别
     const selectedScopeText = buildSelectedScopeText();
     const selectedRiskListNames = riskListData.filter(rl => selectedRiskListIds.has(rl.id)).map(rl => rl.name);
+    // 自动带入的关联预防措施（6.1.2.9.4）
+    const carriedNames = typeof collectCarriedMeasures === 'function'
+        ? [...collectCarriedMeasures().keys()].map(id => { const m = measureLibData.find(x => x.id === id); return m ? m.name : null; }).filter(Boolean)
+        : [];
     
     // 构建自定义检查项表格HTML
     let customItemsHtml = '';
@@ -2398,6 +2416,7 @@ function updateConfirmInfo() {
         <div style="margin-bottom:8px;"><strong style="color:var(--text-secondary);">农村自建房检查项</strong></div>
         ${customItemsHtml || '<span style="color:var(--text-secondary);">-</span>'}
         <div style="margin-top:8px;"><strong style="color:var(--text-secondary);">农村自建房风险清单：</strong>${selectedRiskListNames.join('、') || '-'}</div>
+        <div style="margin-top:8px;"><strong style="color:var(--text-secondary);">关联预防措施（自动带入）：</strong>${carriedNames.length ? carriedNames.join('、') + `（共 ${carriedNames.length} 条，随任务下发指导执行）` : '-'}</div>
         <div style="margin-top:8px;"><strong style="color:var(--text-secondary);">按房屋类别选择：</strong>${selectedCategoryIds.size > 0 ? Array.from(selectedCategoryIds).map(catId => houseCategoryConfig[catId].name + '（' + getCategorySelectedHouses(catId).length + '栋）').join('、') : '-'}</div>
         ${zeroHouseWarning}
     `;
@@ -2706,13 +2725,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ===== 风险清单数据 =====
-const riskListData = [
-    { id: 'rl1', name: '农村自建房结构安全风险清单', version: 'V2.1', genTime: '2026-06-20', itemCount: 45 },
-    { id: 'rl2', name: '农村自建房使用安全风险清单', version: 'V1.5', genTime: '2026-06-18', itemCount: 32 },
-    { id: 'rl3', name: '农村自建房消防风险清单', version: 'V3.0', genTime: '2026-06-15', itemCount: 28 },
-    { id: 'rl4', name: '农村自建房周边环境风险清单', version: 'V1.2', genTime: '2026-06-10', itemCount: 18 },
-    { id: 'rl5', name: '农村自建房施工过程风险清单', version: 'V2.3', genTime: '2026-06-05', itemCount: 22 }
-];
+const riskListData = ruralRiskLists;
 
 function renderRiskListTable() {
     const tbody = document.getElementById('riskListTableBody');
@@ -2772,6 +2785,51 @@ function renderSelectedRiskListBar() {
             </span>
         `).join('');
     }
+    renderCarriedMeasures();
+}
+
+// ===== 关联预防措施自动带入（6.1.2.9.4）：按所选风险清单匹配风险条目，聚合其 measureIds 关联措施（匹配器与清单定义统一在 rural-risk-data.js） =====
+const RISK_LIST_MEASURE_MATCH = RURAL_LIST_MEASURE_MATCH;
+function stripHtmlSafe(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return d.textContent || '';
+}
+// 汇总所选清单带入的措施：Map<measureId, {sources:Set}>
+function collectCarriedMeasures() {
+    return collectRuralCarriedMeasures([...selectedRiskListIds]);
+}
+function renderCarriedMeasures() {
+    const host = document.getElementById('carriedMeasurePanel');
+    const countEl = document.getElementById('carriedMeasureCount');
+    if (!host || typeof measureLibData === 'undefined') return;
+    if (!selectedRiskListIds.size) {
+        host.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;">请先勾选上方风险清单，系统将自动带入清单内风险条目关联的预防措施</div>';
+        countEl.textContent = '';
+        return;
+    }
+    const map = collectCarriedMeasures();
+    if (!map.size) {
+        host.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;">所选清单的风险条目暂未关联预防措施，可到「风险清单编制」中为条目关联措施</div>';
+        countEl.textContent = '';
+        return;
+    }
+    const byType = {};
+    map.forEach((v, mid) => {
+        const m = measureLibData.find(x => x.id === mid);
+        if (!m) return;
+        (byType[m.type] = byType[m.type] || []).push({ m, sources: v.sources });
+    });
+    const TYPE_COLOR = { '工程措施': '#1a73e8', '管理措施': '#188038', '传统工艺措施': '#b06000', '宣教措施': '#9334e6' };
+    host.innerHTML = MEASURE_TYPES.filter(t => byType[t]).map(t => `
+        <div style="margin-bottom:12px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:${TYPE_COLOR[t] || 'var(--text)'};"><i class="fa-solid fa-layer-group" style="margin-right:4px;"></i>${t}（${byType[t].length} 条）</div>
+            <div>${byType[t].map(({ m, sources }) => {
+                const tip = `${stripHtmlSafe(m.desc)}\n责任主体：${m.owner || '-'}\n来源条目：${[...sources].slice(0, 5).join('、')}${sources.size > 5 ? ' 等' : ''}`;
+                return `<span style="display:inline-block;padding:3px 10px;margin:0 6px 6px 0;border-radius:10px;background:rgba(26,115,232,.08);border:1px solid rgba(26,115,232,.25);color:var(--text);font-size:12px;cursor:default;" title="${tip.replace(/"/g, '&quot;')}">${m.name}${(m.grades && m.grades.length) ? `<span style="color:var(--primary);">（分级×${m.grades.length}）</span>` : ''}</span>`;
+            }).join('')}</div>
+        </div>`).join('');
+    countEl.textContent = `共带入 ${map.size} 条`;
 }
 
 // ===== Init =====

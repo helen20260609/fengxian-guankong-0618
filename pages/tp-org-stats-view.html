@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>统计报告只读视图 - 第三方服务机构</title>
+<link rel="stylesheet" href="./all.min.css">
+<script src="../js/third-party-data.js"></script>
+<style>
+:root {
+    --primary: #1a73e8; --bg-page: #f0f2f5; --bg-card: #fff; --text-main: #202124; --text-sub: #5f6368; --border: #dadce0;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-page); color: var(--text-main); font-family: "Microsoft YaHei", "PingFang SC", sans-serif; padding: 24px; }
+.readonly-banner { background: var(--primary); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+.report-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 1100px; margin: 0 auto; }
+.report-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.report-meta { font-size: 13px; color: var(--text-sub); line-height: 1.9; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th, .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+.data-table th { background: #f0f2f5; color: var(--text-sub); font-weight: 600; }
+.data-table tr:hover { background: #f8f9fa; }
+.empty-tip { text-align: center; padding: 48px; color: var(--text-sub); }
+</style>
+</head>
+<body>
+<div class="readonly-banner"><i class="fas fa-lock"></i> 只读分享视图 · 本页面仅供查看，不可修改</div>
+<div class="report-card" id="reportCard"></div>
+<script>
+(function() {
+    var params = new URLSearchParams(location.search);
+    var reportId = params.get('reportId');
+    var reports = [];
+    try { reports = JSON.parse(localStorage.getItem('orgReports') || '[]'); } catch (e) {}
+    var report = reports.find(function(r) { return String(r.id) === String(reportId); });
+    var card = document.getElementById('reportCard');
+    if (!report) {
+        card.innerHTML = '<div class="empty-tip"><i class="fas fa-file-alt" style="font-size:32px;opacity:0.4;"></i><p>报告不存在或链接已失效</p></div>';
+        return;
+    }
+    var indicatorNames = { orgCount: '机构数量', serviceCount: '服务数量', serviceQuality: '服务质量', satisfaction: '客户满意度', credit: '信用分布', timeliness: '及时率', passRate: '一次通过率', newOrg: '新增机构' };
+    var dimensionNames = { time: '时间', area: '区域', field: '专业领域', orgType: '机构类型', credit: '信用等级' };
+    var indicators = (report.indicators || []).map(function(k) { return indicatorNames[k] || k; }).join('、');
+    var dimensions = (report.dimensions || []).map(function(k) { return dimensionNames[k] || k; }).join('、');
+
+    var orgs = typeof getAllOrgs === 'function' ? getAllOrgs() : [];
+    var rows = orgs.map(function(o) {
+        var contracts = typeof getContractsByOrg === 'function' ? getContractsByOrg(o.orgId) : [];
+        var performances = typeof getPerformancesByOrg === 'function' ? getPerformancesByOrg(o.orgId) : [];
+        var serviceCount = contracts.length + performances.length * 2;
+        var passCount = performances.filter(function(p) { return ['优秀','良好','合格'].indexOf(p.conclusion) >= 0; }).length;
+        var quality = performances.length ? Math.round(passCount / performances.length * 100) : 100;
+        var satisfactionMap = { '优秀': 5.0, '良好': 4.5, '合格': 4.0, '不合格': 2.5 };
+        var satSum = 0;
+        performances.forEach(function(p) { satSum += satisfactionMap[p.conclusion] || 4.0; });
+        var satisfaction = performances.length ? (satSum / performances.length).toFixed(1) : '4.0';
+        return '<tr><td>' + (o.orgName || '-') + '</td><td>' + (o.orgType || '-') + '</td><td>' + (o.field || '-') + '</td><td>' + ((o.region || '').replace('上海市', '')) + '</td><td>' + serviceCount + '</td><td>' + quality + '%</td><td>' + satisfaction + '</td><td>' + (o.creditLevel || '-') + '</td></tr>';
+    }).join('');
+
+    card.innerHTML =
+        '<div class="report-title">' + (report.name || '统计报告') + '</div>' +
+        '<div class="report-meta">生成时间：' + (report.createTime || '-') + '　统计周期：' + (report.period || '-') + '<br>' +
+        '统计指标：' + indicators + '<br>统计维度：' + dimensions + '</div>' +
+        '<table class="data-table"><thead><tr><th>机构名称</th><th>类型</th><th>领域</th><th>区域</th><th>服务数量</th><th>合格率</th><th>满意度</th><th>信用等级</th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-sub);">暂无数据</td></tr>') +
+        '</tbody></table>';
+})();
+</script>
+</body>
+</html>

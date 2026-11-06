@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>预警体征</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+.ws-hero { background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%); padding: 16px 18px 30px; color: #fff; position: relative; }
+.ws-hero .ws-header-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ws-hero .ws-back { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+.ws-hero .ws-title { font-size: 19px; font-weight: 700; flex: 1; }
+.ws-hero .ws-sub { font-size: 12.5px; opacity: .85; margin-top: 5px; }
+
+.ws-body { margin: -16px 14px 14px; position: relative; z-index: 2; padding-bottom: calc(var(--tab-bar-height) + var(--safe-bottom) + 20px); }
+
+.kpi-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.kpi-card { flex: 1; background: var(--card); border-radius: 10px; padding: 14px 8px; box-shadow: 0 2px 10px var(--shadow); border: 1px solid var(--border); text-align: center; }
+.kpi-card .value { font-size: 21px; font-weight: 800; }
+.kpi-card .label { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
+
+.chart-card { background: var(--card); border-radius: 10px; padding: 14px; box-shadow: 0 2px 10px var(--shadow); border: 1px solid var(--border); margin-bottom: 14px; }
+.chart-card .cc-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.chart-box { width: 100%; height: 220px; }
+
+.warning-list-section { background: var(--card); border-radius: 10px; padding: 14px; box-shadow: 0 2px 10px var(--shadow); border: 1px solid var(--border); }
+.warning-list-section .wls-title { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+.warning-mini-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.warning-mini-item:last-child { border-bottom: none; }
+.wmi-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.wmi-info { flex: 1; }
+.wmi-title { font-size: 12px; font-weight: 600; }
+.wmi-meta { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+.wmi-status { font-size: 10px; padding: 2px 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="ws-hero">
+        <div class="ws-header-row">
+            <div class="ws-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+            <div class="ws-title">预警体征</div>
+        </div>
+        <div class="ws-sub">当前预警态势与处置监控</div>
+    </div>
+
+    <div class="ws-body">
+        <div class="kpi-row anim d1">
+            <div class="kpi-card">
+                <div class="value" id="totalValue" style="color:var(--text-primary)">--</div>
+                <div class="label">预警总数</div>
+            </div>
+            <div class="kpi-card">
+                <div class="value" id="redValue" style="color:var(--danger)">--</div>
+                <div class="label">红色</div>
+            </div>
+            <div class="kpi-card">
+                <div class="value" id="orangeValue" style="color:var(--warning)">--</div>
+                <div class="label">橙色</div>
+            </div>
+        </div>
+
+        <div class="chart-card anim d2">
+            <div class="cc-title">预警等级分布</div>
+            <div class="chart-box" id="levelPie"></div>
+        </div>
+
+        <div class="chart-card anim d2">
+            <div class="cc-title">预警领域分布</div>
+            <div class="chart-box" id="domainBar"></div>
+        </div>
+
+        <div class="chart-card anim d2">
+            <div class="cc-title">近 7 天预警趋势</div>
+            <div class="chart-box" id="trendLine"></div>
+        </div>
+
+        <div class="warning-list-section anim d3">
+            <div class="wls-title">未处置预警</div>
+            <div id="warningMiniList"></div>
+        </div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var stats = DataStore.warningStats;
+    var warnings = DataStore.warnings.filter(function(w) { return w.status !== 'closed'; });
+    warnings.sort(function(a, b) {
+        var order = { red: 0, orange: 1, yellow: 2, blue: 3 };
+        return order[a.level] - order[b.level];
+    });
+
+    var total = warnings.length;
+    document.getElementById('totalValue').textContent = total;
+    document.getElementById('redValue').textContent = stats.byLevel.red;
+    document.getElementById('orangeValue').textContent = stats.byLevel.orange;
+
+    var levelData = [
+        { value: stats.byLevel.red, name: '红色' },
+        { value: stats.byLevel.orange, name: '橙色' },
+        { value: stats.byLevel.yellow, name: '黄色' },
+        { value: stats.byLevel.blue, name: '蓝色' }
+    ].filter(function(d) { return d.value > 0; });
+
+    var levelColors = ['#ef4444', '#f97316', '#eab308', '#3b82f6'];
+    echarts.init(document.getElementById('levelPie')).setOption({
+        color: levelColors,
+        tooltip: { trigger: 'item' },
+        legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '65%'],
+            center: ['50%', '45%'],
+            data: levelData,
+            label: { fontSize: 12 }
+        }]
+    });
+
+    var domainMap = { build: '建筑工地', gas: '燃气', traffic: '交通', curtain: '幕墙', falling: '高空坠物', selfbuild: '自建房' };
+    var domainData = Object.keys(stats.byDomain).filter(function(k) { return stats.byDomain[k] > 0; }).map(function(k) {
+        return { name: domainMap[k] || k, value: stats.byDomain[k] };
+    });
+    echarts.init(document.getElementById('domainBar')).setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 10, right: 10, top: 10, bottom: 30, containLabel: true },
+        xAxis: { type: 'category', data: domainData.map(function(d){ return d.name; }), axisLabel: { fontSize: 11, color: '#6b7280' }, axisLine: { lineStyle: { color: '#e5e7eb' } } },
+        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { fontSize: 11, color: '#6b7280' } },
+        series: [{
+            data: domainData.map(function(d){ return d.value; }),
+            type: 'bar',
+            itemStyle: { borderRadius: [6, 6, 0, 0], color: '#3b82f6' },
+            barWidth: '40%'
+        }]
+    });
+
+    echarts.init(document.getElementById('trendLine')).setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } },
+        grid: { left: 10, right: 10, top: 30, bottom: 30, containLabel: true },
+        xAxis: { type: 'category', data: stats.byDate.map(function(d){ return d.date; }), axisLabel: { fontSize: 11, color: '#6b7280' }, axisLine: { lineStyle: { color: '#e5e7eb' } } },
+        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { fontSize: 11, color: '#6b7280' } },
+        series: [
+            { name: '红色', type: 'line', data: stats.byDate.map(function(d){ return d.red; }), smooth: true, itemStyle: { color: '#ef4444' } },
+            { name: '橙色', type: 'line', data: stats.byDate.map(function(d){ return d.orange; }), smooth: true, itemStyle: { color: '#f97316' } },
+            { name: '黄色', type: 'line', data: stats.byDate.map(function(d){ return d.yellow; }), smooth: true, itemStyle: { color: '#eab308' } }
+        ]
+    });
+
+    var list = document.getElementById('warningMiniList');
+    if (warnings.length === 0) {
+        list.innerHTML = '<div class="empty-state-sm"><i class="fa-regular fa-bell-slash"></i>暂无未处置预警</div>';
+    } else {
+        list.innerHTML = warnings.slice(0, 5).map(function(w) {
+            var statusText = { pending: '待确认', dispatched: '已分派', handling: '处置中' }[w.status] || w.status;
+            var color = { red: '#ef4444', orange: '#f97316', yellow: '#eab308', blue: '#3b82f6' }[w.level];
+            return '<div class="warning-mini-item">' +
+                '<div class="wmi-dot" style="background:' + color + '"></div>' +
+                '<div class="wmi-info">' +
+                    '<div class="wmi-title">' + App.escapeHtml(w.title) + '</div>' +
+                    '<div class="wmi-meta">' + App.escapeHtml(w.location) + ' · ' + App.relativeTime(w.time) + '</div>' +
+                '</div>' +
+                '<span class="wmi-status" style="background:' + color + '15;color:' + color + '">' + statusText + '</span>' +
+            '</div>';
+        }).join('');
+    }
+})();
+</script>
+</body>
+</html>

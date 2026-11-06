@@ -85,7 +85,7 @@
 
         /* ===== KPI Cards ===== */
         .kpi-wrapper {
-            display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px;
+            display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px;
             margin-bottom: 16px;
         }
         @media (max-width: 1400px) { .kpi-wrapper { grid-template-columns: repeat(3, 1fr); } }
@@ -285,10 +285,15 @@
                 <option value="">全部村/居委</option>
             </select>
             <select class="filter-select" id="filterStructure">
-                <option value="">全部结构形式</option>
-                <option value="砖混结构">砖混结构</option>
-                <option value="框架结构">框架结构</option>
-                <option value="砖木结构">砖木结构</option>
+                <option value="">全部结构类型</option>
+                <option value="砌体结构">砌体结构</option>
+                <option value="木（竹）结构">木（竹）结构</option>
+                <option value="土木/石木结构">土木/石木结构</option>
+                <option value="混杂结构">混杂结构</option>
+                <option value="窑洞">窑洞</option>
+                <option value="钢筋混凝土结构">钢筋混凝土结构</option>
+                <option value="钢结构">钢结构</option>
+                <option value="其他">其他</option>
             </select>
             <select class="filter-select" id="filterYear">
                 <option value="">全部建筑年代</option>
@@ -374,7 +379,7 @@
             <span class="kpi-card-unit">%</span>
         </div>
         <div class="kpi-card-sub">
-            <span>越低越好</span>
+            <span>同房屋同类风险再次出现</span>
         </div>
     </div>
     <div class="kpi-card teal-top">
@@ -388,6 +393,19 @@
         </div>
         <div class="kpi-card-sub">
             <span>C级/D级危房整治销号</span>
+        </div>
+    </div>
+    <div class="kpi-card red-top">
+        <div class="kpi-card-header">
+            <span class="kpi-card-label red">农户满意度</span>
+            <div class="kpi-card-icon red"><i class="fa-solid fa-face-smile"></i></div>
+        </div>
+        <div class="kpi-card-main">
+            <span class="kpi-card-value red" id="kpiSatisfaction">—</span>
+            <span class="kpi-card-unit">星</span>
+        </div>
+        <div class="kpi-card-sub">
+            <span id="kpiSatisfactionSub">整改后回访评价</span>
         </div>
     </div>
 </div>
@@ -422,6 +440,14 @@
                 <div class="card-title"><i class="fa-solid fa-chart-bar"></i> 治理状态构成</div>
             </div>
             <div class="card-body"><div class="chart-box" id="chartGovernDist"></div></div>
+        </div>
+    </div>
+    <div class="card" style="margin-top: 14px;">
+        <div class="card-header">
+            <div class="card-title"><i class="fa-solid fa-triangle-exclamation"></i> 高复发风险类型（薄弱环节）</div>
+        </div>
+        <div class="card-body" style="padding: 8px 16px;">
+            <div id="highRecurrenceList" style="font-size: 13px;"></div>
         </div>
     </div>
 </div>
@@ -601,7 +627,7 @@ function computeMetrics(records) {
     if (!total) {
         return {
             total, completeRate: 0, timelyRate: 0, effectiveRate: 0,
-            recurrenceRate: 0, reliefRate: 0
+            recurrenceRate: 0, reliefRate: 0, satisfactionAvg: null, satisfactionCount: 0
         };
     }
     // 需要整改的房屋：原始风险为非安全，且总任务>0
@@ -628,10 +654,29 @@ function computeMetrics(records) {
 
     const recurrenceRate = riskTasks.length
         ? riskTasks.reduce((s, r) => {
-            const recurrence = r.patrolRecords && r.patrolRecords.some(p => p.foundProblems && p.foundProblems.trim());
+            // 口径①：风险记录中同一房屋同类型风险出现 2 次及以上
+            const typeMap = {};
+            (r.riskRecords || []).forEach(rr => {
+                const t = rr.riskType || rr.hazardType || '';
+                if (t) typeMap[t] = (typeMap[t] || 0) + 1;
+            });
+            let recurrence = Object.values(typeMap).some(c => c > 1);
+            // 口径②（无风险记录时兜底）：整改完成后复查再次发现问题
+            if (!recurrence && !Object.keys(typeMap).length && r.completeDate) {
+                recurrence = (r.patrolRecords || []).some(p =>
+                    p.foundProblems && p.foundProblems.trim() &&
+                    String(p.patrolDate || '') > String(r.completeDate));
+            }
             return s + (recurrence ? 1 : 0);
         }, 0) / riskTasks.length
         : 0;
+
+    // 农户满意度：整改闭环风险的回访星级（数据层 ensureSatisfaction 播种）
+    let satSum = 0, satCount = 0;
+    records.forEach(r => (r.riskRecords || []).forEach(rr => {
+        if (rr.satisfaction && typeof rr.satisfaction.stars === 'number') { satSum += rr.satisfaction.stars; satCount++; }
+    }));
+    const satisfactionAvg = satCount ? satSum / satCount : null;
 
     // 危房：以原始风险等级（销号前）判定 C/D 级危房
     const dangerHouses = records.filter(r => {
@@ -645,7 +690,7 @@ function computeMetrics(records) {
 
     return {
         total, completeRate, timelyRate, effectiveRate,
-        recurrenceRate, reliefRate
+        recurrenceRate, reliefRate, satisfactionAvg, satisfactionCount: satCount
     };
 }
 
@@ -721,6 +766,12 @@ function renderKpis(metrics) {
     document.getElementById('kpiEffectiveRate').textContent = fmtPct(metrics.effectiveRate);
     document.getElementById('kpiRecurrenceRate').textContent = fmtPct(metrics.recurrenceRate);
     document.getElementById('kpiReliefRate').textContent = fmtPct(metrics.reliefRate);
+    const satEl = document.getElementById('kpiSatisfaction');
+    if (satEl) {
+        satEl.textContent = metrics.satisfactionAvg == null ? '—' : metrics.satisfactionAvg.toFixed(1);
+        const sub = document.getElementById('kpiSatisfactionSub');
+        if (sub) sub.textContent = metrics.satisfactionCount ? metrics.satisfactionCount + ' 条回访' : '整改后回访评价';
+    }
 }
 
 function renderRankTable(townMetrics) {
@@ -847,13 +898,58 @@ function renderGovernDist(records) {
 }
 
 function renderTrend(records) {
-    const months = ['2024-07','2024-08','2024-09','2024-10','2024-11','2024-12','2025-01','2025-02','2025-03','2025-04','2025-05','2025-06'];
-    const baseComplete = 0.55;
-    const baseTimely = 0.60;
-    const baseEffective = 0.50;
-    const complete = months.map((_, i) => (baseComplete + i * 0.03 + Math.random() * 0.05) * 100);
-    const timely = months.map((_, i) => (baseTimely + i * 0.025 + Math.random() * 0.05) * 100);
-    const effective = months.map((_, i) => (baseEffective + i * 0.028 + Math.random() * 0.05) * 100);
+    // 真实数据：按验收通过时间（rectProcess accepted 事件）逐月累计计算三项指标
+    const items = [];
+    records.forEach(r => (r.riskRecords || []).forEach(rr => {
+        const proc = rr.rectProcess || {};
+        const acceptEv = (proc.history || []).filter(h => h.state === 'accepted').pop();
+        const month = acceptEv ? String(acceptEv.time || '').slice(0, 7) : '';
+        const verifyEvs = (proc.history || []).filter(h => h.state === 'effectVerify');
+        const lastVerify = verifyEvs[verifyEvs.length - 1];
+        const effective = lastVerify ? /合格|不再发展|通过|稳定/.test(String(lastVerify.content || '')) : null;
+        let onTime = null;
+        if (acceptEv && rr.rectPlan && rr.rectPlan.deadline) {
+            onTime = String(acceptEv.time).slice(0, 10) <= rr.rectPlan.deadline;
+        }
+        items.push({ month: month, onTime: onTime, effective: effective });
+    }));
+    const totalRisks = items.length;
+    const accepted = items.filter(i => i.month);
+    const monthSet = [...new Set(accepted.map(i => i.month))].sort();
+    let months, complete, timely, effective;
+    if (!monthSet.length || !totalRisks) {
+        // 无验收数据：展示当前总体指标基线（横贯近 12 个月）
+        months = [];
+        const now = new Date();
+        for (let i = 11; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+        }
+        const cur = computeMetrics(records);
+        complete = months.map(() => +(cur.completeRate * 100).toFixed(1));
+        timely = months.map(() => +(cur.timelyRate * 100).toFixed(1));
+        effective = months.map(() => +(cur.effectiveRate * 100).toFixed(1));
+    } else {
+        // 月份轴：首个验收月 ~ 当前月
+        const first = monthSet[0].split('-').map(Number);
+        const now = new Date();
+        months = [];
+        let y = first[0], m = first[1];
+        while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
+            months.push(y + '-' + String(m).padStart(2, '0'));
+            m++; if (m > 12) { m = 1; y++; }
+            if (months.length > 36) break; // 最多 36 个月
+        }
+        complete = []; timely = []; effective = [];
+        months.forEach(mo => {
+            const upto = accepted.filter(i => i.month <= mo);
+            complete.push(+((upto.length / totalRisks) * 100).toFixed(1));
+            const ot = upto.filter(i => i.onTime !== null);
+            timely.push(ot.length ? +((ot.filter(i => i.onTime).length / ot.length) * 100).toFixed(1) : null);
+            const ef = upto.filter(i => i.effective !== null);
+            effective.push(ef.length ? +((ef.filter(i => i.effective).length / ef.length) * 100).toFixed(1) : null);
+        });
+    }
     initChart('chartTrend', {
         tooltip: { trigger: 'axis' },
         legend: { data: ['整改完成率', '整改及时率', '整改有效率'], textStyle: { color: getThemeColors().text } },
@@ -861,9 +957,9 @@ function renderTrend(records) {
         xAxis: { type: 'category', boundaryGap: false, data: months },
         yAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
         series: [
-            { name: '整改完成率', type: 'line', smooth: true, data: complete, areaStyle: { color: 'rgba(26,115,232,0.15)' }, itemStyle: { color: '#1a73e8' } },
-            { name: '整改及时率', type: 'line', smooth: true, data: timely, areaStyle: { color: 'rgba(0,151,167,0.15)' }, itemStyle: { color: '#0097a7' } },
-            { name: '整改有效率', type: 'line', smooth: true, data: effective, areaStyle: { color: 'rgba(30,142,62,0.15)' }, itemStyle: { color: '#1e8e3e' } }
+            { name: '整改完成率', type: 'line', smooth: true, connectNulls: true, data: complete, areaStyle: { color: 'rgba(26,115,232,0.15)' }, itemStyle: { color: '#1a73e8' } },
+            { name: '整改及时率', type: 'line', smooth: true, connectNulls: true, data: timely, areaStyle: { color: 'rgba(0,151,167,0.15)' }, itemStyle: { color: '#0097a7' } },
+            { name: '整改有效率', type: 'line', smooth: true, connectNulls: true, data: effective, areaStyle: { color: 'rgba(30,142,62,0.15)' }, itemStyle: { color: '#1e8e3e' } }
         ]
     });
 }
@@ -962,6 +1058,7 @@ function renderCharts() {
     if (currentTab === 'overview') {
         renderRiskDist(filteredRecords);
         renderGovernDist(filteredRecords);
+        renderHighRecurrence(filteredRecords);
     } else if (currentTab === 'trend') {
         renderTrend(filteredRecords);
     } else if (currentTab === 'rank') {
@@ -996,6 +1093,24 @@ function onPeriodChange() {
     document.getElementById('filterDateEnd').style.display = isCustom ? '' : 'none';
     document.getElementById('dateSep').style.display = isCustom ? '' : 'none';
     if (!isCustom) refreshEval();
+}
+
+// 高复发风险类型（薄弱环节识别）——数据层 identifyHighRecurrenceTypes
+function renderHighRecurrence(records) {
+    const box = document.getElementById('highRecurrenceList');
+    if (!box) return;
+    const list = (typeof identifyHighRecurrenceTypes === 'function') ? identifyHighRecurrenceTypes(records) : [];
+    if (!list.length) {
+        box.innerHTML = '<span style="color:#80868b;">暂无高复发风险类型（同一房屋同一风险类型出现 2 次及以上时在此提示）</span>';
+        return;
+    }
+    box.innerHTML = list.map(it =>
+        '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color,#e8eaed);">' +
+        '<span style="background:#fce8e6;color:#d93025;font-size:12px;padding:2px 8px;border-radius:10px;font-weight:600;">高复发</span>' +
+        '<span style="font-weight:600;">' + it.type + '</span>' +
+        '<span style="color:#5f6368;font-size:12px;">涉及 ' + it.houses + ' 户 · 复发 ' + it.times + ' 次</span>' +
+        '<span style="margin-left:auto;color:#5f6368;font-size:12px;">建议增加排查频次与检测密度</span>' +
+        '</div>').join('');
 }
 
 function refreshEval() {
@@ -1064,7 +1179,7 @@ function collectReportData() {
     const fp = document.getElementById('filterPeriod').value;
     if (ft) filters.push('镇/街道：' + ft);
     if (fv) filters.push('村/居委：' + fv);
-    if (fs) filters.push('结构形式：' + fs);
+    if (fs) filters.push('结构类型：' + fs);
     if (fy) filters.push('建筑年代：' + document.getElementById('filterYear').selectedOptions[0].text);
     if (fr) filters.push('风险等级：' + fr);
     if (fp) {
@@ -1107,7 +1222,8 @@ function collectReportData() {
         };
     }).sort((a, b) => b.completeRate - a.completeRate);
 
-    return { metrics, genTime, filters, riskDist, governDist, townRank, recordCount: filteredRecords.length };
+    return { metrics, genTime, filters, riskDist, governDist, townRank, recordCount: filteredRecords.length,
+        highRecurrence: (typeof identifyHighRecurrenceTypes === 'function') ? identifyHighRecurrenceTypes(filteredRecords) : [] };
 }
 
 function doExport(format) {
@@ -1133,7 +1249,8 @@ function exportExcel(data) {
         ['整改及时率', fmtPct(data.metrics.timelyRate) + '%'],
         ['整改有效率', fmtPct(data.metrics.effectiveRate) + '%'],
         ['隐患复发率', fmtPct(data.metrics.recurrenceRate) + '%'],
-        ['危房解危率', fmtPct(data.metrics.reliefRate) + '%']
+        ['危房解危率', fmtPct(data.metrics.reliefRate) + '%'],
+        ['农户满意度', data.metrics.satisfactionCount ? data.metrics.satisfactionAvg.toFixed(1) + ' 星（' + data.metrics.satisfactionCount + ' 条评价）' : '—']
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(kpiRows);
     ws1['!cols'] = [{ wch: 20 }, { wch: 30 }];
@@ -1214,6 +1331,14 @@ function buildReportHtml(data) {
             + (totalGovern ? (g.count / totalGovern * 100).toFixed(1) + '%' : '0%') + '</td></tr>';
     });
 
+    let recurHtml = '';
+    (data.highRecurrence || []).forEach(it => {
+        recurHtml += '<tr><td>' + it.type + '</td><td>' + it.houses + '</td><td>' + it.times + '</td><td>建议增加排查频次与检测密度</td></tr>';
+    });
+    const recurSection = recurHtml
+        ? '<h2>五、高复发风险类型（薄弱环节）</h2><table><tr><th>风险类型</th><th>涉及户数</th><th>复发次数</th><th>管控建议</th></tr>' + recurHtml + '</table>'
+        : '<h2>五、高复发风险类型（薄弱环节）</h2><p style="font-size:13px;color:#666;">本期未识别出高复发风险类型。</p>';
+
     const html = `
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>农村自建房风险控制效果评估报告</title>
@@ -1244,6 +1369,7 @@ ${data.filters.length ? '<div class="filter-info">评估范围：' + data.filter
     <div class="kpi-item"><div class="kpi-label">整改有效率</div><div class="kpi-value">${fmtPctV(data.metrics.effectiveRate)}</div></div>
     <div class="kpi-item"><div class="kpi-label">隐患复发率</div><div class="kpi-value">${fmtPctV(data.metrics.recurrenceRate)}</div></div>
     <div class="kpi-item"><div class="kpi-label">危房解危率</div><div class="kpi-value">${fmtPctV(data.metrics.reliefRate)}</div></div>
+    <div class="kpi-item"><div class="kpi-label">农户满意度</div><div class="kpi-value">${data.metrics.satisfactionCount ? data.metrics.satisfactionAvg.toFixed(1) + ' 星' : '—'}</div></div>
 </div>
 
 <h2>二、风险等级分布</h2>
@@ -1254,6 +1380,8 @@ ${data.filters.length ? '<div class="filter-info">评估范围：' + data.filter
 
 <h2>四、镇/街道排名</h2>
 <table><tr><th>排名</th><th>镇/街道</th><th>档案数</th><th>整改完成率</th><th>整改及时率</th><th>整改有效率</th><th>危房解危率</th></tr>${rankHtml}</table>
+
+${recurSection}
 
 <div style="margin-top:40px;font-size:12px;color:#999;text-align:center;">—— 本报告由系统自动生成 ——</div>
 </body></html>`;

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>农村自建房监测详情</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/tokens.css">
+    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../assets/css/h5-frame.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        .page-body { padding: 0; padding-bottom: calc(var(--space) + var(--safe-bottom)); }
+
+        .knowledge-hero {
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #1d4ed8 100%);
+            margin-top: -34px;
+            padding: calc(34px + 4px) 18px 12px;
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-height: 85px;
+        }
+        .knowledge-hero::before {
+            content: '';
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            right: -50px;
+            top: -20px;
+            background: radial-gradient(circle, rgba(255,255,255,.18), transparent 70%);
+            border-radius: 50%;
+        }
+        .knowledge-hero .kh-back {
+            width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+            font-size: 17px; position: relative; z-index: 2; flex-shrink: 0; cursor: pointer;
+        }
+        .knowledge-hero .hero-title { flex: 1; position: relative; z-index: 2; text-align: center; padding-right: 32px; }
+        .knowledge-hero h1 { font-size: 17px; font-weight: 600; }
+
+        .house-header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+            margin: var(--space-sm) var(--space) 0;
+            padding: 14px var(--space);
+            border-radius: var(--radius-lg);
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,.1);
+        }
+        .house-header::before {
+            content: ''; position: absolute; top: -50%; right: -20%; width: 160px; height: 160px;
+            background: rgba(255,255,255,0.06); border-radius: 50%;
+        }
+        .house-name { font-size: var(--font-xl); font-weight: 600; margin-bottom: 8px; position: relative; }
+        .house-meta { display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm); font-size: var(--font-sm); opacity: 0.9; position: relative; flex-wrap: wrap; }
+        .house-meta span { display: flex; align-items: center; gap: 4px; }
+
+        .realtime-card {
+            background: var(--bg-card); margin: var(--space-sm) var(--space); border-radius: var(--radius-lg);
+            padding: var(--space); box-shadow: 0 2px 8px var(--shadow); display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border);
+        }
+        .realtime-value { display: flex; flex-direction: column; gap: 4px; }
+        .realtime-label { font-size: var(--font-sm); color: var(--text-secondary); }
+        .realtime-number { font-size: 36px; font-weight: 700; line-height: 1; }
+        .realtime-number.normal { color: var(--success); }
+        .realtime-number.warning { color: var(--warning); }
+        .realtime-number.alarm { color: var(--danger); }
+        .realtime-unit { font-size: 14px; font-weight: 400; margin-left: 4px; }
+        .realtime-status { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .status-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .status-icon.normal { background: rgba(var(--success-rgb), .12); color: var(--success); }
+        .status-icon.warning { background: rgba(var(--warning-rgb), .12); color: var(--warning); }
+        .status-icon.alarm { background: rgba(var(--danger-rgb), .12); color: var(--danger); }
+        .status-text { font-size: var(--font-sm); font-weight: 600; }
+        .status-text.normal { color: var(--success); }
+        .status-text.warning { color: var(--warning); }
+        .status-text.alarm { color: var(--danger); }
+
+        .detail-tabs {
+            display: flex; background: var(--bg-card); border-bottom: 1px solid var(--border);
+            margin: var(--space-sm) var(--space) 0;
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0; overflow: hidden;
+            position: -webkit-sticky; position: sticky; top: 0; z-index: 90;
+        }
+        .detail-tab { flex: 1; text-align: center; padding: 12px 0; font-size: var(--font-base); font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; position: relative; background: var(--bg-card); border: none; }
+        .detail-tab.active { color: var(--primary); font-weight: 600; }
+        .detail-tab.active::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 40px; height: 3px; background: var(--primary); border-radius: 2px 2px 0 0; }
+        .tab-panel { display: none; padding: var(--space-sm) var(--space); }
+        .tab-panel .card { margin-left: 0; margin-right: 0; }
+        .tab-panel .card:not(:first-child) { margin-top: var(--space-sm); }
+        .tab-panel.active { display: block; }
+
+        .time-filter { display: flex; gap: 8px; margin-bottom: var(--space-sm); }
+        .time-tag { flex: 1; text-align: center; padding: 6px 0; border-radius: var(--radius-sm); font-size: var(--font-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }
+        .time-tag.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        .trend-chart { height: 200px; position: relative; background: var(--bg-dark); border-radius: var(--radius); overflow: hidden; }
+        .chart-placeholder { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary); font-size: var(--font-sm); flex-direction: column; gap: 8px; }
+        .chart-placeholder i { font-size: 32px; color: var(--border); }
+
+        .stats-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: var(--space-sm); }
+        .stat-box { text-align: center; padding: 10px; background: var(--bg-dark); border-radius: var(--radius); }
+        .stat-box-value { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+        .stat-box-label { font-size: var(--font-xs); color: var(--text-secondary); margin-top: 2px; }
+
+        .alarm-list { max-height: 300px; overflow-y: auto; }
+        .alarm-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .alarm-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .alarm-time-line { display: flex; flex-direction: column; align-items: center; width: 40px; flex-shrink: 0; }
+        .alarm-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); margin-top: 4px; }
+        .alarm-dot.warning { background: var(--warning); }
+        .alarm-line { flex: 1; width: 2px; background: var(--border); margin-top: 4px; }
+        .alarm-content { flex: 1; }
+        .alarm-time { font-size: var(--font-xs); color: var(--text-secondary); margin-bottom: 4px; }
+        .alarm-desc { font-size: var(--font-base); color: var(--text-primary); line-height: 1.5; }
+        .alarm-value { font-size: var(--font-sm); color: var(--danger); font-weight: 600; margin-top: 2px; }
+        .alarm-value.warning { color: var(--warning); }
+
+        .info-list { display: flex; flex-direction: column; gap: 12px; }
+        .info-row { display: flex; justify-content: space-between; align-items: flex-start; }
+        .info-row-label { font-size: var(--font-sm); color: var(--text-secondary); flex-shrink: 0; width: 80px; }
+        .info-row-value { font-size: var(--font-base); color: var(--text-primary); text-align: right; flex: 1; }
+
+        .map-container { height: 160px; background: var(--bg-dark); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--text-secondary); font-size: var(--font-sm); position: relative; overflow: hidden; }
+        .map-container i { font-size: 32px; color: var(--primary); }
+        .map-pin { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); color: var(--danger); font-size: 24px; }
+
+        .house-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .house-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; font-size: var(--font-xs); font-weight: 600; background: rgba(var(--primary-rgb), .1); color: var(--primary); }
+
+        /* 修复桌面端手机框内滚动容器高度问题，确保 tab 吸顶生效 */
+        @media screen and (min-width: 480px) {
+            .phone-frame { overflow: hidden; }
+            .phone-shell { height: calc(844px - 28px); max-height: calc(844px - 28px); overflow-y: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="side-button side-button-left mute"></div>
+        <div class="side-button side-button-left volume-up"></div>
+        <div class="side-button side-button-left volume-down"></div>
+        <div class="side-button side-button-right power"></div>
+        <div class="phone-shell">
+            <div class="status-bar light">
+                <span class="sb-time" id="statusTime">9:41</span>
+                <span class="sb-icons">
+                    <i class="fa-solid fa-signal"></i>
+                    <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                    <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+                </span>
+            </div>
+
+            <div class="knowledge-hero">
+                <div class="kh-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+                <div class="hero-title"><h1>农村自建房监测详情</h1></div>
+            </div>
+
+            <div class="page-body">
+                <div class="house-header" id="houseHeader">
+                    <div class="house-name" id="houseName">--</div>
+                    <div class="house-meta">
+                        <span><i class="fa-solid fa-location-dot"></i> <span id="houseLocation">--</span></span>
+                    </div>
+                </div>
+
+                <div class="realtime-card">
+                    <div class="realtime-value">
+                        <span class="realtime-label">当前倾斜率</span>
+                        <span class="realtime-number" id="realtimeValue">--</span>
+                    </div>
+                    <div class="realtime-status">
+                        <div class="status-icon" id="statusIcon"><i class="fa-solid fa-question"></i></div>
+                        <span class="status-text" id="statusText">--</span>
+                    </div>
+                </div>
+
+                <div class="detail-tabs">
+                    <button class="detail-tab active" onclick="switchTab(this, 'overview')">监测概况</button>
+                    <button class="detail-tab" onclick="switchTab(this, 'alarm')">报警记录</button>
+                </div>
+
+                <div class="tab-panel active" id="panel-overview">
+                    <div class="card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="st-icon bg-primary"><i class="fa-solid fa-chart-line"></i></div>
+                                历史趋势
+                            </div>
+                        </div>
+                        <div class="time-filter">
+                            <div class="time-tag active" onclick="switchTimeRange(this, '24h')">24小时</div>
+                            <div class="time-tag" onclick="switchTimeRange(this, '7d')">7天</div>
+                            <div class="time-tag" onclick="switchTimeRange(this, '30d')">30天</div>
+                        </div>
+                        <div class="trend-chart" id="trendChart">
+                            <div class="chart-placeholder" id="chartPlaceholder">
+                                <i class="fa-solid fa-chart-area"></i>
+                                <span>趋势图表区域</span>
+                            </div>
+                        </div>
+                        <div class="stats-summary">
+                            <div class="stat-box"><div class="stat-box-value" id="maxValue">--</div><div class="stat-box-label">最高值</div></div>
+                            <div class="stat-box"><div class="stat-box-value" id="minValue">--</div><div class="stat-box-label">最低值</div></div>
+                            <div class="stat-box"><div class="stat-box-value" id="avgValue">--</div><div class="stat-box-label">平均值</div></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="st-icon bg-success"><i class="fa-solid fa-house-user"></i></div>
+                                房屋基本信息
+                            </div>
+                        </div>
+                        <div class="info-list">
+                            <div class="info-row"><span class="info-row-label">房屋结构</span><span class="info-row-value" id="houseStructure">--</span></div>
+                            <div class="info-row"><span class="info-row-label">建造年代</span><span class="info-row-value" id="buildYear">--</span></div>
+                            <div class="info-row"><span class="info-row-label">房屋层数</span><span class="info-row-value" id="houseFloors">--</span></div>
+                            <div class="info-row"><span class="info-row-label">建筑面积</span><span class="info-row-value" id="houseArea">--</span></div>
+                            <div class="info-row"><span class="info-row-label">监测设备</span><span class="info-row-value" id="monitorDevice">--</span></div>
+                            <div class="info-row"><span class="info-row-label">安装日期</span><span class="info-row-value" id="installDate">--</span></div>
+                            <div class="info-row"><span class="info-row-label">户主姓名</span><span class="info-row-value" id="houseOwner">--</span></div>
+                            <div class="info-row"><span class="info-row-label">联系电话</span><span class="info-row-value" id="ownerPhone">--</span></div>
+                        </div>
+                        <div class="house-tags" id="houseTags"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="st-icon bg-warning"><i class="fa-solid fa-map-marked-alt"></i></div>
+                                安装位置
+                            </div>
+                        </div>
+                        <div class="map-container">
+                            <i class="fa-solid fa-map"></i>
+                            <span>地图加载区域</span>
+                            <i class="fa-solid fa-map-marker-alt map-pin"></i>
+                        </div>
+                        <div class="info-list" style="margin-top: 12px;">
+                            <div class="info-row"><span class="info-row-label">详细地址</span><span class="info-row-value" id="detailAddress">--</span></div>
+                            <div class="info-row"><span class="info-row-label">经纬度</span><span class="info-row-value" id="coordinates">--</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-panel" id="panel-alarm">
+                    <div class="card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="st-icon bg-danger"><i class="fa-solid fa-bell"></i></div>
+                                报警记录
+                            </div>
+                        </div>
+                        <div class="alarm-list" id="alarmList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+// 农村自建房监测数据（多房屋）
+const ruralHouseData = {
+    'RHC-001': {
+        name: '青村镇李老汉住宅',
+        location: '奉贤区青村镇青村中路 128 号',
+        coordinates: '121.5123, 30.8901',
+        structure: '砖混结构',
+        buildYear: '1988年',
+        floors: '3层',
+        area: '约 180㎡',
+        device: '无线倾斜监测仪',
+        installDate: '2024-09-10',
+        owner: '李老汉',
+        phone: '138****1234',
+        tags: ['C级危房', '重点监测', '独居老人'],
+        indicator: '倾斜率',
+        unit: '‰',
+        value: '4.5',
+        status: 'red',
+        history: generateHistory(3.0, 5.0, 2.5, 5.5),
+        alarmRecords: [
+            { time: '2025-06-26 14:28:33', type: 'alarm', desc: '倾斜率超过报警阈值', value: '4.8‰' },
+            { time: '2025-06-25 16:42:11', type: 'warning', desc: '倾斜率接近报警阈值', value: '3.6‰' },
+            { time: '2025-06-20 09:15:22', type: 'warning', desc: '倾斜率波动异常', value: '3.4‰' }
+        ]
+    },
+    'RHC-002': {
+        name: '南桥镇王家宅院',
+        location: '奉贤区南桥镇南桥路 88 号',
+        coordinates: '121.4901, 30.9123',
+        structure: '砖木结构',
+        buildYear: '1995年',
+        floors: '2层',
+        area: '约 145㎡',
+        device: '无线倾斜监测仪',
+        installDate: '2024-10-22',
+        owner: '王建国',
+        phone: '139****5678',
+        tags: ['一般老旧', '常规监测'],
+        indicator: '倾斜率',
+        unit: '‰',
+        value: '2.1',
+        status: 'green',
+        history: generateHistory(1.5, 2.5, 1.2, 3.0),
+        alarmRecords: []
+    },
+    'RHC-003': {
+        name: '奉浦街道张大姐楼房',
+        location: '奉贤区奉浦街道韩村路 56 号',
+        coordinates: '121.5056, 30.9012',
+        structure: '混合结构',
+        buildYear: '2002年',
+        floors: '4层',
+        area: '约 220㎡',
+        device: '无线倾斜监测仪',
+        installDate: '2024-08-15',
+        owner: '张秀兰',
+        phone: '137****9012',
+        tags: ['加层扩建', '重点监测'],
+        indicator: '倾斜率',
+        unit: '‰',
+        value: '3.7',
+        status: 'yellow',
+        history: generateHistory(2.8, 4.0, 2.2, 4.5),
+        alarmRecords: [
+            { time: '2025-06-24 10:18:45', type: 'warning', desc: '倾斜率持续上升', value: '3.7‰' }
+        ]
+    },
+    'RHC-004': {
+        name: '金汇镇老周私房',
+        location: '奉贤区金汇镇金汇路 202 号',
+        coordinates: '121.5289, 30.8789',
+        structure: '砖混结构',
+        buildYear: '1975年',
+        floors: '2层',
+        area: '约 120㎡',
+        device: '无线倾斜监测仪',
+        installDate: '2024-07-08',
+        owner: '周德福',
+        phone: '136****3456',
+        tags: ['D级危房', '紧急关注', '独居老人'],
+        indicator: '倾斜率',
+        unit: '‰',
+        value: '6.2',
+        status: 'red',
+        history: generateHistory(4.5, 6.5, 3.8, 7.0),
+        alarmRecords: [
+            { time: '2025-06-26 09:12:07', type: 'alarm', desc: '倾斜率严重超标', value: '6.2‰' },
+            { time: '2025-06-25 20:45:33', type: 'alarm', desc: '倾斜率超过报警阈值', value: '5.9‰' },
+            { time: '2025-06-22 15:30:18', type: 'warning', desc: '倾斜率接近报警阈值', value: '4.9‰' }
+        ]
+    },
+    'RHC-005': {
+        name: '柘林镇孙家老宅',
+        location: '奉贤区柘林镇柘林路 33 号',
+        coordinates: '121.4789, 30.8656',
+        structure: '土木结构',
+        buildYear: '1982年',
+        floors: '1层',
+        area: '约 95㎡',
+        device: '无线倾斜监测仪',
+        installDate: '2024-11-05',
+        owner: '孙秀英',
+        phone: '150****7890',
+        tags: ['传统民居', '常规监测'],
+        indicator: '倾斜率',
+        unit: '‰',
+        value: '2.8',
+        status: 'green',
+        history: generateHistory(2.0, 3.0, 1.5, 3.5),
+        alarmRecords: []
+    },
+    'RHC-006': {
+        name: '四团镇赵家小楼',
+        location: '奉贤区四团镇四团路 77 号',
+        coordinates: '121.5523, 30.8456',
+        structure: '砖混结构',
+        buildYear: '1998年',
+        floors: '3层',
+        area: '约 160㎡',
+        device: '无线倾斜监测仪',
+        installDate: '2024-09-28',
+        owner: '赵明华',
+        phone: '158****2345',
+        tags: ['墙体裂缝', '重点监测'],
+        indicator: '倾斜率',
+        unit: '‰',
+        value: '3.4',
+        status: 'orange',
+        history: generateHistory(2.5, 3.8, 2.0, 4.2),
+        alarmRecords: [
+            { time: '2025-06-23 11:25:52', type: 'warning', desc: '倾斜率接近报警阈值', value: '3.5‰' }
+        ]
+    }
+};
+
+function generateHistory(base, max, min, alarm) {
+    var history = [];
+    var now = new Date('2025-06-26T14:00:00');
+    for (var i = 30; i >= 0; i--) {
+        var t = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        var value = base + (Math.random() - 0.5) * (max - min);
+        if (i === 0) value = alarm;
+        history.push({ time: formatDate(t), value: parseFloat(value.toFixed(2)) });
+    }
+    return history;
+}
+
+function formatDate(date) {
+    var y = date.getFullYear();
+    var m = String(date.getMonth() + 1).padStart(2, '0');
+    var d = String(date.getDate()).padStart(2, '0');
+    var h = String(date.getHours()).padStart(2, '0');
+    var min = String(date.getMinutes()).padStart(2, '0');
+    var s = String(date.getSeconds()).padStart(2, '0');
+    return y + '-' + m + '-' + d + ' ' + h + ':' + min + ':' + s;
+}
+
+const statusMap = {
+    green:  { label: '正常', class: 'normal', icon: 'fa-circle-check' },
+    yellow: { label: '预警', class: 'warning', icon: 'fa-triangle-exclamation' },
+    orange: { label: '预警', class: 'warning', icon: 'fa-triangle-exclamation' },
+    red:    { label: '报警', class: 'alarm', icon: 'fa-circle-exclamation' }
+};
+
+var chart = null;
+
+function initPage() {
+    var id = App.getQuery('id') || 'RHC-001';
+    var house = ruralHouseData[id];
+
+    if (!house) {
+        App.showToast('农村自建房监测点不存在');
+        setTimeout(function() { App.back(); }, 1500);
+        return;
+    }
+
+    var status = statusMap[house.status] || statusMap.red;
+
+    document.getElementById('houseName').textContent = house.name;
+    document.getElementById('houseLocation').textContent = house.location;
+
+    var valueEl = document.getElementById('realtimeValue');
+    valueEl.innerHTML = house.value + '<span class="realtime-unit">' + house.unit + '</span>';
+    valueEl.className = 'realtime-number ' + status.class;
+
+    document.getElementById('statusIcon').className = 'status-icon ' + status.class;
+    document.getElementById('statusIcon').innerHTML = '<i class="fas ' + status.icon + '"></i>';
+    document.getElementById('statusText').className = 'status-text ' + status.class;
+    document.getElementById('statusText').textContent = status.label;
+
+    document.getElementById('houseStructure').textContent = house.structure;
+    document.getElementById('buildYear').textContent = house.buildYear;
+    document.getElementById('houseFloors').textContent = house.floors;
+    document.getElementById('houseArea').textContent = house.area;
+    document.getElementById('monitorDevice').textContent = house.device;
+    document.getElementById('installDate').textContent = house.installDate;
+    document.getElementById('houseOwner').textContent = house.owner;
+    document.getElementById('ownerPhone').textContent = house.phone;
+
+    document.getElementById('houseTags').innerHTML = house.tags.map(function(t) {
+        return '<span class="house-tag"><i class="fa-solid fa-tag"></i> ' + App.escapeHtml(t) + '</span>';
+    }).join('');
+
+    document.getElementById('detailAddress').textContent = house.location;
+    document.getElementById('coordinates').textContent = house.coordinates;
+
+    renderAlarmRecords(house.alarmRecords || [], 'alarmList');
+
+    initChart(house);
+    renderTrend('24h', house);
+}
+
+function initChart(house) {
+    var chartEl = document.getElementById('trendChart');
+    chartEl.innerHTML = '';
+    chart = echarts.init(chartEl);
+}
+
+function renderTrend(range, house) {
+    if (!chart) return;
+
+    var all = house.history || [];
+    var data = [];
+
+    if (range === '24h') {
+        data = all.slice(-7).map(function(h) { return { time: h.time.substring(11, 16), value: h.value }; });
+    } else if (range === '7d') {
+        data = all.slice(-7).map(function(h) { return { time: h.time.substring(5, 10), value: h.value }; });
+    } else {
+        data = all.map(function(h, idx) { if (idx % 3 !== 0) return null; return { time: h.time.substring(5, 10), value: h.value }; }).filter(Boolean);
+    }
+
+    var values = data.map(function(d) { return d.value; });
+    if (!values.length) {
+        document.getElementById('maxValue').textContent = '--';
+        document.getElementById('minValue').textContent = '--';
+        document.getElementById('avgValue').textContent = '--';
+        chart.clear();
+        return;
+    }
+
+    var max = Math.max.apply(null, values);
+    var min = Math.min.apply(null, values);
+    var avg = values.reduce(function(a, b) { return a + b; }, 0) / values.length;
+
+    document.getElementById('maxValue').textContent = max.toFixed(2) + house.unit;
+    document.getElementById('minValue').textContent = min.toFixed(2) + house.unit;
+    document.getElementById('avgValue').textContent = avg.toFixed(2) + house.unit;
+
+    var hexColor = house.status === 'red' ? '#ef4444' : (house.status === 'yellow' || house.status === 'orange' ? '#f59e0b' : '#22c55e');
+
+    chart.setOption({
+        grid: { left: 10, right: 10, top: 30, bottom: 20, containLabel: true },
+        tooltip: { trigger: 'axis' },
+        xAxis: {
+            type: 'category',
+            data: data.map(function(d) { return d.time; }),
+            axisLine: { lineStyle: { color: '#e5e7eb' } },
+            axisLabel: { color: '#6b7280', fontSize: 11, interval: 'auto' },
+            axisTick: { alignWithLabel: true }
+        },
+        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#6b7280', fontSize: 11 } },
+        series: [{
+            data: values,
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 6,
+            lineStyle: { color: hexColor, width: 3 },
+            itemStyle: { color: hexColor },
+            areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: hexColor + '40' }, { offset: 1, color: hexColor + '05' }] } }
+        }]
+    }, true);
+    setTimeout(function() { chart.resize(); }, 100);
+}
+
+function renderAlarmRecords(records, elementId) {
+    var listEl = document.getElementById(elementId);
+    if (!records || records.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-secondary)">暂无报警记录</div>';
+        return;
+    }
+
+    listEl.innerHTML = records.map(function(record, index) {
+        var isLast = index === records.length - 1;
+        var typeClass = record.type === 'warning' ? 'warning' : '';
+        return '<div class="alarm-item">' +
+            '<div class="alarm-time-line">' +
+            '<div class="alarm-dot ' + typeClass + '"></div>' +
+            (isLast ? '' : '<div class="alarm-line"></div>') +
+            '</div>' +
+            '<div class="alarm-content">' +
+            '<div class="alarm-time">' + App.escapeHtml(record.time) + '</div>' +
+            '<div class="alarm-desc">' + App.escapeHtml(record.desc) + '</div>' +
+            '<div class="alarm-value ' + typeClass + '">数值: ' + App.escapeHtml(record.value) + '</div>' +
+            '</div>' +
+            '</div>';
+    }).join('');
+}
+
+function switchTab(el, panelId) {
+    document.querySelectorAll('.detail-tab').forEach(function(tab) { tab.classList.remove('active'); });
+    document.querySelectorAll('.tab-panel').forEach(function(panel) { panel.classList.remove('active'); });
+    el.classList.add('active');
+    document.getElementById('panel-' + panelId).classList.add('active');
+    if (panelId === 'overview' && chart) { setTimeout(function() { chart.resize(); }, 50); }
+}
+
+function switchTimeRange(el, range) {
+    document.querySelectorAll('.time-tag').forEach(function(tag) { tag.classList.remove('active'); });
+    el.classList.add('active');
+    var id = App.getQuery('id') || 'RHC-001';
+    var house = ruralHouseData[id];
+    if (house) renderTrend(range, house);
+}
+
+initPage();
+</script>
+</body>
+</html>

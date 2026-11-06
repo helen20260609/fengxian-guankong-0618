@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>巡查轨迹追踪</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+.track-list { padding: 0; }
+.track-card .tc-date { font-size: 15px; font-weight: 700; }
+.track-card .tc-mode { font-size: 11px; color: var(--text2); margin-top: 4px; }
+.track-card .tc-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.track-card .tc-stat { text-align: center; }
+.track-card .tc-stat .value { font-size: 17px; font-weight: 800; color: var(--primary); }
+.track-card .tc-stat .label { font-size: 10px; color: var(--text2); margin-top: 2px; }
+
+#trackChart { width: 100%; height: 320px; background: linear-gradient(180deg,#e0f2fe 0%,#f0fdf4 100%); }
+.point-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.point-item:last-child { border-bottom: none; }
+.point-item .pi-idx { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.point-item .pi-body { flex: 1; }
+.point-item .pi-time { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.back-bar { padding: 0 0 14px; }
+.kpi-card .kp-value { color: var(--primary); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">巡查轨迹追踪</div>
+        <div class="ph-sub">查看历史巡查轨迹与关键点位</div>
+    </div>
+
+    <div class="knowledge-body scrollable-body form-sheet">
+        <div class="track-list anim d1" id="trackList"></div>
+
+        <div class="detail-view" id="detailView">
+            <div class="back-bar">
+                <div class="back-link tap" onclick="showList()"><i class="fa-solid fa-chevron-left"></i> 返回轨迹列表</div>
+            </div>
+            <div class="card anim d1">
+                <div id="trackChart"></div>
+            </div>
+            <div class="kpi-grid cols-2 anim d2" id="trackKpis"></div>
+            <div class="card anim d3">
+                <div class="dynamic-section-title">关键点位</div>
+                <div id="pointList"></div>
+            </div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    function normalizeCoord(lat, lng) {
+        return [(lng - 121.4726) / 0.06 * 100, (30.9123 - lat) / 0.04 * 100];
+    }
+
+    function renderList() {
+        var container = document.getElementById('trackList');
+        container.innerHTML = DataStore.patrolTracks.map(function(track, idx) {
+            var modeLabel = track.mode === 'full' ? '全程轨迹' : '关键点位';
+            return '<div class="track-card card tap anim d' + (idx + 1) + '" onclick="showDetail(' + idx + ')">' +
+                '<div class="tc-date">' + track.date + '</div>' +
+                '<div class="tc-mode">' + modeLabel + ' · 覆盖 ' + App.escapeHtml(track.coverage) + '</div>' +
+                '<div class="tc-stats">' +
+                    '<div class="tc-stat"><div class="value">' + track.distance + '</div><div class="label">里程(km)</div></div>' +
+                    '<div class="tc-stat"><div class="value">' + App.formatDuration(track.duration) + '</div><div class="label">耗时</div></div>' +
+                    '<div class="tc-stat"><div class="value">' + track.arrivalRate + '%</div><div class="label">到达率</div></div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    var chart = null;
+
+    window.showDetail = function(idx) {
+        var track = DataStore.patrolTracks[idx];
+        if (!track) return;
+
+        document.getElementById('trackList').style.display = 'none';
+        document.getElementById('detailView').classList.add('show');
+
+        // KPI
+        document.getElementById('trackKpis').innerHTML =
+            '<div class="kpi-card"><div class="kp-value">' + track.distance + ' km</div><div class="kp-label">巡查里程</div></div>' +
+            '<div class="kpi-card"><div class="kp-value">' + App.formatDuration(track.duration) + '</div><div class="kp-label">巡查耗时</div></div>' +
+            '<div class="kpi-card"><div class="kp-value">' + track.arrivalRate + '%</div><div class="kp-label">点位到达率</div></div>' +
+            '<div class="kpi-card"><div class="kp-value">' + App.escapeHtml(track.coverage) + '</div><div class="kp-label">覆盖区域</div></div>';
+
+        // 点位列表
+        document.getElementById('pointList').innerHTML = track.points.map(function(p, i) {
+            return '<div class="point-item">' +
+                '<div class="pi-idx">' + (i + 1) + '</div>' +
+                '<div class="pi-body">' +
+                    '<div>任务点位 ' + App.escapeHtml(p.taskId) + '</div>' +
+                    '<div class="pi-time">' + App.formatDate(p.time, 'hh:mm') + ' · ' + (p.completed ? '已到达' : '未到达') + '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+
+        // 地图
+        if (chart) chart.dispose();
+        chart = echarts.init(document.getElementById('trackChart'));
+        var lineData = track.points.map(function(p) {
+            var c = normalizeCoord(p.lat, p.lng);
+            return [c[0], c[1]];
+        });
+        var pointData = track.points.map(function(p, i) {
+            var c = normalizeCoord(p.lat, p.lng);
+            return { value: [c[0], c[1]], name: '点位' + (i + 1), itemStyle: { color: p.completed ? '#22c55e' : '#ef4444' } };
+        });
+        chart.setOption({
+            grid: { left: 0, right: 0, top: 0, bottom: 0 },
+            xAxis: { show: false, min: 0, max: 100 },
+            yAxis: { show: false, min: 0, max: 100 },
+            tooltip: { trigger: 'item', formatter: function(params) { return params.name; } },
+            series: [
+                {
+                    type: 'line',
+                    smooth: true,
+                    data: lineData,
+                    lineStyle: { color: '#3b82f6', width: 3 },
+                    symbol: 'none'
+                },
+                {
+                    type: 'scatter',
+                    data: pointData,
+                    symbolSize: 14,
+                    label: { show: true, formatter: function(p) { return p.name; }, fontSize: 10, color: '#333', position: 'top' }
+                }
+            ]
+        });
+    };
+
+    window.showList = function() {
+        document.getElementById('trackList').style.display = 'block';
+        document.getElementById('detailView').classList.remove('show');
+        if (chart) { chart.dispose(); chart = null; }
+    };
+
+    renderList();
+})();
+</script>
+</body>
+</html>

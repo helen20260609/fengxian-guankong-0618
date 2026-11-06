@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>在线排查与处置</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.task-list { padding: 0; }
+.task-card { border-left: 4px solid var(--primary); }
+.task-card.red { border-left-color: var(--danger); }
+.task-card.orange { border-left-color: var(--orange); }
+.task-card.yellow { border-left-color: var(--warning); }
+.task-card .tc-title { font-size: 14px; font-weight: 700; }
+.task-card .tc-meta { font-size: 11px; color: var(--text2); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+.task-card .tc-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+.task-card .tc-source { font-size: 11px; color: var(--primary); background: rgba(var(--primary-rgb),.1); padding: 3px 8px; border-radius: 6px; }
+
+.photo-grid .photo-add { border: 2px dashed var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; }
+.photo-grid .photo-thumb .remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--danger); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+
+.location-bar { background: var(--bg-hover); }
+.location-bar .loc-info { flex: 1; }
+.location-bar .loc-refresh { flex: 0 0 auto; color: var(--primary); cursor: pointer; }
+
+.flow-actions { display: flex; gap: 10px; margin-top: 20px; }
+.flow-actions .btn { flex: 1; }
+.result-card { text-align: center; padding: 20px; }
+.fb-title { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">在线排查与处置</div>
+        <div class="ph-sub">现场核实 · 隐患登记 · 处置建议 · 任务提交</div>
+    </div>
+
+    <div class="knowledge-body scrollable-body form-sheet">
+        <!-- 任务列表 -->
+        <div class="task-list anim d1" id="taskList"></div>
+
+        <!-- 四步流程 -->
+        <div class="flow-view" id="flowView">
+            <div class="back-link tap" onclick="backToList()"><i class="fa-solid fa-chevron-left"></i> 返回任务列表</div>
+            <div class="step-bar">
+                <div class="step-item active" id="step1"><div class="si-dot">1</div><div class="si-label">现场核实</div></div>
+                <div class="step-item" id="step2"><div class="si-dot">2</div><div class="si-label">隐患登记</div></div>
+                <div class="step-item" id="step3"><div class="si-dot">3</div><div class="si-label">处置建议</div></div>
+                <div class="step-item" id="step4"><div class="si-dot">4</div><div class="si-label">任务提交</div></div>
+            </div>
+
+            <div id="stepPanels">
+                <!-- Step 1 -->
+                <div class="step-panel" id="panel1">
+                    <div class="card">
+                        <div class="fb-title">任务信息</div>
+                        <div class="form-item"><label>排查任务</label><input type="text" id="oiTitle" readonly></div>
+                        <div class="form-item"><label>任务地点</label><input type="text" id="oiLocation" readonly></div>
+                    </div>
+                    <div class="card">
+                        <div class="fb-title">GPS 到位确认</div>
+                        <div class="location-bar" id="locationBar">
+                            <i class="fa-solid fa-location-dot" style="color:var(--primary)"></i>
+                            <div class="loc-info" id="locInfo">点击刷新获取当前位置</div>
+                            <div class="loc-refresh tap" onclick="refreshLocation()"><i class="fa-solid fa-rotate"></i></div>
+                        </div>
+                        <div class="form-item" style="margin-top:14px">
+                            <label>初步判断 <span class="req">*</span></label>
+                            <div class="radio-group" id="conclusionGroup">
+                                <div class="radio-chip tap" data-val="normal" onclick="selectConclusion(this,'normal')">正常</div>
+                                <div class="radio-chip tap" data-val="abnormal" onclick="selectConclusion(this,'abnormal')">异常</div>
+                                <div class="radio-chip tap" data-val="review" onclick="selectConclusion(this,'review')">需复查</div>
+                            </div>
+                            <div class="error-msg" id="conclusionError"></div>
+                        </div>
+                        <div class="form-item">
+                            <label>现场照片</label>
+                            <div class="photo-grid" id="step1Photos"></div>
+                        </div>
+                        <div class="form-item">
+                            <label>现场描述</label>
+                            <textarea id="step1Desc" placeholder="记录现场情况"></textarea>
+                        </div>
+                    </div>
+                    <div class="flow-actions">
+                        <button class="btn btn-outline tap" onclick="saveDraft()">暂存</button>
+                        <button class="btn btn-primary tap" onclick="nextStep(2)">下一步</button>
+                    </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="step-panel" id="panel2" style="display:none">
+                    <div class="card">
+                        <div class="fb-title">隐患登记</div>
+                        <div class="form-item">
+                            <label>隐患标题 <span class="req">*</span></label>
+                            <input type="text" id="hdTitle" placeholder="请输入隐患标题">
+                            <div class="error-msg" id="hdTitleError"></div>
+                        </div>
+                        <div class="form-item">
+                            <label>风险类型 <span class="req">*</span></label>
+                            <select id="hdType" onchange="onTypeChange()">
+                                <option value="">请选择风险类型</option>
+                                <option value="脚手架工程">脚手架工程</option>
+                                <option value="基坑工程">基坑工程</option>
+                                <option value="起重吊装">起重吊装</option>
+                                <option value="燃气管线">燃气管线</option>
+                                <option value="玻璃幕墙">玻璃幕墙</option>
+                                <option value="交通安全">交通安全</option>
+                                <option value="自建房安全">自建房安全</option>
+                                <option value="其他">其他</option>
+                            </select>
+                            <div class="error-msg" id="hdTypeError"></div>
+                        </div>
+                        <div class="form-item">
+                            <label>风险等级 <span class="req">*</span></label>
+                            <div class="radio-group" id="levelGroup">
+                                <div class="radio-chip tap danger" data-val="red" onclick="selectLevel(this,'red')">红色</div>
+                                <div class="radio-chip tap warning" data-val="orange" onclick="selectLevel(this,'orange')">橙色</div>
+                                <div class="radio-chip tap" data-val="yellow" onclick="selectLevel(this,'yellow')">黄色</div>
+                                <div class="radio-chip tap" data-val="blue" onclick="selectLevel(this,'blue')">蓝色</div>
+                            </div>
+                            <div class="error-msg" id="levelError"></div>
+                        </div>
+                        <div class="form-item">
+                            <label>隐患描述</label>
+                            <textarea id="hdDesc" placeholder="详细描述隐患情况"></textarea>
+                        </div>
+                        <div class="form-item">
+                            <label>影响范围</label>
+                            <input type="text" id="hdScope" placeholder="如：影响周边 50 米范围">
+                        </div>
+                        <div class="form-item">
+                            <label>现场照片/视频</label>
+                            <div class="photo-grid" id="step2Photos"></div>
+                        </div>
+                    </div>
+                    <div class="flow-actions">
+                        <button class="btn btn-outline tap" onclick="prevStep(1)">上一步</button>
+                        <button class="btn btn-primary tap" onclick="nextStep(3)">下一步</button>
+                    </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="step-panel" id="panel3" style="display:none">
+                    <div class="card">
+                        <div class="fb-title">处置建议</div>
+                        <div class="form-item">
+                            <label>处置方式 <span class="req">*</span></label>
+                            <div class="radio-group" id="disposalGroup">
+                                <div class="radio-chip tap" data-val="immediate" onclick="selectDisposal(this,'immediate')">立即处置</div>
+                                <div class="radio-chip tap" data-val="transfer" onclick="selectDisposal(this,'transfer')">上报转办</div>
+                            </div>
+                            <div class="error-msg" id="disposalError"></div>
+                        </div>
+                        <div class="form-item">
+                            <label>处置措施</label>
+                            <textarea id="disposalMeasures" placeholder="填写具体处置措施或整改要求"></textarea>
+                        </div>
+                        <div class="form-item">
+                            <label>建议整改时限</label>
+                            <input type="datetime-local" id="disposalDeadline">
+                        </div>
+                        <div class="form-item">
+                            <label>建议责任单位</label>
+                            <input type="text" id="responsibleUnit" placeholder="如：施工单位 A">
+                        </div>
+                    </div>
+                    <div class="flow-actions">
+                        <button class="btn btn-outline tap" onclick="prevStep(2)">上一步</button>
+                        <button class="btn btn-primary tap" onclick="nextStep(4)">下一步</button>
+                    </div>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="step-panel" id="panel4" style="display:none">
+                    <div class="card result-card anim d1">
+                        <div class="rc-icon"><i class="fa-solid fa-check"></i></div>
+                        <div class="rc-title">提交成功</div>
+                        <div class="rc-desc" id="resultDesc">已生成事件编号，相关责任人将收到通知。</div>
+                        <button class="btn btn-primary tap" style="margin-top:20px;width:100%" onclick="backToList()">返回任务列表</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+
+    var currentTaskId = null;
+    var currentStep = 1;
+    var formData = {};
+    var step1Photos = [];
+    var step2Photos = [];
+
+    var typeLabels = {
+        normal: '正常', abnormal: '异常', review: '需复查',
+        red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色',
+        immediate: '立即处置', transfer: '上报转办'
+    };
+
+    function renderTaskList() {
+        var list = DataStore.onlineInspectionTasks.slice().sort(function(a, b) {
+            var levelOrder = { red: 0, orange: 1, yellow: 2, blue: 3 };
+            return (levelOrder[a.level] || 9) - (levelOrder[b.level] || 9);
+        });
+        document.getElementById('taskList').innerHTML = list.map(function(t, idx) {
+            return '<div class="task-card card ' + t.level + ' tap anim d' + (idx + 1) + '" onclick="enterFlow(\'' + t.id + '\')">' +
+                '<div class="tc-title">' + App.escapeHtml(t.title) + '</div>' +
+                '<div class="tc-meta">' +
+                    '<span><i class="fa-solid fa-location-dot"></i> ' + App.escapeHtml(t.location) + '</span>' +
+                    '<span><i class="fa-solid fa-clock"></i> ' + App.formatDate(t.deadline, 'MM-dd hh:mm') + '</span>' +
+                '</div>' +
+                '<div class="tc-foot">' +
+                    '<span class="tc-source">' + App.escapeHtml(t.source) + '</span>' +
+                    '<span class="risk-badge ' + t.level + '" style="font-size: 10px"><span class="risk-dot ' + t.level + '" style="margin-right:4px"></span>' + typeLabels[t.level] + '</span>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    window.enterFlow = function(taskId) {
+        currentTaskId = taskId;
+        var task = DataStore.getOnlineInspectionTask(taskId);
+        document.getElementById('oiTitle').value = task.title;
+        document.getElementById('oiLocation').value = task.location;
+        document.getElementById('taskList').style.display = 'none';
+        document.getElementById('flowView').classList.add('show');
+        loadDraft();
+        refreshLocation();
+    };
+
+    window.backToList = function() {
+        document.getElementById('taskList').style.display = 'block';
+        document.getElementById('flowView').classList.remove('show');
+        resetFlow();
+        renderTaskList();
+    };
+
+    function resetFlow() {
+        currentStep = 1;
+        currentTaskId = null;
+        formData = {};
+        step1Photos = [];
+        step2Photos = [];
+        ['panel1','panel2','panel3','panel4'].forEach(function(id, i) {
+            document.getElementById(id).style.display = i === 0 ? 'block' : 'none';
+        });
+        ['step1','step2','step3','step4'].forEach(function(id, i) {
+            var el = document.getElementById(id);
+            el.classList.toggle('active', i === 0);
+            el.classList.remove('completed');
+        });
+        // 清空表单
+        document.getElementById('conclusionGroup').querySelectorAll('.radio-chip').forEach(function(c) { c.classList.remove('active'); });
+        document.getElementById('levelGroup').querySelectorAll('.radio-chip').forEach(function(c) { c.classList.remove('active'); });
+        document.getElementById('disposalGroup').querySelectorAll('.radio-chip').forEach(function(c) { c.classList.remove('active'); });
+        document.getElementById('step1Desc').value = '';
+        document.getElementById('hdTitle').value = '';
+        document.getElementById('hdType').value = '';
+        document.getElementById('hdDesc').value = '';
+        document.getElementById('hdScope').value = '';
+        document.getElementById('disposalMeasures').value = '';
+        document.getElementById('disposalDeadline').value = '';
+        document.getElementById('responsibleUnit').value = '';
+        renderPhotoGrid('step1Photos', step1Photos, false);
+        renderPhotoGrid('step2Photos', step2Photos, false);
+    }
+
+    function updateStepUI() {
+        ['step1','step2','step3','step4'].forEach(function(id, i) {
+            var el = document.getElementById(id);
+            var stepNum = i + 1;
+            el.classList.toggle('active', stepNum === currentStep);
+            el.classList.toggle('completed', stepNum < currentStep);
+        });
+        ['panel1','panel2','panel3','panel4'].forEach(function(id, i) {
+            document.getElementById(id).style.display = (i + 1) === currentStep ? 'block' : 'none';
+        });
+    }
+
+    window.nextStep = function(step) {
+        if (step === 2) {
+            App.clearFieldError('conclusion');
+            if (!formData.conclusion) {
+                var msgEl = document.getElementById('conclusionError');
+                if (msgEl) msgEl.textContent = '请选择初步判断';
+                return;
+            }
+        }
+        if (step === 3) {
+            App.clearFieldError('hdTitle');
+            App.clearFieldError('hdType');
+            App.clearFieldError('level');
+            var titleVal = document.getElementById('hdTitle').value.trim();
+            var typeVal = document.getElementById('hdType').value;
+            var hasError = false;
+            if (!titleVal) {
+                var msgEl = document.getElementById('hdTitleError');
+                if (msgEl) msgEl.textContent = '请输入隐患标题';
+                hasError = true;
+            }
+            if (!typeVal) {
+                var msgEl2 = document.getElementById('hdTypeError');
+                if (msgEl2) msgEl2.textContent = '请选择风险类型';
+                hasError = true;
+            }
+            if (!formData.level) {
+                var msgEl3 = document.getElementById('levelError');
+                if (msgEl3) msgEl3.textContent = '请选择风险等级';
+                hasError = true;
+            }
+            if (hasError) return;
+        }
+        if (step === 4) {
+            App.clearFieldError('disposal');
+            if (!formData.disposal) {
+                var msgEl = document.getElementById('disposalError');
+                if (msgEl) msgEl.textContent = '请选择处置方式';
+                return;
+            }
+            submitTask();
+            return;
+        }
+        currentStep = step;
+        updateStepUI();
+    };
+
+    window.prevStep = function(step) {
+        currentStep = step;
+        updateStepUI();
+    };
+
+    window.selectConclusion = function(el, val) {
+        formData.conclusion = val;
+        document.getElementById('conclusionGroup').querySelectorAll('.radio-chip').forEach(function(c) { c.classList.remove('active'); });
+        el.classList.add('active');
+        App.clearFieldError('conclusion');
+    };
+
+    window.selectLevel = function(el, val) {
+        formData.level = val;
+        document.getElementById('levelGroup').querySelectorAll('.radio-chip').forEach(function(c) { c.classList.remove('active'); });
+        el.classList.add('active');
+        App.clearFieldError('level');
+    };
+
+    window.selectDisposal = function(el, val) {
+        formData.disposal = val;
+        document.getElementById('disposalGroup').querySelectorAll('.radio-chip').forEach(function(c) { c.classList.remove('active'); });
+        el.classList.add('active');
+        App.clearFieldError('disposal');
+    };
+
+    window.onTypeChange = function() {
+        var type = document.getElementById('hdType').value;
+        var risk = RiskData.getAll ? RiskData.getAll().find(function(r) { return r.type === type; }) : null;
+        if (risk && !document.getElementById('hdDesc').value.trim()) {
+            document.getElementById('hdDesc').value = risk.identification || risk.content || '';
+        }
+    };
+
+    window.refreshLocation = function() {
+        document.getElementById('locInfo').textContent = '定位中...';
+        App.getLocation().then(function(loc) {
+            formData.location = loc;
+            document.getElementById('locInfo').innerHTML = App.escapeHtml(loc.address) + ' <span style="color:var(--text2)">(精度 ' + loc.accuracy + 'm)</span>';
+        });
+    };
+
+    function renderPhotoGrid(containerId, photos, readOnly) {
+        var container = document.getElementById(containerId);
+        var html = '';
+        if (!readOnly) {
+            html += '<div class="photo-add tap" onclick="takePhotoFor(\'' + containerId + '\')"><i class="fa-solid fa-camera" style="font-size: 19px;margin-bottom:4px"></i><div>拍照</div></div>';
+        }
+        photos.forEach(function(p, i) {
+            html += '<div class="photo-thumb" style="background-image:url(' + p + ')">' +
+                (!readOnly ? '<div class="remove" onclick="removePhoto(\'' + containerId + '\',' + i + ')"><i class="fa-solid fa-xmark"></i></div>' : '') +
+            '</div>';
+        });
+        container.innerHTML = html;
+    }
+
+    window.takePhotoFor = function(containerId) {
+        App.takePhoto().then(function(url) {
+            if (containerId === 'step1Photos') step1Photos.push(url);
+            else step2Photos.push(url);
+            renderPhotoGrid(containerId, containerId === 'step1Photos' ? step1Photos : step2Photos, false);
+        });
+    };
+
+    window.removePhoto = function(containerId, idx) {
+        App.confirm('确认删除该照片？', function() {
+            if (containerId === 'step1Photos') step1Photos.splice(idx, 1);
+            else step2Photos.splice(idx, 1);
+            renderPhotoGrid(containerId, containerId === 'step1Photos' ? step1Photos : step2Photos, false);
+        });
+    };
+
+    function saveFormData() {
+        formData.title = document.getElementById('hdTitle').value;
+        formData.type = document.getElementById('hdType').value;
+        formData.description = document.getElementById('hdDesc').value;
+        formData.scope = document.getElementById('hdScope').value;
+        formData.measures = document.getElementById('disposalMeasures').value;
+        formData.deadline = document.getElementById('disposalDeadline').value;
+        formData.responsibleUnit = document.getElementById('responsibleUnit').value;
+        formData.step1Desc = document.getElementById('step1Desc').value;
+    }
+
+    window.saveDraft = function() {
+        saveFormData();
+        var key = 'oi-draft-' + currentTaskId;
+        localStorage.setItem(key, JSON.stringify({
+            step: currentStep,
+            formData: formData,
+            step1Photos: step1Photos,
+            step2Photos: step2Photos
+        }));
+        App.showToast('已暂存');
+    };
+
+    function loadDraft() {
+        var key = 'oi-draft-' + currentTaskId;
+        var saved = localStorage.getItem(key);
+        if (!saved) return;
+        try {
+            var draft = JSON.parse(saved);
+            formData = draft.formData || {};
+            step1Photos = draft.step1Photos || [];
+            step2Photos = draft.step2Photos || [];
+            document.getElementById('step1Desc').value = formData.step1Desc || '';
+            document.getElementById('hdTitle').value = formData.title || '';
+            document.getElementById('hdType').value = formData.type || '';
+            document.getElementById('hdDesc').value = formData.description || '';
+            document.getElementById('hdScope').value = formData.scope || '';
+            document.getElementById('disposalMeasures').value = formData.measures || '';
+            document.getElementById('disposalDeadline').value = formData.deadline || '';
+            document.getElementById('responsibleUnit').value = formData.responsibleUnit || '';
+            renderPhotoGrid('step1Photos', step1Photos, false);
+            renderPhotoGrid('step2Photos', step2Photos, false);
+            // 恢复单选
+            if (formData.conclusion) {
+                var c = document.querySelector('#conclusionGroup .radio-chip[data-val="' + formData.conclusion + '"]');
+                if (c) c.classList.add('active');
+            }
+            if (formData.level) {
+                var l = document.querySelector('#levelGroup .radio-chip[data-val="' + formData.level + '"]');
+                if (l) l.classList.add('active');
+            }
+            if (formData.disposal) {
+                var d = document.querySelector('#disposalGroup .radio-chip[data-val="' + formData.disposal + '"]');
+                if (d) d.classList.add('active');
+            }
+        } catch (e) {}
+    }
+
+    function submitTask() {
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('提交任务...');
+        setTimeout(function() {
+            saveFormData();
+            var result = {
+                taskId: currentTaskId,
+                conclusion: formData.conclusion,
+                hiddenDanger: {
+                    title: formData.title,
+                    type: formData.type,
+                    level: formData.level,
+                    description: formData.description,
+                    scope: formData.scope,
+                    location: formData.location ? formData.location.address : ''
+                },
+                disposal: formData.disposal,
+                measures: formData.measures,
+                deadline: formData.deadline,
+                responsibleUnit: formData.responsibleUnit,
+                photos: step2Photos
+            };
+            DataStore.submitOnlineInspection(result);
+            localStorage.removeItem('oi-draft-' + currentTaskId);
+            document.getElementById('resultDesc').textContent = '已生成事件编号，相关责任人将收到通知。';
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            currentStep = 4;
+            updateStepUI();
+        }, 600);
+    }
+
+    document.getElementById('hdTitle').addEventListener('input', function() {
+        App.clearFieldError('hdTitle');
+    });
+    document.getElementById('hdType').addEventListener('change', function() {
+        App.clearFieldError('hdType');
+    });
+
+    renderTaskList();
+})();
+</script>
+</body>
+</html>

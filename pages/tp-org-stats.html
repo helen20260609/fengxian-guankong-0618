@@ -69,7 +69,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .panel-body { padding: 20px; }
 
 /* 统计卡片 */
-.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); margin-bottom: 20px; }
+.stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--gap); margin-bottom: 20px; }
 .stat-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; align-items: center; gap: 12px; transition: all 0.3s; cursor: pointer; }
 .stat-item:hover, .stat-item.active { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); border-color: var(--primary); }
 .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
@@ -205,7 +205,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 
 @media (max-width: 1200px) {
     .chart-row { flex-direction: column; }
-    .stat-row { grid-template-columns: repeat(3, 1fr); }
+    .stat-row { grid-template-columns: repeat(5, 1fr); }
     .drawer { width: 100%; }
 }
 @media (max-width: 768px) {
@@ -600,6 +600,36 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeReportModal()">关闭</button>
             <button class="btn btn-primary" onclick="exportReport()">导出报告</button>
+        </div>
+    </div>
+</div>
+
+<!-- 报告分享弹窗 -->
+<div class="modal-overlay" id="shareModal">
+    <div class="modal-container" style="max-width: 480px;">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-share-alt" style="color:var(--primary);"></i> 分享报告</div>
+            <button class="modal-close" onclick="closeShareModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">只读分享链接</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="shareLinkInput" readonly style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg-hover);">
+                    <button class="btn btn-primary" onclick="copyShareLink()"><i class="fas fa-copy"></i> 复制</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">分享给指定人员/部门（备注）</label>
+                <input type="text" id="shareTarget" placeholder="如：监管一部、张管理员" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
+                <i class="fas fa-info-circle"></i> 链接为只读视图，接收方打开后可查看报告内容，不可修改。分享记录将保存到本地。
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeShareModal()">关闭</button>
+            <button class="btn btn-primary" onclick="confirmShare()"><i class="fas fa-check"></i> 确认分享</button>
         </div>
     </div>
 </div>
@@ -1094,7 +1124,28 @@ function resetStats() {
 }
 
 function exportTable() {
-    alert('数据导出功能：将导出当前机构统计明细为 Excel/CSV 格式');
+    var headers = ['机构名称', '机构类型', '业务领域', '所在区域', '合同数', '项目数', '报告数', '合格率', '及时率', '满意度', '信用等级', '状态'];
+    var rows = filteredOrgList.map(function(i) {
+        return [i.name, i.type, i.field, i.district, i.contracts, i.projects, i.reports, i.qualifiedRate + '%', i.onTimeRate + '%', i.satisfaction, i.credit, i.status];
+    });
+    downloadCsv('机构统计明细_' + formatNow().slice(0, 10), headers, rows);
+}
+
+// 通用 CSV 下载（Excel 兼容，带 BOM）
+function downloadCsv(filename, headers, rows) {
+    var csv = '﻿' + headers.join(',') + '\n';
+    rows.forEach(function(row) {
+        csv += row.map(function(cell) { return '"' + String(cell == null ? '' : cell).replace(/"/g, '""') + '"'; }).join(',') + '\n';
+    });
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 100);
 }
 
 // 自定义报表配置
@@ -1326,7 +1377,7 @@ function generateReport() {
     });
     preview.innerHTML = html;
 
-    var report = { id: Date.now(), name: name, period: periodText, createTime: formatNow(), indicators: reportConfig.indicators.slice() };
+    var report = { id: Date.now(), name: name, period: periodText, createTime: formatNow(), indicators: reportConfig.indicators.slice(), dimensions: reportConfig.dimensions.slice(), chartTypes: reportConfig.chartTypes.slice(), filters: JSON.parse(JSON.stringify(currentFilters)) };
     reports.unshift(report);
     localStorage.setItem('orgReports', JSON.stringify(reports));
     renderReportPreview();
@@ -1334,7 +1385,7 @@ function generateReport() {
 
 function generateAutoReport(period) {
     var periodText = { week: '周报', month: '月报', quarter: '季报', year: '年报' }[period];
-    var report = { id: Date.now(), name: '第三方服务机构' + periodText, period: periodText, createTime: formatNow(), indicators: ['orgCount', 'serviceCount', 'serviceQuality', 'satisfaction'] };
+    var report = { id: Date.now(), name: '第三方服务机构' + periodText, period: periodText, createTime: formatNow(), indicators: ['orgCount', 'serviceCount', 'serviceQuality', 'satisfaction'], dimensions: ['time', 'area', 'field', 'orgType'], chartTypes: ['table', 'bar', 'pie', 'line'], filters: JSON.parse(JSON.stringify(currentFilters)) };
     reports.unshift(report);
     localStorage.setItem('orgReports', JSON.stringify(reports));
     renderReports();
@@ -1350,7 +1401,7 @@ function renderReports() {
         return '<div class="report-card">' +
             '<div class="report-icon ' + iconClass + '"><i class="fas fa-file-alt"></i></div>' +
             '<div class="report-info"><div class="report-title">' + r.name + '</div><div class="report-meta">生成时间：' + r.createTime + ' · 指标：' + r.indicators.map(function(i) { return indicatorName(i); }).join('、') + '</div></div>' +
-            '<div class="report-actions"><button class="btn btn-sm btn-outline" onclick="viewReport(' + r.id + ')">查看</button><button class="btn btn-sm btn-primary" onclick="exportReport(' + r.id + ')">导出</button></div>' +
+            '<div class="report-actions"><button class="btn btn-sm btn-outline" onclick="viewReport(' + r.id + ')">查看</button><button class="btn btn-sm btn-primary" onclick="exportReport(' + r.id + ')">导出</button><button class="btn btn-sm btn-outline" onclick="openShareModal(' + r.id + ')"><i class="fas fa-share-alt"></i> 分享</button></div>' +
             '</div>';
     }).join('');
 }
@@ -1363,8 +1414,76 @@ function viewReport(id) {
     document.getElementById('reportModal').classList.add('active');
 }
 
+// 报告分享：生成只读链接并记录分享历史
+var shareReportId = null;
+function openShareModal(id) {
+    shareReportId = id;
+    var r = reports.find(function(i) { return i.id === id; });
+    if (!r) return;
+    var link = location.origin + location.pathname.replace('tp-org-stats.html', 'tp-org-stats-view.html') + '?reportId=' + id + '&readonly=1';
+    document.getElementById('shareLinkInput').value = link;
+    document.getElementById('shareTarget').value = '';
+    document.getElementById('shareModal').classList.add('active');
+}
+function closeShareModal() {
+    document.getElementById('shareModal').classList.remove('active');
+    shareReportId = null;
+}
+function copyShareLink() {
+    var input = document.getElementById('shareLinkInput');
+    input.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    if (navigator.clipboard) navigator.clipboard.writeText(input.value).catch(function() {});
+    showTip('链接已复制', 'success');
+}
+function confirmShare() {
+    var target = document.getElementById('shareTarget').value.trim();
+    var r = reports.find(function(i) { return i.id === shareReportId; });
+    if (r) {
+        if (!r.shared) r.shared = [];
+        r.shared.push({ target: target || '未指定', time: formatNow(), link: document.getElementById('shareLinkInput').value });
+        localStorage.setItem('orgReports', JSON.stringify(reports));
+    }
+    closeShareModal();
+    showTip('已分享' + (target ? '给「' + target + '」' : ''), 'success');
+}
+
 function exportReport(id) {
-    alert('报告导出功能：将生成 PDF/Excel 格式的统计报告供下载');
+    var r = id ? reports.find(function(i) { return i.id === id; }) : null;
+    if (!r) {
+        // 自定义报表 Tab 的导出：按当前配置导出明细
+        var list = filteredOrgList.length ? filteredOrgList : orgList;
+        var headers = ['机构名称', '类型', '领域', '区域'].concat(reportConfig.indicators.map(indicatorName));
+        var rows = list.map(function(item) {
+            return [item.name, item.type, item.field, item.district].concat(reportConfig.indicators.map(function(ind) { return formatIndicatorValue(ind, item); }));
+        });
+        downloadCsv('自定义统计报告_' + formatNow().slice(0, 10), headers, rows);
+        return;
+    }
+    // 报告中心导出：生成可打印的 PDF 报告页
+    var indicators = (r.indicators || []).map(indicatorName).join('、');
+    var dimensions = (r.dimensions || []).map(dimensionName).join('、');
+    var list = filteredOrgList.length ? filteredOrgList : orgList;
+    var tableRows = list.map(function(item) {
+        return '<tr><td>' + item.name + '</td><td>' + item.type + '</td><td>' + item.field + '</td><td>' + item.district + '</td><td>' + (item.contracts + item.projects + item.reports) + '</td><td>' + item.qualifiedRate + '%</td><td>' + item.satisfaction + '</td><td>' + item.credit + '</td></tr>';
+    }).join('');
+    var printHtml = '<html><head><title>' + r.name + '</title><style>' +
+        'body{font-family:"Microsoft YaHei",sans-serif;padding:24px;color:#202124}' +
+        'h2{text-align:center;margin-bottom:8px}' +
+        '.meta{color:#5f6368;font-size:13px;margin-bottom:20px;line-height:1.8}' +
+        'table{width:100%;border-collapse:collapse;font-size:12px}' +
+        'th,td{padding:8px;border:1px solid #dadce0;text-align:left}' +
+        'th{background:#f0f2f5}' +
+        '</style></head><body>' +
+        '<h2>' + r.name + '</h2>' +
+        '<div class="meta">生成时间：' + r.createTime + '　统计指标：' + indicators + '<br>统计维度：' + dimensions + '</div>' +
+        '<table><thead><tr><th>机构名称</th><th>类型</th><th>领域</th><th>区域</th><th>服务数量</th><th>合格率</th><th>满意度</th><th>信用等级</th></tr></thead><tbody>' +
+        tableRows + '</tbody></table></body></html>';
+    var win = window.open('', '_blank');
+    win.document.write(printHtml);
+    win.document.close();
+    win.focus();
+    setTimeout(function() { win.print(); }, 300);
 }
 
 function indicatorName(key) {

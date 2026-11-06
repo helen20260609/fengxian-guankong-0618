@@ -112,7 +112,15 @@ function __getHouseArchStorage() {
     try {
         const raw = localStorage.getItem(HOUSE_ARCH_KEY);
         const parsed = raw ? JSON.parse(raw) : {};
-        return parsed && typeof parsed === 'object' ? parsed : {};
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        // 自愈：剔除 key 与记录编号不一致的历史脏数据（数组并入字典产生的 "0".."n" 错位副本），
+        // 避免脏 key 随 patchHouseRecord/POST 回写服务端污染 house-arch.json
+        Object.keys(parsed).forEach(k => {
+            const rec = parsed[k];
+            if (!rec || typeof rec !== 'object' || Array.isArray(rec)) { delete parsed[k]; return; }
+            if (rec.no && String(rec.no) !== String(k)) delete parsed[k];
+        });
+        return parsed;
     } catch (e) { return {}; }
 }
 
@@ -428,6 +436,880 @@ const DEFAULT_HOUSE_STATUS = {
     }
 };
 
+// ============================================================
+// 三层档案（房屋级 / 风险级 / 鉴定级）数据层补齐（幂等，只增不改）
+// - 风险级：riskRecords[i] 增加 archiveNo（档案编号）、stage/stageLabel（生命周期阶段）、
+//           timeline[]（流转时间线，为空时由既有数据播种）、appraisalIds[]（关联鉴定）
+// - 鉴定级：appraisalReports[i] 增加 appraisalNo、effectScope（whole-house/risk）、appliedTo[]
+// stage/appraisalIds/appliedTo 为派生字段每次重算；archiveNo/appraisalNo/timeline 一经写入不覆盖。
+// ============================================================
+const RISK_ARCHIVE_LAYER_VERSION = 1;
+const RISK_STAGE_LABELS = {
+    discovered: '已发现',
+    verified: '已核实',
+    graded: '已分级',
+    rectifying: '整治中',
+    accepting: '待验收',
+    closed: '已销号'
+};
+
+function generateRiskArchiveNo(no, seq) { return 'RA-' + (no || 'X') + '-' + String(seq || 1).padStart(3, '0'); }
+function generateAppraisalArchiveNo(no, seq) { return 'JD-' + (no || 'X') + '-' + String(seq || 1).padStart(3, '0'); }
+
+// 生命周期阶段推导：以隐患台账状态为主，等级信息兜底；处置流程验收通过视为已销号
+function deriveRiskStage(rr, hz) {
+    const hzStatus = hz && hz.currentStatus;
+    if (hzStatus === '已销号') return 'closed';
+    if (rr && rr.rectProcess && rr.rectProcess.status === 'accepted') return 'closed';
+    if (hzStatus === '整治中') return 'rectifying';
+    if (hzStatus === '管控中') return 'graded';
+    return (rr && rr.riskLevel) || (hz && (hz.initialJudge || hz.currentLevel)) ? 'verified' : 'discovered';
+}
+
+// 时间线播种（仅当 timeline 为空）：汇总登记/动态/治理/销号既有痕迹
+function seedRiskTimeline(rec, rr, hz) {
+    const tl = [];
+    if (rr.createdAt || (hz && hz.createdAt)) {
+        tl.push({
+            time: (hz && hz.createdAt) || rr.createdAt,
+            node: 'register', title: '隐患登记',
+            operator: (hz && hz.createdBy) || rr.person || '',
+            source: (rr.sourceType || '') + (rr.sourceId ? '·' + rr.sourceId : ''),
+            derived: true
+        });
+    }
+    (rec.hazardDynamics || []).forEach(d => {
+        if (!hz || d.hazardId !== hz.id || d.actionType === '登记') return;
+        tl.push({
+            time: d.actionTime || '', node: 'dynamic', title: d.actionType || '动态',
+            operator: d.operator || '', content: d.content || '',
+            conclusion: d.conclusion || '', levelAfter: d.levelAfter || '', derived: true
+        });
+    });
+    (rec.governanceEvents || []).forEach(ev => {
+        if (ev.riskRecordId !== rr.id && !(hz && ev.hazardId === hz.id)) return;
+        tl.push({ time: ev.createdAt || '', node: 'governance', title: '纳入治理链', content: ev.status || '', derived: true });
+    });
+    if (hz && hz.currentStatus === '已销号') {
+        const ci = rec.closeInfo || {};
+        tl.push({ time: ci.reportTime || hz.closeTime || '', node: 'close', title: '验收销号', operator: ci.reporter || '', derived: true });
+    }
+    return tl.sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+}
+
+// 关联鉴定报告：治理事件链引用的鉴定 + riskInfo 弱关联 + 单鉴定兜底（1房1活跃风险1鉴定）
+function linkRiskAppraisals(rec, rr, hz) {
+    const ids = [];
+    (rec.governanceEvents || []).forEach(ev => {
+        if (ev.riskRecordId !== rr.id && !(hz && ev.hazardId === hz.id)) return;
+        const ar = ev.data && ev.data.appraisalReports;
+        if (Array.isArray(ar)) ar.forEach(a => { if (a && a.id && ids.indexOf(a.id) === -1) ids.push(a.id); });
+    });
+    const ri = rec.riskInfo || {};
+    if (ri.relatedAppraisalId && ids.indexOf(ri.relatedAppraisalId) === -1 &&
+        (rec.appraisalReports || []).some(a => a.id === ri.relatedAppraisalId)) {
+        ids.push(ri.relatedAppraisalId);
+    }
+    const apps = rec.appraisalReports || [];
+    const activeRisks = (rec.riskRecords || []).filter(r => r.stage !== 'closed');
+    if (!ids.length && apps.length === 1 && activeRisks.length === 1 && activeRisks[0] === rr) {
+        ids.push(apps[0].id);
+    }
+    return ids;
+}
+
+// ========== 监测点清单（6.1.2.17.2 演示种子数据）==========
+// 类型：倾角计/裂缝计/沉降观测点/位移计/水位计；按房屋编号稳定派生 3-5 个
+const MONITOR_POINT_TYPES = ['倾角计', '裂缝计', '沉降观测点', '位移计', '水位计'];
+function generateMonitorPoints(no) {
+    const seed = parseInt(String(no || '').replace(/\D/g, '') || '0', 10);
+    const parts = ['屋面东南角', '承重外墙', '地基基础北侧', '楼梯间', '后檐墙'];
+    const count = 3 + (seed % 3); // 3-5 个
+    const list = [];
+    for (let i = 0; i < count; i++) {
+        list.push({
+            id: 'MP-' + no + '-' + String(i + 1).padStart(2, '0'),
+            type: MONITOR_POINT_TYPES[(seed + i) % MONITOR_POINT_TYPES.length],
+            location: parts[(seed + i) % parts.length],
+            status: (seed + i) % 5 === 4 ? '离线' : '在线',
+            installDate: '2024-0' + ((seed + i) % 9 + 1) + '-1' + (i % 9)
+        });
+    }
+    return list;
+}
+
+// ========== 消息通知（6.1.2.17.2 演示：localStorage 持久化）==========
+const HOUSE_NOTIFY_KEY = 'houseArchNotify';
+function getNotifications() {
+    try { return JSON.parse(localStorage.getItem(HOUSE_NOTIFY_KEY) || '[]'); } catch (e) { return []; }
+}
+// 推送通知：风险录入/修改后通知责任人与监管人员（演示：写入本地通知中心）
+function pushNotification(rec, riskRec, action) {
+    if (!rec) return;
+    const list = getNotifications();
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    const receivers = [rec.owner, rec.responsiblePerson].filter(Boolean);
+    if (!receivers.length) receivers.push('监管人员');
+    receivers.forEach(who => {
+        list.unshift({
+            id: 'NT' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+            time: ts,
+            receiver: who,
+            title: '【' + (action || '风险信息') + '】' + (riskRec.riskName || riskRec.hazardType || '风险记录'),
+            content: (rec.no || '') + ' ' + (riskRec.hazardType || '') + '（' + (riskRec.riskLevel || '') + '）' + (riskRec.location ? ' @' + riskRec.location : ''),
+            houseNo: rec.no || '',
+            read: false
+        });
+    });
+    try { localStorage.setItem(HOUSE_NOTIFY_KEY, JSON.stringify(list.slice(0, 100))); } catch (e) {}
+}
+
+// ========== 风险清单库（6.1.2.17.2）：类型 → 描述模板 + 防范措施建议 ==========
+// 手动录入时按类型自动带入；仅作演示种子数据
+const RISK_TYPE_LIBRARY = {
+    '裂缝':     { descTemplate: '{part}存在裂缝，缝宽超限，持续发展可能影响结构安全', prevention: '定期观测裂缝发展；设置观测标记；必要时委托专业机构鉴定' },
+    '渗漏':     { descTemplate: '{part}存在渗漏，长期浸水导致材料性能退化', prevention: '及时修缮防水层；保持排水通畅；雨季加强巡查' },
+    '沉降':     { descTemplate: '{part}存在不均匀沉降，可能引起结构倾斜开裂', prevention: '设置沉降观测点；控制周边堆载；发现加速沉降立即上报' },
+    '腐朽':     { descTemplate: '{part}木构件腐朽，承载能力下降', prevention: '保持通风干燥；防腐处理；严重腐朽构件及时更换' },
+    '破损':     { descTemplate: '{part}存在破损，影响正常使用及结构安全', prevention: '及时修复破损部位；避免超载使用；纳入日常巡查重点' },
+    '变形':     { descTemplate: '{part}存在明显变形，超出正常使用限值', prevention: '限制使用荷载；加强变形监测；必要时支撑加固' },
+    '倾斜':     { descTemplate: '{part}存在倾斜，倾斜率接近或超过限值', prevention: '安装倾斜监测设备；疏散危险区域人员；制定应急撤离预案' },
+    '钢筋锈蚀': { descTemplate: '{part}钢筋锈蚀，截面削弱，耐久性下降', prevention: '除锈防腐处理；修补保护层；潮湿环境加强检查' },
+    '抹灰脱落': { descTemplate: '{part}抹灰层空鼓脱落，存在坠落伤人风险', prevention: '及时铲除空鼓抹灰；下方设置警示区域；行人通道重点排查' },
+    '积水':     { descTemplate: '{part}长期积水，侵蚀基础及墙体材料', prevention: '疏通排水设施；增设散水坡；雨后及时清理积水' }
+};
+
+// ========== 责任单位归属（6.1.2.17.3 演示）==========
+// 责任主体类型
+const RESPONSIBLE_UNIT_TYPES = {
+    owner: '户主（产权人）', user: '使用人（租户）', renovator: '改扩建实施人',
+    village: '村委会', town: '乡镇政府', county: '县级政府部门'
+};
+// 各单位类型默认职责边界
+const RESPONSIBLE_DUTY_MAP = {
+    owner: '整改主体责任（结构安全）', user: '使用安全', renovator: '整改主体责任（自行实施部分）',
+    village: '协助整改', town: '统筹支持', county: '行业监管'
+};
+
+// 推荐规则库：按优先级排列，命中第一条即返回（演示规则引擎）
+const RESPONSIBILITY_RULES = [
+    { id: 'R7', name: '重大风险乡镇兜底',
+      match: (rr, rec) => !!rec.difficultyTag && ((rec.appraisalReports || []).some(a => a.conclusion === 'D级') || rr.riskLevel === '第一类'),
+      primary: 'town', support: ['county'],
+      reason: () => '困难群体房屋存在涉及公共安全的重大风险，户主无力整改，推荐乡镇政府作为兜底责任单位，申请上级补助资金' },
+    { id: 'R6', name: '困难群体协助整改',
+      match: (rr, rec) => !!rec.difficultyTag,
+      primary: 'owner', support: ['village', 'town'],
+      reason: rec => '该户属' + (rec.difficultyTag || '困难群体') + '，推荐户主为责任主体，村委会协助整改、乡镇政府统筹支持' },
+    { id: 'R3', name: '擅自改扩建',
+      match: rr => /改扩|加建|扩建|加层/.test((rr.riskType || '') + (rr.riskDesc || '') + (rr.hazardDesc || '') + (rr.riskPart || '')),
+      primary: 'renovator', support: ['owner'],
+      reason: () => '擅自改扩建风险，推荐实施改扩建的责任人作为整改责任主体，户主配合' },
+    { id: 'R4', name: '出租房屋共担',
+      match: (rr, rec) => ((rec.usage && rec.usage.usageType) || '') === '出租',
+      primary: 'owner', support: ['user'],
+      reason: () => '出租房屋风险，户主负责结构安全、使用人负责使用安全，共同承担责任' },
+    { id: 'R1', name: '地基基础风险',
+      match: rr => /地基|基础|沉降/.test((rr.riskType || '') + (rr.riskDesc || '') + (rr.hazardDesc || '') + (rr.riskPart || '')),
+      primary: 'owner', support: [],
+      reason: () => '地基基础风险，推荐户主作为整改责任主体' },
+    { id: 'R2', name: '承重结构风险',
+      match: rr => /承重|梁|柱|墙体|结构|裂缝|屋面/.test((rr.riskType || '') + (rr.riskDesc || '') + (rr.hazardDesc || '') + (rr.riskPart || '')),
+      primary: 'owner', support: [],
+      reason: () => '承重结构风险，推荐户主作为整改责任主体' },
+    { id: 'R5', name: '空置房屋',
+      match: (rr, rec) => ((rec.usage && rec.usage.usageType) || '') === '空置',
+      primary: 'owner', support: [],
+      reason: () => '空置房屋风险，推荐户主作为责任主体，纳入村委会日常监管' },
+    { id: 'R0', name: '默认产权人负责',
+      match: () => true,
+      primary: 'owner', support: [],
+      reason: () => '产权清晰的房屋风险，责任单位默认为户主' }
+];
+
+// 单位类型 → 具体单位/人员名称（对接农房产权库的演示映射）
+function resolveResponsibleName(rec, rr, type) {
+    const street = rec.street || '属地';
+    switch (type) {
+        case 'owner': return rec.owner || '户主';
+        case 'user': return (rr && rr.relatedUser && rr.relatedUser !== rec.owner) ? rr.relatedUser : '租户';
+        case 'renovator': {
+            const db = rec.designBuild || rec.designInfo || {};
+            return db.builder || db.craftsman || rec.owner || '改扩建实施人';
+        }
+        case 'village': {
+            const v = rec.village || rec.community || '';
+            return (v && v !== '--') ? (v.indexOf('村') === -1 && v.indexOf('委') === -1 ? v + '村委会' : v) : (street + '村委会');
+        }
+        case 'town': return street.indexOf('街道') !== -1 ? street + '办事处' : street + '人民政府';
+        case 'county': return '区房屋管理局';
+        default: return RESPONSIBLE_UNIT_TYPES[type] || type;
+    }
+}
+
+// 规则推荐（纯函数）：返回 { ruleId, ruleName, reason, primary, support[] }
+function recommendResponsibility(rec, rr) {
+    const rule = RESPONSIBILITY_RULES.find(r => r.match(rr, rec)) || RESPONSIBILITY_RULES[RESPONSIBILITY_RULES.length - 1];
+    const mk = type => ({
+        type: type,
+        label: RESPONSIBLE_UNIT_TYPES[type] || type,
+        name: resolveResponsibleName(rec, rr, type),
+        duty: RESPONSIBLE_DUTY_MAP[type] || ''
+    });
+    return {
+        ruleId: rule.id,
+        ruleName: rule.name,
+        reason: rule.reason(rec),
+        primary: mk(rule.primary),
+        support: (rule.support || []).map(mk)
+    };
+}
+
+// 确认流程节点（多级确认）
+const RESP_CONFIRM_STEPS = ['网格员初指', '村委确认', '乡镇复核'];
+
+// 补齐风险级记录的责任单位归属（幂等，仅补缺）
+function ensureRiskResponsibility(rec) {
+    if (!rec) return rec;
+    // 困难群体标识（演示种子：仅补缺，正式版对接困难群体数据库）
+    if (rec.difficultyTag === undefined) rec.difficultyTag = (rec.no === 'NF-2025-00001') ? '低保户' : '';
+    (rec.riskRecords || []).forEach(rr => {
+        if (rr.responsibility) return;
+        const sug = recommendResponsibility(rec, rr);
+        rr.responsibility = {
+            ruleId: sug.ruleId,
+            ruleName: sug.ruleName,
+            ruleReason: sug.reason,
+            primary: sug.primary,
+            support: sug.support,
+            status: '初指',
+            confirmFlow: [{ step: RESP_CONFIRM_STEPS[0], operator: rr.person || rec.responsiblePerson || '网格员', time: rr.date || '', note: '按规则 ' + sug.ruleId + '（' + sug.ruleName + '）自动推荐' }],
+            changeLogs: []
+        };
+    });
+    return rec;
+}
+
+// 多级确认推进（初指 → 村委确认 → 乡镇复核）；返回 false 表示已到末级或记录缺失
+function confirmResponsibilityStep(rec, riskRecordId, operator) {
+    const rr = (rec.riskRecords || []).find(r => r.id === riskRecordId || r.archiveNo === riskRecordId);
+    if (!rr || !rr.responsibility) return false;
+    const resp = rr.responsibility;
+    const curIdx = RESP_CONFIRM_STEPS.indexOf(resp.status === '初指' ? RESP_CONFIRM_STEPS[0] : resp.status);
+    if (curIdx < 0 || curIdx >= RESP_CONFIRM_STEPS.length - 1) return false;
+    const next = RESP_CONFIRM_STEPS[curIdx + 1];
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    resp.status = next;
+    resp.confirmFlow.push({ step: next, operator: operator || '当前用户', time: ts, note: next === '村委确认' ? '村委审核确认责任单位' : '乡镇复核最终确认' });
+    return true;
+}
+
+// 责任单位变更：记录变更履历并推送通知
+function changeResponsibleUnit(rec, riskRecordId, payload) {
+    const rr = (rec.riskRecords || []).find(r => r.id === riskRecordId || r.archiveNo === riskRecordId);
+    if (!rr || !rr.responsibility || !payload) return false;
+    const resp = rr.responsibility;
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    const from = resp.primary.label + ' ' + resp.primary.name;
+    resp.primary = {
+        type: payload.type,
+        label: RESPONSIBLE_UNIT_TYPES[payload.type] || payload.type,
+        name: payload.name || resolveResponsibleName(rec, rr, payload.type),
+        duty: RESPONSIBLE_DUTY_MAP[payload.type] || ''
+    };
+    if (Array.isArray(payload.support)) resp.support = payload.support.map(t => ({
+        type: t, label: RESPONSIBLE_UNIT_TYPES[t] || t, name: resolveResponsibleName(rec, rr, t), duty: RESPONSIBLE_DUTY_MAP[t] || ''
+    }));
+    resp.changeLogs.push({ time: ts, operator: payload.operator || '当前用户', from: from, to: resp.primary.label + ' ' + resp.primary.name, reason: payload.reason || '' });
+    try { pushNotification(rec, { riskName: rr.riskName, hazardType: rr.riskType, riskLevel: rr.riskLevel, location: rr.riskPart }, '责任单位变更'); } catch (e) {}
+    return true;
+}
+
+// ========== 整改措施与执行期限（6.1.2.17.4 演示）==========
+// 整改措施库：独立存储于 localStorage（key 见下），支持增删改查与标签分类
+const MEASURE_LIB_KEY = 'houseMeasureLib';
+// 预置措施模板：充分考虑农村适用性，描述通俗化
+const MEASURE_LIBRARY_SEED = [
+    { id: 'ML-DJ-01', tag: '地基加固', name: '夯实加固', desc: '对软弱地基分层回填素土并逐层夯实，每层厚度不超过30厘米', requirement: '夯实度达到规范要求，雨天停止作业', dutyAdvice: '户主聘请有资质施工队伍', acceptStd: '地基承载力检测合格，沉降观测稳定' },
+    { id: 'ML-DJ-02', tag: '地基加固', name: '碎石桩加固', desc: '在基础周边打入碎石桩挤密地基土，提高地基承载力', requirement: '桩位布置经技术人员确认，施工期做好沉降观测', dutyAdvice: '乡镇政府统筹专业队伍', acceptStd: '复合地基承载力检测合格' },
+    { id: 'ML-QT-01', tag: '墙体加固', name: '钢筋网抹面', desc: '墙体裂缝修补可采用水泥砂浆填缝，墙面挂钢筋网后抹面加固', requirement: '钢筋网与墙体可靠锚固，抹面厚度均匀', dutyAdvice: '户主组织施工，村委会协助监督', acceptStd: '抹面平整无空鼓，裂缝不再发展' },
+    { id: 'ML-QT-02', tag: '墙体加固', name: '增设扶壁柱', desc: '在墙体薄弱部位增设砖砌或混凝土扶壁柱，提高墙体稳定性', requirement: '扶壁柱与原墙可靠连接，基础同步处理', dutyAdvice: '户主聘请有资质施工队伍', acceptStd: '扶壁柱垂直度合格，连接部位无开裂' },
+    { id: 'ML-MG-01', tag: '木构件更换', name: '檩条更换', desc: '木构件更换需选用干燥木材并做防腐处理，腐朽檩条整根更换', requirement: '木材含水率符合要求，防腐处理到位', dutyAdvice: '户主组织农村工匠施工', acceptStd: '新檩条安装牢固，挠度合格' },
+    { id: 'ML-MG-02', tag: '木构件更换', name: '椽子更换', desc: '腐朽、虫蛀椽子按原规格更换，更换前对相邻构件临时支撑', requirement: '先支撑后更换，禁止大面积拆除', dutyAdvice: '户主组织农村工匠施工', acceptStd: '屋面平整，椽子固定可靠' },
+    { id: 'ML-WM-01', tag: '屋面维修', name: '小青瓦修补', desc: '破损小青瓦按原样式补配更换，屋脊、檐口重点部位挂灰坐浆', requirement: '瓦面铺设平整，排水顺畅无倒泛水', dutyAdvice: '户主组织农村工匠施工', acceptStd: '雨后检查无渗漏' },
+    { id: 'ML-WM-02', tag: '屋面维修', name: '防水处理', desc: '屋面清理后满铺防水卷材或涂刷防水涂料，节点部位加强处理', requirement: '基层干燥平整，搭接宽度符合要求', dutyAdvice: '户主聘请专业防水队伍', acceptStd: '蓄水或淋水试验无渗漏' },
+    { id: 'ML-CC-01', tag: '拆除重建', name: '整体拆除重建', desc: 'D级危房或无修缮价值房屋整体拆除，按宅基地审批面积原址重建', requirement: '拆除前完成人员安置，重建履行审批手续', dutyAdvice: '乡镇政府统筹，申请危房改造补助', acceptStd: '重建房屋竣工验收合格' }
+];
+function getMeasureLibrary() {
+    try {
+        const raw = localStorage.getItem(MEASURE_LIB_KEY);
+        if (raw) { const arr = JSON.parse(raw); if (Array.isArray(arr) && arr.length) return arr; }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(MEASURE_LIBRARY_SEED));
+}
+function saveMeasureLibrary(list) {
+    try { localStorage.setItem(MEASURE_LIB_KEY, JSON.stringify(list)); } catch (e) {}
+}
+function upsertMeasureLibItem(item) {
+    const lib = getMeasureLibrary();
+    const idx = lib.findIndex(m => m.id === item.id);
+    if (idx !== -1) lib[idx] = item; else lib.push(item);
+    saveMeasureLibrary(lib);
+    return item;
+}
+function deleteMeasureLibItem(id) {
+    saveMeasureLibrary(getMeasureLibrary().filter(m => m.id !== id));
+}
+
+// 时限规则：按风险等级生成建议时限（演示：沪标三级 ↔ 规范四档映射）
+const DEADLINE_RULES = [
+    { level: '第一类', tier: '重大风险', text: '立即撤离人员并采取临时措施（24小时内）', days: 1, urgent: true },
+    { level: '第二类', tier: '较大风险', text: '限时整改（3-6个月）', months: 6 },
+    { level: '第三类', tier: '一般风险', text: '常规整改（6-12个月）', months: 12 },
+    { level: '低风险', tier: '低风险', text: '纳入计划整改（12-24个月或纳入日常维护）', months: 24 }
+];
+// 农忙月份（演示农事日历）：5-6月夏收、9-10月秋收
+const FARM_BUSY_MONTHS = [5, 6, 9, 10];
+// 按等级+农事日历建议时限：落点撞农忙则顺延至农忙后
+function suggestDeadline(riskLevel, startDateStr) {
+    const rule = DEADLINE_RULES.find(r => r.level === riskLevel) || DEADLINE_RULES[2];
+    const start = startDateStr ? new Date(startDateStr) : new Date();
+    let d;
+    if (rule.days) {
+        d = new Date(start.getTime() + rule.days * 86400000);
+    } else {
+        d = new Date(start.getTime());
+        d.setMonth(d.getMonth() + rule.months);
+    }
+    let farmNote = '';
+    if (!rule.urgent && FARM_BUSY_MONTHS.indexOf(d.getMonth() + 1) !== -1) {
+        // 顺延至农忙结束次月1日
+        let m = d.getMonth() + 1;
+        while (FARM_BUSY_MONTHS.indexOf(m) !== -1) m = m === 12 ? 1 : m + 1;
+        d = new Date(d.getFullYear() + (m < d.getMonth() + 1 ? 1 : 0), m - 1, 1);
+        farmNote = '已避开农忙时节，顺延至' + m + '月';
+    }
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const dateStr = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    return { date: dateStr, ruleLevel: rule.level, tier: rule.tier, text: rule.text, urgent: !!rule.urgent, farmNote: farmNote };
+}
+
+// 按风险类型匹配措施标签（演示规则）
+const MEASURE_TAG_RULES = [
+    { kw: /地基|基础|沉降/, tag: '地基加固' },
+    { kw: /墙|裂缝|倾斜|承重/, tag: '墙体加固' },
+    { kw: /木|檩|椽|腐朽|虫蛀/, tag: '木构件更换' },
+    { kw: /屋面|渗漏|瓦|防水/, tag: '屋面维修' },
+    { kw: /D级|拆除|重建/, tag: '拆除重建' }
+];
+function pickMeasuresForRisk(rr) {
+    const lib = getMeasureLibrary();
+    const text = (rr.riskType || '') + (rr.riskDesc || '') + (rr.hazardDesc || '') + (rr.riskPart || '');
+    const rule = MEASURE_TAG_RULES.find(r => r.kw.test(text));
+    const tag = rule ? rule.tag : '';
+    // 命中标签取前 2 条；未命中默认取钢筋网抹面+小青瓦修补（农村高频）
+    let picks = tag ? lib.filter(m => m.tag === tag).slice(0, 2) : [];
+    if (!picks.length) picks = lib.filter(m => ['ML-QT-01', 'ML-WM-01'].indexOf(m.id) !== -1);
+    return picks.map(m => m.id);
+}
+
+// 补齐风险级记录的整改方案 rectPlan（幂等，仅补缺）
+function ensureRectPlan(rec) {
+    if (!rec) return rec;
+    (rec.riskRecords || []).forEach(rr => {
+        if (rr.rectPlan) return;
+        const sug = suggestDeadline(rr.riskLevel || '第三类', String(rr.date || '').slice(0, 10));
+        rr.rectPlan = {
+            measureIds: pickMeasuresForRisk(rr),
+            tempMeasures: [],
+            deadline: sug.date,
+            deadlineText: sug.text + (sug.farmNote ? '（' + sug.farmNote + '）' : ''),
+            deadlineUrgent: sug.urgent,
+            deadlineAdjusts: [],
+            dispatchStatus: '待派发',
+            dispatchedTo: [],
+            dispatchTime: ''
+        };
+    });
+    return rec;
+}
+
+// 时限调整：留痕（旧值/新值/理由/时间/操作人）
+function adjustRectDeadline(rec, riskRecordId, newDate, reason, operator) {
+    const rr = (rec.riskRecords || []).find(r => r.id === riskRecordId || r.archiveNo === riskRecordId);
+    if (!rr || !rr.rectPlan || !newDate) return false;
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    rr.rectPlan.deadlineAdjusts.push({ oldDate: rr.rectPlan.deadline, newDate: newDate, reason: reason || '', time: ts, operator: operator || '当前用户' });
+    rr.rectPlan.deadline = newDate;
+    return true;
+}
+
+// 派发整改任务：主责单位 + 抄送村支书/网格员/乡镇建设管理员，联动消息通知
+function dispatchRectTask(rec, riskRecordId, operator) {
+    const rr = (rec.riskRecords || []).find(r => r.id === riskRecordId || r.archiveNo === riskRecordId);
+    if (!rr || !rr.rectPlan || rr.rectPlan.dispatchStatus === '已派发') return false;
+    const primaryName = (rr.responsibility && rr.responsibility.primary) ? rr.responsibility.primary.name : (rec.owner || '户主');
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    rr.rectPlan.dispatchStatus = '已派发';
+    rr.rectPlan.dispatchTime = ts;
+    rr.rectPlan.dispatchedTo = [
+        { role: '责任单位', name: primaryName },
+        { role: '村支书', name: '村支书（抄送）' },
+        { role: '网格员', name: '网格员（抄送）' },
+        { role: '乡镇建设管理员', name: '乡镇建设管理员（抄送）' }
+    ];
+    // 联动处置过程状态机（6.1.2.17.5）：派发即进入「待接收」
+    if (rr.rectProcess && !rr.rectProcess.status) {
+        rr.rectProcess.status = 'pendingReceive';
+        rr.rectProcess.statusSince = ts;
+        rr.rectProcess.history.push({
+            time: ts, state: 'dispatch', title: '整改任务派发',
+            operator: operator || '系统', content: '期限 ' + (rr.rectPlan.deadline || '—'),
+            photos: [], derived: true
+        });
+    }
+    try {
+        pushNotification(rec, { riskName: rr.riskName, hazardType: rr.riskType, riskLevel: rr.riskLevel, location: rr.riskPart },
+            '整改任务派发（期限 ' + rr.rectPlan.deadline + '）');
+    } catch (e) {}
+    return true;
+}
+
+// 时限状态：safe=正常 / warning=临近（≤15天）/ danger=已超期
+function getDeadlineStatus(deadlineStr) {
+    if (!deadlineStr) return { cls: 'info', text: '未设置', days: null };
+    const diff = Math.ceil((new Date(deadlineStr) - new Date()) / 86400000);
+    if (diff < 0) return { cls: 'danger', text: '已超期 ' + (-diff) + ' 天', days: diff, overdue: true };
+    if (diff <= 15) return { cls: 'warning', text: '临近到期（剩 ' + diff + ' 天）', days: diff, near: true };
+    return { cls: 'safe', text: '剩 ' + diff + ' 天', days: diff };
+}
+
+// ========== 风险处理过程监控（6.1.2.17.5 演示）==========
+// 10 态处置状态机：定义标签 / 操作角色 / 必传材料规则 / 状态 SLA（天）
+const RECT_PROCESS_STATES = {
+    pendingReceive: { label: '待接收',   role: '责任人（户主）',       slaDays: 3,  uploads: [] },
+    siteReview:     { label: '现场复核', role: '村干部/乡镇建设管理员', slaDays: 7,  uploads: ['复核记录', '现场照片'] },
+    tempMeasure:    { label: '临时措施', role: '责任人（户主）',       slaDays: 2,  uploads: ['警戒线照片', '人员撤离记录'] },
+    artisanPick:    { label: '工匠选择', role: '责任人（户主）',       slaDays: 15, uploads: ['工匠信息'] },
+    materialPrep:   { label: '材料准备', role: '责任人（户主）',       slaDays: 15, uploads: ['材料采购证明', '材料进场照片'] },
+    rectifying:     { label: '整改实施', role: '责任人（户主）',       slaDays: 30, uploads: ['实施过程记录', '现场照片'] },
+    effectVerify:   { label: '效果验证', role: '村干部/乡镇建设管理员', slaDays: 7,  uploads: ['验证照片', '验证结论'] },
+    accepted:       { label: '验收通过', role: '乡镇建设管理员/县级部门', slaDays: null, uploads: [] },
+    rejected:       { label: '验收驳回', role: '乡镇建设管理员/县级部门', slaDays: null, uploads: ['驳回理由'] },
+    overdue:        { label: '逾期未整改', role: '系统（自动升级）',    slaDays: null, uploads: [] }
+};
+const RECT_STATE_ORDER = ['pendingReceive', 'siteReview', 'tempMeasure', 'artisanPick', 'materialPrep', 'rectifying', 'effectVerify', 'accepted'];
+// 合法流转表（验收驳回 → 退回整改实施；逾期未整改 → 恢复整改实施）
+const RECT_STATE_FLOW = {
+    pendingReceive: ['siteReview'],
+    siteReview:     ['tempMeasure'],
+    tempMeasure:    ['artisanPick'],
+    artisanPick:    ['materialPrep'],
+    materialPrep:   ['rectifying'],
+    rectifying:     ['effectVerify'],
+    effectVerify:   ['accepted', 'rejected'],
+    rejected:       ['rectifying'],
+    overdue:        ['rectifying'],
+    accepted:       []
+};
+// 必传材料校验规则：state → [{ key, label, isPhoto }]
+const RECT_STATE_RULES = {
+    siteReview:   [{ key: 'note', label: '复核记录' }, { key: 'photos', label: '现场照片', isPhoto: true }],
+    tempMeasure:  [{ key: 'photos', label: '警戒线照片', isPhoto: true }, { key: 'evacuation', label: '人员撤离记录' }],
+    artisanPick:  [{ key: 'artisan', label: '工匠信息' }],
+    materialPrep: [{ key: 'photos', label: '材料进场照片', isPhoto: true }, { key: 'purchase', label: '材料采购证明' }],
+    rectifying:   [{ key: 'note', label: '实施过程记录' }, { key: 'photos', label: '现场照片', isPhoto: true }],
+    effectVerify: [{ key: 'photos', label: '验证照片', isPhoto: true }, { key: 'conclusion', label: '验证结论' }],
+    rejected:     [{ key: 'note', label: '驳回理由' }]
+};
+function __rectNow() {
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+}
+// 第六遍：补齐处置过程 rectProcess（幂等，仅补缺）；已派发任务播种至「待接收」，已销号风险播种至「验收通过」（由闭环数据派生）
+function ensureRectProcess(rec) {
+    if (!rec) return rec;
+    (rec.riskRecords || []).forEach(rr => {
+        const ci = rec.closeInfo || {};
+        // 存量升级：已销号但 rectProcess 仍为空状态的，补派生闭环记录
+        if (rr.rectProcess && !rr.rectProcess.status && rr.stage === 'closed') {
+            const t = ci.reportTime || __rectNow();
+            rr.rectProcess.status = 'accepted';
+            rr.rectProcess.statusSince = t;
+            (rr.rectProcess.history = rr.rectProcess.history || []).push(
+                { time: t, state: 'rectifying', title: '整改实施', operator: rr.person || '', content: '整治措施实施完成（历史闭环数据派生）', photos: [], derived: true },
+                { time: t, state: 'effectVerify', title: '效果验证', operator: ci.reporter || '乡镇建设管理员', content: '复验合格，风险消除（历史闭环数据派生）', photos: [], derived: true },
+                { time: t, state: 'accepted', title: '验收通过', operator: ci.reporter || '乡镇建设管理员', content: '整改完成并归档（历史闭环数据派生）', photos: [], derived: true }
+            );
+            return;
+        }
+        if (rr.rectProcess) return;
+        const dispatched = rr.rectPlan && rr.rectPlan.dispatchStatus === '已派发';
+        const closed = rr.stage === 'closed';
+        const rp = {
+            status: closed ? 'accepted' : (dispatched ? 'pendingReceive' : ''),
+            statusSince: closed ? (ci.reportTime || '') : (dispatched ? (rr.rectPlan.dispatchTime || __rectNow()) : ''),
+            history: [],
+            overdueLevel: ''   // '' | village | town | county
+        };
+        if (closed) {
+            rp.history.push({ time: rp.statusSince, state: 'rectifying', title: '整改实施', operator: rr.person || '', content: '整治措施实施完成（历史闭环数据派生）', photos: [], derived: true });
+            rp.history.push({ time: rp.statusSince, state: 'effectVerify', title: '效果验证', operator: ci.reporter || '乡镇建设管理员', content: '复验合格，风险消除（历史闭环数据派生）', photos: [], derived: true });
+            rp.history.push({ time: rp.statusSince, state: 'accepted', title: '验收通过', operator: ci.reporter || '乡镇建设管理员', content: '整改完成并归档（历史闭环数据派生）', photos: [], derived: true });
+        } else if (dispatched) {
+            rp.history.push({
+                time: rr.rectPlan.dispatchTime || __rectNow(),
+                state: 'dispatch', title: '整改任务派发',
+                operator: '系统', content: '期限 ' + (rr.rectPlan.deadline || '—'),
+                photos: [], derived: true
+            });
+        }
+        rr.rectProcess = rp;
+    });
+    return rec;
+}
+// 校验必传材料，返回缺失项标签数组
+function validateRectStateUploads(stateKey, payload) {
+    const rules = RECT_STATE_RULES[stateKey] || [];
+    const missing = [];
+    rules.forEach(r => {
+        const v = payload ? payload[r.key] : null;
+        const ok = r.isPhoto ? (Array.isArray(v) && v.length > 0) : !!(v && String(v).trim());
+        if (!ok) missing.push(r.label);
+    });
+    return missing;
+}
+// 状态推进：校验流转合法性 + 必传材料；追加 history + 风险事件链 timeline；推送通知
+function advanceRectProcess(rec, riskRecordId, payload) {
+    const rr = (rec.riskRecords || []).find(r => r.id === riskRecordId || r.archiveNo === riskRecordId);
+    if (!rr || !rr.rectProcess || !payload || !payload.to) return { ok: false, msg: '参数不完整' };
+    const proc = rr.rectProcess;
+    const from = proc.status;
+    if (from === 'accepted') return { ok: false, msg: '已验收归档，不可再流转' };
+    const allowed = RECT_STATE_FLOW[from] || [];
+    if (allowed.indexOf(payload.to) === -1) {
+        return { ok: false, msg: '不允许从「' + (RECT_PROCESS_STATES[from] || {}).label + '」流转至「' + (RECT_PROCESS_STATES[payload.to] || {}).label + '」' };
+    }
+    const missing = validateRectStateUploads(payload.to, payload);
+    if (missing.length) return { ok: false, msg: '缺少必传材料：' + missing.join('、') };
+    const ts = __rectNow();
+    const st = RECT_PROCESS_STATES[payload.to];
+    const ev = {
+        time: ts, state: payload.to, title: st.label,
+        operator: payload.operator || '当前用户',
+        role: payload.role || st.role,
+        content: payload.note || payload.conclusion || '',
+        photos: Array.isArray(payload.photos) ? payload.photos : [],
+        extra: {
+            evacuation: payload.evacuation || '',
+            artisan: payload.artisan || '',
+            purchase: payload.purchase || ''
+        }
+    };
+    proc.history.push(ev);
+    proc.status = payload.to;
+    proc.statusSince = ts;
+    proc.overdueLevel = '';
+    // 同步风险事件链时间轴（6.1.2.17.1 载体复用）
+    if (!Array.isArray(rr.timeline)) rr.timeline = [];
+    rr.timeline.push({
+        time: ts, node: 'process', title: '处置：' + st.label,
+        operator: ev.operator, content: ev.content, photos: ev.photos
+    });
+    try {
+        pushNotification(rec, { riskName: rr.riskName, hazardType: rr.riskType, riskLevel: rr.riskLevel, location: rr.riskPart },
+            '处置进展：' + st.label);
+    } catch (e) {}
+    return { ok: true };
+}
+// 验收驳回：effectVerify → rejected（理由必填，经统一流转校验）
+function rejectRectProcess(rec, riskRecordId, reason, operator) {
+    return advanceRectProcess(rec, riskRecordId, { to: 'rejected', note: reason, operator: operator || '乡镇建设管理员' });
+}
+// 分状态超期检测：返回 { overdue, days, slaDays, escalateTo } —— 逐级上报 村→镇→县
+function checkProcessOverdue(rec, rr) {
+    const proc = rr && rr.rectProcess;
+    if (!proc || !proc.status || proc.status === 'accepted') return { overdue: false };
+    const st = RECT_PROCESS_STATES[proc.status];
+    if (!st || !st.slaDays || !proc.statusSince) return { overdue: false };
+    const days = Math.floor((new Date() - new Date(String(proc.statusSince).replace(' ', 'T'))) / 86400000);
+    if (days <= st.slaDays) return { overdue: false, days: days, slaDays: st.slaDays };
+    const overDays = days - st.slaDays;
+    let escalateTo = 'village';
+    if (overDays > 7) escalateTo = 'town';
+    if (overDays > 15) escalateTo = 'county';
+    return { overdue: true, days: days, slaDays: st.slaDays, overDays: overDays, escalateTo: escalateTo, stateLabel: st.label };
+}
+// 超时未接收 → 通知村干部上门告知；分状态超期 → 分级预警通知（幂等：同级不重复）
+function escalateProcessOverdue(rec, riskRecordId) {
+    const rr = (rec.riskRecords || []).find(r => r.id === riskRecordId || r.archiveNo === riskRecordId);
+    if (!rr || !rr.rectProcess) return false;
+    const chk = checkProcessOverdue(rec, rr);
+    if (!chk.overdue) return false;
+    const proc = rr.rectProcess;
+    if (proc.overdueLevel === chk.escalateTo) return false;
+    proc.overdueLevel = chk.escalateTo;
+    const ESC_LABEL = { village: '村委会', town: '乡镇政府', county: '县级住建部门' };
+    const target = ESC_LABEL[chk.escalateTo];
+    const msg = proc.status === 'pendingReceive'
+        ? '超时未接收整改任务，请' + target + '安排村干部上门告知'
+        : '「' + chk.stateLabel + '」超期 ' + chk.overDays + ' 天，预警逐级上报至' + target;
+    try {
+        pushNotification(rec, { riskName: rr.riskName, hazardType: rr.riskType, riskLevel: rr.riskLevel, location: rr.riskPart }, msg);
+    } catch (e) {}
+    if (!Array.isArray(rr.timeline)) rr.timeline = [];
+    rr.timeline.push({ time: __rectNow(), node: 'overdue', title: '超期预警（上报' + target + '）', operator: '系统', content: msg });
+    return true;
+}
+
+// ========== 风险控制效果评估（6.1.2.17.6 演示）==========
+// 满意度回访：已验收（accepted）风险幂等回填 4-5 星演示评价
+function ensureSatisfaction(rec) {
+    if (!rec) return rec;
+    (rec.riskRecords || []).forEach((rr, i) => {
+        if (rr.satisfaction != null) return;
+        const done = rr.rectProcess && rr.rectProcess.status === 'accepted';
+        if (!done) return;
+        // 确定性伪随机：按档案序号 4/5 星交替
+        rr.satisfaction = { stars: (i % 2 === 0 ? 5 : 4), comment: i % 2 === 0 ? '整改及时，居住安心' : '整改到位，回访满意', visitTime: (rr.rectProcess.statusSince || '') };
+    });
+    return rec;
+}
+
+// 等级数值化（沪标三级：第三类最重）用于整改前后对比
+const __LEVEL_SCORE = { '第三类': 3, '第二类': 2, '第一类': 1 };
+// 汇总单房屋指标明细（供总览聚合）：返回该房屋所有风险的评估条目
+function collectRiskEvalItems(rec) {
+    const items = [];
+    (rec.riskRecords || []).forEach(rr => {
+        const proc = rr.rectProcess || {};
+        const done = proc.status === 'accepted';
+        // 按期判定：验收通过时间 ≤ 当前期限（含调整后）
+        let onTime = null;
+        if (done && rr.rectPlan && rr.rectPlan.deadline) {
+            const acceptEv = (proc.history || []).filter(h => h.state === 'accepted').pop();
+            const acceptTime = acceptEv ? String(acceptEv.time).slice(0, 10) : '';
+            onTime = acceptTime && acceptTime <= rr.rectPlan.deadline;
+        }
+        // 整改有效率：验收通过 且 （效果验证结论合格 或 后续巡查无同类问题——演示：结论含「合格/不再发展」）
+        let effective = null;
+        if (done) {
+            const verifyEvs = (proc.history || []).filter(h => h.state === 'effectVerify');
+            const lastVerify = verifyEvs[verifyEvs.length - 1];
+            const concl = lastVerify ? String(lastVerify.content || '') : '';
+            effective = /合格|不再发展|通过|稳定/.test(concl);
+        }
+        items.push({
+            houseNo: rec.no,
+            street: rec.street || '', village: rec.village || rec.community || '',
+            structure: (rec.structure && rec.structure.structureType) || rec.structureType || '',
+            buildYear: rec.buildYear || (rec.basic && rec.basic.buildYear) || '',
+            riskId: rr.id, riskType: rr.riskType || rr.hazardType || '', riskLevel: rr.riskLevel || '',
+            rectified: done, onTime: onTime, effective: effective,
+            satisfaction: rr.satisfaction || null
+        });
+    });
+    return items;
+}
+// 复发判定：同一房屋同一风险类型出现次数 >1 视为复发
+function countRecurrence(rec) {
+    const typeMap = {};
+    (rec.riskRecords || []).forEach(rr => {
+        const t = rr.riskType || rr.hazardType || '';
+        if (!t) return;
+        typeMap[t] = (typeMap[t] || 0) + 1;
+    });
+    let recurTypes = 0, recurTimes = 0;
+    Object.keys(typeMap).forEach(t => {
+        if (typeMap[t] > 1) { recurTypes++; recurTimes += typeMap[t] - 1; }
+    });
+    return { recurTypes: recurTypes, recurTimes: recurTimes, typeMap: typeMap };
+}
+
+// 6 项指标聚合（输入：房屋记录数组）
+function computeEffectMetrics(records) {
+    const m = {
+        totalRisks: 0, rectified: 0, onTime: 0, onTimeBase: 0,
+        effective: 0, effectiveBase: 0,
+        dangerTotal: 0, dangerResolved: 0,
+        satisfactionSum: 0, satisfactionCount: 0,
+        recurHouses: 0, recurTimes: 0, houseWithRisks: 0
+    };
+    (records || []).forEach(rec => {
+        const items = collectRiskEvalItems(rec);
+        if (items.length) m.houseWithRisks++;
+        const rec2 = countRecurrence(rec);
+        if (rec2.recurTypes > 0) m.recurHouses++;
+        m.recurTimes += rec2.recurTimes;
+        items.forEach(it => {
+            m.totalRisks++;
+            if (it.rectified) m.rectified++;
+            if (it.onTime !== null) { m.onTimeBase++; if (it.onTime) m.onTime++; }
+            if (it.effective !== null) { m.effectiveBase++; if (it.effective) m.effective++; }
+            if (it.satisfaction) { m.satisfactionSum += it.satisfaction.stars; m.satisfactionCount++; }
+        });
+        // 危房解危率：第三类（严重损坏房）治理完成且销号通过
+        if ((rec.riskLevel === '第三类' || (rec.overview && rec.overview.riskLevel === '第三类'))) {
+            m.dangerTotal++;
+            if (rec.governance === 'done' && rec.closeStatus === '已通过') m.dangerResolved++;
+        }
+    });
+    const pct = (a, b) => b > 0 ? Math.round((a / b) * 1000) / 10 : null;
+    return {
+        completionRate: pct(m.rectified, m.totalRisks),          // 整改完成率
+        timelinessRate: pct(m.onTime, m.onTimeBase),             // 整改及时率
+        effectivenessRate: pct(m.effective, m.effectiveBase),    // 整改有效率
+        recurrenceRate: pct(m.recurHouses, m.houseWithRisks),    // 复发率（房屋口径）
+        recurrenceTimes: m.recurTimes,
+        dangerResolveRate: pct(m.dangerResolved, m.dangerTotal), // 危房解危率
+        dangerTotal: m.dangerTotal, dangerResolved: m.dangerResolved,
+        satisfactionAvg: m.satisfactionCount ? Math.round((m.satisfactionSum / m.satisfactionCount) * 10) / 10 : null, // 农户满意度（均星）
+        satisfactionCount: m.satisfactionCount,
+        totalRisks: m.totalRisks, rectified: m.rectified
+    };
+}
+// 多维度下钻：dimKey ∈ street|village|structure|buildYear|riskLevel
+function drillEffectMetrics(records, dimKey) {
+    const groups = {};
+    (records || []).forEach(rec => {
+        let key;
+        if (dimKey === 'buildYear') {
+            const y = parseInt(rec.buildYear || (rec.basic && rec.basic.buildYear) || 0, 10);
+            key = !y ? '未知' : (y < 1980 ? '1980年前' : (y < 2000 ? '1980-1999' : (y < 2010 ? '2000-2009' : '2010年后')));
+        } else if (dimKey === 'structure') {
+            key = (rec.structure && rec.structure.structureType) || rec.structureType || '未知';
+        } else if (dimKey === 'village') {
+            key = rec.village || rec.community || '未知';
+        } else if (dimKey === 'riskLevel') {
+            key = rec.riskLevel || '未知';
+        } else {
+            key = rec.street || '未知';
+        }
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(rec);
+    });
+    return Object.keys(groups).map(k => ({ dim: k, metrics: computeEffectMetrics(groups[k]) }))
+        .sort((a, b) => (b.metrics.totalRisks || 0) - (a.metrics.totalRisks || 0));
+}
+// 高复发风险类型识别（后评估：薄弱环节）
+function identifyHighRecurrenceTypes(records) {
+    const agg = {};
+    (records || []).forEach(rec => {
+        const rec2 = countRecurrence(rec);
+        Object.keys(rec2.typeMap).forEach(t => {
+            if (rec2.typeMap[t] > 1) {
+                if (!agg[t]) agg[t] = { type: t, houses: 0, times: 0 };
+                agg[t].houses++; agg[t].times += rec2.typeMap[t] - 1;
+            }
+        });
+    });
+    return Object.keys(agg).map(k => agg[k]).sort((a, b) => b.times - a.times);
+}
+// 导出 CSV（演示：替代 PDF/Word/Excel）
+function exportEffectCsv(dimRows, metrics) {
+    const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    let csv = '﻿指标,数值\n';
+    csv += '整改完成率(%),' + (metrics.completionRate == null ? '—' : metrics.completionRate) + '\n';
+    csv += '整改及时率(%),' + (metrics.timelinessRate == null ? '—' : metrics.timelinessRate) + '\n';
+    csv += '整改有效率(%),' + (metrics.effectivenessRate == null ? '—' : metrics.effectivenessRate) + '\n';
+    csv += '复发率(%),' + (metrics.recurrenceRate == null ? '—' : metrics.recurrenceRate) + '\n';
+    csv += '危房解危率(%),' + (metrics.dangerResolveRate == null ? '—' : metrics.dangerResolveRate) + '\n';
+    csv += '农户满意度(均星),' + (metrics.satisfactionAvg == null ? '—' : metrics.satisfactionAvg) + '\n\n';
+    csv += '维度,风险总数,已整改,完成率(%),及时率(%),有效率(%),复发率(%),解危率(%),满意度\n';
+    (dimRows || []).forEach(r => {
+        const mm = r.metrics;
+        csv += [esc(r.dim), mm.totalRisks, mm.rectified,
+            mm.completionRate == null ? '—' : mm.completionRate,
+            mm.timelinessRate == null ? '—' : mm.timelinessRate,
+            mm.effectivenessRate == null ? '—' : mm.effectivenessRate,
+            mm.recurrenceRate == null ? '—' : mm.recurrenceRate,
+            mm.dangerResolveRate == null ? '—' : mm.dangerResolveRate,
+            mm.satisfactionAvg == null ? '—' : mm.satisfactionAvg].join(',') + '\n';
+    });
+    return csv;
+}
+
+function ensureRiskArchiveLayer(rec) {
+    if (!rec) return rec;
+    if (!Array.isArray(rec.riskRecords)) rec.riskRecords = [];
+    if (!Array.isArray(rec.appraisalReports)) rec.appraisalReports = [];
+
+    // 档案编号：缺失即补（按数组序号生成，稳定不重复）
+    rec.riskRecords.forEach((rr, i) => { if (!rr.archiveNo) rr.archiveNo = generateRiskArchiveNo(rec.no, i + 1); });
+    rec.appraisalReports.forEach((a, i) => { if (!a.appraisalNo) a.appraisalNo = generateAppraisalArchiveNo(rec.no, i + 1); });
+
+    const findHz = rr => (rec.hazardRecords || []).find(h => h.id === (rr.hazardId || (Array.isArray(rr.linkedHazardIds) && rr.linkedHazardIds[0]))) || null;
+
+    // 第一遍：生命周期阶段（linkRiskAppraisals 的兜底规则依赖全量 stage）
+    rec.riskRecords.forEach(rr => {
+        rr.stage = deriveRiskStage(rr, findHz(rr));
+        rr.stageLabel = RISK_STAGE_LABELS[rr.stage] || rr.stage;
+    });
+    // 第二遍：关联鉴定 + 时间线播种
+    rec.riskRecords.forEach(rr => {
+        rr.appraisalIds = linkRiskAppraisals(rec, rr, findHz(rr));
+        if (!Array.isArray(rr.timeline)) rr.timeline = [];
+        if (!rr.timeline.length) rr.timeline = seedRiskTimeline(rec, rr, findHz(rr));
+    });
+
+    // 第三遍（6.1.2.17.2）：补齐风险级规范字段——基础/特征/关联三维度（幂等，仅补缺）
+    const ri = rec.riskInfo || {};
+    rec.riskRecords.forEach((rr, i) => {
+        const hz = findHz(rr);
+        if (!rr.riskNo) rr.riskNo = 'RSK-' + (rr.archiveNo || (rec.no + '-' + String(i + 1).padStart(3, '0')));
+        if (!rr.riskName) rr.riskName = (rec.name || rec.no || '') + ' ' + (rr.riskLevel || '') + '风险';
+        if (!rr.riskType) rr.riskType = (hz && hz.hazardType) || ri.riskType || '';
+        if (!rr.discoveryMethod) rr.discoveryMethod = rr.sourceType === '巡查' ? '巡查发现' : (rr.sourceType === '鉴定' ? '鉴定确认' : (rr.sourceType === '排查' ? '排查发现' : (ri.discoveryMethod || '排查发现')));
+        if (!rr.riskPart) rr.riskPart = (hz && (hz.location || hz.hazardPart)) || ri.riskPart || '';
+        if (!rr.spatialLocation) rr.spatialLocation = ri.spatialLocation || rec.address || '';
+        if (!rr.riskDesc) rr.riskDesc = rr.hazardDesc || ri.riskDesc || '';
+        if (!rr.relatedHouse) rr.relatedHouse = rec.no || '';
+        if (!rr.relatedOwner) rr.relatedOwner = rec.owner || ri.relatedOwner || '';
+        if (!rr.relatedUser) rr.relatedUser = ri.relatedUser || rec.owner || '';
+        if (!rr.relatedInspectionId && rr.sourceType === '排查' && rr.sourceId) rr.relatedInspectionId = rr.sourceId;
+        if (!rr.relatedPatrolId && rr.sourceType === '巡查' && rr.sourceId) rr.relatedPatrolId = rr.sourceId;
+    });
+
+    // 鉴定级：登记被风险记录的消费关系
+    // effectScope（派生）：仅被 1 条风险记录引用 → risk；多条引用或无引用 → 整屋 whole-house
+    rec.appraisalReports.forEach(a => {
+        if (!Array.isArray(a.appliedTo)) a.appliedTo = [];
+        const linkedRisks = rec.riskRecords.filter(rr => (rr.appraisalIds || []).indexOf(a.id) !== -1);
+        a.effectScope = linkedRisks.length === 1 ? 'risk' : 'whole-house';
+        linkedRisks.forEach(rr => {
+            if (!a.appliedTo.some(t => t.type === 'grading' && t.targetId === rr.archiveNo)) {
+                a.appliedTo.push({ type: 'grading', targetId: rr.archiveNo });
+            }
+        });
+    });
+
+    // 第四遍（6.1.2.17.3）：责任单位归属补齐（幂等，仅补缺）
+    ensureRiskResponsibility(rec);
+
+    // 第五遍（6.1.2.17.4）：整改措施与时限补齐（幂等，仅补缺）
+    ensureRectPlan(rec);
+
+    // 第六遍（6.1.2.17.5）：处置过程状态机补齐（幂等，仅补缺）
+    ensureRectProcess(rec);
+
+    // 第七遍（6.1.2.17.6）：满意度回访补齐（幂等，仅补缺，仅已验收风险）
+    ensureSatisfaction(rec);
+
+    rec._riskArchiveVersion = RISK_ARCHIVE_LAYER_VERSION;
+    return rec;
+}
+
 // 规范化单条记录：保持 risk/riskLevel、governance/governStatus 两对字段一致，
 // 销号通过则统一为 safe/第一类 + done/已治理，并补全编号。
 function normalizeHouseRecord(record) {
@@ -447,6 +1329,8 @@ function normalizeHouseRecord(record) {
     if (!rec.inspectionRecords) rec.inspectionRecords = [];
     if (!rec.appraisalReports) rec.appraisalReports = [];
     if (!rec.patrolRecords) rec.patrolRecords = [];
+    // 监测点清单（幂等）：供风险录入时选取关联
+    if (!Array.isArray(rec.monitorPoints) || !rec.monitorPoints.length) rec.monitorPoints = generateMonitorPoints(rec.no);
     // 历史缓存记录缺失鉴定报告时按编号补生成（非安全房才需要鉴定）
     if (rec.risk && rec.risk !== 'safe') {
         const idx = parseInt(String(rec.no || '').replace(/\D/g, '') || '0', 10);
@@ -479,7 +1363,7 @@ function normalizeHouseRecord(record) {
         rec.governStatus = '已治理';
         rec.isRemovedFromFocus = true;
         rec.riskDisplayLevel = HAZARD_TO_RISK_LEVEL[rec.originalRiskLevel] || rec.originalRiskLevel;
-        return rec;
+        return ensureRiskArchiveLayer(rec);
     }
 
     // 风险等级：以中文 riskLevel（风险等级）为准，回写 risk；若 riskLevel 缺失则反向生成
@@ -550,7 +1434,7 @@ function normalizeHouseRecord(record) {
         }
     }
 
-    return rec;
+    return ensureRiskArchiveLayer(rec);
 }
 
 // 从统一数据记录获取完整记录（如不存在则返回 null）
@@ -1716,27 +2600,35 @@ function initHouseArchSeed() {
         });
     }
 
-    const all = getHouseArchStorage();
-    if (Object.keys(all).length === 0) {
-        const seed = generateHouseSeed();
-        setHouseArchStorage(seed);
-        __seedGenerated = true;
-        // 同步生成 closeApplyData，确保 hidden-close-apply 页面可展示
-        syncCloseApplyData(seed);
-        // 注入演示记录（见下）
-        __injectDemoRecords(seed);
-        return seed;
+    // 初始化阶段（种子生成/规范化回写/closeApply 同步）一律不回写服务端：
+    // 服务端拉取尚在途，抢先 POST 会用本地旧快照整体覆盖服务端较新数据；
+    // 之后用户操作触发的 setHouseRecord/flushHouseArchToServer 仍正常推送。
+    __syncToServerEnabled = false;
+    try {
+        const all = getHouseArchStorage();
+        if (Object.keys(all).length === 0) {
+            const seed = generateHouseSeed();
+            setHouseArchStorage(seed);
+            __seedGenerated = true;
+            // 同步生成 closeApplyData，确保 hidden-close-apply 页面可展示
+            syncCloseApplyData(seed);
+            // 注入演示记录（见下）
+            __injectDemoRecords(seed);
+            return seed;
+        }
+        // 规范化已存在的数据，确保各页面读取一致
+        Object.keys(all).forEach(no => normalizeHouseRecord(all[no]));
+        setHouseArchStorage(all);
+        // 若 closeApplyData 为空则根据现有房屋数据同步生成
+        if (getCloseApplyStorage().length === 0) {
+            syncCloseApplyData(all);
+        }
+        // 演示记录兜底：本地缺失时从服务端 json 拉取注入（保证演示效果可重建）
+        __injectDemoRecords(all);
+        return all;
+    } finally {
+        __syncToServerEnabled = true;
     }
-    // 规范化已存在的数据，确保各页面读取一致
-    Object.keys(all).forEach(no => normalizeHouseRecord(all[no]));
-    setHouseArchStorage(all);
-    // 若 closeApplyData 为空则根据现有房屋数据同步生成
-    if (getCloseApplyStorage().length === 0) {
-        syncCloseApplyData(all);
-    }
-    // 演示记录兜底：本地缺失时从服务端 json 拉取注入（保证演示效果可重建）
-    __injectDemoRecords(all);
-    return all;
 }
 
 // ============================================================

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>抢险队伍</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+/* ===== 顶部导航（方案①：绝对居中标题） ===== */
+.page-hero { display: flex; align-items: center; justify-content: center; padding: calc(34px + 16px) 18px 42px; }
+.page-hero .ph-back { position: absolute; left: 14px; top: calc(34px + 16px); margin: 0; display: flex; align-items: center; justify-content: center; height: 32px; }
+.page-hero .ph-title { position: absolute; left: 50%; top: calc(34px + 16px); transform: translateX(-50%); text-align: center; line-height: 32px; width: 70%; z-index: 2; }
+.page-hero .ph-sub { position: static; text-align: center; font-size: 12.5px; opacity: .85; margin-top: 40px; width: 100%; z-index: 2; }
+
+/* ===== 内容区（取消叠压，与下立交列表页一致） ===== */
+.content-sheet.page-body-sheet { margin-top: 0; padding-top: 18px; border-radius: 0; box-shadow: none; border: none; background: transparent; }
+.content-sheet .search-bar { align-items: center; gap: 10px; margin-top: 4px; background: transparent; box-shadow: none; border: none; padding: 0; }
+.content-sheet .search-input-wrapper { display: flex; align-items: center; background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); min-height: 40px; }
+.content-sheet .search-input-wrapper input { background: transparent; border-color: transparent; height: 40px; padding-top: 0; padding-bottom: 0; }
+
+/* 筛选按钮（白底卡片样式） */
+.content-sheet .filter-trigger {
+    flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 40px; padding: 0 14px; background: var(--card); color: var(--text2);
+    font-size: 13px; font-weight: 400; border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 2px 8px var(--shadow); cursor: pointer; position: relative; transition: all .15s;
+}
+.content-sheet .filter-trigger:active { transform: scale(.96); }
+.content-sheet .filter-trigger .badge-num {
+    position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--card); box-sizing: border-box;
+}
+
+/* 已选条件标签（横滑） */
+.selected-tags { display: flex; flex-wrap: nowrap; gap: 8px; margin: 12px 0 4px; overflow-x: auto; scrollbar-width: none; }
+.selected-tags::-webkit-scrollbar { display: none; }
+.tag { flex-shrink: 0; background: rgba(var(--primary-rgb),.08); color: var(--primary); border: 1px solid rgba(var(--primary-rgb),.18); border-radius: 999px; padding: 4px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.tag i { cursor: pointer; font-size: 10px; }
+
+/* 队伍卡片 */
+.team-card { cursor: pointer; transition: transform .12s; }
+.team-card:active { transform: scale(.99); }
+.tc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.tc-name { font-size: 17px; font-weight: 700; color: var(--text-primary); flex: 1; min-width: 0; line-height: 1.4; }
+.tc-cat { flex-shrink: 0; font-size: 11px; padding: 3px 9px; border-radius: 6px; font-weight: 600; }
+.tc-meta { margin-top: 8px; font-size: 13px; color: var(--text2); display: flex; align-items: center; gap: 10px; }
+.tc-meta .num { font-weight: 700; color: var(--text-primary); font-size: 15px; }
+.tc-meta-divider { width: 1px; height: 12px; background: var(--border); flex-shrink: 0; }
+.tc-spacer { height: 8px; }
+.tc-row { font-size: 13px; color: var(--text2); display: flex; gap: 6px; }
+.tc-row + .tc-row { margin-top: 6px; }
+.tc-row i { width: 14px; text-align: center; color: var(--text2); opacity: .7; flex-shrink: 0; margin-top: 2px; }
+.tc-row .txt { flex: 1; line-height: 1.4; word-break: break-word; }
+.tc-row .txt.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-contact-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.tc-contact-info { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-contact-info i { font-size: 12px; flex-shrink: 0; }
+.tc-contact-info b { color: var(--text-primary); font-weight: 600; }
+.tc-contact-info .tc-dot { margin: 0 4px; color: var(--text2); }
+.tc-contact-info .tc-phone-num { color: var(--text-primary); font-weight: 600; }
+.call-btn { flex-shrink: 0; background: rgba(var(--success-rgb),.1); color: var(--success); border: 1px solid rgba(var(--success-rgb),.25); border-radius: 20px; padding: 8px 16px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.call-btn i { font-size: 12px; }
+
+/* 类别配色（13 类映射到 7 色系） */
+.cat-blue   { background: rgba(26,115,232,.1);  color: #1a73e8; }
+.cat-cyan   { background: rgba(0,151,167,.1);   color: #0097a7; }
+.cat-green  { background: rgba(52,168,83,.1);   color: #34a853; }
+.cat-orange { background: rgba(230,81,0,.1);    color: #e65100; }
+.cat-red    { background: rgba(217,48,37,.1);   color: #d93025; }
+.cat-purple { background: rgba(123,47,247,.1);  color: #7b2ff7; }
+.cat-gold   { background: rgba(199,128,0,.12);  color: #c78000; }
+
+/* 空状态 / 加载 */
+.loading { text-align: center; padding: 16px; color: var(--text2); font-size: 13px; }
+.loading i { margin-right: 6px; }
+
+/* 筛选抽屉 */
+.filter-section { margin-bottom: 18px; }
+.filter-section .filter-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px; }
+.filter-section .filter-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.filter-chip { padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text-primary); cursor: pointer; transition: all .15s; }
+.filter-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.date-range { display: flex; align-items: center; gap: 10px; }
+.date-range input { flex: 1; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-primary); font-size: 13px; }
+.date-range .sep { color: var(--text2); }
+
+.sheet-footer { display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+.sheet-footer .btn { flex: 1; height: 44px; border-radius: 10px; }
+
+/* 抽屉动画 */
+.modal-sheet { display: block !important; opacity: 0; pointer-events: none; transform: translateY(100%); transition: transform .25s ease, opacity .25s ease; z-index: 1001; }
+.modal-sheet.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.modal-mask { display: none; opacity: 0; transition: opacity .25s ease; z-index: 1000; }
+.modal-mask.show { display: block; opacity: 1; }
+
+.bottom-spacer { height: 20px; }
+
+:root[data-theme="dark"] .content-sheet .search-input-wrapper input { background: var(--input-bg); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="phone-notch"></div>
+    <div class="phone-shell">
+        <div class="status-bar light">
+            <span class="sb-time" id="statusTime">9:41</span>
+            <span class="sb-icons">
+                <i class="fa-solid fa-signal"></i>
+                <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+            </span>
+        </div>
+
+        <div class="page-hero">
+            <div class="ph-back" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+            <div class="ph-title">抢险队伍</div>
+        </div>
+
+        <div class="content-sheet page-body-sheet">
+            <div class="search-bar">
+                <div class="search-input-wrapper" style="flex:1">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="搜索名称 / 地址 / 联系人 / 电话">
+                </div>
+                <div class="filter-trigger" onclick="openDrawer()">
+                    <i class="fa-solid fa-filter"></i> 筛选
+                    <span class="badge-num" id="filterBadge" style="display:none">0</span>
+                </div>
+            </div>
+
+            <div class="selected-tags" id="selectedTags"></div>
+
+            <div class="section-v2" id="listSection">
+                <div class="sv2-head">
+                    <div class="sv2-title"><i class="fa-solid fa-people-group" style="color:var(--primary);margin-right:6px"></i>队伍台账</div>
+                    <div class="sv2-more" id="totalCount">共 -- 支</div>
+                </div>
+                <div class="card-list" id="cardList"></div>
+                <div class="loading" id="loading" style="display:none"><i class="fa-solid fa-circle-notch fa-spin"></i> 加载中…</div>
+                <div class="empty-state" id="empty" style="display:none">
+                    <i class="fa-regular fa-folder-open"></i>
+                    <div class="empty-title">暂无符合条件的队伍</div>
+                    <div class="empty-desc">请调整筛选或搜索条件</div>
+                </div>
+                <div class="bottom-spacer"></div>
+            </div>
+        </div>
+
+        <!-- 筛选抽屉 -->
+        <div class="modal-mask" id="drawerOverlay" onclick="closeDrawer()"></div>
+        <div class="modal-sheet" id="drawer">
+            <div class="sheet-header">
+                <div class="sheet-title">筛选条件</div>
+                <div class="sheet-close" onclick="closeDrawer()"><i class="fa-solid fa-times"></i></div>
+            </div>
+            <div id="drawerBody"></div>
+            <div class="sheet-footer">
+                <button class="btn btn-outline" onclick="resetFilters()">重置</button>
+                <button class="btn btn-primary" onclick="confirmFilters()">确定</button>
+            </div>
+        </div>
+    </div>
+    <div class="phone-home-indicator"></div>
+</div>
+
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="../assets/js/rescue-team-data.js"></script>
+<script>
+(function(){
+    var DATA = window.RESCUE_TEAM_DATA || [];
+
+    /* 类别配色映射（13 类 → 7 色系） */
+    var CAT_COLOR = {
+        '机动抢险': 'cat-blue', '兼职机动抢险': 'cat-blue', '应急抢险': 'cat-blue',
+        '排水除涝': 'cat-cyan', '道路清障排水': 'cat-cyan', '内河搜救': 'cat-cyan',
+        '道路清障': 'cat-green', '桥梁养护': 'cat-green',
+        '绿化安全': 'cat-gold',
+        '物资抢运': 'cat-orange', '车辆牵引': 'cat-orange',
+        '人员疏散、应急接驳': 'cat-red',
+        '供气保障': 'cat-purple'
+    };
+    function catClass(c){ return CAT_COLOR[c] || 'cat-blue'; }
+
+    /* 筛选项（动态生成） */
+    var categories = [], domains = [], units = [];
+    DATA.forEach(function(t){
+        if (categories.indexOf(t.category) < 0) categories.push(t.category);
+        if (domains.indexOf(t.domain) < 0) domains.push(t.domain);
+        if (units.indexOf(t.reportUnit) < 0) units.push(t.reportUnit);
+    });
+
+    var selectedFilters = {};   // {category, domain, reportUnit, dateStart, dateEnd}
+    var searchKw = '';
+    var pageSize = 10, currentPage = 1, isLoading = false, hasMore = true;
+
+    /* ---------- 筛选 ---------- */
+    function matchFilter(t){
+        if (selectedFilters.category && t.category !== selectedFilters.category) return false;
+        if (selectedFilters.domain && t.domain !== selectedFilters.domain) return false;
+        if (selectedFilters.reportUnit && t.reportUnit !== selectedFilters.reportUnit) return false;
+        if (selectedFilters.dateStart && t.reportDate < selectedFilters.dateStart) return false;
+        if (selectedFilters.dateEnd && t.reportDate > selectedFilters.dateEnd) return false;
+        if (searchKw){
+            var kw = searchKw.toLowerCase();
+            var hay = (t.name + ' ' + t.address + ' ' + t.contact + ' ' + t.phone).toLowerCase();
+            if (hay.indexOf(kw) < 0) return false;
+        }
+        return true;
+    }
+    function filtered(){ return DATA.filter(matchFilter); }
+
+    /* ---------- 渲染卡片 ---------- */
+    function firstPhone(p){ return (p || '').split('、')[0].trim(); }
+    function cardHtml(t){
+        var tel = firstPhone(t.phone);
+        return '<div class="card team-card" onclick="goDetail(' + t.id + ')">'
+            +   '<div class="tc-head">'
+            +     '<div class="tc-name">' + t.name + '</div>'
+            +     '<div class="tc-cat ' + catClass(t.category) + '">' + t.category + '</div>'
+            +   '</div>'
+            +   '<div class="tc-meta"><i class="fa-solid fa-bolt"></i>' + t.domain + '<div class="tc-meta-divider"></div><i class="fa-solid fa-users"></i>队伍人数：<span class="num">' + t.headcount + '</span> 人</div>'
+            +   '<div class="tc-spacer"></div>'
+            +   '<div class="tc-row"><i class="fa-solid fa-location-dot"></i><span class="txt truncate">地址：' + t.address + '</span></div>'
+            +   '<div class="tc-row"><i class="fa-solid fa-shield-halved"></i><span class="txt">区域：' + t.responsibility + '</span></div>'
+            +   '<div class="tc-spacer"></div>'
+            +   '<div class="tc-contact-row">'
+            +     '<div class="tc-contact-info"><i class="fa-regular fa-user"></i>联系人：<b>' + t.contact.split('、')[0] + '</b></div>'
+            +     (tel ? '<a class="call-btn" href="tel:' + tel + '" onclick="event.stopPropagation()"><i class="fa-solid fa-phone"></i> 拨打</a>' : '')
+            +   '</div>'
+            + '</div>';
+    }
+
+    function render(reset){
+        var list = filtered();
+        var total = list.length;
+        var totalPeople = list.reduce(function(s,t){return s + t.headcount;}, 0);
+        document.getElementById('totalCount').textContent = '共 ' + total + ' 支';
+
+        var box = document.getElementById('cardList');
+        var empty = document.getElementById('empty');
+        if (reset){ box.innerHTML = ''; currentPage = 1; hasMore = true; }
+
+        if (total === 0){ empty.style.display = 'block'; return; }
+        empty.style.display = 'none';
+
+        var slice = list.slice(0, currentPage * pageSize);
+        box.innerHTML = slice.map(cardHtml).join('');
+        hasMore = slice.length < total;
+    }
+
+    /* ---------- 标签 ---------- */
+    var FILTER_LABELS = { category:'类别', domain:'领域', reportUnit:'填报单位', dateStart:'开始', dateEnd:'结束' };
+    function renderTags(){
+        var box = document.getElementById('selectedTags');
+        var keys = Object.keys(selectedFilters).filter(function(k){ return selectedFilters[k]; });
+        var badge = document.getElementById('filterBadge');
+        if (keys.length === 0){ box.innerHTML = ''; badge.style.display = 'none'; return; }
+        badge.style.display = 'inline-flex';
+        badge.textContent = keys.length;
+        box.innerHTML = keys.map(function(k){
+            var v = selectedFilters[k];
+            var label = (k === 'dateStart' || k === 'dateEnd') ? (FILTER_LABELS[k] + ':' + v) : v;
+            return '<span class="tag">' + label + '<i class="fa-solid fa-xmark" onclick="removeFilter(\'' + k + '\')"></i></span>';
+        }).join('');
+    }
+    window.removeFilter = function(k){ delete selectedFilters[k]; renderTags(); render(true); };
+
+    /* ---------- 抽屉 ---------- */
+    function chipGroup(key, title, options){
+        var chips = options.map(function(o){
+            var act = selectedFilters[key] === o ? ' active' : '';
+            return '<div class="filter-chip' + act + '" data-key="' + key + '" data-val="' + o + '">' + o + '</div>';
+        }).join('');
+        return '<div class="filter-section"><div class="filter-title">' + title + '</div>'
+             + '<div class="filter-options">' + chips + '</div></div>';
+    }
+    function renderDrawer(){
+        var html = chipGroup('category', '队伍类别', categories)
+                 + chipGroup('domain', '所属领域', domains)
+                 + chipGroup('reportUnit', '填报单位', units)
+                 + '<div class="filter-section"><div class="filter-title">填报日期</div>'
+                 + '<div class="date-range">'
+                 + '<input type="date" id="dateStart" value="' + (selectedFilters.dateStart||'') + '">'
+                 + '<span class="sep">~</span>'
+                 + '<input type="date" id="dateEnd" value="' + (selectedFilters.dateEnd||'') + '">'
+                 + '</div></div>';
+        document.getElementById('drawerBody').innerHTML = html;
+
+        document.querySelectorAll('#drawerBody .filter-chip').forEach(function(c){
+            c.onclick = function(){
+                var k = c.dataset.key, v = c.dataset.val;
+                if (selectedFilters[k] === v) delete selectedFilters[k];
+                else selectedFilters[k] = v;
+                document.querySelectorAll('#drawerBody .filter-chip[data-key="' + k + '"]').forEach(function(x){
+                    x.classList.toggle('active', selectedFilters[k] === x.dataset.val);
+                });
+            };
+        });
+    }
+    window.openDrawer = function(){ renderDrawer(); document.getElementById('drawerOverlay').classList.add('show'); document.getElementById('drawer').classList.add('show'); };
+    window.closeDrawer = function(){ document.getElementById('drawerOverlay').classList.remove('show'); document.getElementById('drawer').classList.remove('show'); };
+    window.resetFilters = function(){
+        selectedFilters = {};
+        renderDrawer();
+        document.getElementById('dateStart').value = '';
+        document.getElementById('dateEnd').value = '';
+    };
+    window.confirmFilters = function(){
+        var ds = document.getElementById('dateStart').value;
+        var de = document.getElementById('dateEnd').value;
+        if (ds) selectedFilters.dateStart = ds; else delete selectedFilters.dateStart;
+        if (de) selectedFilters.dateEnd = de; else delete selectedFilters.dateEnd;
+        closeDrawer(); renderTags(); render(true);
+    };
+
+    /* ---------- 搜索 ---------- */
+    var searchTimer;
+    document.getElementById('searchInput').addEventListener('input', function(e){
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function(){ searchKw = e.target.value.trim(); render(true); }, 250);
+    });
+
+    /* ---------- 上拉加载 ---------- */
+    document.querySelector('.phone-shell').addEventListener('scroll', function(){
+        if (isLoading || !hasMore) return;
+        var el = this;
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 60){
+            isLoading = true;
+            document.getElementById('loading').style.display = 'block';
+            setTimeout(function(){
+                currentPage++;
+                render(false);
+                isLoading = false;
+                document.getElementById('loading').style.display = 'none';
+            }, 300);
+        }
+    });
+
+    window.goDetail = function(id){ App.go('h5-rescue-team-detail.html?id=' + id); };
+
+    render(true);
+})();
+</script>
+</body>
+</html>

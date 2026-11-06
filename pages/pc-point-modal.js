@@ -172,9 +172,13 @@ function buildPointModalContent(point) {
     const statusHtml = renderStatusLabel(point.status, point.statusLabel);
     const riskHtml = renderRiskLabel(point.risk, point.riskLabel);
 
-    const checkItems = point.checkItems && point.checkItems.length > 0
-        ? point.checkItems.map((item, index) => buildCheckItemCard(item, index)).join('')
-        : '<div class="empty-state" style="padding:30px 0;"><i class="fas fa-clipboard-list"></i><p>暂无检查项记录</p></div>';
+    // 待巡查：尚未开展巡查，不展示检查项判定内容（避免误导为已有结论）
+    const isInspected = point.status === 'inspected';
+    const checkItems = !isInspected
+        ? '<div class="empty-state" style="padding:30px 0;"><i class="fas fa-clock"></i><p>该房屋尚未巡查，暂无检查项判定结果<br><span style="font-size:12px;">巡查填报后可在此查看</span></p></div>'
+        : (point.checkItems && point.checkItems.length > 0
+            ? point.checkItems.map((item, index) => buildCheckItemCard(item, index)).join('')
+            : '<div class="empty-state" style="padding:30px 0;"><i class="fas fa-clipboard-list"></i><p>暂无检查项记录</p></div>');
 
     return `
         <div class="point-detail-section">

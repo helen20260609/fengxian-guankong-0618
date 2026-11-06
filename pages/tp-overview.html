@@ -225,7 +225,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 }
 </style>
     <script src="./echarts.min.js"></script>
-    <script src="https://api.map.baidu.com/api?v=3.0&ak=KZC3aTy6LXVDRQSauPax1wloEMsAGK47"></script>
+    <script src="./leaflet.js"></script>
+    <link rel="stylesheet" href="./leaflet.css">
     <script src="../js/third-party-data.js"></script>
 </head>
 <body>
@@ -318,10 +319,10 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
             </div>
             <div class="map-legend">
                 <div class="map-legend-title">覆盖机构数量</div>
-                <div class="map-legend-item"><div class="map-legend-dot" style="background: #1a73e8;"></div> 高（≥35家）</div>
-                <div class="map-legend-item"><div class="map-legend-dot" style="background: #34a853;"></div> 中（20-34家）</div>
-                <div class="map-legend-item"><div class="map-legend-dot" style="background: #f59e0b;"></div> 低（10-19家）</div>
-                <div class="map-legend-item"><div class="map-legend-dot" style="background: #9c27b0;"></div> 较少（＜10家）</div>
+                <div class="map-legend-item"><div class="map-legend-dot" style="background: #1a73e8;"></div> 高（≥6家）</div>
+                <div class="map-legend-item"><div class="map-legend-dot" style="background: #34a853;"></div> 中（4-5家）</div>
+                <div class="map-legend-item"><div class="map-legend-dot" style="background: #f59e0b;"></div> 低（2-3家）</div>
+                <div class="map-legend-item"><div class="map-legend-dot" style="background: #9c27b0;"></div> 较少（＜2家）</div>
             </div>
         </div>
     </div>
@@ -528,20 +529,27 @@ window.addEventListener('message', function(e) {
     }
 });
 
+// 统计辅助：按指定字段对机构分组计数
+function countOrgsBy(field) {
+    var map = {};
+    if (typeof getAllOrgs !== 'function') return map;
+    getAllOrgs().forEach(function(o) {
+        var k = o[field] || '未分类';
+        map[k] = (map[k] || 0) + 1;
+    });
+    return map;
+}
+var FIELD_COLORS = { '建筑工地': '#1a73e8', '基坑': '#34a853', '交通': '#f59e0b', '玻璃幕墙': '#9c27b0', '燃气': '#00bcd4', '高空坠物': '#e37400', '城镇自建房': '#1e8e3e', '农村自建房': '#7c4dff' };
+var TYPE_COLORS = ['#1a73e8', '#10b981', '#f59e0b', '#9c27b0', '#00bcd4', '#e37400'];
+
 // ECharts 业务分布柱状图
 var businessChart, orgTypeChart, qualLevelChart;
 document.addEventListener('DOMContentLoaded', function() {
     businessChart = echarts.init(document.getElementById('businessBarChart'));
-    var categoryData = [
-        { name: '建筑工地', value: 45, color: '#1a73e8' },
-        { name: '基坑', value: 32, color: '#34a853' },
-        { name: '交通', value: 28, color: '#f59e0b' },
-        { name: '玻璃幕墙', value: 24, color: '#9c27b0' },
-        { name: '燃气', value: 38, color: '#00bcd4' },
-        { name: '高空坠物', value: 20, color: '#e37400' },
-        { name: '城镇自建房', value: 35, color: '#1e8e3e' },
-        { name: '农村自建房', value: 30, color: '#7c4dff' }
-    ];
+    var fieldCounts = countOrgsBy('field');
+    var categoryData = Object.keys(FIELD_COLORS).map(function(name) {
+        return { name: name, value: fieldCounts[name] || 0, color: FIELD_COLORS[name] };
+    });
     
     var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     var textColor = isDark ? '#e2e8f0' : '#202124';
@@ -618,17 +626,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // 点击下钻事件
     businessChart.on('click', function(params) {
         var category = categoryData[params.dataIndex];
-        showDrillDownModal(category.name, category.value, category.color);
+        var realOrgs = getOrgsByField(category.name);
+        showDrillDownModal(category.name, realOrgs.length, category.color);
     });
     
     // 机构类型占比 ECharts 饼图
     orgTypeChart = echarts.init(document.getElementById('orgTypePieChart'));
-    var orgTypeData = [
-        { name: '检测机构', value: 52, color: '#1a73e8' },
-        { name: '评估机构', value: 38, color: '#10b981' },
-        { name: '咨询机构', value: 28, color: '#f59e0b' },
-        { name: '其他', value: 10, color: '#9c27b0' }
-    ];
+    var typeCounts = countOrgsBy('orgType');
+    var orgTypeData = Object.keys(typeCounts).map(function(name, i) {
+        return { name: name, value: typeCounts[name], color: TYPE_COLORS[i % TYPE_COLORS.length] };
+    });
     var orgTypeOption = {
         tooltip: {
             trigger: 'item',
@@ -711,11 +718,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 资质等级分布 ECharts 柱状图
     qualLevelChart = echarts.init(document.getElementById('qualLevelChart'));
-    var qualLevelData = [
-        { name: '甲级', value: 48, color: '#1a73e8' },
-        { name: '乙级', value: 52, color: '#34a853' },
-        { name: '丙级', value: 28, color: '#f59e0b' }
-    ];
+    var qualCounts = countOrgsBy('qual');
+    var qualColors = { '甲级': '#1a73e8', '乙级': '#34a853', '丙级': '#f59e0b' };
+    var qualLevelData = Object.keys(qualCounts).map(function(name) {
+        return { name: name, value: qualCounts[name], color: qualColors[name] || '#9c27b0' };
+    });
     var qualLevelOption = {
         tooltip: {
             trigger: 'axis',
@@ -893,8 +900,8 @@ document.addEventListener('DOMContentLoaded', function() {
             existingModal.remove();
         }
         
-        // 模拟该领域的机构数据
-        var orgData = generateOrgData(categoryName, count);
+        // 该领域的真实机构数据
+        var orgData = getOrgsByField(categoryName);
         
         var modal = document.createElement('div');
         modal.id = 'drillDownModal';
@@ -959,23 +966,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 生成模拟机构数据
-    function generateOrgData(category, count) {
-        var types = ['检测机构', '评估机构', '咨询机构'];
-        var credits = ['AAA', 'AA', 'A', 'B'];
-        var statuses = ['已入库', '已入库', '已入库', '待复核'];
-        var orgs = [];
-        
-        for (var i = 0; i < Math.min(count, 20); i++) {
-            orgs.push({
-                name: category + '服务机构' + (i + 1),
-                code: '91440101MA' + (5 + i) + 'XXXXXX',
-                type: types[Math.floor(Math.random() * types.length)],
-                credit: credits[Math.floor(Math.random() * credits.length)],
-                status: statuses[Math.floor(Math.random() * statuses.length)]
-            });
-        }
-        return orgs;
+    // 该领域的真实机构列表
+    function getOrgsByField(category) {
+        if (typeof getAllOrgs !== 'function') return [];
+        return getAllOrgs().filter(function(o) { return o.field === category; }).map(function(o) {
+            return { name: o.orgName, code: o.orgCode, type: o.orgType || '-', credit: o.creditLevel || 'A', status: o.status === '正常' ? '已入库' : '待复核' };
+        });
     }
 });
 
@@ -1338,25 +1334,39 @@ function exportOrgList(type) {
     }
 }
 
-// 服务范围分析地图数据与渲染
+// 服务范围分析地图：位置定义 + 按机构 serviceTowns 实时统计
 var serviceMapData = [
-    { name: '南桥街道', top: '44%', left: '42%', width: '13%', height: '13%', orgs: { '建筑工地': 18, '基坑': 12, '交通': 10, '玻璃幕墙': 8, '燃气': 14, '高空坠物': 7, '城镇自建房': 11, '农村自建房': 5 } },
-    { name: '奉浦街道', top: '40%', left: '54%', width: '12%', height: '12%', orgs: { '建筑工地': 14, '基坑': 9, '交通': 8, '玻璃幕墙': 6, '燃气': 10, '高空坠物': 5, '城镇自建房': 8, '农村自建房': 3 } },
-    { name: '金海街道', top: '54%', left: '56%', width: '12%', height: '12%', orgs: { '建筑工地': 12, '基坑': 7, '交通': 9, '玻璃幕墙': 5, '燃气': 8, '高空坠物': 4, '城镇自建房': 7, '农村自建房': 2 } },
-    { name: '奉城镇', top: '22%', left: '64%', width: '18%', height: '18%', orgs: { '建筑工地': 16, '基坑': 10, '交通': 11, '玻璃幕墙': 7, '燃气': 12, '高空坠物': 6, '城镇自建房': 13, '农村自建房': 8 } },
-    { name: '庄行镇', top: '36%', left: '18%', width: '16%', height: '16%', orgs: { '建筑工地': 11, '基坑': 8, '交通': 6, '玻璃幕墙': 5, '燃气': 9, '高空坠物': 7, '城镇自建房': 10, '农村自建房': 6 } },
-    { name: '金汇镇', top: '16%', left: '44%', width: '16%', height: '16%', orgs: { '建筑工地': 15, '基坑': 9, '交通': 8, '玻璃幕墙': 6, '燃气': 11, '高空坠物': 5, '城镇自建房': 9, '农村自建房': 7 } },
-    { name: '青村镇', top: '58%', left: '72%', width: '16%', height: '16%', orgs: { '建筑工地': 10, '基坑': 6, '交通': 7, '玻璃幕墙': 4, '燃气': 8, '高空坠物': 3, '城镇自建房': 8, '农村自建房': 9 } },
-    { name: '柘林镇', top: '74%', left: '30%', width: '18%', height: '14%', orgs: { '建筑工地': 9, '基坑': 5, '交通': 6, '玻璃幕墙': 4, '燃气': 7, '高空坠物': 4, '城镇自建房': 6, '农村自建房': 8 } },
-    { name: '四团镇', top: '12%', left: '74%', width: '18%', height: '18%', orgs: { '建筑工地': 8, '基坑': 5, '交通': 9, '玻璃幕墙': 3, '燃气': 6, '高空坠物': 2, '城镇自建房': 7, '农村自建房': 10 } },
-    { name: '海湾镇', top: '78%', left: '58%', width: '14%', height: '12%', orgs: { '建筑工地': 6, '基坑': 3, '交通': 4, '玻璃幕墙': 2, '燃气': 5, '高空坠物': 2, '城镇自建房': 3, '农村自建房': 4 } },
-    { name: '西渡镇', top: '52%', left: '28%', width: '13%', height: '13%', orgs: { '建筑工地': 13, '基坑': 8, '交通': 7, '玻璃幕墙': 6, '燃气': 9, '高空坠物': 6, '城镇自建房': 8, '农村自建房': 4 } }
+    { name: '南桥街道', top: '44%', left: '42%' },
+    { name: '奉浦街道', top: '40%', left: '54%' },
+    { name: '金海街道', top: '54%', left: '56%' },
+    { name: '奉城镇', top: '22%', left: '64%' },
+    { name: '庄行镇', top: '36%', left: '18%' },
+    { name: '金汇镇', top: '16%', left: '44%' },
+    { name: '青村镇', top: '58%', left: '72%' },
+    { name: '柘林镇', top: '74%', left: '30%' },
+    { name: '四团镇', top: '12%', left: '74%' },
+    { name: '海湾镇', top: '78%', left: '58%' },
+    { name: '西渡镇', top: '52%', left: '28%' }
 ];
 
+// 按街镇统计机构覆盖：统计每个街镇下各专业领域的机构数量
+function computeTownStats() {
+    var stats = {};
+    if (typeof getAllOrgs !== 'function') return stats;
+    getAllOrgs().forEach(function(o) {
+        (o.serviceTowns || []).forEach(function(town) {
+            if (!stats[town]) stats[town] = {};
+            var f = o.field || '未分类';
+            stats[town][f] = (stats[town][f] || 0) + 1;
+        });
+    });
+    return stats;
+}
+
 function getRegionColor(count) {
-    if (count >= 35) return '#1a73e8';
-    if (count >= 20) return '#34a853';
-    if (count >= 10) return '#f59e0b';
+    if (count >= 6) return '#1a73e8';
+    if (count >= 4) return '#34a853';
+    if (count >= 2) return '#f59e0b';
     return '#9c27b0';
 }
 
@@ -1413,17 +1423,19 @@ function renderServiceMap() {
     // 移除旧的区域块（保留 tooltip）
     var oldRegions = container.querySelectorAll('.map-region');
     oldRegions.forEach(function(el) { el.remove(); });
-    
+
+    var townStats = computeTownStats();
     serviceMapData.forEach(function(region) {
+        var regionOrgs = townStats[region.name] || {};
         var count = 0;
         var details = [];
         if (field) {
-            count = region.orgs[field] || 0;
+            count = regionOrgs[field] || 0;
             details.push({ name: field, value: count });
         } else {
-            for (var key in region.orgs) {
-                count += region.orgs[key];
-                details.push({ name: key, value: region.orgs[key] });
+            for (var key in regionOrgs) {
+                count += regionOrgs[key];
+                details.push({ name: key, value: regionOrgs[key] });
             }
         }
         
@@ -1475,24 +1487,16 @@ function renderServiceMap() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // 初始化百度地图（仅执行一次，BMap 加载完成后创建）
-    var baiduMapInitialized = false;
-    function initBaiduMap() {
-        if (baiduMapInitialized) return;
-        if (typeof BMap === 'undefined' || typeof BMap.Map !== 'function') {
-            setTimeout(initBaiduMap, 300);
-            return;
-        }
-        try {
-            var map = new BMap.Map('baiduMapContainer');
-            map.centerAndZoom(new BMap.Point(121.47, 30.92), 11);
-            map.enableScrollWheelZoom(true);
-            baiduMapInitialized = true;
-        } catch (e) {
-            console.error('百度地图初始化失败', e);
-        }
+    // 初始化 Leaflet + 高德瓦片地图（与巡查任务分析页统一）
+    var mapContainer = document.getElementById('baiduMapContainer');
+    if (mapContainer && typeof L !== 'undefined') {
+        var serviceMap = L.map('baiduMapContainer').setView([30.92, 121.47], 11);
+        L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+            attribution: '&copy; 高德地图',
+            maxZoom: 19,
+            subdomains: '1234'
+        }).addTo(serviceMap);
     }
-    initBaiduMap();
     renderServiceMap();
 });
 </script>

@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>预警详情</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.warn-header { background: var(--card); padding: 16px 14px; border-bottom: 1px solid var(--border); }
+.warn-header .wh-title { font-size: 16px; font-weight: 700; }
+.warn-header .wh-meta { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; }
+
+.info-block { background: var(--card); border-radius: 10px; margin: 14px; padding: 14px; box-shadow: 0 2px 10px var(--shadow); border: 1px solid var(--border); }
+.info-block .ib-title { font-size: 13px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.info-block .ib-title i { color: var(--primary); }
+.info-block .ib-row { display: flex; margin-bottom: 10px; font-size: 12px; }
+.info-block .ib-row:last-child { margin-bottom: 0; }
+.info-block .ib-label { color: var(--text2); width: 80px; flex-shrink: 0; }
+.info-block .ib-value { flex: 1; color: var(--text-primary); }
+.info-block .ib-value.long { line-height: 1.6; }
+
+.timeline { padding-left: 18px; }
+
+.bottom-actions { position: sticky; bottom: 0; margin-top: auto; width: 100%; max-width: 390px; padding: 12px 14px calc(12px + var(--safe-bottom)); background: var(--card); border-top: 1px solid var(--border); display: flex; gap: 10px; z-index: 100; }
+.bottom-actions .btn { flex: 1; }
+
+.page-body-pb { padding-bottom: calc(var(--safe-bottom) + 80px); }
+
+.radio-group { display: flex; gap: 20px; margin-top: 6px; }
+.radio-item { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.radio-item input[type="radio"] { width: 18px; height: 18px; accent-color: var(--primary); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <!-- 侧边按钮 -->
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <!-- 状态栏 -->
+    <div class="status-bar">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="nav-bar">
+        <div class="nav-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="nav-title">预警详情</div>
+        <div class="nav-action"></div>
+    </div>
+
+    <div class="warn-header">
+        <div class="wh-title" id="warnTitle">--</div>
+        <div class="wh-meta">
+            <span id="warnLevel">--</span>
+            <span id="warnStatus">--</span>
+            <span id="warnNo">--</span>
+        </div>
+    </div>
+
+    <div class="page-body-pb">
+
+        <div class="info-block anim d1">
+            <div class="ib-title"><i class="fa-solid fa-circle-info"></i>基本信息</div>
+            <div class="ib-row"><div class="ib-label">预警领域</div><div class="ib-value" id="warnDomain">--</div></div>
+            <div class="ib-row"><div class="ib-label">发生地点</div><div class="ib-value" id="warnLocation">--</div></div>
+            <div class="ib-row"><div class="ib-label">触发时间</div><div class="ib-value" id="warnTime">--</div></div>
+            <div class="ib-row"><div class="ib-label">监测指标</div><div class="ib-value" id="warnIndicator">--</div></div>
+            <div class="ib-row"><div class="ib-label">当前数值</div><div class="ib-value" id="warnCurrent">--</div></div>
+            <div class="ib-row"><div class="ib-label">预警阈值</div><div class="ib-value" id="warnThreshold">--</div></div>
+            <div class="ib-row"><div class="ib-label">责任人</div><div class="ib-value" id="warnHandler">--</div></div>
+            <div class="ib-row"><div class="ib-label">完成期限</div><div class="ib-value" id="warnDeadline">--</div></div>
+            <div class="ib-row"><div class="ib-label">预警描述</div><div class="ib-value long" id="warnDesc">--</div></div>
+        </div>
+
+        <div class="info-block anim d2">
+            <div class="ib-title"><i class="fa-solid fa-route"></i>处置进度</div>
+            <div class="timeline" id="timeline">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 底部操作 -->
+    <div class="bottom-actions" id="bottomActions">
+        <button class="btn btn-primary" onclick="App.showToast('操作开发中')">处置</button>
+    </div>
+
+    <!-- 在线确认 / 任务分派弹窗 -->
+    <div class="modal-mask" id="dispatchModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title">在线确认与分派</div>
+                <div class="sheet-close tap" onclick="closeDispatch()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>确认人</label>
+                <input type="text" id="dispatchConfirmer" value="王主任" placeholder="填写确认人">
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>处置人 <span class="req">*</span></label>
+                <select id="dispatchHandler">
+                    <option value="">请选择处置人</option>
+                    <option value="李工">李工（施工单位 A）</option>
+                    <option value="赵师傅">赵师傅（燃气公司）</option>
+                    <option value="张工">张工（施工单位 A）</option>
+                    <option value="交警队">交警队</option>
+                </select>
+                <div class="error-msg" id="dispatchHandlerError"></div>
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>责任单位</label>
+                <input type="text" id="dispatchUnit" placeholder="填写责任单位">
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>完成期限 <span class="req">*</span></label>
+                <input type="datetime-local" id="dispatchDeadline">
+                <div class="error-msg" id="dispatchDeadlineError"></div>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="submitDispatch()">确认并分派</button>
+        </div>
+    </div>
+
+    <!-- 处置反馈弹窗 -->
+    <div class="modal-mask" id="feedbackModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title">处置反馈</div>
+                <div class="sheet-close tap" onclick="closeFeedback()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>处置措施 <span class="req">*</span></label>
+                <textarea id="feedbackMeasures" placeholder="填写已采取的处置措施" style="min-height:80px"></textarea>
+                <div class="error-msg" id="feedbackMeasuresError"></div>
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>完成时间 <span class="req">*</span></label>
+                <input type="datetime-local" id="feedbackTime">
+                <div class="error-msg" id="feedbackTimeError"></div>
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>现场照片</label>
+                <div class="photo-grid" id="feedbackPhotos"></div>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="submitFeedback()">提交反馈</button>
+        </div>
+    </div>
+
+    <!-- 验收归档弹窗 -->
+    <div class="modal-mask" id="acceptModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title">验收归档</div>
+                <div class="sheet-close tap" onclick="closeAccept()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>验收结果 <span class="req">*</span></label>
+                <div class="radio-group">
+                    <label class="radio-item"><input type="radio" name="acceptResult" value="pass" checked> 验收通过</label>
+                    <label class="radio-item"><input type="radio" name="acceptResult" value="reject"> 驳回重做</label>
+                </div>
+            </div>
+            <div class="form-item" style="margin-bottom:14px">
+                <label>验收意见 <span class="req">*</span></label>
+                <textarea id="acceptRemark" placeholder="填写验收意见或驳回原因" style="min-height:80px"></textarea>
+                <div class="error-msg" id="acceptRemarkError"></div>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="submitAccept()">提交</button>
+        </div>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    var warnId = App.getQuery('id');
+    var warn = DataStore.getWarning(warnId);
+
+    if (!warn) {
+        App.showToast('预警不存在');
+        setTimeout(function() { App.back(); }, 1500);
+        return;
+    }
+
+    var statusName = { pending: '待确认', dispatched: '已分派', handling: '处置中', accepting: '待验收', closed: '已闭环' };
+
+    document.getElementById('warnTitle').textContent = warn.title;
+    document.getElementById('warnLevel').innerHTML = '<span class="risk-badge ' + warn.level + '"><span class="risk-dot ' + warn.level + '"></span> ' + levelName(warn.level) + '</span>';
+    document.getElementById('warnStatus').innerHTML = '<span class="status-tag ' + statusClass(warn.status) + '">' + statusName[warn.status] + '</span>';
+    document.getElementById('warnNo').innerHTML = '<i class="fa-solid fa-barcode"></i> ' + warn.eventNo;
+
+    document.getElementById('warnDomain').textContent = RiskData.domains[warn.domain] ? RiskData.domains[warn.domain].name : warn.domain;
+    document.getElementById('warnLocation').textContent = warn.location;
+    document.getElementById('warnTime').textContent = App.formatDate(warn.time, 'yyyy-MM-dd hh:mm');
+    document.getElementById('warnIndicator').textContent = warn.indicator || '—';
+    document.getElementById('warnCurrent').textContent = warn.currentValue || '—';
+    document.getElementById('warnThreshold').textContent = warn.threshold || '—';
+    document.getElementById('warnHandler').textContent = warn.handler || '待分配';
+    document.getElementById('warnDeadline').textContent = warn.deadline ? App.formatDate(warn.deadline, 'yyyy-MM-dd hh:mm') : '未设置';
+    document.getElementById('warnDesc').textContent = warn.description || '—';
+
+    // 时间轴
+    function renderTimeline() {
+        var timeline = document.getElementById('timeline');
+        timeline.innerHTML = '';
+        warn.timeline.forEach(function(step) {
+            var cls = step.status === 'active' ? 'tl-item active' : (step.status === 'completed' ? 'tl-item completed' : 'tl-item');
+            var html = '<div class="' + cls + '" style="margin-bottom:14px">' +
+                '<div class="tl-title">' + step.step + '</div>' +
+                (step.time ? '<div class="tl-time">' + App.formatDate(step.time, 'MM-dd hh:mm') + ' · ' + App.escapeHtml(step.actor) + '</div>' : '') +
+                '<div class="tl-desc">' + App.escapeHtml(step.action) + (step.result ? '：' + App.escapeHtml(step.result) : '') + '</div>' +
+            '</div>';
+            timeline.insertAdjacentHTML('beforeend', html);
+        });
+    }
+    renderTimeline();
+
+    // 底部按钮根据状态
+    var feedbackPhotos = [];
+    function renderBottomActions() {
+        var actions = document.getElementById('bottomActions');
+        if (warn.status === 'closed') {
+            actions.innerHTML = '<button class="btn btn-outline" onclick="App.back()">返回</button>';
+        } else if (warn.status === 'pending') {
+            actions.innerHTML = '<button class="btn btn-primary" onclick="openDispatch()">在线确认</button>';
+        } else if (warn.status === 'accepting') {
+            actions.innerHTML = '<button class="btn btn-outline" onclick="openAccept()">验收归档</button>';
+        } else {
+            actions.innerHTML = '<button class="btn btn-outline" onclick="App.showToast(\'已暂存\')">暂存</button><button class="btn btn-primary" onclick="openFeedback()">处置反馈</button>';
+        }
+    }
+    renderBottomActions();
+
+    window.openDispatch = function() {
+        App.clearFormErrors('#dispatchModal');
+        document.getElementById('dispatchModal').classList.add('show');
+        document.getElementById('dispatchDeadline').value = App.formatDate(new Date(Date.now() + 4 * 60 * 60 * 1000), 'yyyy-MM-ddThh:mm');
+    };
+
+    window.closeDispatch = function() {
+        document.getElementById('dispatchModal').classList.remove('show');
+    };
+
+    window.submitDispatch = function() {
+        var v = App.validateForm([
+            { id: 'dispatchHandler', name: '处置人', rules: ['required'] },
+            { id: 'dispatchDeadline', name: '完成期限', rules: ['required'] }
+        ], '#dispatchModal');
+        if (!v.valid) return;
+
+        var confirmer = document.getElementById('dispatchConfirmer').value.trim();
+        var handler = document.getElementById('dispatchHandler').value;
+        var unit = document.getElementById('dispatchUnit').value.trim();
+        var deadline = document.getElementById('dispatchDeadline').value;
+
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('提交中...');
+        setTimeout(function() {
+            DataStore.confirmAndDispatchWarning(warn.id, {
+                confirmer: confirmer,
+                handler: handler,
+                responsibleUnit: unit,
+                deadline: deadline
+            });
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            closeDispatch();
+            refresh();
+            App.showToast('已确认并分派');
+        }, 600);
+    };
+
+    window.openFeedback = function() {
+        App.clearFormErrors('#feedbackModal');
+        document.getElementById('feedbackModal').classList.add('show');
+        document.getElementById('feedbackTime').value = App.formatDate(new Date(), 'yyyy-MM-ddThh:mm');
+        feedbackPhotos = [];
+        renderFeedbackPhotos();
+    };
+
+    window.closeFeedback = function() {
+        document.getElementById('feedbackModal').classList.remove('show');
+    };
+
+    function renderFeedbackPhotos() {
+        var container = document.getElementById('feedbackPhotos');
+        container.innerHTML = '<div class="photo-add" onclick="takeFeedbackPhoto()"><i class="fa-solid fa-camera" style="font-size: 19px;margin-bottom:4px"></i><div>拍照</div></div>' +
+            feedbackPhotos.map(function(p, i) {
+                return '<div class="photo-thumb" style="background-image:url(' + p + ')"><div class="remove" onclick="removeFeedbackPhoto(' + i + ')"><i class="fa-solid fa-xmark"></i></div></div>';
+            }).join('');
+    }
+
+    window.takeFeedbackPhoto = function() {
+        App.takePhoto().then(function(url) {
+            feedbackPhotos.push(url);
+            renderFeedbackPhotos();
+        });
+    };
+
+    window.removeFeedbackPhoto = function(idx) {
+        App.confirm('确认删除该照片？', function() {
+            feedbackPhotos.splice(idx, 1);
+            renderFeedbackPhotos();
+        });
+    };
+
+    window.submitFeedback = function() {
+        var v = App.validateForm([
+            { id: 'feedbackMeasures', name: '处置措施', rules: ['required'] },
+            { id: 'feedbackTime', name: '完成时间', rules: ['required'] }
+        ], '#feedbackModal');
+        if (!v.valid) return;
+
+        var measures = document.getElementById('feedbackMeasures').value.trim();
+        var time = document.getElementById('feedbackTime').value;
+
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('提交中...');
+        setTimeout(function() {
+            DataStore.submitWarningFeedback(warn.id, { measures: measures, time: time, photos: feedbackPhotos, result: '处置完成' });
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            closeFeedback();
+            refresh();
+            App.showToast('处置反馈已提交');
+        }, 600);
+    };
+
+    window.openAccept = function() {
+        App.clearFormErrors('#acceptModal');
+        document.getElementById('acceptModal').classList.add('show');
+        document.getElementById('acceptRemark').value = '';
+        var radios = document.getElementsByName('acceptResult');
+        for (var i = 0; i < radios.length; i++) { radios[i].checked = (radios[i].value === 'pass'); }
+    };
+
+    window.closeAccept = function() {
+        document.getElementById('acceptModal').classList.remove('show');
+    };
+
+    window.submitAccept = function() {
+        var v = App.validateForm([{ id: 'acceptRemark', name: '验收意见', rules: ['required'] }], '#acceptModal');
+        if (!v.valid) return;
+
+        var remark = document.getElementById('acceptRemark').value.trim();
+        var result = 'pass';
+        var radios = document.getElementsByName('acceptResult');
+        for (var i = 0; i < radios.length; i++) { if (radios[i].checked) result = radios[i].value; }
+
+        var doSubmit = function() {
+            var btn = document.activeElement;
+            if (btn) btn.disabled = true;
+            App.showLoading('提交中...');
+            setTimeout(function() {
+                if (result === 'pass') {
+                    DataStore.acceptWarning(warn.id, { actor: '验收人', remark: remark });
+                } else {
+                    DataStore.rejectWarning(warn.id, { actor: '验收人', remark: remark });
+                }
+                App.hideLoading();
+                if (btn) btn.disabled = false;
+                closeAccept();
+                refresh();
+                App.showToast(result === 'pass' ? '验收通过，已归档' : '已驳回，请重新处置');
+            }, 600);
+        };
+
+        if (result === 'reject') {
+            App.confirm('确定驳回该预警并退回重新处置？', doSubmit);
+        } else {
+            doSubmit();
+        }
+    };
+
+    function refresh() {
+        document.getElementById('warnStatus').innerHTML = '<span class="status-tag ' + statusClass(warn.status) + '">' + statusName[warn.status] + '</span>';
+        document.getElementById('warnHandler').textContent = warn.handler || '待分配';
+        document.getElementById('warnDeadline').textContent = warn.deadline ? App.formatDate(warn.deadline, 'yyyy-MM-dd hh:mm') : '未设置';
+        renderTimeline();
+        renderBottomActions();
+    }
+
+    function levelName(level) {
+        var map = { red: '红色', orange: '橙色', yellow: '黄色', blue: '蓝色' };
+        return map[level] || level;
+    }
+
+    function statusClass(status) {
+        if (status === 'pending') return 'pending';
+        if (status === 'dispatched' || status === 'handling') return 'handling';
+        if (status === 'accepting') return 'handling';
+        if (status === 'closed') return 'closed';
+        return 'rejected';
+    }
+
+    // 实时清除/校验弹窗表单错误
+    var warnFormFieldMap = {
+        '#dispatchModal': [
+            { id: 'dispatchHandler', name: '处置人', rules: ['required'] },
+            { id: 'dispatchDeadline', name: '完成期限', rules: ['required'] }
+        ],
+        '#feedbackModal': [
+            { id: 'feedbackMeasures', name: '处置措施', rules: ['required'] },
+            { id: 'feedbackTime', name: '完成时间', rules: ['required'] }
+        ],
+        '#acceptModal': [
+            { id: 'acceptRemark', name: '验收意见', rules: ['required'] }
+        ]
+    };
+    Object.keys(warnFormFieldMap).forEach(function(selector) {
+        warnFormFieldMap[selector].forEach(function(f) {
+            var el = document.getElementById(f.id);
+            if (!el) return;
+            var eventType = el.tagName === 'SELECT' ? 'change' : 'input';
+            el.addEventListener(eventType, function() { App.clearFieldError(f.id, selector); });
+            el.addEventListener('blur', function() { App.validateField(f, selector); });
+        });
+    });
+})();
+</script>
+</body>
+</html>

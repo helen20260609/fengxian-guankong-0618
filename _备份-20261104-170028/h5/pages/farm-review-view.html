@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>排查结果详情</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.view-body { flex: 1; overflow-y: auto; padding: 14px 14px calc(14px + var(--safe-bottom)); background: var(--bg); }
+.page-hero { padding-bottom: 58px; }
+.page-hero .ph-sub { position: absolute; left: 50%; top: calc(34px + 16px + 36px); transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; z-index: 2; }
+
+.section { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.section .sec-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.section .sec-title::before { content: ''; width: 3px; height: 14px; background: var(--primary); border-radius: 2px; }
+.section-num { color: var(--primary); font-weight: 600; margin-right: 6px; }
+
+.field-item { margin-bottom: 12px; }
+.field-item:last-child { margin-bottom: 0; }
+.field-item .fi-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.field-item .fi-value { font-size: 13px; color: var(--text-primary); font-weight: 500; line-height: 1.6; }
+.field-item .fi-value.empty { color: var(--text2); font-weight: 400; }
+
+/* 基本信息紧凑行样式（与排查页一致） */
+.field-item.inline { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; margin-bottom: 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.field-item.inline:last-child { border-bottom: none; }
+.field-item.inline .fi-label { font-size: 13px; margin-bottom: 0; color: var(--text2); font-weight: 500; }
+.field-item.inline .fi-value { font-size: 13px; text-align: right; word-break: break-all; max-width: 60%; font-weight: 500; }
+.field-item.inline .fi-value.empty { font-style: normal; }
+
+.pill-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { padding: 4px 10px; border-radius: 12px; font-size: 12px; background: var(--bg); color: var(--text2); border: 1px solid var(--border); }
+.pill.active { background: rgba(26,115,232,.1); color: var(--primary); border-color: var(--primary); }
+.pill.active.danger { background: rgba(217,48,37,.12); color: #d93025; border-color: #d93025; }
+.pill.active.warning { background: rgba(249,171,0,.15); color: #c68400; border-color: #f9ab00; }
+.pill.active.safe { background: rgba(24,128,56,.12); color: #188038; border-color: #188038; }
+.pill.active.info { background: rgba(26,115,232,.1); color: #1a73e8; border-color: #1a73e8; }
+
+.photo-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo-item { width: 78px; height: 78px; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid var(--border); background: var(--bg); }
+.photo-item img { width: 100%; height: 100%; object-fit: cover; }
+.photo-item .pi-tag { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); color: #fff; font-size: 10px; text-align: center; padding: 2px 0; }
+
+.checkin-card { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.checkin-card .sec-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.checkin-card .sec-title::before { content: ''; width: 3px; height: 14px; background: var(--primary); border-radius: 2px; }
+.checkin-card .sec-title .ck-status { margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 8px; }
+.ck-status.ck-done { background: rgba(24,128,56,.12); color: #188038; }
+.ck-status.ck-far { background: rgba(217,48,37,.12); color: #d93025; }
+.checkin-info { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
+.checkin-info .ck-row { display: flex; font-size: 12px; margin-top: 6px; }
+.checkin-info .ck-row:first-child { margin-top: 0; }
+.checkin-info .ck-label { width: 72px; flex-shrink: 0; color: var(--text2); }
+.checkin-info .ck-value { flex: 1; color: var(--text-primary); word-break: break-all; }
+.checkin-info .ck-value.far { color: #d93025; font-weight: 600; }
+.checkin-info .ck-value.ok { color: #188038; font-weight: 600; }
+
+.ck-map-wrap { margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+#ckMap { width: 100%; height: 180px; }
+.ck-map-legend { display: flex; gap: 14px; padding: 6px 10px; background: var(--bg); font-size: 11px; color: var(--text2); }
+.ck-map-legend .lg-item { display: flex; align-items: center; gap: 4px; }
+.ck-map-legend .lg-dot { width: 8px; height: 8px; border-radius: 50%; }
+.lg-dot.lg-house { background: #1a73e8; }
+.lg-dot.lg-checkin { background: #188038; }
+.lg-dot.lg-line { width: 14px; height: 2px; border-radius: 0; background: #d93025; }
+
+.ck-marker { position: relative; }
+.ck-marker .ckm-pin { width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; }
+.ck-marker .ckm-pin i { transform: rotate(45deg); color: #fff; font-size: 12px; }
+.ck-marker.ckm-house .ckm-pin { background: #1a73e8; }
+.ck-marker.ckm-checkin .ckm-pin { background: #188038; }
+
+.sign-block { padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); margin-bottom: 8px; }
+.sign-block .sb-title { font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+.sign-block .sb-content { font-size: 13px; color: var(--text-primary); }
+.sign-block .sb-meta { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+.submit-info { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.submit-info .si-row { display: flex; font-size: 12px; margin-top: 6px; }
+.submit-info .si-row:first-child { margin-top: 0; }
+.submit-info .si-row.full { display: block; }
+.submit-info .si-row.full .si-value { font-size: 13px; line-height: 1.5; }
+.submit-info .si-row.full .si-value.si-no { font-size: 18px; font-weight: 700; color: var(--primary); font-family: 'Courier New', monospace; letter-spacing: 1px; }
+.submit-info .si-label { width: 72px; flex-shrink: 0; color: var(--text2); }
+.submit-info .si-value { flex: 1; color: var(--text-primary); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">排查结果详情</div>
+        <div class="ph-sub">农房回头看 · 奉贤区农村自建房</div>
+    </div>
+
+    <div class="view-body" id="viewBody">
+        <!-- 提交信息 -->
+        <div class="submit-info" id="submitInfo">
+            <div class="si-row full"><div class="si-value si-no" id="siHouseNo">—</div></div>
+            <div class="si-row full"><div class="si-value" id="siAddress">—</div></div>
+            <div class="si-row"><div class="si-label">提交时间</div><div class="si-value" id="siTime">—</div></div>
+        </div>
+
+        <!-- 现场打卡 -->
+        <div class="checkin-card" id="checkinCard" style="display:none">
+            <div class="sec-title">现场打卡 <span class="ck-status ck-done" id="ckStatus">已打卡</span></div>
+            <div class="checkin-info" id="checkinInfo">
+                <div class="ck-row"><div class="ck-label">打卡时间</div><div class="ck-value" id="ckTime">—</div></div>
+                <div class="ck-row"><div class="ck-label">打卡坐标</div><div class="ck-value" id="ckCoord">—</div></div>
+            </div>
+            <div class="ck-map-wrap" id="ckMapWrap">
+                <div id="ckMap"></div>
+                <div class="ck-map-legend">
+                    <div class="lg-item"><div class="lg-dot lg-house"></div>房屋图斑</div>
+                    <div class="lg-item"><div class="lg-dot lg-checkin"></div>现场打卡点</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 房屋底数 -->
+        <div class="section" id="section-basic">
+            <div class="sec-title"><span class="section-num">1.</span>房屋底数</div>
+            <div id="basicFields"></div>
+        </div>
+
+        <!-- 排查问题清单 -->
+        <div class="section" id="section-construction">
+            <div class="sec-title"><span class="section-num">2.</span>排查问题清单</div>
+            <div id="constructionFields"></div>
+        </div>
+
+        <!-- 现场照片 -->
+        <div class="section" id="section-photos">
+            <div class="sec-title"><span class="section-num">3.</span>现场照片</div>
+            <div id="photoFields"></div>
+        </div>
+    </div>
+
+    <!-- 返回顶部（必须在 .phone-shell 内，桌面端用 absolute 相对壳定位） -->
+    <div id="backToTop" class="fab" title="返回顶部">
+        <i class="fa-solid fa-arrow-up"></i>
+    </div>
+
+    </div>
+</div>
+
+<!-- 照片查看器（轮播） -->
+<div id="photoViewerMask" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:4000;align-items:center;justify-content:center;user-select:none;">
+    <img id="photoViewerImg" style="max-width:92vw;max-height:86vh;object-fit:contain;" draggable="false">
+    <div id="photoViewerClose" style="position:absolute;top:18px;right:18px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;z-index:2;"><i class="fa-solid fa-xmark"></i></div>
+    <div id="photoViewerPrev" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;z-index:2;"><i class="fa-solid fa-chevron-left"></i></div>
+    <div id="photoViewerNext" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;z-index:2;"><i class="fa-solid fa-chevron-right"></i></div>
+    <div id="photoViewerCounter" style="position:absolute;bottom:22px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.85);font-size:13px;letter-spacing:1px;background:rgba(0,0,0,.35);padding:4px 14px;border-radius:14px;z-index:2;">1 / 1</div>
+    <!-- 拍摄信息水印（参考截图样式） -->
+    <div id="photoViewerExif" style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent, rgba(0,0,0,.75));padding:40px 16px 16px;z-index:2;display:none;">
+        <div style="background:rgba(30,64,175,.88);border-radius:10px;padding:12px 14px;color:#fff;max-width:340px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.25);">
+                <span style="width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0;"></span>
+                <span style="font-size:15px;font-weight:600;letter-spacing:1px;">拍摄信息</span>
+            </div>
+            <div style="display:flex;font-size:13px;line-height:1.9;">
+                <span style="width:64px;flex-shrink:0;color:rgba(255,255,255,.75);">拍摄时间</span>
+                <span id="pvExifTime">—</span>
+            </div>
+            <div style="display:flex;font-size:13px;line-height:1.9;">
+                <span style="width:64px;flex-shrink:0;color:rgba(255,255,255,.75);">拍摄地址</span>
+                <span id="pvExifAddr">—</span>
+            </div>
+            <div style="display:flex;font-size:13px;line-height:1.9;">
+                <span style="width:64px;flex-shrink:0;color:rgba(255,255,255,.75);">经&nbsp;&nbsp;&nbsp;&nbsp;度</span>
+                <span id="pvExifLng">—</span>
+            </div>
+            <div style="display:flex;font-size:13px;line-height:1.9;">
+                <span style="width:64px;flex-shrink:0;color:rgba(255,255,255,.75);">纬&nbsp;&nbsp;&nbsp;&nbsp;度</span>
+                <span id="pvExifLat">—</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* 返回顶部按钮（桌面端 absolute 到 .phone-shell，真机端 fixed） */
+.fab#backToTop {
+    position: fixed;
+    right: 22px;
+    bottom: calc(32px + var(--safe-bottom));
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(26,115,232,.92);
+    color: #fff;
+    z-index: 3000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 4px 12px rgba(26,115,232,.35);
+    cursor: pointer;
+    transition: opacity .2s;
+}
+.fab#backToTop.show { display: flex; }
+@media screen and (min-width: 480px) {
+    .phone-shell .fab#backToTop {
+        position: absolute;
+        right: 20px;
+        bottom: calc(20px + var(--safe-bottom));
+    }
+}
+</style>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="../../js/house-arch-data.js"></script>
+<script>
+(function() {
+    var houseNo = (App.getQuery('no') || '').trim().toUpperCase();
+    var recordIndex = parseInt(App.getQuery('idx') || '-1', 10);
+    var record = null;
+    var house = null;
+
+    initHouseArchSeed();
+    if (houseNo) {
+        house = getHouseRecord(houseNo);
+    }
+
+    // 档案中找不到时，回退到排查记录数据（手工排查/PC 导入但未入档的房屋）
+    // 与 farm-review-inspect.html 的兜底逻辑保持一致
+    function buildHouseFromRecord(rec) {
+        if (!rec) return null;
+        return {
+            no: rec.houseNo,
+            name: rec.houseName || rec.houseNo,
+            owner: rec.owner || rec.houseOwner || '',
+            address: rec.houseAddress || rec.address || '',
+            street: rec.town || '',
+            community: rec.village || '',
+            village: rec.village || '',
+            preliminaryJudge: rec.initialJudgment || rec.inspectResult || rec.checkRemark || '',
+            appraisalConclusion: rec.appraisalResult || '',
+            district: rec.district || '',
+            groupName: rec.groupName || '',
+            roadName: rec.roadName || '',
+            buildingNo: rec.buildingNo || '',
+            overview: {
+                usage: rec.houseUsage || rec.usageType || '',
+                specificUsage: Array.isArray(rec.specificUsage) ? rec.specificUsage.join('、') : (rec.specificUsage || ''),
+                otherUsage: rec.otherUsage || '',
+                floors: rec.floors || rec.houseFloors || '',
+                buildingArea: rec.area || rec.buildingArea || '',
+                builtYear: rec.buildYear || ''
+            }
+        };
+    }
+    if (!house && houseNo) {
+        try {
+            var l0 = JSON.parse(localStorage.getItem('farm-review-records') || '[]');
+            var hit0 = l0.filter(function(x) { return (x.houseNo || '').toUpperCase() === houseNo; })[0];
+            if (hit0) house = buildHouseFromRecord(hit0);
+        } catch (e) {}
+    }
+
+    // ---------- 归一化风险等级 ----------
+    function normalizeRisk(lv) {
+        if (!lv) return '—';
+        if (/第三类|重大|疑似危房|严重损坏/.test(lv)) return '第三类';
+        if (/第二类|一般损坏|一般隐患|较大/.test(lv)) return '第二类';
+        if (/第一类|完好|基本完好|安全|无风险/.test(lv)) return '第一类';
+        return '第一类';
+    }
+
+    // 推送快照覆盖：H5 冻结在推送那一刻，PC 后续保存不影响手机端
+    function applySnapshot(rec) {
+        if (!rec || typeof rec !== 'object') return rec;
+        var snap = rec.pushedSnapshot;
+        if (!snap || typeof snap !== 'object') return rec;
+        var KEEP_KEYS = { houseNo: 1, status: 1, submitTime: 1, saveTime: 1, updateTime: 1, pushedTime: 1, pushCount: 1, checkin: 1, rectify: 1, pushedSnapshot: 1 };
+        var out = {};
+        Object.keys(rec).forEach(function(k) { out[k] = rec[k]; });
+        Object.keys(snap).forEach(function(k) {
+            if (KEEP_KEYS[k]) return;
+            out[k] = snap[k];
+        });
+        return out;
+    }
+
+    // ---------- 加载记录 ----------
+    function loadRecord(onDone) {
+        var list = [];
+        try { list = JSON.parse(localStorage.getItem('farm-review-records') || '[]'); } catch(e) {}
+        // 优先按索引取
+        if (recordIndex >= 0 && recordIndex < list.length) {
+            record = list[recordIndex];
+        } else if (houseNo) {
+            // 按 houseNo 找最新一条
+            var filtered = list.filter(function(r) { return r.houseNo === houseNo; });
+            if (filtered.length > 0) {
+                record = filtered[0];
+            }
+        }
+        if (record) {
+            // 推送快照覆盖：H5 冻结在推送那一刻，PC 后续保存不影响手机端
+            record = applySnapshot(record);
+            onDone && onDone();
+            return;
+        }
+        // 本地未命中：回源服务端单条接口（直接分享链接/清缓存后打开的场景）
+        if (houseNo) {
+            fetch('/api/farm-review-records/' + encodeURIComponent(houseNo))
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(rec) {
+                    if (rec && rec.houseNo) {
+                        // 推送快照覆盖
+                        record = applySnapshot(rec);
+                        // 档案无此房屋时，用排查记录兜底构建 house
+                        if (!house) house = buildHouseFromRecord(record);
+                        // 顺手写回本地缓存，下次秒开
+                        try {
+                            var l2 = JSON.parse(localStorage.getItem('farm-review-records') || '[]');
+                            if (!Array.isArray(l2)) l2 = [];
+                            l2 = l2.filter(function(x) { return x && x.houseNo !== rec.houseNo; });
+                            l2.unshift(rec);
+                            localStorage.setItem('farm-review-records', JSON.stringify(l2));
+                        } catch (e) {}
+                        onDone && onDone();
+                    } else {
+                        App.showToast('未找到排查记录');
+                        setTimeout(function() { App.back(); }, 1500);
+                    }
+                })
+                .catch(function() {
+                    App.showToast('未找到排查记录');
+                    setTimeout(function() { App.back(); }, 1500);
+                });
+            return;
+        }
+        App.showToast('未找到排查记录');
+        setTimeout(function() { App.back(); }, 1500);
+    }
+
+    function fmtTime(isoStr) {
+        if (!isoStr) return '—';
+        var d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' +
+               String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+
+    function fmtCoord(lat, lng) {
+        return lat.toFixed(6) + ', ' + lng.toFixed(6);
+    }
+
+    // ---------- 字段定义 ----------
+    var FIELD_DEFS = {
+        // 房屋底数（与排查页 tab1 只读展示一致，含区位字段）
+        basic: [
+            { key: 'district', label: '所在区' },
+            { key: 'town', label: '街镇' },
+            { key: 'village', label: '村居委' },
+            { key: 'groupName', label: '组' },
+            { key: 'roadName', label: '路' },
+            { key: 'buildingNo', label: '号栋' },
+            { key: 'usage', label: '房屋用途' },
+            { key: 'specificUsage', label: '具体用途' },
+            { key: 'otherUsage', label: '其他具体用途' },
+            { key: 'floors', label: '建筑层数' },
+            { key: 'buildingArea', label: '建筑面积' },
+            { key: 'builtYear', label: '建成时间' },
+            { key: 'preliminaryJudge', label: '初步判定' },
+            { key: 'appraisalConclusion', label: '鉴定结论' }
+        ],
+        // 排查问题清单（与排查页 tab2 的 17 项一致）
+        construction: [
+            { key: 'checkFindTime', label: '排查发现时间' },
+            { key: 'village', label: '村居委' },
+            { key: 'homesteadLocation', label: '宅基地位置门牌号' },
+            { key: 'uniqueId', label: '唯一标识' },
+            { key: 'houseOwner', label: '房屋产权人' },
+            { key: 'contactPhone', label: '联系电话' },
+            { key: 'buildYear', label: '房屋建造年份' },
+            { key: 'houseFloors', label: '房屋层数' },
+            { key: 'houseType', label: '房屋类型' },
+            { key: 'structuralProblems', label: '排查发现具体结构安全问题' },
+            { key: 'hazardLevel', label: '隐患等级' },
+            { key: 'tempControlMeasures', label: '现场落实临时管控措施', isArray: true },
+            { key: 'tempControlMeasuresOther', label: '其他临时管控措施' },
+            { key: 'ownerRectifyMeasures', label: '需产权人落实整改措施', isArray: true },
+            { key: 'ownerRectifyMeasuresOther', label: '其他整改措施' },
+            { key: 'rectifyDeadline', label: '计划整改完成时限' },
+            { key: 'inspectorName', label: '现场排查人员' },
+            { key: 'checkRemark', label: '备注' }
+        ],
+        safety: []
+    };
+
+    var PHOTO_CATS = [
+        { key: 'currentStatus', label: '现场照片' }
+    ];
+
+    // 兼容旧数据：若 record.photos 还含 damagePhoto（旧分类），显示时并入 currentStatus
+    function normalizePhotos(photos) {
+        photos = photos || {};
+        var cur = Array.isArray(photos.currentStatus) ? photos.currentStatus.slice() : [];
+        var dmg = Array.isArray(photos.damagePhoto) ? photos.damagePhoto : [];
+        if (dmg.length) cur = cur.concat(dmg);
+        return { currentStatus: cur };
+    }
+
+    // ---------- 渲染字段 ----------
+    function renderField(def, value, inline, data) {
+        var div = document.createElement('div');
+        div.className = 'field-item' + (inline ? ' inline' : '');
+        var label = document.createElement('div');
+        label.className = 'fi-label';
+        label.textContent = def.label;
+        div.appendChild(label);
+
+        var valueEl = document.createElement('div');
+        valueEl.className = 'fi-value';
+
+        if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+            valueEl.textContent = '--';
+            valueEl.classList.add('empty');
+        } else if (def.isArray && Array.isArray(value)) {
+            var pillGroup = document.createElement('div');
+            pillGroup.className = 'pill-group';
+            value.forEach(function(v) {
+                var pill = document.createElement('span');
+                pill.className = 'pill active';
+                if (/严重|危险|停止|拆改|大幅增加|开挖/.test(v)) pill.classList.add('danger');
+                else if (/一般|观察|处理/.test(v)) pill.classList.add('warning');
+                else if (/安全|完好|无|未见/.test(v)) pill.classList.add('safe');
+                pill.textContent = v;
+                pillGroup.appendChild(pill);
+            });
+            valueEl.appendChild(pillGroup);
+        } else if (def.key === 'structuralProblems') {
+            // 排查发现具体结构安全问题：优先按 hazards 数组逐行渲染；否则按 \n 拆分
+            var lines = [];
+            if (Array.isArray(data && data.hazards) && data.hazards.length) {
+                lines = data.hazards.map(function(h, i) {
+                    var parts = [];
+                    if (h.part) parts.push('【' + h.part + '】');
+                    if (h.description) parts.push(h.description);
+                    return (i + 1) + '. ' + parts.join(' ');
+                });
+            } else {
+                lines = String(value).split(/\r?\n/).map(function(s) { return s.trim(); }).filter(Boolean);
+                // 按行首数字编号排序（兼容 "1." "2." "10." 等前缀）
+                lines.sort(function(a, b) {
+                    var ma = a.match(/^(\d+)\s*[.、]/);
+                    var mb = b.match(/^(\d+)\s*[.、]/);
+                    var na = ma ? parseInt(ma[1], 10) : 0;
+                    var nb = mb ? parseInt(mb[1], 10) : 0;
+                    return na - nb;
+                });
+            }
+            lines.forEach(function(line) {
+                var row = document.createElement('div');
+                row.style.marginBottom = '4px';
+                row.textContent = line;
+                valueEl.appendChild(row);
+            });
+        } else if (def.key === 'hazardLevel') {
+            // 隐患等级：单值以 pill 徽标样式展示
+            var hv = String(value);
+            var pillGroup = document.createElement('div');
+            pillGroup.className = 'pill-group';
+            var pill = document.createElement('span');
+            pill.className = 'pill active';
+            if (/严重|危险/.test(hv)) pill.classList.add('danger');
+            else if (/一般/.test(hv)) pill.classList.add('warning');
+            else pill.classList.add('info');
+            pill.textContent = hv;
+            pillGroup.appendChild(pill);
+            valueEl.appendChild(pillGroup);
+        } else {
+            var text = String(value);
+            if (def.key === 'forBusiness') text = value === '是' ? '用于生产经营' : '非生产经营';
+            valueEl.textContent = text;
+        }
+
+        div.appendChild(valueEl);
+        return div;
+    }
+
+    function renderFields(containerId, defs, data, inline) {
+        var container = document.getElementById(containerId);
+        container.innerHTML = '';
+        defs.forEach(function(def) {
+            var value = data[def.key];
+            // answers 中的单选/多选
+            if (data.answers && data.answers[def.key] !== undefined) {
+                value = data.answers[def.key];
+            }
+            container.appendChild(renderField(def, value, inline, data));
+        });
+    }
+
+    // ---------- 渲染照片 ----------
+    var pvMask = null, pvImg = null;
+    var pvList = [], pvIndex = 0;
+    function pvRender() {
+        if (!pvImg) pvImg = document.getElementById('photoViewerImg');
+        pvImg.src = pvList[pvIndex];
+        var counter = document.getElementById('photoViewerCounter');
+        if (counter) counter.textContent = (pvIndex + 1) + ' / ' + pvList.length;
+        var multi = pvList.length > 1;
+        document.getElementById('photoViewerPrev').style.display = multi ? 'flex' : 'none';
+        document.getElementById('photoViewerNext').style.display = multi ? 'flex' : 'none';
+        counter.style.display = multi ? 'block' : 'none';
+        // 填充拍摄信息水印
+        renderViewerExif();
+    }
+    function renderViewerExif() {
+        var exifBox = document.getElementById('photoViewerExif');
+        if (!exifBox) return;
+        // 优先取照片自带 meta，其次取现场打卡数据，最后取记录/房屋地址
+        var photoMeta = null;
+        try {
+            var curList = (record && record.photos && record.photos.currentStatus) || [];
+            // 通过 src 反查当前照片对象
+            var src = pvList[pvIndex];
+            for (var i = 0; i < curList.length; i++) {
+                var p = curList[i];
+                if ((p.dataUrl || p.url || p) === src) { photoMeta = p; break; }
+            }
+        } catch (e) {}
+
+        var ck = (record && record.checkin) || {};
+        var time = (photoMeta && photoMeta.time) || ck.time || (record && record.submitTime) || '—';
+        var lat = (photoMeta && photoMeta.lat) || ck.lat || (record && record.lat) || '';
+        var lng = (photoMeta && photoMeta.lng) || ck.lng || (record && record.lng) || '';
+        var addr = (photoMeta && photoMeta.address) || ck.address || (record && record.houseAddress) || (house && house.address) || '—';
+
+        document.getElementById('pvExifTime').textContent = time;
+        document.getElementById('pvExifAddr').textContent = addr;
+        document.getElementById('pvExifLng').textContent = lng !== '' ? Number(lng).toFixed(14) : '—';
+        document.getElementById('pvExifLat').textContent = lat !== '' ? Number(lat).toFixed(14) : '—';
+        exifBox.style.display = 'block';
+    }
+    function pvStep(d) {
+        pvIndex = (pvIndex + d + pvList.length) % pvList.length;
+        pvRender();
+    }
+    function openPhotoViewer(src, list) {
+        if (!pvMask) pvMask = document.getElementById('photoViewerMask');
+        if (!pvMask) return;
+        pvList = (list && list.length) ? list.slice() : [src];
+        pvIndex = Math.max(0, pvList.indexOf(src));
+        pvRender();
+        pvMask.style.display = 'flex';
+    }
+    function closePhotoViewer() {
+        if (pvMask) pvMask.style.display = 'none';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        var m = document.getElementById('photoViewerMask');
+        if (!m) return;
+        m.addEventListener('click', function(ev) { if (ev.target === m) closePhotoViewer(); });
+        document.getElementById('photoViewerClose').addEventListener('click', function(ev) { ev.stopPropagation(); closePhotoViewer(); });
+        document.getElementById('photoViewerPrev').addEventListener('click', function(ev) { ev.stopPropagation(); pvStep(-1); });
+        document.getElementById('photoViewerNext').addEventListener('click', function(ev) { ev.stopPropagation(); pvStep(1); });
+        // 键盘左右切换
+        document.addEventListener('keydown', function(ev) {
+            if (m.style.display !== 'flex') return;
+            if (ev.key === 'ArrowLeft') pvStep(-1);
+            else if (ev.key === 'ArrowRight') pvStep(1);
+            else if (ev.key === 'Escape') closePhotoViewer();
+        });
+        // 触摸滑动切换
+        var touchX = null;
+        m.addEventListener('touchstart', function(ev) { touchX = ev.touches[0].clientX; }, { passive: true });
+        m.addEventListener('touchend', function(ev) {
+            if (touchX === null) return;
+            var dx = ev.changedTouches[0].clientX - touchX;
+            if (Math.abs(dx) > 40) pvStep(dx < 0 ? 1 : -1);
+            touchX = null;
+        }, { passive: true });
+    });
+    function renderPhotos(containerId, photos) {
+        var container = document.getElementById(containerId);
+        container.innerHTML = '';
+        var hasAny = false;
+
+        PHOTO_CATS.forEach(function(cat) {
+            var catPhotos = photos[cat.key] || [];
+            if (catPhotos.length === 0) return;
+            hasAny = true;
+
+            var catDiv = document.createElement('div');
+            catDiv.className = 'field-item';
+
+            var grid = document.createElement('div');
+            grid.className = 'photo-grid';
+            var catSrcList = catPhotos.map(function(p) { return p.dataUrl || p.url || p; });
+            catPhotos.forEach(function(p, idx) {
+                var item = document.createElement('div');
+                item.className = 'photo-item';
+                item.style.cursor = 'zoom-in';
+                var img = document.createElement('img');
+                img.src = catSrcList[idx];
+                img.onerror = function() { this.style.display = 'none'; };
+                item.appendChild(img);
+                item.addEventListener('click', function() { openPhotoViewer(catSrcList[idx], catSrcList); });
+                if (cat.facadeLabels && idx < cat.facadeLabels.length) {
+                    var tag = document.createElement('div');
+                    tag.className = 'pi-tag';
+                    tag.textContent = cat.facadeLabels[idx] + '面';
+                    item.appendChild(tag);
+                }
+                grid.appendChild(item);
+            });
+            catDiv.appendChild(grid);
+            container.appendChild(catDiv);
+        });
+
+        if (!hasAny) {
+            // 示意：无照片时显示占位示意图（可点击放大查看，演示放大功能）
+            var demoDiv = document.createElement('div');
+            demoDiv.className = 'field-item';
+            var demoGrid = document.createElement('div');
+            demoGrid.className = 'photo-grid';
+            var demoList = [];
+            [{ t: '房屋正面', c1: '#a8c5a0', c2: '#7ba371' },
+             { t: '房屋侧面', c1: '#9db8d2', c2: '#6f8fb0' },
+             { t: '庭院环境', c1: '#d2b89d', c2: '#b08f6f' }].forEach(function(d) {
+                var item = document.createElement('div');
+                item.className = 'photo-item';
+                item.style.cursor = 'zoom-in';
+                var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="156" height="156">'
+                    + '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+                    + '<stop offset="0" stop-color="' + d.c1 + '"/><stop offset="1" stop-color="' + d.c2 + '"/>'
+                    + '</linearGradient></defs>'
+                    + '<rect width="156" height="156" fill="url(#g)"/>'
+                    + '<text x="78" y="82" text-anchor="middle" fill="rgba(255,255,255,.9)" font-size="15" font-family="sans-serif">' + d.t + '</text>'
+                    + '<text x="78" y="104" text-anchor="middle" fill="rgba(255,255,255,.65)" font-size="11" font-family="sans-serif">点击放大</text>'
+                    + '</svg>';
+                var src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+                demoList.push(src);
+                var img = document.createElement('img');
+                img.src = src;
+                item.appendChild(img);
+                item.addEventListener('click', function() { openPhotoViewer(src, demoList); });
+                demoGrid.appendChild(item);
+            });
+            demoDiv.appendChild(demoGrid);
+            container.appendChild(demoDiv);
+        }
+    }
+
+    // ---------- 渲染打卡信息 ----------
+    function renderCheckin() {
+        var card = document.getElementById('checkinCard');
+        var rec = record.checkin;
+        if (!rec || !rec.lat) {
+            card.style.display = 'none';
+            return;
+        }
+        card.style.display = 'block';
+        document.getElementById('ckTime').textContent = rec.time || '—';
+        document.getElementById('ckCoord').textContent = fmtCoord(rec.lat, rec.lng);
+
+        var houseRec = null;
+        if (house && house.lat && house.lng) {
+            houseRec = house;
+        } else if (record.houseNo) {
+            houseRec = getHouseRecord(record.houseNo);
+        }
+        // 记录自带的房屋坐标兜底（imported/demo 数据可能不在档案里）
+        if ((!houseRec || !houseRec.lat || !houseRec.lng) && record.houseLat && record.houseLng) {
+            houseRec = { lat: record.houseLat, lng: record.houseLng };
+        }
+
+        renderCkMap(rec.lat, rec.lng, houseRec);
+    }
+
+    function distanceMeters(lat1, lng1, lat2, lng2) {
+        var R = 6371000;
+        var rad = Math.PI / 180;
+        var dLat = (lat2 - lat1) * rad;
+        var dLng = (lng2 - lng1) * rad;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    // ---------- 打卡小地图 ----------
+    var ckMap = null;
+    var ckMapLayers = [];
+
+    function createCkIcon(cls, icon) {
+        return L.divIcon({
+            className: '',
+            html: '<div class="ck-marker ' + cls + '"><div class="ckm-pin"><i class="fa-solid ' + icon + '"></i></div></div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 28]
+        });
+    }
+
+    function ensureCkMap() {
+        if (!ckMap) {
+            ckMap = L.map('ckMap', { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+            L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+                maxZoom: 19, subdomains: '1234'
+            }).addTo(ckMap);
+        }
+        return ckMap;
+    }
+
+    function renderCkMap(checkinLat, checkinLng, houseRec) {
+        var map = ensureCkMap();
+        ckMapLayers.forEach(function(l) { map.removeLayer(l); });
+        ckMapLayers = [];
+        var points = [];
+
+        if (houseRec && houseRec.lat && houseRec.lng) {
+            points.push([houseRec.lat, houseRec.lng]);
+            ckMapLayers.push(L.marker([houseRec.lat, houseRec.lng], { icon: createCkIcon('ckm-house', 'fa-house') }).addTo(map));
+        }
+        if (typeof checkinLat === 'number' && typeof checkinLng === 'number') {
+            points.push([checkinLat, checkinLng]);
+            ckMapLayers.push(L.marker([checkinLat, checkinLng], { icon: createCkIcon('ckm-checkin', 'fa-location-crosshairs') }).addTo(map));
+        }
+
+        if (points.length === 0) {
+            map.setView([30.92, 121.47], 12);
+        } else if (points.length === 1) {
+            map.setView(points[0], 14);
+        } else {
+            map.fitBounds(L.latLngBounds(points).pad(0.5));
+        }
+    }
+
+    // ---------- 主渲染 ----------
+    function render() {
+        if (!record) return;
+
+        // 提交信息
+        document.getElementById('siHouseNo').textContent = record.houseNo || '—';
+        var address = record.houseAddress || (house && house.address) || '—';
+        document.getElementById('siAddress').textContent = address;
+        document.getElementById('siTime').textContent = fmtTime(record.submitTime);
+
+        renderCheckin();
+        // 房屋底数取记录保存的区位字段 + 档案 overview（与排查页 tab1 只读展示一致）
+        var ov = (house && house.overview) ? house.overview : {};
+        var basicData = {
+            district: record.district || (house && house.district) || '奉贤区',
+            town: record.town || (house && (house.town || house.street)) || '',
+            village: (house && (house.village || house.community)) || record.villageName || '',
+            groupName: record.groupName || (house && house.groupName) || '',
+            roadName: record.roadName || (house && house.roadName) || '',
+            buildingNo: record.buildingNo || (house && house.buildingNo) || '',
+            usage: ov.usage || (house && house.usageType) || '',
+            specificUsage: ov.specificUsage || '',
+            otherUsage: ov.otherUsage || '',
+            floors: ov.floors ? ov.floors + (String(ov.floors).indexOf('层') > -1 ? '' : '层') : (house && house.floors) || '',
+            buildingArea: ov.buildingArea ? ov.buildingArea + (String(ov.buildingArea).indexOf('m') > -1 ? '' : ' m²') : '',
+            builtYear: ov.builtYear || (house && house.year ? house.year + ' 年' : ''),
+            preliminaryJudge: (house && house.preliminaryJudge) || '',
+            appraisalConclusion: (house && house.appraisalConclusion) || ''
+        };
+        renderFields('basicFields', FIELD_DEFS.basic, basicData, true);
+        // 问题清单直接取提交记录（排查页 collectData 已将字段平铺到 result 顶层）
+        // 唯一标识：若记录中未填写，回退显示当前唯一标识（与排查页默认行为一致）
+        // 排查发现时间：若记录中未填写，回退显示当前月份（与排查页默认值一致）
+        var constructionData = record;
+        var needPatch = false;
+        var patch = {};
+        if ((!record.uniqueId || String(record.uniqueId).trim() === '') && house && house.no) {
+            patch.uniqueId = house.no;
+            needPatch = true;
+        }
+        if (!record.checkFindTime || String(record.checkFindTime).trim() === '') {
+            var now = new Date();
+            patch.checkFindTime = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+            needPatch = true;
+        }
+        if (needPatch) constructionData = Object.assign({}, record, patch);
+        renderFields('constructionFields', FIELD_DEFS.construction, constructionData);
+        renderPhotos('photoFields', normalizePhotos(record.photos));
+    }
+
+    loadRecord(function() { if (record) render(); });
+
+    // ---------- 返回顶部 ----------
+    (function() {
+        var viewBody = document.getElementById('viewBody');
+        var btn = document.getElementById('backToTop');
+        if (!viewBody || !btn) return;
+        viewBody.addEventListener('scroll', function() {
+            if (viewBody.scrollTop > 200) btn.classList.add('show');
+            else btn.classList.remove('show');
+        });
+        btn.addEventListener('click', function() {
+            viewBody.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    })();
+})();
+</script>
+</body>
+</html>

@@ -443,11 +443,52 @@ body.tp-embed > .stat-row, body.tp-embed > .analysis-card { display: none !impor
 <div class="modal-overlay" id="reminderModal">
     <div class="modal-container">
         <div class="modal-header">
-            <div class="modal-title"><i class="fas fa-bell" style="color: var(--primary);"></i> 报告交付提醒</div>
+            <div class="modal-title"><i class="fas fa-bell" style="color: var(--primary);"></i> 报告交付提醒
+                <button class="btn btn-outline" style="margin-left:12px;padding:4px 12px;font-size:12px;" onclick="openReminderRuleModal()"><i class="fas fa-cog"></i> 规则配置</button>
+            </div>
             <button class="modal-close" onclick="closeReminderModal()"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body" id="reminderModalBody">
             <!-- 内容通过 JS 填充 -->
+        </div>
+    </div>
+</div>
+
+<!-- 提醒规则配置弹窗 -->
+<div class="modal-overlay" id="reminderRuleModal">
+    <div class="modal-container" style="max-width: 480px;">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-cog" style="color: var(--primary);"></i> 提醒规则配置</div>
+            <button class="modal-close" onclick="closeReminderRuleModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="padding: 20px;">
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+                    <input type="checkbox" id="ruleEnabled" style="width:16px;height:16px;">
+                    启用交付期限提醒
+                </label>
+            </div>
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">提前提醒天数（多个用逗号分隔）</label>
+                <input type="text" id="ruleDays" placeholder="如：7,3,1" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">在交付期限前 N 天生成提醒</div>
+            </div>
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+                    <input type="checkbox" id="ruleOverdueDaily" style="width:16px;height:16px;">
+                    逾期后每日提醒
+                </label>
+            </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+                    <input type="checkbox" id="ruleSms" style="width:16px;height:16px;">
+                    同时发送短信提醒（模拟）
+                </label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeReminderRuleModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveReminderRule()"><i class="fas fa-save"></i> 保存配置</button>
         </div>
     </div>
 </div>
@@ -1100,7 +1141,7 @@ function computeContractAnalysis(groupBy) {
         groups[key].count += 1;
         var amount = parseFloat(item.amount) || 0;
         groups[key].amount += amount;
-        if (item.status === '已完成') {
+        if (item.status === '已验收' || item.status === '已完成') {
             groups[key].finished += 1;
             groups[key].finishedAmount += amount;
         }
@@ -1222,10 +1263,53 @@ function getPeriodTag(servicePeriod, status) {
 }
 
 // 生成提醒列表：逾期 + 7天内 + 3天内 + 1天内
+// 提醒规则配置（localStorage 持久化）
+var REMINDER_RULE_KEY = 'tpReminderRule_v1';
+function getReminderRule() {
+    var def = { enabled: true, days: [7, 3, 1], overdueDaily: true, sms: true };
+    try {
+        var raw = localStorage.getItem(REMINDER_RULE_KEY);
+        if (raw) {
+            var r = JSON.parse(raw);
+            return { enabled: r.enabled !== false, days: Array.isArray(r.days) && r.days.length ? r.days : def.days, overdueDaily: r.overdueDaily !== false, sms: r.sms !== false };
+        }
+    } catch (e) {}
+    return def;
+}
+function openReminderRuleModal() {
+    var rule = getReminderRule();
+    document.getElementById('ruleEnabled').checked = rule.enabled;
+    document.getElementById('ruleDays').value = rule.days.join(',');
+    document.getElementById('ruleOverdueDaily').checked = rule.overdueDaily;
+    document.getElementById('ruleSms').checked = rule.sms;
+    document.getElementById('reminderRuleModal').classList.add('active');
+}
+function closeReminderRuleModal() {
+    document.getElementById('reminderRuleModal').classList.remove('active');
+}
+function saveReminderRule() {
+    var days = document.getElementById('ruleDays').value.split(/[,，\s]+/).map(function(s) { return parseInt(s, 10); }).filter(function(n) { return !isNaN(n) && n > 0; }).sort(function(a, b) { return b - a; });
+    if (!days.length) { alert('请至少填写一个有效的提前提醒天数'); return; }
+    var rule = {
+        enabled: document.getElementById('ruleEnabled').checked,
+        days: days,
+        overdueDaily: document.getElementById('ruleOverdueDaily').checked,
+        sms: document.getElementById('ruleSms').checked
+    };
+    localStorage.setItem(REMINDER_RULE_KEY, JSON.stringify(rule));
+    closeReminderRuleModal();
+    renderReminderList();
+    renderStatCards();
+    showTip('提醒规则已保存', 'success');
+}
+
 function generateReminders() {
     var reminders = [];
+    var rule = getReminderRule();
+    if (!rule.enabled) return reminders;
     var today = new Date();
     today.setHours(0, 0, 0, 0);
+    var maxDay = Math.max.apply(null, rule.days);
     Object.keys(contractData).forEach(function(id) {
         var c = contractData[id];
         if (!c || c.status === '已验收') return;
@@ -1241,23 +1325,16 @@ function generateReminders() {
             diffDays: diffDays
         };
         if (diffDays < 0) {
+            if (!rule.overdueDaily) return;
             item.type = 'overdue';
             item.dot = 'red';
             item.desc = '报告已逾期 ' + Math.abs(diffDays) + ' 天';
             reminders.push(item);
-        } else if (diffDays <= 1) {
-            item.type = 'urgent';
-            item.dot = 'red';
-            item.desc = '交付期限 ' + item.deadline + '（剩 ' + diffDays + ' 天）';
-            reminders.push(item);
-        } else if (diffDays <= 3) {
-            item.type = 'warning';
-            item.dot = 'orange';
-            item.desc = '交付期限 ' + item.deadline + '（剩 ' + diffDays + ' 天）';
-            reminders.push(item);
-        } else if (diffDays <= 7) {
-            item.type = 'notice';
-            item.dot = 'green';
+        } else if (rule.days.indexOf(diffDays) >= 0 || (diffDays <= maxDay && rule.days.some(function(d) { return diffDays <= d; }))) {
+            // 命中配置的提醒天数，或处于最大提醒窗口内按最接近级别归类
+            var level = diffDays <= 1 ? 'urgent' : (diffDays <= 3 ? 'warning' : 'notice');
+            item.type = level;
+            item.dot = level === 'urgent' ? 'red' : (level === 'warning' ? 'orange' : 'green');
             item.desc = '交付期限 ' + item.deadline + '（剩 ' + diffDays + ' 天）';
             reminders.push(item);
         }
@@ -1285,12 +1362,13 @@ function renderReminderList() {
         return;
     }
     var html = '<div class="remind-list">';
+    var rule = getReminderRule();
     reminders.forEach(function(r) {
         var push = latestReminderPush(r.contractId);
         var pushHtml = push ?
             '<div class="remind-push">' +
                 '<span class="push-tag"><i class="fas fa-bell"></i> 系统消息已推送</span>' +
-                (push.sms ? '<span class="push-tag sms"><i class="fas fa-comment-alt"></i> 短信' + push.sms.status + '（' + push.sms.phone + '）</span>' : '') +
+                (rule.sms && push.sms ? '<span class="push-tag sms"><i class="fas fa-comment-alt"></i> 短信' + push.sms.status + '（' + push.sms.phone + '）</span>' : '') +
                 '<span style="color:var(--text-secondary);">' + push.time + '</span>' +
             '</div>' :
             '<div class="remind-push"><span class="push-tag none">尚未推送</span></div>';

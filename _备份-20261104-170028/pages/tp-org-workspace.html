@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鉴定机构工作台 - 第三方服务机构</title>
+    <link rel="stylesheet" href="./all.min.css">
+    <link rel="stylesheet" href="./tp-common.css">
+    <script src="../js/third-party-data.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --primary-light: #e8f0fe;
+            --success: #1e8e3e;
+            --danger: #d93025;
+            --warning: #e37400;
+            --bg-dark: #f0f2f5;
+            --bg-card: #ffffff;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+            --shadow: rgba(0,0,0,0.08);
+            --radius: 8px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            padding: 16px;
+            font-size: 14px;
+        }
+        .page-container { max-width: 100%; margin: 0 auto; }
+        .page-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+        }
+        .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .org-switch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+        .org-switch select {
+            padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+            font-size: 13px; outline: none; min-width: 220px; background: #fff; font-family: inherit;
+        }
+        .org-switch select:focus { border-color: var(--primary); }
+
+        /* 消息提醒铃铛 */
+        .notify-wrap { position: relative; }
+        .notify-bell {
+            position: relative; width: 38px; height: 38px; border-radius: 50%;
+            background: var(--bg-card); border: 1px solid var(--border); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; color: var(--text-secondary); box-shadow: 0 1px 4px var(--shadow);
+            transition: all .15s;
+        }
+        .notify-bell:hover { color: var(--primary); border-color: var(--primary); }
+        .notify-badge {
+            position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px;
+            border-radius: 9px; background: var(--danger); color: #fff;
+            font-size: 10px; line-height: 17px; text-align: center; padding: 0 4px;
+            font-weight: 600; display: none;
+        }
+        .notify-panel {
+            position: absolute; top: 46px; right: 0; width: 400px; max-height: 480px;
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.15); z-index: 900; display: none;
+            flex-direction: column; overflow: hidden;
+        }
+        .notify-panel.show { display: flex; }
+        .notify-panel-header {
+            padding: 12px 16px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            font-size: 13px; font-weight: 600;
+        }
+        .notify-panel-header .read-all {
+            font-size: 12px; color: var(--primary); cursor: pointer; font-weight: 400;
+        }
+        .notify-panel-header .read-all:hover { text-decoration: underline; }
+        .notify-list { overflow-y: auto; flex: 1; }
+        .notify-item {
+            padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer;
+            display: flex; gap: 10px; align-items: flex-start;
+        }
+        .notify-item:hover { background: var(--primary-light); }
+        .notify-item:last-child { border-bottom: none; }
+        .notify-item.unread { background: #f0f7ff; }
+        .notify-item .level-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+        .notify-item .level-icon.overdue { background: rgba(217,48,37,0.12); color: var(--danger); }
+        .notify-item .level-icon.urgent { background: rgba(217,48,37,0.12); color: var(--danger); }
+        .notify-item .level-icon.warning { background: rgba(227,116,0,0.12); color: var(--warning); }
+        .notify-item .level-icon.notice { background: rgba(30,142,62,0.12); color: var(--success); }
+        .notify-item .n-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+        .notify-item.unread .n-title::after { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); margin-left: 6px; vertical-align: 2px; }
+        .notify-item .n-content { font-size: 12px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+        .notify-item .n-meta { font-size: 11px; color: var(--text-secondary); margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .notify-item .n-meta .sms-tag { color: var(--success); }
+        .notify-empty { text-align: center; padding: 40px 16px; color: var(--text-secondary); font-size: 13px; }
+
+        .stat-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .stat-chip {
+            flex: 1; min-width: 140px; background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 1px 4px var(--shadow);
+        }
+        .stat-chip .stat-icon {
+            width: 40px; height: 40px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; font-size: 18px;
+        }
+        .stat-chip .stat-num { font-size: 22px; font-weight: 700; line-height: 1.2; }
+        .stat-chip .stat-label { font-size: 12px; color: var(--text-secondary); }
+        .stat-icon.todo { background: rgba(227,116,0,0.12); color: var(--warning); }
+        .stat-icon.doing { background: rgba(30,142,62,0.12); color: var(--success); }
+        .stat-icon.done { background: rgba(26,115,232,0.12); color: var(--primary); }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 0 1px 4px var(--shadow);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(0,0,0,0.02);
+        }
+        .card-body { padding: 16px; }
+
+        .filter-row { display: flex; align-items: center; gap: 16px; flex-wrap: nowrap; }
+        .filter-row .filter-item { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+        .filter-row .filter-item label { white-space: nowrap; font-size: 13px; color: var(--text-secondary); }
+        .filter-row .filter-item select,
+        .filter-row .filter-item input {
+            padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+            background: #fff; color: var(--text-primary); font-size: 13px; outline: none;
+            min-width: 120px; height: 36px; font-family: inherit;
+        }
+        .filter-row .filter-item:first-child { flex: 0 0 220px; min-width: 180px; max-width: 260px; }
+        .filter-row .filter-item:first-child input { width: 100%; }
+        .filter-row .filter-actions { display: flex; gap: 8px; margin-left: auto; }
+        @media (max-width: 900px) {
+            .filter-row { flex-wrap: wrap; }
+            .filter-row .filter-actions { margin-left: 0; }
+        }
+
+        .btn {
+            padding: 9px 20px; border-radius: var(--radius); font-size: 14px; cursor: pointer;
+            border: none; display: inline-flex; align-items: center; gap: 6px;
+            transition: all 0.2s; font-family: inherit;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { background: #fff; border: 1px solid var(--border); color: var(--text-primary); }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-success:hover { filter: brightness(0.95); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { filter: brightness(0.95); }
+        .btn-sm { padding: 6px 12px; font-size: 13px; }
+        .empty-tip { text-align: center; color: var(--text-secondary); padding: 32px 0; }
+
+        .list-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .list-table thead th {
+            padding: 12px 16px; text-align: left; font-weight: 600;
+            color: var(--text-secondary); background: rgba(0,0,0,0.02);
+            border-bottom: 1px solid var(--border); white-space: nowrap;
+        }
+        .list-table tbody td {
+            padding: 14px 16px; color: var(--text-primary);
+            border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap;
+        }
+        .table-wrapper { overflow-x: auto; }
+        .table-link { color: var(--primary); text-decoration: none; font-size: 13px; margin: 0 6px 0 0; cursor: pointer; }
+        .table-link:hover { text-decoration: underline; }
+        .table-link.danger { color: var(--danger); }
+
+        .status-tag { display: inline-block; padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .status-tag.todo { background: rgba(227,116,0,0.12); color: var(--warning); }
+        .status-tag.accepted { background: rgba(30,142,62,0.12); color: var(--success); }
+        .status-tag.feedback { background: rgba(26,115,232,0.12); color: var(--primary); }
+        .status-tag.declined { background: rgba(95,99,104,0.12); color: var(--text-secondary); }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+            display: none; align-items: center; justify-content: center; z-index: 1000;
+            padding: 20px;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: var(--bg-card); border-radius: var(--radius); width: 100%; max-width: 640px;
+            max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;
+        }
+        .modal-header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .modal-body { padding: 16px; overflow-y: auto; }
+        .modal-footer { padding: 14px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .form-row-full { display: grid; grid-template-columns: 1fr; margin-bottom: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+        .form-group label .required { color: var(--danger); margin-left: 2px; }
+        .form-group label .label-tip { font-weight: 400; color: var(--text-secondary); font-size: 12px; margin-left: 4px; }
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+            font-size: 14px; font-family: inherit; outline: none; transition: border-color 0.2s; background: #fff;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+        .form-group textarea { resize: vertical; min-height: 72px; }
+        .value {
+            padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+            background: #f8f9fa; color: var(--text-primary); min-height: 38px; line-height: 1.4;
+        }
+        .selected-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .selected-chip {
+            background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary);
+            border-radius: 16px; padding: 4px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .selected-chip .remove { cursor: pointer; font-weight: bold; }
+        .group-badge {
+            display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 11px;
+            background: var(--primary); color: #fff; margin-right: 2px;
+        }
+        .group-badge.report { background: var(--success); }
+        input[type="file"] { padding: 6px; border: 1px dashed var(--primary); border-radius: var(--radius); background: var(--primary-light); color: var(--primary); }
+        input[type="file"]:hover { background: #dbe7fb; }
+        .feedback-log {
+            background: #f8f9fa; border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 10px 12px; font-size: 13px; color: var(--text-secondary); line-height: 1.6;
+            margin-top: 8px;
+        }
+        .feedback-log-title { font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+        .accept-tip {
+            background: var(--primary-light); border-radius: var(--radius); padding: 12px 14px;
+            font-size: 13px; color: var(--text-primary); line-height: 1.7; margin-bottom: 16px;
+        }
+        @media (max-width: 768px) {
+            .form-row { grid-template-columns: 1fr; }
+        }
+
+        /* ===== Toast 提示 ===== */
+        .toast-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 9999;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; visibility: hidden;
+            transition: opacity 0.25s;
+        }
+        .toast-overlay.show { opacity: 1; visibility: visible; }
+        .toast-card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+            width: 380px; max-width: 90vw;
+            overflow: hidden;
+            transform: translateY(12px) scale(0.96);
+            transition: transform 0.25s;
+        }
+        .toast-overlay.show .toast-card { transform: translateY(0) scale(1); }
+        .toast-body { padding: 32px 28px 24px; text-align: center; }
+        .toast-icon {
+            width: 56px; height: 56px; margin: 0 auto 16px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 28px;
+        }
+        .toast-icon.success { background: #e6f7ed; color: #16a34a; }
+        .toast-icon.warning { background: #fef3e2; color: #d97706; }
+        .toast-title { font-size: 17px; font-weight: 600; color: #111827; margin-bottom: 8px; }
+        .toast-message { font-size: 14px; color: #4b5563; line-height: 1.7; white-space: pre-line; }
+        .toast-footer { padding: 12px 20px 20px; }
+        .toast-btn {
+            width: 100%; height: 40px;
+            border: none; border-radius: 8px;
+            background: var(--primary, #2563eb); color: #fff;
+            font-size: 14px; font-weight: 500;
+            cursor: pointer; transition: filter 0.2s;
+        }
+        .toast-btn:hover { filter: brightness(1.08); }
+    </style>
+</head>
+<body>
+<!-- Toast 提示容器 -->
+<div class="toast-overlay" id="toastOverlay" onclick="if(event.target===this)hideToast()">
+    <div class="toast-card">
+        <div class="toast-body">
+            <div class="toast-icon" id="toastIcon"><i class="fa-solid fa-check"></i></div>
+            <div class="toast-title" id="toastTitle"></div>
+            <div class="toast-message" id="toastMessage"></div>
+        </div>
+        <div class="toast-footer">
+            <button class="toast-btn" onclick="hideToast()">我知道了</button>
+        </div>
+    </div>
+</div>
+<script>
+function showToast(type, title, message) {
+    var overlay = document.getElementById('toastOverlay');
+    var icon = document.getElementById('toastIcon');
+    document.getElementById('toastTitle').textContent = title;
+    document.getElementById('toastMessage').textContent = message || '';
+    icon.className = 'toast-icon ' + (type === 'warning' ? 'warning' : 'success');
+    icon.innerHTML = type === 'warning' ? '<i class="fa-solid fa-exclamation"></i>' : '<i class="fa-solid fa-check"></i>';
+    overlay.classList.add('show');
+}
+function hideToast() {
+    document.getElementById('toastOverlay').classList.remove('show');
+}
+</script>
+
+<div class="page-container">
+    <div class="page-header">
+        <div class="page-title"><i class="fas fa-building" style="color:var(--primary)"></i> 鉴定机构工作台</div>
+        <div style="display:flex; align-items:center; gap:14px;">
+            <div class="notify-wrap">
+                <div class="notify-bell" id="notifyBell" onclick="toggleNotifyPanel(event)" title="系统消息">
+                    <i class="fas fa-bell"></i>
+                    <span class="notify-badge" id="notifyBadge"></span>
+                </div>
+                <div class="notify-panel" id="notifyPanel">
+                    <div class="notify-panel-header">
+                        <span><i class="fas fa-bell" style="color:var(--primary)"></i> 系统消息</span>
+                        <span class="read-all" onclick="readAllNotifications()">全部已读</span>
+                    </div>
+                    <div class="notify-list" id="notifyList"></div>
+                </div>
+            </div>
+            <div class="org-switch">
+                <i class="fas fa-building" style="color:var(--primary)"></i>
+                <label for="orgSwitcher">当前机构</label>
+                <select id="orgSwitcher" onchange="onOrgSwitch()"></select>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-row" id="statRow"></div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="filter-row">
+                <div class="filter-item">
+                    <input type="text" id="filterKeyword" placeholder="需求编号 / 需求名称">
+                </div>
+                <div class="filter-item">
+                    <label>受理状态</label>
+                    <select id="filterStatus">
+                        <option value="">全部</option>
+                        <option value="todo">待响应</option>
+                        <option value="accepted">鉴定中</option>
+                        <option value="feedback">已反馈</option>
+                        <option value="declined">已谢绝</option>
+                    </select>
+                </div>
+                <div class="filter-actions">
+                    <button class="btn btn-primary btn-sm" onclick="renderTaskTable()"><i class="fas fa-search"></i> 查询</button>
+                    <button class="btn btn-outline btn-sm" onclick="resetFilter()"><i class="fas fa-rotate-left"></i> 重置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><i class="fas fa-list" style="color:var(--primary)"></i> 与本机构关联的委托记录</div>
+        <div class="table-wrapper">
+            <table class="list-table">
+                <thead>
+                    <tr>
+                        <th>需求编号</th>
+                        <th>需求名称</th>
+                        <th>专业领域</th>
+                        <th>委托人 / 单位</th>
+                        <th>委托时间</th>
+                        <th>受理状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="taskTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 查阅资料弹窗 -->
+<div class="modal-overlay" id="detailModal">
+    <div class="modal" style="max-width:720px;">
+        <div class="modal-header"><i class="fas fa-eye"></i> 委托资料查阅</div>
+        <div class="modal-body" id="detailBody"></div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeDetailModal()">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 出具鉴定成果弹窗 -->
+<div class="modal-overlay" id="reportModal">
+    <div class="modal" style="max-width:720px;">
+        <div class="modal-header"><i class="fas fa-paper-plane"></i> 出具鉴定成果</div>
+        <div class="modal-body">
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>鉴定结论 <span class="required">*</span></label>
+                    <textarea id="reportConclusion" placeholder="请输入鉴定结论，例如：经现场检测鉴定，该房屋承重结构满足安全使用要求，鉴定等级为B级..."></textarea>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>鉴定计划 <span class="label-tip">受理后拟定的鉴定方案、检测计划等</span></label>
+                    <input type="file" id="planAttachments" multiple onchange="handlePlanAttachments(this)">
+                    <div class="selected-list" id="planAttachmentList"></div>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>鉴定报告 <span class="label-tip">最终出具的鉴定报告及检测数据等</span></label>
+                    <input type="file" id="reportAttachments" multiple onchange="handleReportAttachments(this)">
+                    <div class="selected-list" id="reportAttachmentList"></div>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>备注说明</label>
+                    <textarea id="reportRemark" placeholder="可补充说明鉴定过程、依据标准等"></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeReportModal()">取消</button>
+            <button class="btn btn-success" onclick="submitReport()"><i class="fas fa-paper-plane"></i> 提交鉴定成果</button>
+        </div>
+    </div>
+</div>
+
+<!-- 接受委托确认弹窗 -->
+<div class="modal-overlay" id="acceptModal">
+    <div class="modal" style="max-width:520px;">
+        <div class="modal-header"><i class="fas fa-check-circle" style="color:var(--success);"></i> 接受鉴定委托</div>
+        <div class="modal-body">
+            <div class="accept-tip">
+                <i class="fas fa-info-circle" style="color:var(--primary)"></i>
+                接受委托后，贵机构可在线查阅该需求的委托资料（申请详情、附件材料），并上传鉴定计划、出具鉴定报告，成果将实时反馈给委托方。
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>需求编号</label>
+                    <div class="value" id="acceptTaskCode">—</div>
+                </div>
+            </div>
+            <div class="form-row-full" style="margin-bottom:0;">
+                <div class="form-group">
+                    <label>需求名称</label>
+                    <div class="value" id="acceptTaskName">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeAcceptModal()">再想想</button>
+            <button class="btn btn-success" onclick="confirmAccept()"><i class="fas fa-check"></i> 确认接受</button>
+        </div>
+    </div>
+</div>
+
+<!-- 谢绝委托弹窗 -->
+<div class="modal-overlay" id="declineModal">
+    <div class="modal" style="max-width:560px;">
+        <div class="modal-header"><i class="fas fa-times-circle" style="color:var(--danger);"></i> 谢绝鉴定委托</div>
+        <div class="modal-body">
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>需求编号</label>
+                    <div class="value" id="declineTaskCode">—</div>
+                </div>
+            </div>
+            <div class="form-row-full">
+                <div class="form-group">
+                    <label>常用谢绝原因</label>
+                    <select id="declinePreset" onchange="onDeclinePresetChange(this)">
+                        <option value="">-- 选择常用语快速填充 --</option>
+                        <option value="资质范围与该委托事项不符">资质范围与该委托事项不符</option>
+                        <option value="机构档期已满，无法按期完成鉴定">机构档期已满，无法按期完成鉴定</option>
+                        <option value="技术力量或设备条件不足，无法承接">技术力量或设备条件不足，无法承接</option>
+                        <option value="与委托方存在利益关联，主动回避">与委托方存在利益关联，主动回避</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row-full" style="margin-bottom:0;">
+                <div class="form-group">
+                    <label>谢绝原因 <span class="required">*</span></label>
+                    <textarea id="declineReason" rows="3" placeholder="请填写谢绝原因，便于委托方及时改派其他鉴定机构"></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeDeclineModal()">取消</button>
+            <button class="btn btn-danger" onclick="confirmDecline()"><i class="fas fa-times"></i> 确认谢绝</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    var taskList = [];
+    var orgPool = [];
+    var currentOrgName = '';
+    var actionTaskId = null;
+    var planTempAttachments = [];
+    var reportTempAttachments = [];
+    var STORAGE_KEY = 'expertDispatchTasks';
+    var API_URL = '/api/dispatch-tasks';
+
+    function loadTasks(callback) {
+        fetch(API_URL)
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                taskList = Array.isArray(data) ? data : [];
+                if (typeof callback === 'function') callback();
+            })
+            .catch(function(err) {
+                console.error('加载调度记录失败', err);
+                try {
+                    var saved = localStorage.getItem(STORAGE_KEY);
+                    if (saved) taskList = JSON.parse(saved);
+                } catch(e) {}
+                if (typeof callback === 'function') callback();
+            });
+    }
+
+    function saveTasks(callback) {
+        fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(taskList)
+        })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(taskList)); } catch(e) {}
+                }
+                if (typeof callback === 'function') callback();
+            })
+            .catch(function(err) {
+                console.error('保存调度记录失败', err);
+                try { localStorage.setItem(STORAGE_KEY, JSON.stringify(taskList)); } catch(e) {}
+                if (typeof callback === 'function') callback();
+            });
+    }
+
+    function nowText() {
+        return new Date().toISOString().slice(0,19).replace('T',' ');
+    }
+
+    function initOrgSwitcher() {
+        orgPool = (typeof getAllOrgs === 'function') ? getAllOrgs() : [];
+        var select = document.getElementById('orgSwitcher');
+        if (!orgPool.length) {
+            select.innerHTML = '<option value="">（暂无机构）</option>';
+            return;
+        }
+        select.innerHTML = orgPool.map(function(o) {
+            return '<option value="' + o.orgName + '">' + o.orgName + '</option>';
+        }).join('');
+        var saved = localStorage.getItem('wsCurrentOrg');
+        var names = orgPool.map(function(o) { return o.orgName; });
+        currentOrgName = (saved && names.indexOf(saved) >= 0) ? saved : names[0];
+        select.value = currentOrgName;
+    }
+
+    function onOrgSwitch() {
+        currentOrgName = document.getElementById('orgSwitcher').value;
+        localStorage.setItem('wsCurrentOrg', currentOrgName);
+        closeNotifyPanel();
+        renderStats();
+        renderTaskTable();
+        renderNotifyBadge();
+    }
+
+    // ==================== 系统消息（报告上传提醒） ====================
+    function currentOrgId() {
+        var org = (orgPool || []).find(function(o) { return o.orgName === currentOrgName; });
+        return org ? org.orgId : '';
+    }
+
+    function renderNotifyBadge() {
+        var badge = document.getElementById('notifyBadge');
+        if (!badge || typeof getUnreadNotificationCount !== 'function') return;
+        var orgId = currentOrgId();
+        var count = orgId ? getUnreadNotificationCount(orgId) : 0;
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = count > 0 ? 'block' : 'none';
+    }
+
+    function toggleNotifyPanel(event) {
+        if (event) event.stopPropagation();
+        var panel = document.getElementById('notifyPanel');
+        if (panel.classList.contains('show')) {
+            closeNotifyPanel();
+        } else {
+            renderNotifyList();
+            panel.classList.add('show');
+        }
+    }
+
+    function closeNotifyPanel() {
+        var panel = document.getElementById('notifyPanel');
+        if (panel) panel.classList.remove('show');
+    }
+
+    function renderNotifyList() {
+        var container = document.getElementById('notifyList');
+        var orgId = currentOrgId();
+        var list = (orgId && typeof getNotificationsByOrgId === 'function') ? getNotificationsByOrgId(orgId) : [];
+        if (!list.length) {
+            container.innerHTML = '<div class="notify-empty"><i class="fas fa-check-circle" style="font-size:26px; color:var(--success); margin-bottom:8px;"></i><p>暂无系统消息</p></div>';
+            return;
+        }
+        container.innerHTML = list.map(function(n) {
+            var smsText = (n.sms && n.sms.phone) ? '<span class="sms-tag"><i class="fas fa-comment-alt"></i> 短信' + n.sms.status + '（' + n.sms.phone + '）</span>' : '';
+            return '<div class="notify-item' + (n.read ? '' : ' unread') + '" onclick="readNotification(\'' + n.notificationId + '\')">' +
+                '<div class="level-icon ' + n.level + '"><i class="fas fa-file-upload"></i></div>' +
+                '<div style="flex:1;">' +
+                    '<div class="n-title">' + n.title + '</div>' +
+                    '<div class="n-content">' + n.content + '</div>' +
+                    '<div class="n-meta"><span><i class="far fa-clock"></i> ' + n.time + '</span>' + smsText + '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    function readNotification(notificationId) {
+        if (typeof markNotificationRead === 'function') markNotificationRead(notificationId);
+        renderNotifyBadge();
+        renderNotifyList();
+    }
+
+    function readAllNotifications() {
+        var orgId = currentOrgId();
+        if (orgId && typeof markAllNotificationsRead === 'function') markAllNotificationsRead(orgId);
+        renderNotifyBadge();
+        renderNotifyList();
+    }
+
+    document.addEventListener('click', function(e) {
+        var wrap = document.querySelector('.notify-wrap');
+        if (wrap && !wrap.contains(e.target)) closeNotifyPanel();
+    });
+
+    // 与本机构关联的任务：机构鉴定类申请，已分派给本机构（待分派/已驳回的机构不可见）
+    function myTasks() {
+        return taskList.filter(function(t) {
+            if (t.applyType !== 'org') return false;
+            if (t.status === 'pending' || t.status === 'rejected') return false;
+            return (t.experts || []).some(function(e) { return e.name === currentOrgName; });
+        });
+    }
+
+    function myResponse(task) {
+        return (task.responses || {})[currentOrgName] || null;
+    }
+
+    // 受理状态：待响应 / 鉴定中 / 已反馈 / 已谢绝
+    function myState(task) {
+        var resp = myResponse(task);
+        if (resp && resp.action === 'declined') return { key: 'declined', text: '已谢绝' };
+        if (task.status === 'feedback') return { key: 'feedback', text: '已反馈' };
+        if (resp && resp.action === 'accepted') return { key: 'accepted', text: '鉴定中' };
+        return { key: 'todo', text: '待响应' };
+    }
+
+    function renderStats() {
+        var list = myTasks();
+        var counts = { todo: 0, accepted: 0, feedback: 0 };
+        list.forEach(function(t) {
+            var s = myState(t).key;
+            if (counts[s] !== undefined) counts[s]++;
+        });
+        document.getElementById('statRow').innerHTML =
+            '<div class="stat-chip"><div class="stat-icon todo"><i class="fas fa-bell"></i></div><div><div class="stat-num">' + counts.todo + '</div><div class="stat-label">待响应委托</div></div></div>' +
+            '<div class="stat-chip"><div class="stat-icon doing"><i class="fas fa-spinner"></i></div><div><div class="stat-num">' + counts.accepted + '</div><div class="stat-label">鉴定中</div></div></div>' +
+            '<div class="stat-chip"><div class="stat-icon done"><i class="fas fa-check-circle"></i></div><div><div class="stat-num">' + counts.feedback + '</div><div class="stat-label">已反馈</div></div></div>';
+    }
+
+    function renderTaskTable() {
+        var keyword = document.getElementById('filterKeyword').value.trim();
+        var status = document.getElementById('filterStatus').value;
+        var list = myTasks().filter(function(t) {
+            if (keyword && (t.code || t.id).indexOf(keyword) < 0 && (t.name || '').indexOf(keyword) < 0) return false;
+            if (status && myState(t).key !== status) return false;
+            return true;
+        });
+        var tbody = document.getElementById('taskTableBody');
+        if (!list.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-tip">暂无与本机构关联的委托记录</td></tr>';
+            return;
+        }
+        tbody.innerHTML = list.map(function(t) {
+            var s = myState(t);
+            var ops = '';
+            if (s.key === 'todo') {
+                ops = '<a class="table-link" onclick="openAcceptModal(\'' + t.id + '\')">接受委托</a>' +
+                      '<a class="table-link danger" onclick="openDeclineModal(\'' + t.id + '\')">谢绝</a>';
+            } else if (s.key === 'accepted') {
+                ops = '<a class="table-link" onclick="openDetailModal(\'' + t.id + '\')">查阅资料</a>' +
+                      '<a class="table-link" onclick="openReportModal(\'' + t.id + '\')">出具鉴定成果</a>';
+            } else if (s.key === 'feedback') {
+                ops = '<a class="table-link" onclick="openDetailModal(\'' + t.id + '\')">查阅资料</a>';
+            } else {
+                ops = '<span style="color:var(--text-secondary);font-size:12px;">已通知委托方改派</span>';
+            }
+            return '<tr>' +
+                '<td>' + (t.code || t.id) + '</td>' +
+                '<td>' + (t.name || '—') + '</td>' +
+                '<td>' + (t.domain || '—') + '</td>' +
+                '<td>' + (t.requester || '—') + '</td>' +
+                '<td>' + (t.createTime || '—') + '</td>' +
+                '<td><span class="status-tag ' + s.key + '">' + s.text + '</span></td>' +
+                '<td>' + ops + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    function resetFilter() {
+        document.getElementById('filterKeyword').value = '';
+        document.getElementById('filterStatus').value = '';
+        renderTaskTable();
+    }
+
+    /* ========== 接受委托 ========== */
+    function openAcceptModal(id) {
+        actionTaskId = id;
+        var task = taskList.find(function(t) { return t.id === id; });
+        if (!task) return;
+        document.getElementById('acceptTaskCode').textContent = task.code || task.id;
+        document.getElementById('acceptTaskName').textContent = task.name || '—';
+        document.getElementById('acceptModal').classList.add('show');
+    }
+
+    function closeAcceptModal() {
+        document.getElementById('acceptModal').classList.remove('show');
+        actionTaskId = null;
+    }
+
+    function confirmAccept() {
+        var task = taskList.find(function(t) { return t.id === actionTaskId; });
+        if (!task) { closeAcceptModal(); return; }
+        task.responses = task.responses || {};
+        task.responses[currentOrgName] = { action: 'accepted', time: nowText() };
+        task.updateTime = nowText();
+        saveTasks(function() {
+            closeAcceptModal();
+            renderStats();
+            renderTaskTable();
+            showToast('success', '已接受委托', '现在可以在线查阅委托资料\n并上传鉴定计划、出具鉴定报告');
+        });
+    }
+
+    /* ========== 谢绝委托 ========== */
+    function openDeclineModal(id) {
+        actionTaskId = id;
+        var task = taskList.find(function(t) { return t.id === id; });
+        if (!task) return;
+        document.getElementById('declineTaskCode').textContent = task.code || task.id;
+        document.getElementById('declinePreset').value = '';
+        document.getElementById('declineReason').value = '';
+        document.getElementById('declineModal').classList.add('show');
+    }
+
+    function closeDeclineModal() {
+        document.getElementById('declineModal').classList.remove('show');
+        actionTaskId = null;
+    }
+
+    function onDeclinePresetChange(sel) {
+        if (sel.value) document.getElementById('declineReason').value = sel.value;
+    }
+
+    function confirmDecline() {
+        var reason = document.getElementById('declineReason').value.trim();
+        if (!reason) { showToast('warning', '请填写原因', '请填写谢绝原因，便于委托方及时改派其他鉴定机构'); return; }
+        var task = taskList.find(function(t) { return t.id === actionTaskId; });
+        if (!task) { closeDeclineModal(); return; }
+        task.responses = task.responses || {};
+        task.responses[currentOrgName] = { action: 'declined', reason: reason, time: nowText() };
+        task.updateTime = nowText();
+        saveTasks(function() {
+            closeDeclineModal();
+            renderStats();
+            renderTaskTable();
+            showToast('success', '已谢绝委托', '已通知委托方\n可改派其他鉴定机构');
+        });
+    }
+
+    /* ========== 查阅资料 ========== */
+    function attachmentGroupBadge(a) {
+        if (a && a.group === 'plan') return '<span class="group-badge">鉴定计划</span>';
+        if (a && a.group === 'report') return '<span class="group-badge report">鉴定报告</span>';
+        return '';
+    }
+
+    function openDetailModal(id) {
+        var task = taskList.find(function(t) { return t.id === id; });
+        if (!task) return;
+        window._detailTask = task;
+        var s = myState(task);
+        var html = '<div class="form-row"><div class="form-group"><label>需求编号</label><div class="value">' + (task.code || task.id) + '</div></div><div class="form-group"><label>受理状态</label><div class="value"><span class="status-tag ' + s.key + '">' + s.text + '</span></div></div></div>' +
+            '<div class="form-row"><div class="form-group"><label>需求名称</label><div class="value">' + (task.name || '—') + '</div></div><div class="form-group"><label>专业领域</label><div class="value">' + (task.domain || '—') + '</div></div></div>' +
+            '<div class="form-row-full"><div class="form-group"><label>鉴定目的</label><div class="value">' + (task.purpose || '—') + '</div></div></div>' +
+            '<div class="form-row-full"><div class="form-group"><label>鉴定要求</label><div class="value">' + (task.requirement || '—') + '</div></div></div>' +
+            '<div class="form-row"><div class="form-group"><label>委托来源</label><div class="value">' + (task.requestSource || '—') + '</div></div><div class="form-group"><label>委托人 / 单位</label><div class="value">' + (task.requester || '—') + '</div></div></div>' +
+            '<div class="form-row"><div class="form-group"><label>委托方联系方式</label><div class="value">' + (task.contact || '—') + '</div></div><div class="form-group"><label>所需机构数</label><div class="value">' + (task.count || '—') + '</div></div></div>';
+        if ((task.attachments || []).length) {
+            html += '<div class="form-row-full"><div class="form-group"><label>委托资料 / 附件材料</label><div class="selected-list">' + task.attachments.map(function(a, i) {
+                return '<span class="selected-chip" style="cursor:pointer;" onclick="viewTaskAttachment(' + i + ')" title="点击在线查看"><i class="fas fa-file"></i> ' + a.name + ' <i class="fas fa-eye" style="font-size:11px;opacity:0.6;"></i></span>';
+            }).join('') + '</div></div></div>';
+        }
+        if (task.remark) {
+            html += '<div class="form-row-full"><div class="form-group"><label>需求说明</label><div class="value">' + task.remark + '</div></div></div>';
+        }
+        if (task.feedback) {
+            html += '<div class="feedback-log"><div class="feedback-log-title"><i class="fas fa-paper-plane"></i> 本机构鉴定成果</div>' +
+                '<div>提交时间：' + task.feedback.time + '</div>' +
+                '<div>鉴定结论：' + (task.feedback.conclusion || '—') + '</div>' +
+                '<div>备注：' + (task.feedback.remark || '—') + '</div>';
+            if ((task.feedback.attachments || []).length) {
+                html += '<div>鉴定成果附件：' + task.feedback.attachments.map(function(a, i){ return attachmentGroupBadge(a) + '<a href="javascript:void(0)" onclick="viewFeedbackAttachment(' + i + ')" style="color:var(--primary);cursor:pointer;" title="点击在线查看">' + a.name + '</a>'; }).join('、') + '</div>';
+            }
+            html += '</div>';
+        }
+        document.getElementById('detailBody').innerHTML = html;
+        document.getElementById('detailModal').classList.add('show');
+    }
+
+    function closeDetailModal() {
+        document.getElementById('detailModal').classList.remove('show');
+    }
+
+    // 在线查看附件：转 Blob 新窗口打开（图片/PDF 等浏览器可直接预览的类型）
+    function openAttachmentOnline(file) {
+        if (!file) return;
+        if (!file.data) { showToast('warning', '暂无法在线查看', '该附件只有文件名记录，未包含文件内容（可能是早期数据）'); return; }
+        try {
+            var parts = file.data.split(',');
+            var mime = (parts[0].match(/data:(.*?)(;|$)/) || [])[1] || 'application/octet-stream';
+            var bin = atob(parts[1]);
+            var arr = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            var blobUrl = URL.createObjectURL(new Blob([arr], { type: mime }));
+            window.open(blobUrl, '_blank');
+        } catch (err) {
+            window.open(file.data, '_blank');
+        }
+    }
+
+    function viewTaskAttachment(idx) {
+        var task = window._detailTask;
+        if (!task) return;
+        openAttachmentOnline((task.attachments || [])[idx]);
+    }
+
+    function viewFeedbackAttachment(idx) {
+        var task = window._detailTask;
+        if (!task || !task.feedback) return;
+        openAttachmentOnline((task.feedback.attachments || [])[idx]);
+    }
+
+    /* ========== 出具鉴定成果 ========== */
+    function openReportModal(id) {
+        actionTaskId = id;
+        planTempAttachments = [];
+        reportTempAttachments = [];
+        document.getElementById('reportConclusion').value = '';
+        document.getElementById('reportRemark').value = '';
+        renderPlanAttachmentList();
+        renderReportAttachmentList();
+        document.getElementById('reportModal').classList.add('show');
+    }
+
+    function closeReportModal() {
+        document.getElementById('reportModal').classList.remove('show');
+        actionTaskId = null;
+    }
+
+    function readFilesToBase64(inputFiles, callback) {
+        var results = [];
+        if (!inputFiles || !inputFiles.length) { callback(results); return; }
+        var pending = inputFiles.length;
+        Array.prototype.forEach.call(inputFiles, function(file) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                results.push({ name: file.name, size: file.size, type: file.type, data: e.target.result });
+                pending--;
+                if (pending === 0) callback(results);
+            };
+            reader.onerror = function() {
+                pending--;
+                if (pending === 0) callback(results);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function handlePlanAttachments(input) {
+        readFilesToBase64(input.files, function(files) {
+            planTempAttachments = planTempAttachments.concat(files);
+            renderPlanAttachmentList();
+        });
+        input.value = '';
+    }
+
+    function renderPlanAttachmentList() {
+        var container = document.getElementById('planAttachmentList');
+        if (!planTempAttachments.length) { container.innerHTML = ''; return; }
+        container.innerHTML = planTempAttachments.map(function(a, idx) {
+            return '<span class="selected-chip"><i class="fas fa-file"></i> ' + a.name + ' <span class="remove" onclick="removePlanAttachment(' + idx + ')">×</span></span>';
+        }).join('');
+    }
+
+    function removePlanAttachment(idx) {
+        planTempAttachments.splice(idx, 1);
+        renderPlanAttachmentList();
+    }
+
+    function handleReportAttachments(input) {
+        readFilesToBase64(input.files, function(files) {
+            reportTempAttachments = reportTempAttachments.concat(files);
+            renderReportAttachmentList();
+        });
+        input.value = '';
+    }
+
+    function renderReportAttachmentList() {
+        var container = document.getElementById('reportAttachmentList');
+        if (!reportTempAttachments.length) { container.innerHTML = ''; return; }
+        container.innerHTML = reportTempAttachments.map(function(a, idx) {
+            return '<span class="selected-chip"><i class="fas fa-file"></i> ' + a.name + ' <span class="remove" onclick="removeReportAttachment(' + idx + ')">×</span></span>';
+        }).join('');
+    }
+
+    function removeReportAttachment(idx) {
+        reportTempAttachments.splice(idx, 1);
+        renderReportAttachmentList();
+    }
+
+    function submitReport() {
+        var task = taskList.find(function(t) { return t.id === actionTaskId; });
+        if (!task) return;
+        var conclusion = document.getElementById('reportConclusion').value.trim();
+        var remark = document.getElementById('reportRemark').value.trim();
+        if (!conclusion) { showToast('warning', '请完善信息', '请输入鉴定结论'); return; }
+
+        var allAttachments = planTempAttachments.map(function(a) {
+            return { name: a.name, size: a.size, type: a.type, data: a.data, group: 'plan' };
+        }).concat(reportTempAttachments.map(function(a) {
+            return { name: a.name, size: a.size, type: a.type, data: a.data, group: 'report' };
+        }));
+
+        if (window.parent !== window) {
+            window.parent.postMessage({
+                action: 'expertDispatchResult',
+                payload: {
+                    taskId: task.id,
+                    code: task.code || task.id,
+                    applyType: task.applyType,
+                    name: task.name,
+                    domain: task.domain,
+                    experts: task.experts,
+                    conclusion: conclusion,
+                    attachments: allAttachments,
+                    updateTime: task.updateTime,
+                    remark: remark
+                }
+            }, '*');
+        }
+
+        task.status = 'feedback';
+        task.feedback = {
+            conclusion: conclusion,
+            remark: remark,
+            attachments: allAttachments,
+            responder: currentOrgName,
+            time: nowText()
+        };
+        task.updateTime = task.feedback.time;
+        saveTasks(function() {
+            closeReportModal();
+            renderStats();
+            renderTaskTable();
+            showToast('success', '鉴定成果已提交', '结果已同步给委托方\n流转记录可查看详情');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // 自动生成报告交付提醒任务并推送系统消息/短信
+        if (typeof generateReportReminders === 'function') generateReportReminders();
+        initOrgSwitcher();
+        renderNotifyBadge();
+        loadTasks(function() {
+            renderStats();
+            renderTaskTable();
+        });
+    });
+</script>
+</body>
+</html>

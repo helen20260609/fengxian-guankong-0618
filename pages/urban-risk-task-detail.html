@@ -651,6 +651,9 @@ body {
 }
 .issue-modal-footer .btn { height: 34px; }
 
+/* ===== 现场照片放大查看（放大层复用 pc-point-modal.js 的 openPhotoViewer） ===== */
+#modalIssuePhotos img { cursor: zoom-in; }
+
 /* 整改状态标签 */
 .status-rectify {
  display: inline-flex;
@@ -1099,12 +1102,20 @@ body {
       <span class="issue-info-value" id="modalIssueHouseNo">-</span>
      </div>
      <div class="issue-info-item">
+      <span class="issue-info-label">地址</span>
+      <span class="issue-info-value" id="modalIssueAddress">-</span>
+     </div>
+     <div class="issue-info-item">
       <span class="issue-info-label">隐患主项</span>
       <span class="issue-info-value" id="modalIssueMain">-</span>
      </div>
      <div class="issue-info-item">
       <span class="issue-info-label">隐患分项</span>
       <span class="issue-info-value" id="modalIssueSub">-</span>
+     </div>
+     <div class="issue-info-item">
+      <span class="issue-info-label">风险类型</span>
+      <span class="issue-info-value" id="modalIssueRiskType">-</span>
      </div>
      <div class="issue-info-item">
       <span class="issue-info-label">分项内容</span>
@@ -1115,12 +1126,20 @@ body {
       <span class="issue-info-value" id="modalIssueRisk">-</span>
      </div>
      <div class="issue-info-item">
+      <span class="issue-info-label">可能导致事故</span>
+      <span class="issue-info-value" id="modalIssueAccident">-</span>
+     </div>
+     <div class="issue-info-item">
       <span class="issue-info-label">整改状态</span>
       <span class="issue-info-value" id="modalIssueStatus">-</span>
      </div>
      <div class="issue-info-item">
       <span class="issue-info-label">上报时间</span>
       <span class="issue-info-value" id="modalIssueTime">-</span>
+     </div>
+     <div class="issue-info-item">
+      <span class="issue-info-label">现场照片</span>
+      <span class="issue-info-value" id="modalIssuePhotos">-</span>
      </div>
     </div>
    </div>
@@ -1234,17 +1253,23 @@ function makeIssueData(t) {
    id: i + 1,
    houseNo: 'FX-NC-ZF-' + String(i + 1).padStart(4, '0'),
    main: '城镇自建房结构',
-   sub: i % 2 === 0 ? '墙体/梁柱' : '构件（节点）',
-   content: i % 2 === 0 ? '强度不足' : '连接节点不牢',
+   sub: i % 2 === 0 ? '墙体' : '梁、柱',
+   riskType: i % 2 === 0 ? '墙体开裂变形' : '梁柱开裂变形',
+   content: i % 2 === 0 ? '现场实测：承重墙体多数受力裂缝，部分明显位移和歪闪。' : '现场实测：梁、柱出现受力裂缝，个别梁柱节点破损和开裂明显。',
    scope: Array.isArray(t.selectedProjects) && t.selectedProjects[i]
     ? t.selectedProjects[i].name
     : '巡查范围',
+   address: Array.isArray(t.selectedProjects) && t.selectedProjects[i] && t.selectedProjects[i].address
+    ? t.selectedProjects[i].address
+    : '上海市奉贤区青村镇解放路120号',
    risk: i % 4 === 0 ? 'high' : (i % 4 === 1 ? 'upperMedium' : (i % 4 === 2 ? 'medium' : 'low')),
    riskLabel: i % 4 === 0 ? '疑似危房' : (i % 4 === 1 ? '疑似严重损坏房' : (i % 4 === 2 ? '疑似一般损坏房' : '完好房（基本完好房）')),
+   accident: i % 2 === 0 ? '墙体酥碎或倒塌' : '梁、柱倒塌，房屋坍塌或局部坍塌',
    status: 'pending-audit',
    statusLabel: '待审核',
    foundTime: t.createTime ? t.createTime.split(' ')[0] + ' 09:30' : '2025-06-02 09:30',
-   deadline: t.endDate ? t.endDate + ' 18:00:00' : '2025-06-10 18:00:00'
+   deadline: t.endDate ? t.endDate + ' 18:00:00' : '2025-06-10 18:00:00',
+   photos: [issueDemoPhoto(i % 2 === 0 ? '墙体' : '梁、柱')]
   });
  }
  return issues;
@@ -1359,9 +1384,15 @@ const scopeData = storedTask ? makeScopeData(storedTask) : [
  { id: 4, houseNo: 'FX-NC-ZF-0004', name: '青村镇光明路200号自建房', type: '城镇自建房', company: '青村镇社区镇建设管理办公室', address: '上海市奉贤区青村镇光明村光明路200号', risk: 'low', riskLabel: '完好房（基本完好房）', riskDistribution: { red: 0, orange: 0, yellow: 0, blue: 1 }, status: 'pending', statusLabel: '待巡查', time: '-', checkItems: []}
 ];
 
+// 演示用现场照片占位图
+function issueDemoPhoto(label) {
+ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90"><rect width="120" height="90" fill="#fdecea"/><text x="60" y="40" font-size="11" fill="#c0392b" text-anchor="middle">现场照片</text><text x="60" y="58" font-size="10" fill="#c0392b" text-anchor="middle">${label}</text></svg>`;
+ return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
 const issueData = storedTask ? makeIssueData(storedTask) : [
- { id: 1, houseNo: 'FX-NC-ZF-0001', main: '城镇自建房结构', sub: '墙体/梁柱', content: '强度不足', scope: '青村镇解放路120号自建房', risk: 'high', riskLabel: '疑似危房', status: 'pending-audit', statusLabel: '待审核', foundTime: '2025-06-02 09:30', deadline: '2025-06-10 18:00:00' },
- { id: 2, houseNo: 'FX-NC-ZF-0002', main: '城镇自建房结构', sub: '构件（节点）', content: '连接节点不牢', scope: '青村镇人民路88号隐患点', risk: 'upperMedium', riskLabel: '疑似严重损坏房', status: 'pending-handle', statusLabel: '待处置', foundTime: '2025-06-02 10:45', deadline: '2025-06-15 18:00:00' }
+ { id: 1, houseNo: 'FX-NC-ZF-0001', main: '城镇自建房结构', sub: '墙体', riskType: '墙体开裂变形', content: '现场实测：承重墙体多数受力裂缝，部分承重墙体明显位移和歪闪。', scope: '青村镇解放路120号自建房', address: '上海市奉贤区青村镇解放路120号', risk: 'high', riskLabel: '疑似危房', accident: '墙体酥碎或倒塌', status: 'pending-audit', statusLabel: '待审核', foundTime: '2025-06-02 09:30', deadline: '2025-06-10 18:00:00', photos: [issueDemoPhoto('墙体')] },
+ { id: 2, houseNo: 'FX-NC-ZF-0002', main: '城镇自建房结构', sub: '梁、柱', riskType: '梁柱开裂变形', content: '现场实测：梁、柱出现受力裂缝，个别梁柱节点破损和开裂明显。', scope: '青村镇人民路88号隐患点', address: '上海市奉贤区青村镇人民路88号', risk: 'upperMedium', riskLabel: '疑似严重损坏房', accident: '梁、柱倒塌，房屋坍塌或局部坍塌', status: 'pending-handle', statusLabel: '待处置', foundTime: '2025-06-02 10:45', deadline: '2025-06-15 18:00:00', photos: [issueDemoPhoto('梁、柱')] }
 ];
 
 const timelineData = storedTask ? makeTimelineData(storedTask) : [
@@ -1748,12 +1779,23 @@ function viewIssue(id) {
  const sm = statusMap2[issue.status] || statusMap2['pending-audit'];
 
  document.getElementById('modalIssueHouseNo').textContent = houseNo;
+ document.getElementById('modalIssueAddress').textContent = issue.address || '-';
  document.getElementById('modalIssueMain').textContent = issue.main;
  document.getElementById('modalIssueSub').textContent = issue.sub;
+ document.getElementById('modalIssueRiskType').textContent = issue.riskType || '-';
  document.getElementById('modalIssueContent').textContent = issue.content;
  document.getElementById('modalIssueRisk').innerHTML = '<span class="risk-tag ' + riskClass + '">' + issue.riskLabel + '</span>';
+ document.getElementById('modalIssueAccident').textContent = issue.accident || '-';
  document.getElementById('modalIssueStatus').innerHTML = '<span class="status-rectify ' + sm.cls + '"><i class="fas ' + sm.icon + '" style="margin-right:4px;"></i>' + issue.statusLabel + '</span>';
  document.getElementById('modalIssueTime').textContent = issue.foundTime;
+ const photosEl = document.getElementById('modalIssuePhotos');
+ if (issue.photos && issue.photos.length) {
+  photosEl.innerHTML = issue.photos.map(function(p) {
+   return '<img src="' + p + '" alt="现场照片" title="点击放大查看" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #e0e0e0;margin:0 6px 6px 0;">';
+  }).join('');
+ } else {
+  photosEl.textContent = '-';
+ }
 
  document.getElementById('issueModalOverlay').classList.add('show');
 }
@@ -1761,6 +1803,12 @@ function viewIssue(id) {
 function closeIssueModal() {
  document.getElementById('issueModalOverlay').classList.remove('show');
 }
+
+// ===== 现场照片放大查看：点击缩略图调用 pc-point-modal.js 的 openPhotoViewer =====
+document.addEventListener('click', function (e) {
+ var img = e.target.closest('#modalIssuePhotos img');
+ if (img && typeof openPhotoViewer === 'function') openPhotoViewer(img.src);
+});
 
 // Init
 renderFlow();

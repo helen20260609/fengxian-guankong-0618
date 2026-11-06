@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>房屋档案 - 跳转中</title>
+<style>
+    body{font-family:"Microsoft YaHei",sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f7fa;color:#5f6368;}
+    .box{text-align:center;}
+    .spinner{width:36px;height:36px;border:3px solid #e0e0e0;border-top-color:#1a73e8;border-radius:50%;margin:0 auto 16px;animation:spin 0.8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="box"><div class="spinner"></div><div id="msg">正在打开房屋档案…</div></div>
+<script>
+// =========================================================
+// 路由分发页：按编号前缀 / 数据源把请求分流到农村或城镇专属详情页。
+// 旧入口全部指向本文件(house-arch-detail.html)，无需修改即可自动分流。
+//   CF- 前缀  -> house-arch-detail-urban.html
+//   其余      -> 查 urbanHouseArch* 数据源, 命中则城镇, 否则农村
+// =========================================================
+(function () {
+    var q = location.search || '';
+    function param(k) { return new URLSearchParams(q).get(k) || ''; }
+    var no = param('no') || param('id') || '';
+    var category = param('category') || '';
+
+    function existsIn(storageKeys, houseNo) {
+        if (!houseNo) return false;
+        for (var i = 0; i < storageKeys.length; i++) {
+            try {
+                var raw = localStorage.getItem(storageKeys[i]);
+                if (!raw) continue;
+                var data = JSON.parse(raw);
+                if (data && data[houseNo]) return true;
+            } catch (e) { /* 忽略解析错误 */ }
+        }
+        return false;
+    }
+
+    var target = 'house-arch-detail-rural.html'; // 默认农村
+    if (/^CF-/i.test(no)) {
+        target = 'house-arch-detail-urban.html';
+    } else if (/城镇/.test(category)) {
+        target = 'house-arch-detail-urban.html';
+    } else if (/农村/.test(category)) {
+        target = 'house-arch-detail-rural.html';
+    } else if (existsIn(['urbanHouseArchDraft', 'urbanHouseArchData'], no)) {
+        target = 'house-arch-detail-urban.html';
+    }
+
+    // 保留全部查询参数, 直接替换到目标页
+    location.replace(target + q);
+})();
+</script>
+</body>
+</html>

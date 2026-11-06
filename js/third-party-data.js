@@ -6,6 +6,8 @@
 // =========================================================
 
 const TP_STORAGE_KEY = 'thirdPartyData';
+const INITIAL_CREDIT_SCORE = 75;
+const INITIAL_CREDIT_LEVEL = 'B';
 
 // 统一数据模型
 // orgs:      机构主数据
@@ -33,7 +35,7 @@ function createDefaultData() {
         { contractId: 'HT-20260005', orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', orgCode: '91310000987654321B', projectName: '上海市燃气管道安全风险评估', serviceScope: '燃气', servicePeriod: '2026-06-01 ~ 2026-09-30', amount: 16.8, payment: '按里程碑付款', deliverable: '燃气管道风险评估报告及管控建议', acceptance: '通过燃气主管部门评审', status: '已验收', signDate: '2026-05-25' },
         { contractId: 'HT-20260006', orgId: 'ORG-20260006', orgName: '上海城市安全研究院', orgCode: '91310000678901234C', projectName: '上海市高空坠物风险排查评估', serviceScope: '高空坠物', servicePeriod: '2026-02-20 ~ 2026-05-20', amount: 13.2, payment: '一次性付款', deliverable: '高空坠物风险排查评估报告', acceptance: '完成现场复核并备案', status: '已验收', signDate: '2026-02-10' },
         { contractId: 'HT-20260007', orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', orgCode: '91310000456789012D', projectName: '上海市城镇自建房安全鉴定', serviceScope: '城镇自建房', servicePeriod: '2026-05-10 ~ 2026-08-10', amount: 24.5, payment: '分期付款', deliverable: '房屋安全鉴定报告', acceptance: '鉴定结论通过主管部门认可', status: '已验收', signDate: '2026-04-30' },
-        { contractId: 'HT-20260008', orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', orgCode: '91310000234567890E', projectName: '上海市农村自建房安全评估', serviceScope: '农村自建房', servicePeriod: '2026-03-01 ~ 2026-06-01', amount: 8.8, payment: '一次性付款', deliverable: '农村自建房安全评估报告', acceptance: '评估报告经乡镇备案', status: '已验收', signDate: '2026-02-25' }
+        { contractId: 'HT-20260008', orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', orgCode: '91310000234567890E', projectName: '上海市农村自建房安全评估', serviceScope: '农村自建房', servicePeriod: '2026-03-01 ~ 2026-06-01', amount: 8.8, payment: '一次性付款', deliverable: '农村自建房安全评估报告', acceptance: '评估报告经镇/街道备案', status: '已验收', signDate: '2026-02-25' }
     ];
 
     const performances = [
@@ -97,7 +99,8 @@ function createDefaultData() {
         levels: 1,           // 默认单级
         requiredOpinion: true,
         presetPass: ['材料齐全，予以通过', '符合入库条件', '资质有效期符合要求'],
-        presetReject: ['材料不完整，请补充', '资质有效期不足，请更新', '经营范围不符合要求', '法人代表信息有误']
+        presetReject: ['材料不完整，请补充', '资质有效期不足，请更新', '经营范围不符合要求', '法人代表信息有误'],
+        presetVerify: ['申请资料与原件扫描件不一致，需比对核验', '法人身份信息待核实，发起实名核验', '资质证书真伪待向发证机关核验', '企业法人证明文件存疑，需补充核验', '联系电话无法接通，需电话核验', '注册地址存疑，需现场核验']
     };
 
     const auditFlow = {};  // key: orgId, value: { currentLevel, history, status } 审核流程状态
@@ -139,7 +142,7 @@ function migrateTPData(data) {
                 if (!exists) data.experts.push(e);
             });
         }
-        migrateCreditSnapshots();
+        migrateCreditSnapshots(data);
         data.version = 4;
         saveTPData(data);
     }
@@ -147,6 +150,45 @@ function migrateTPData(data) {
     if (!data.expertApplications) data.expertApplications = [];
     if (!data.orgChangeRequests) data.orgChangeRequests = [];
     if (!data.notifications) data.notifications = [];
+    // 信用等级统一为 AAA/AA/A/B/C 五级：存量 BBB/BB 映射为 B
+    if (data.orgs && data.orgs.length) {
+        var levelChanged = false;
+        data.orgs.forEach(function(o) {
+            if (o.creditLevel === 'BBB' || o.creditLevel === 'BB') { o.creditLevel = 'B'; levelChanged = true; }
+        });
+        if (data.credit) {
+            Object.keys(data.credit).forEach(function(orgId) {
+                var rec = data.credit[orgId];
+                if (rec && (rec.creditLevel === 'BBB' || rec.creditLevel === 'BB')) { rec.creditLevel = 'B'; levelChanged = true; }
+                if (rec && (rec.level === 'BBB' || rec.level === 'BB')) { rec.level = 'B'; levelChanged = true; }
+            });
+        }
+        if (levelChanged) saveTPData(data);
+    }
+    // 老数据补入库时间：无 admitDate 的机构按索引分配历史月份，便于统计演示
+    if (data.orgs && data.orgs.length) {
+        var baseMonths = ['2026-01-15','2026-02-10','2026-03-08','2026-04-12','2026-05-20','2026-06-05','2026-07-18','2026-08-22'];
+        var admitChanged = false;
+        data.orgs.forEach(function(o, i) {
+            if (!o.admitDate) { o.admitDate = baseMonths[i % baseMonths.length] || '2026-01-15'; admitChanged = true; }
+        });
+        if (admitChanged) saveTPData(data);
+    }
+    // 老数据补服务覆盖街镇：用于服务范围地图统计，每家机构分配 1~3 个奉贤街镇
+    if (data.orgs && data.orgs.length) {
+        var towns = ['南桥街道','奉浦街道','金海街道','奉城镇','庄行镇','金汇镇','青村镇','柘林镇','四团镇','海湾镇','西渡镇'];
+        var townChanged = false;
+        data.orgs.forEach(function(o, i) {
+            if (!o.serviceTowns || !o.serviceTowns.length) {
+                var count = (i % 3) + 1;
+                var assigned = [];
+                for (var k = 0; k < count; k++) assigned.push(towns[(i + k * 3) % towns.length]);
+                o.serviceTowns = assigned;
+                townChanged = true;
+            }
+        });
+        if (townChanged) saveTPData(data);
+    }
     return data;
 }
 
@@ -198,6 +240,15 @@ function getOrgById(orgId) { return getAllOrgs().find(o => o.orgId === orgId); }
 function getOrgByName(orgName) { return getAllOrgs().find(o => o.orgName === orgName); }
 function getOrgByCode(orgCode) { return getAllOrgs().find(o => o.orgCode === orgCode); }
 
+// 获取机构入库时间：优先 admitDate，老数据用 changeHistory 首条新增记录时间兜底
+function getOrgAdmitDate(org) {
+    if (!org) return '';
+    if (org.admitDate) return org.admitDate;
+    var hist = org.changeHistory || [];
+    var first = hist.filter(function(h) { return h.action === '新增' || h.action === '批量导入'; }).pop();
+    return first ? (first.time || '') : '';
+}
+
 function getContractsByOrg(orgId) { return getTPData().contracts.filter(c => c.orgId === orgId); }
 function getAllContracts() { return getTPData().contracts; }
 function getContractById(contractId) { return getAllContracts().find(c => c.contractId === contractId); }
@@ -222,8 +273,13 @@ function getTPAuditConfig() {
             levels: 1,
             requiredOpinion: true,
             presetPass: ['材料齐全，予以通过', '符合入库条件', '资质有效期符合要求'],
-            presetReject: ['材料不完整，请补充', '资质有效期不足，请更新', '经营范围不符合要求', '法人代表信息有误']
+            presetReject: ['材料不完整，请补充', '资质有效期不足，请更新', '经营范围不符合要求', '法人代表信息有误'],
+            presetVerify: ['申请资料与原件扫描件不一致，需比对核验', '法人身份信息待核实，发起实名核验', '资质证书真伪待向发证机关核验', '企业法人证明文件存疑，需补充核验', '联系电话无法接通，需电话核验', '注册地址存疑，需现场核验']
         };
+        saveTPData(data);
+    }
+    if (!data.auditConfig.presetVerify) {
+        data.auditConfig.presetVerify = ['申请资料与原件扫描件不一致，需比对核验', '法人身份信息待核实，发起实名核验', '资质证书真伪待向发证机关核验', '企业法人证明文件存疑，需补充核验', '联系电话无法接通，需电话核验', '注册地址存疑，需现场核验'];
         saveTPData(data);
     }
     return data.auditConfig;
@@ -284,6 +340,8 @@ function submitOrgApplication(application) {
     const basic = application.basic || {};
     const creditCode = basic.creditCode || '';
     if (creditCode) {
+        const existsOrg = (data.orgs || []).some(o => o.orgCode === creditCode);
+        if (existsOrg) throw new Error('该统一社会信用代码的机构已入库，无需重复申请。');
         const exists = data.orgApplications.some(a => a.basic && a.basic.creditCode === creditCode && a.status !== '已驳回');
         if (exists) throw new Error('该统一社会信用代码已有正在审核或已通过的申请，请勿重复提交。');
     }
@@ -332,6 +390,9 @@ function auditOrgApplication(applicationId, level, operator, opinion, decision) 
     if (decision === 'reject') {
         app.status = '已驳回';
         app.flowState.status = 'rejected';
+    } else if (decision === 'verify') {
+        app.status = '核验中';
+        app.flowState.status = 'verifying';
     } else if (decision === 'pass') {
         if (lv >= maxLevel) {
             app.status = '已通过';
@@ -346,6 +407,44 @@ function auditOrgApplication(applicationId, level, operator, opinion, decision) 
     updateOrgApplication(app);
     return app;
 }
+function getInitialCreditDimensions(behaviorCredit) {
+    return {
+        base: INITIAL_CREDIT_SCORE,
+        performance: null,
+        quality: null,
+        behavior: behaviorCredit,
+        satisfaction: null
+    };
+}
+
+function createInitialCreditRecord(org) {
+    var time = nowStr();
+    var initialEvent = {
+        time: time,
+        orgId: org.orgId,
+        orgName: org.orgName,
+        eventName: '入库初始信用',
+        eventKey: 'initial_credit',
+        type: 'neutral',
+        scoreDelta: 0,
+        dimension: 'base',
+        remark: '机构审核入库，初始信用分 ' + INITIAL_CREDIT_SCORE + ' 分，初始等级 ' + INITIAL_CREDIT_LEVEL + ' 级',
+        ruleId: '',
+        scoreAfter: INITIAL_CREDIT_SCORE,
+        levelAfter: INITIAL_CREDIT_LEVEL
+    };
+    return {
+        orgId: org.orgId,
+        orgName: org.orgName,
+        creditLevel: INITIAL_CREDIT_LEVEL,
+        score: INITIAL_CREDIT_SCORE,
+        dimensions: getInitialCreditDimensions(100),
+        history: [initialEvent],
+        changeLog: [Object.assign({}, initialEvent)],
+        snapshots: [{ date: todayStr(), score: INITIAL_CREDIT_SCORE, level: INITIAL_CREDIT_LEVEL }]
+    };
+}
+
 function promoteApplicationToOrg(app) {
     if (!app) return;
     const basic = app.basic || {};
@@ -353,7 +452,7 @@ function promoteApplicationToOrg(app) {
     const creditCode = basic.creditCode || app.creditCode || '';
     const existing = creditCode && data.orgs.find(o => o.orgCode === creditCode);
     if (existing) return existing;
-    const orgId = 'ORG-' + (data.orgs.length + 1).toString().padStart(5, '0');
+    const orgId = genBatchOrgId(data);
     const newOrg = {
         orgId: orgId,
         orgName: basic.enterpriseName || app.orgName || '',
@@ -365,12 +464,16 @@ function promoteApplicationToOrg(app) {
         orgType: basic.orgType || '服务机构',
         qual: (app.qualifications && app.qualifications[0] && app.qualifications[0].level) || '乙级',
         status: '正常',
-        creditLevel: 'A',
-        score: 75,
+        creditLevel: INITIAL_CREDIT_LEVEL,
+        score: INITIAL_CREDIT_SCORE,
         established: basic.establishDate || '',
+        admitDate: nowStr(),
+        serviceTowns: [],
         changeHistory: [{ action: '新增', time: nowStr(), operator: '系统', remark: '机构申报审核通过，正式入库', diff: ['机构名称：' + (basic.enterpriseName || app.orgName || '-'), '统一代码：' + creditCode] }]
     };
     data.orgs.push(newOrg);
+    if (!data.credit) data.credit = {};
+    data.credit[orgId] = createInitialCreditRecord(newOrg);
     // 将在线申请中填报的关联专家一并入库，并关联到新机构
     if (app.relatedExperts && app.relatedExperts.length) {
         if (!data.experts) data.experts = [];
@@ -457,7 +560,9 @@ function auditOrgChangeRequest(changeId, operator, opinion, decision) {
 function applyOrgChangeRequest(data, req, operator) {
     var org = (data.orgs || []).find(function(o) { return o.orgId === req.orgId; });
     if (!org) return;
+    var previousName = org.orgName;
     (req.changes || []).forEach(function(c) { org[c.field] = c.newValue; });
+    syncOrgRelations(data, org, previousName);
     addOrgChangeHistoryRecord(data, org.orgId, {
         action: '信息变更',
         time: nowStr(),
@@ -551,6 +656,9 @@ function auditExpertApplication(applicationId, level, operator, opinion, decisio
     if (decision === 'reject') {
         app.status = '已驳回';
         app.flowState.status = 'rejected';
+    } else if (decision === 'verify') {
+        app.status = '核验中';
+        app.flowState.status = 'verifying';
     } else if (decision === 'pass') {
         if (lv >= maxLevel) {
             app.status = '已通过';
@@ -730,11 +838,31 @@ function goToTPExpertWorkload(expertId) {
         + '&name=' + encodeURIComponent(expert ? expert.name : '');
 }
 // ---------- 数据更新（增删改） ----------
+function syncOrgRelations(data, org, previousName) {
+    var oldName = previousName || org.orgName;
+    (data.contracts || []).forEach(function(c) {
+        if (c.orgId !== org.orgId) return;
+        c.orgName = org.orgName;
+        c.orgCode = org.orgCode;
+    });
+    (data.performances || []).forEach(function(p) {
+        if (p.orgId === org.orgId) p.orgName = org.orgName;
+    });
+    (data.experts || []).forEach(function(e) {
+        if (e.orgId !== org.orgId) return;
+        e.orgName = org.orgName;
+        if (e.workplace === oldName) e.workplace = org.orgName;
+    });
+    if (data.credit && data.credit[org.orgId]) data.credit[org.orgId].orgName = org.orgName;
+}
+
 function updateOrg(org) {
     const data = getTPData();
     const idx = data.orgs.findIndex(o => o.orgId === org.orgId);
+    const previousName = idx >= 0 ? data.orgs[idx].orgName : org.orgName;
     if (idx >= 0) data.orgs[idx] = org;
     else data.orgs.push(org);
+    syncOrgRelations(data, org, previousName);
     saveTPData(data);
 }
 
@@ -820,6 +948,15 @@ function calculateCreditScoreFromDefaults(org, contracts, performances, creditRe
         .reduce((sum, h) => sum + Math.abs(h.scoreDelta || 0), 0);
     const behaviorCredit = Math.max(0, 100 - behaviorPenalty);
 
+    // 新入库机构尚无业务数据时使用统一初始信用，无数据维度不按 0 分处理
+    if (!contracts.length && !performances.length) {
+        return {
+            score: INITIAL_CREDIT_SCORE,
+            level: INITIAL_CREDIT_LEVEL,
+            dimensions: getInitialCreditDimensions(behaviorCredit)
+        };
+    }
+
     // 客户评价：满意度评分（简化：基于业绩结论）
     const satisfactionCredit = Math.round(excellentRate * 100);
 
@@ -836,8 +973,7 @@ function calculateCreditScoreFromDefaults(org, contracts, performances, creditRe
     if (totalScore >= 90) level = 'AAA';
     else if (totalScore >= 85) level = 'AA';
     else if (totalScore >= 80) level = 'A';
-    else if (totalScore >= 70) level = 'BBB';
-    else if (totalScore >= 60) level = 'BB';
+    else if (totalScore >= 70) level = 'B';
     else level = 'C';
 
     return {
@@ -862,7 +998,7 @@ const DEFAULT_CREDIT_RULES = [
     { ruleId: 'RULE-005', version: 1, name: '合同履约逾期', eventKey: 'delivery_overdue', dimension: 'performance', type: 'negative', scoreDelta: -1, degradeLevel: false, degradeTo: '', enabled: true, description: '未按合同期限交付，扣 1 分' }
 ];
 
-const LEVEL_ORDER = ['AAA', 'AA', 'A', 'BBB', 'BB', 'C'];
+const LEVEL_ORDER = ['AAA', 'AA', 'A', 'B', 'C'];
 
 function nowStr() {
     const now = new Date();
@@ -971,8 +1107,7 @@ function applyCreditRules(calc, creditRecord, ruleConfig) {
         if (finalScore >= 90) finalLevel = 'AAA';
         else if (finalScore >= 85) finalLevel = 'AA';
         else if (finalScore >= 80) finalLevel = 'A';
-        else if (finalScore >= 70) finalLevel = 'BBB';
-        else if (finalScore >= 60) finalLevel = 'BB';
+        else if (finalScore >= 70) finalLevel = 'B';
         else finalLevel = 'C';
     }
 
@@ -981,18 +1116,6 @@ function applyCreditRules(calc, creditRecord, ruleConfig) {
         level: finalLevel,
         dimensions: calc.dimensions
     };
-}
-
-function runDailyCreditCalc() {
-    const config = getCreditRuleConfig();
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    const today = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
-    if (config.lastCalcTime === today) return;
-
-    getAllOrgs().forEach(o => syncCredit(o.orgId));
-    config.lastCalcTime = today;
-    saveCreditRuleConfig(config);
 }
 
 function syncCredit(orgId, opts) {
@@ -1035,7 +1158,7 @@ function syncCredit(orgId, opts) {
         };
         if (!data.credit[orgId].changeLog) data.credit[orgId].changeLog = [];
         data.credit[orgId].changeLog.unshift(logEntry);
-        addCreditSnapshot(orgId, calc.score, calc.level, { skipSave: true });
+        addCreditSnapshot(orgId, calc.score, calc.level, { skipSave: true, data: data });
     }
     // 同步回机构主数据
     const idx = data.orgs.findIndex(o => o.orgId === orgId);
@@ -1102,7 +1225,7 @@ function recordCreditEvent(orgId, event) {
 
 function addCreditSnapshot(orgId, score, level, opts) {
     opts = opts || {};
-    const data = getTPData();
+    const data = opts.data || getTPData();
     if (!data.credit) data.credit = {};
     if (!data.credit[orgId]) data.credit[orgId] = { orgId, orgName: (getOrgById(orgId) || {}).orgName, history: [], changeLog: [], snapshots: [] };
     if (!data.credit[orgId].snapshots) data.credit[orgId].snapshots = [];
@@ -1157,8 +1280,8 @@ function ensureCreditSnapshots(orgId) {
     }
 }
 
-function migrateCreditSnapshots() {
-    const data = getTPData();
+function migrateCreditSnapshots(data) {
+    data = data || getTPData();
     if (!data.credit) return;
     Object.keys(data.credit).forEach(orgId => {
         const record = data.credit[orgId];

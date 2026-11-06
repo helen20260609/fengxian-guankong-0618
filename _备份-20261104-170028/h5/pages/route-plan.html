@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>排查路线规划</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+.page-hero .ph-stats { display: flex; gap: 20px; margin-top: 14px; position: relative; z-index: 2; }
+.page-hero .ph-stat { text-align: center; }
+.page-hero .ph-stat .value { font-size: 21px; font-weight: 800; }
+.page-hero .ph-stat .label { font-size: 10px; opacity: .85; margin-top: 2px; }
+
+#routeChart { width: 100%; height: 280px; background: linear-gradient(180deg,#e0f2fe 0%,#f0fdf4 100%); }
+
+.point-list { padding: 0; margin: 0; background: transparent; border-radius: 0; box-shadow: none; border: none; }
+.point-list .pl-title { font-size: 13px; font-weight: 700; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+.point-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.point-item:last-child { border-bottom: none; }
+.point-item .pi-idx { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.point-item.completed .pi-idx { background: var(--success); }
+.point-item .pi-body { flex: 1; }
+.point-item .pi-name { font-size: 13px; font-weight: 700; }
+.point-item .pi-meta { font-size: 11px; color: var(--text2); margin-top: 4px; display: flex; gap: 12px; }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="page-hero">
+        <div class="ph-back tap" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+        <div class="ph-title">今日排查路线</div>
+        <div class="ph-sub" id="planDate">--</div>
+        <div class="ph-stats">
+            <div class="ph-stat">
+                <div class="value" id="pointCount">--</div>
+                <div class="label">点位数</div>
+            </div>
+            <div class="ph-stat">
+                <div class="value" id="planDuration">--</div>
+                <div class="label">预计时长</div>
+            </div>
+            <div class="ph-stat">
+                <div class="value" id="completedCount">--</div>
+                <div class="label">已完成</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="knowledge-body scrollable-body form-sheet">
+        <div class="card anim d1" style="padding:0;margin-top:-16px;border-radius: 12px;overflow:hidden;">
+            <div id="routeChart"></div>
+        </div>
+
+        <div class="card anim d2">
+            <div class="point-list">
+                <div class="pl-title">
+                    <span>排查点位</span>
+                    <span style="font-size: 11px;color:var(--text2)" id="progressText">--</span>
+                </div>
+                <div id="pointList"></div>
+            </div>
+        </div>
+
+        <div class="bottom-spacer"></div>
+    </div>
+
+    <div class="bottom-actions">
+        <button class="btn btn-outline tap" onclick="shareRoute()"><i class="fa-solid fa-share-nodes"></i> 分享</button>
+        <button class="btn btn-primary tap" onclick="startNav()"><i class="fa-solid fa-location-arrow"></i> 开始导航</button>
+    </div>
+
+    </div>
+</div>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+
+    var plan = DataStore.routePlans[0];
+    if (!plan) {
+        App.showToast('暂无路线规划');
+        setTimeout(App.back, 1500);
+        return;
+    }
+
+    function normalizeCoord(lat, lng) {
+        return [(lng - 121.4726) / 0.06 * 100, (30.9123 - lat) / 0.04 * 100];
+    }
+
+    function calcDuration(points) {
+        var start = points[0].eta;
+        var end = points[points.length - 1].eta;
+        var s = new Date('2026-06-21 ' + start);
+        var e = new Date('2026-06-21 ' + end);
+        return Math.round((e - s) / 60000);
+    }
+
+    function render() {
+        var completed = plan.points.filter(function(p) { return p.completed; }).length;
+        var duration = calcDuration(plan.points);
+
+        document.getElementById('planDate').textContent = plan.date + ' · 自动生成最优路线';
+        document.getElementById('pointCount').textContent = plan.points.length;
+        document.getElementById('planDuration').textContent = App.formatDuration(duration);
+        document.getElementById('completedCount').textContent = completed;
+        document.getElementById('progressText').textContent = completed + '/' + plan.points.length + ' 已完成';
+
+        document.getElementById('pointList').innerHTML = plan.points.map(function(p, i) {
+            var typeLabel = { task: '巡查任务', danger: '风险隐患' }[p.type] || p.type;
+            var statusCls = p.completed ? 'completed' : 'pending';
+            var statusText = p.completed ? '已完成' : '待排查';
+            return '<div class="point-item ' + statusCls + ' tap">' +
+                '<div class="pi-idx">' + (i + 1) + '</div>' +
+                '<div class="pi-body">' +
+                    '<div class="pi-name">' + App.escapeHtml(p.name) + '</div>' +
+                    '<div class="pi-meta">' +
+                        '<span><i class="fa-solid fa-tag"></i> ' + typeLabel + '</span>' +
+                        '<span><i class="fa-solid fa-clock"></i> 预计 ' + p.eta + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="status-tag ' + statusCls + '" style="flex-shrink:0">' + statusText + '</div>' +
+            '</div>';
+        }).join('');
+
+        // 地图
+        var chart = echarts.init(document.getElementById('routeChart'));
+        var lineData = plan.points.map(function(p) {
+            var c = normalizeCoord(p.lat, p.lng);
+            return [c[0], c[1]];
+        });
+        var pointData = plan.points.map(function(p, i) {
+            var c = normalizeCoord(p.lat, p.lng);
+            return {
+                value: [c[0], c[1]],
+                name: String(i + 1),
+                itemStyle: { color: p.completed ? '#22c55e' : '#3b82f6' }
+            };
+        });
+        chart.setOption({
+            grid: { left: 0, right: 0, top: 0, bottom: 0 },
+            xAxis: { show: false, min: 0, max: 100 },
+            yAxis: { show: false, min: 0, max: 100 },
+            tooltip: { trigger: 'item' },
+            series: [
+                {
+                    type: 'line',
+                    smooth: false,
+                    data: lineData,
+                    lineStyle: { color: '#3b82f6', width: 3 },
+                    symbol: 'none'
+                },
+                {
+                    type: 'scatter',
+                    data: pointData,
+                    symbolSize: 18,
+                    label: { show: true, formatter: '{b}', fontSize: 11, color: '#fff', fontWeight: 'bold' }
+                }
+            ]
+        });
+    }
+
+    window.shareRoute = function() {
+        App.showToast('路线已生成分享卡片');
+    };
+
+    window.startNav = function() {
+        App.showToast('已调用地图导航规划');
+    };
+
+    render();
+})();
+</script>
+</body>
+</html>

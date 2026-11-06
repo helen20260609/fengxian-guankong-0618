@@ -158,7 +158,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     <select id="qual"><option value="">请选择</option><option>甲级</option><option>乙级</option><option>丙级</option></select>
                 </div>
                 <div class="form-group"><label>机构类型</label>
-                    <select id="orgType"><option value="">请选择</option><option>检测机构</option><option>评估机构</option><option>研究院</option><option>服务机构</option><option>鉴定机构</option><option>咨询机构</option></select>
+                    <select id="orgType" onchange="applyOrgTypeForm()"><option value="">请选择</option><option>检测机构</option><option>评估机构</option><option>研究院</option><option>服务机构</option><option>鉴定机构</option><option>咨询机构</option></select>
                 </div>
             </div>
             <div class="form-row">
@@ -209,9 +209,15 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                 </div>
             </div>
             <button type="button" class="btn-add" onclick="addQualRow()"><i class="fas fa-plus"></i> 添加资质证书</button>
+            <div class="form-row" style="margin-top: 16px;">
+                <div class="form-group full-width"><label>资质证书扫描件</label>
+                    <div class="file-upload"><label class="file-upload-btn" for="qualCertFile">选择文件</label><input type="file" id="qualCertFile" multiple accept=".jpg,.jpeg,.png,.pdf"><span class="file-upload-text" id="qualCertText">请上传资质证书扫描件（可多选，JPG/PNG/PDF）</span></div>
+                    <div id="qualCertList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:12px;color:var(--text-secondary);"></div>
+                </div>
+            </div>
         </div>
 
-        <div class="form-section">
+        <div class="form-section" id="equipmentSection">
             <div class="form-section-title"><i class="fas fa-tools"></i> 设备信息</div>
             <div id="equipmentList">
                 <div class="dynamic-row">
@@ -294,7 +300,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     <div class="success-desc">您的机构资料已提交，请使用以下信息查询审核进度。</div>
     <div class="success-meta" id="successMeta"></div>
     <div class="form-actions" style="border-top:none; justify-content:center;">
-        <a href="tp-audit.html?tab=progress" class="btn btn-primary" style="text-decoration:none;"><i class="fas fa-search"></i> 查询审核进度</a>
+        <a href="tp-audit.html?tab=progress&portal=1" class="btn btn-primary" style="text-decoration:none;"><i class="fas fa-search"></i> 查询审核进度</a>
         <a href="tp-overview.html" class="btn btn-outline" style="text-decoration:none;"><i class="fas fa-arrow-left"></i> 返回机构名录</a>
     </div>
 </div>
@@ -308,6 +314,8 @@ window.addEventListener('message', function(e) {
     if (e.data && e.data.action === 'setTheme') { document.documentElement.setAttribute('data-theme', e.data.theme); localStorage.setItem('theme', e.data.theme); }
 });
 
+var isRegulatorEntry = new URLSearchParams(location.search).get('agent') === '1';
+
 function bindFileUpload(inputId, textId, defaultText) {
     var input = document.getElementById(inputId);
     var text = document.getElementById(textId);
@@ -318,6 +326,54 @@ bindFileUpload('businessLicenseFile', 'businessLicenseText', '请上传营业执
 bindFileUpload('legalCertFile', 'legalCertText', '请上传企业法人证明文件（JPG/PNG/PDF）');
 bindFileUpload('socialSecurityFile', 'socialSecurityText', '请上传近6个月社保缴纳证明');
 bindFileUpload('calibrationFile', 'calibrationText', '请上传设备校准/检定证书');
+
+// 资质证书多文件上传显示
+document.getElementById('qualCertFile').addEventListener('change', function() {
+    var files = Array.from(this.files);
+    document.getElementById('qualCertText').textContent = files.length ? '已选择 ' + files.length + ' 个文件' : '请上传资质证书扫描件（可多选，JPG/PNG/PDF）';
+    document.getElementById('qualCertList').innerHTML = files.map(function(f) {
+        return '<span style="background:var(--bg-hover);padding:3px 10px;border-radius:10px;border:1px solid var(--border);">' + f.name + '</span>';
+    }).join('');
+});
+
+// 通用附件读取：将文件转为 base64 存入申请附件
+var ATTACH_MAX_SIZE = 2 * 1024 * 1024; // 单文件最大 2MB（localStorage 限制）
+function readFileAsBase64(file) {
+    return new Promise(function(resolve, reject) {
+        if (file.size > ATTACH_MAX_SIZE) { reject(new Error('文件「' + file.name + '」超过 2MB 限制，请压缩后上传')); return; }
+        var reader = new FileReader();
+        reader.onload = function() { resolve({ name: file.name, type: file.type, size: file.size, dataUrl: reader.result }); };
+        reader.onerror = function() { reject(new Error('文件「' + file.name + '」读取失败')); };
+        reader.readAsDataURL(file);
+    });
+}
+function readSingleAttachment(inputId) {
+    var input = document.getElementById(inputId);
+    if (!input || !input.files.length) return Promise.resolve(null);
+    return readFileAsBase64(input.files[0]);
+}
+function readMultiAttachments(inputId) {
+    var input = document.getElementById(inputId);
+    if (!input || !input.files.length) return Promise.resolve([]);
+    return Promise.all(Array.from(input.files).map(readFileAsBase64));
+}
+function collectAttachments() {
+    return Promise.all([
+        readSingleAttachment('legalCertFile'),
+        readSingleAttachment('businessLicenseFile'),
+        readSingleAttachment('socialSecurityFile'),
+        readSingleAttachment('calibrationFile'),
+        readMultiAttachments('qualCertFile')
+    ]).then(function(results) {
+        return {
+            legalCert: results[0],
+            businessLicense: results[1],
+            socialSecurity: results[2],
+            calibration: results[3],
+            qualCerts: results[4]
+        };
+    });
+}
 
 function removeRow(btn) {
     var row = btn.closest('.dynamic-row, .dynamic-row-qual, .dynamic-row-expert');
@@ -375,6 +431,13 @@ function addExpertRow() {
     container.appendChild(row);
 }
 
+// 按机构类型动态表单：检测机构显示设备信息区，其他类型隐藏
+function applyOrgTypeForm() {
+    var type = (document.getElementById('orgType') || {}).value || '';
+    var section = document.getElementById('equipmentSection');
+    if (section) section.style.display = (type === '检测机构') ? '' : 'none';
+}
+
 function getVal(id) { return document.getElementById(id).value.trim(); }
 function pad(n) { return String(n).padStart(2, '0'); }
 function nowStr() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
@@ -397,6 +460,28 @@ function submitApply() {
         alert('请填写所有必填项');
         return;
     }
+
+    // 先读取附件（转 base64），再组装并提交申请
+    collectAttachments().then(function(attachments) {
+        doSubmitApplication(attachments);
+    }).catch(function(err) {
+        alert(err.message || '附件读取失败');
+    });
+}
+
+function doSubmitApplication(attachments) {
+    var enterpriseName = getVal('enterpriseName');
+    var creditCode = getVal('creditCode');
+    var legalName = getVal('legalName');
+    var legalPhone = getVal('legalPhone');
+    var legalIdCard = getVal('legalIdCard');
+    var address = getVal('address');
+    var establishDate = getVal('establishDate');
+    var capital = getVal('capital');
+    var field = getVal('field');
+    var serviceArea = getVal('serviceArea');
+    var qual = getVal('qual');
+    var businessScope = getVal('businessScope');
 
     var applicationId = 'APP-' + new Date().getFullYear() + pad(new Date().getMonth()+1) + pad(new Date().getDate()) + '-' + String(Math.floor(Math.random() * 9000) + 1000);
     var orgId = 'ORG-' + new Date().getFullYear() + pad(new Date().getMonth()+1) + pad(new Date().getDate()) + '-' + String(Math.floor(Math.random() * 9000) + 1000);
@@ -450,6 +535,7 @@ function submitApply() {
         orgId: orgId,
         status: '待审核',
         submitTime: nowStr(),
+        source: (resubmitApp && resubmitApp.source) || (isRegulatorEntry ? '监管端代录' : '机构自主申报'),
         basic: {
             enterpriseName: enterpriseName,
             creditCode: creditCode,
@@ -471,13 +557,21 @@ function submitApply() {
         personnel: personnel,
         equipment: equipment,
         relatedExperts: relatedExperts,
+        attachments: attachments,
         auditHistory: []
     };
 
     if (resubmitApp) {
-        // 重新提交：沿用原申请编号，状态回到待审核，流程重置并留痕
+        // 重新提交：沿用原申请编号，状态回到待审核，流程重置并留痕；未重新上传的附件保留原数据
         application.applicationId = resubmitApp.applicationId;
         application.orgId = resubmitApp.orgId || application.orgId;
+        var prevAt = resubmitApp.attachments || {};
+        ['legalCert','businessLicense','socialSecurity','calibration'].forEach(function(k) {
+            if (!application.attachments[k] && prevAt[k]) application.attachments[k] = prevAt[k];
+        });
+        if ((!application.attachments.qualCerts || !application.attachments.qualCerts.length) && prevAt.qualCerts) {
+            application.attachments.qualCerts = prevAt.qualCerts;
+        }
         application.auditHistory = (resubmitApp.auditHistory || []);
         application.auditHistory.push({ level: 0, decision: 'resubmit', operator: '机构-' + (legalName || '申请人'), opinion: '补充资料后重新提交', time: nowStr() });
         application.flowState = resubmitApp.flowState || { mode: 'single', levels: 1, currentLevel: 0, status: 'pending' };
@@ -516,9 +610,10 @@ function submitApply() {
     document.getElementById('successMeta').innerHTML =
         '<div><strong>申请编号：</strong>' + application.applicationId + '</div>' +
         '<div><strong>统一社会信用代码：</strong>' + creditCode + '</div>' +
+        '<div><strong>申报来源：</strong>' + application.source + '</div>' +
         '<div><strong>提交时间：</strong>' + application.submitTime + '</div>' +
         '<div><strong>当前状态：</strong>待审核</div>' +
-        '<div><a href="tp-audit.html?tab=progress&orgCode=' + encodeURIComponent(creditCode) + '" style="color:var(--primary);text-decoration:none;"><i class="fas fa-search"></i> 查询审核进度</a></div>';
+        '<div><a href="tp-audit.html?tab=progress&portal=1&orgCode=' + encodeURIComponent(creditCode) + '" style="color:var(--primary);text-decoration:none;"><i class="fas fa-search"></i> 查询审核进度</a></div>';
 }
 
 /* ---------- 驳回后补充资料重新提交：?resubmit=<申请编号> ---------- */
@@ -595,7 +690,23 @@ function initResubmitMode() {
     if (titleEl) titleEl.innerHTML = '<i class="fas fa-edit" style="color: var(--warning);"></i> 补充资料重新提交（原申请编号：' + resubmitApp.applicationId + '）';
 }
 
+function initRegulatorEntry() {
+    if (!isRegulatorEntry) return;
+    var pageTitle = document.querySelector('.page-title');
+    var pageSubtitle = document.querySelector('.page-subtitle');
+    var formTitle = document.querySelector('#applyFormCard .form-title');
+    if (pageTitle) pageTitle.innerHTML = '<i class="fas fa-building" style="color:var(--primary);"></i> 代录机构申报';
+    if (pageSubtitle) pageSubtitle.textContent = '监管端代机构填写申报资料，与机构自主申报共用同一审核流程，提交后进入申报审核中心。';
+    if (formTitle) formTitle.innerHTML = '<i class="fas fa-edit" style="color:var(--primary);"></i> 机构申请信息（监管端代录）';
+    document.querySelectorAll('a[href="tp-overview.html"]').forEach(function(link) {
+        link.href = 'tp-warehouse.html';
+        link.innerHTML = '<i class="fas fa-arrow-left"></i> 返回机构信息管理';
+    });
+}
+
+initRegulatorEntry();
 initResubmitMode();
+applyOrgTypeForm();
 
 /* ---------- 机构信息变更申请：?change=<机构ID> ---------- */
 var CHANGE_FIELDS = [
@@ -683,7 +794,7 @@ function submitChangeRequest() {
         '<div><strong>统一社会信用代码：</strong>' + escHtml(req.creditCode || '-') + '</div>' +
         '<div><strong>提交时间：</strong>' + escHtml(req.submitTime) + '</div>' +
         '<div><strong>当前状态：</strong>待审核</div>' +
-        '<div><a href="tp-audit.html?tab=progress&orgCode=' + encodeURIComponent(req.creditCode || '') + '" style="color:var(--primary);text-decoration:none;"><i class="fas fa-search"></i> 查询审核进度</a></div>';
+        '<div><a href="tp-audit.html?tab=progress&portal=1&orgCode=' + encodeURIComponent(req.creditCode || '') + '" style="color:var(--primary);text-decoration:none;"><i class="fas fa-search"></i> 查询审核进度</a></div>';
 }
 
 initChangeMode();

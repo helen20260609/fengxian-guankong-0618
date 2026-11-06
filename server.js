@@ -470,6 +470,22 @@ function handleApi(req, res, urlPath) {
                 return;
             }
             var houseArchFile = path.join(dataDir, 'house-arch.json');
+            // 写前备份 + 退化检测（原型防护：定位/回溯数据被重置的问题）
+            try {
+                var prevRaw = fs.readFileSync(houseArchFile, 'utf8');
+                if (prevRaw) {
+                    fs.writeFile(houseArchFile + '.bak', prevRaw, 'utf8', function() {});
+                    var prevObj = JSON.parse(prevRaw);
+                    var degraded = [];
+                    Object.keys(prevObj).forEach(function(k) {
+                        var o = prevObj[k], n = obj[k];
+                        if (o && n && o.street && !n.street) degraded.push(k);
+                    });
+                    if (degraded.length) {
+                        console.warn('[house-arch] 警告: street 字段退化(有值→空): ' + degraded.join(', '));
+                    }
+                }
+            } catch (e) { /* 首次写入无备份 */ }
             fs.writeFile(houseArchFile, JSON.stringify(obj, null, 2), 'utf8', function(err2) {
                 if (err2) {
                     sendJson(res, 500, { error: '保存失败' });

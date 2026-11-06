@@ -199,12 +199,16 @@ body { background: var(--bg-page); color: var(--text-main); font-family: "Micros
 const ST_META = { '待验收': { cls: 'wait-check' }, '已完成': { cls: 'done' }, '处置中': { cls: 'wait-check' } };
 const STAGES = [
     { key: 'appraise', name: '安全鉴定', optional: true, fields: [
-        { k: 'orgName', label: '鉴定机构名称' }, { k: 'time', label: '鉴定时间' },
-        { k: 'principal', label: '鉴定负责人' }, { k: 'conclusion', label: '鉴定结论' }
+        { k: 'orgName', label: '鉴定机构名称' }, { k: 'creditCode', label: '统一社会信用代码' },
+        { k: 'time', label: '鉴定时间' }, { k: 'principal', label: '鉴定负责人' },
+        { k: 'conclusion', label: '鉴定结论' }, { k: 'phaseTag', label: '阶段性标识' },
+        { k: 'report', label: '鉴定报告', type: 'files' }, { k: 'remark', label: '备注' }
     ]},
     { key: 'evaluate', name: '安全评估', optional: true, fields: [
-        { k: 'orgName', label: '评估机构名称' }, { k: 'time', label: '评估时间' },
-        { k: 'principal', label: '评估负责人' }, { k: 'conclusion', label: '评估结论' }
+        { k: 'orgName', label: '评估机构名称' }, { k: 'creditCode', label: '统一社会信用代码' },
+        { k: 'time', label: '评估时间' }, { k: 'principal', label: '评估负责人' },
+        { k: 'conclusion', label: '评估结论' }, { k: 'phaseTag', label: '阶段性标识' },
+        { k: 'report', label: '评估报告', type: 'files' }, { k: 'remark', label: '备注' }
     ]},
     { key: 'plan', name: '整治计划', optional: true, fields: [
         { k: 'startTime', label: '计划开始时间' }, { k: 'endTime', label: '计划完成时间' },
@@ -212,17 +216,26 @@ const STAGES = [
         { k: 'scheme', label: '整治方案' },
         { k: 'hardIso', label: '是否采取硬隔离' }, { k: 'noIsoReason', label: '未硬隔离原因说明' }
     ]},
-    { key: 'rectify', name: '整治措施', optional: false }
+    { key: 'rectify', name: '整治措施', optional: true }
 ];
 const RECTIFY_FIELDS = {
     mgmt: [
         { k: 'measure', label: '管理措施' }, { k: 'startTime', label: '开始时间' }, { k: 'endTime', label: '结束时间' },
-        { k: 'principal', label: '负责人' }, { k: 'phone', label: '联系电话' }
+        { k: 'principal', label: '负责人信息' }, { k: 'phone', label: '联系电话' },
+        { k: 'implPhotos', label: '管理措施实施照片', type: 'photos' },
+        { k: 'donePhotos', label: '管理措施完成照片', type: 'photos' },
+        { k: 'finished', label: '措施是否完成' }, { k: 'remark', label: '备注' }
     ],
     eng: [
-        { k: 'measure', label: '工程措施' }, { k: 'planDetail', label: '细化工程措施方案' },
+        { k: 'measure', label: '工程措施' }, { k: 'policyPath', label: '实施拟采用的政策路径' },
+        { k: 'otherPolicyPath', label: '其他实施拟采用政策路径' }, { k: 'planDetail', label: '细化工程措施方案' },
         { k: 'startTime', label: '开始时间' }, { k: 'endTime', label: '结束时间' },
-        { k: 'principal', label: '负责人' }, { k: 'phone', label: '联系电话' }, { k: 'company', label: '施工单位' }
+        { k: 'principal', label: '负责人信息' }, { k: 'phone', label: '联系电话' },
+        { k: 'implPhotos', label: '工程措施实施照片', type: 'photos' },
+        { k: 'donePhotos', label: '工程措施完成照片', type: 'photos' },
+        { k: 'finished', label: '措施是否完成' }, { k: 'remark', label: '备注' },
+        { k: 'company', label: '施工单位' }, { k: 'acceptUnit', label: '验收单位' },
+        { k: 'acceptResult', label: '验收结论' }, { k: 'subsidy', label: '补助资金' }
     ]
 };
 
@@ -334,7 +347,7 @@ function renderReport() {
     const r = sub.handleReport || {};
     document.getElementById('r-method').textContent = r.method || sub.method;
     document.getElementById('r-time').textContent = r.submitTime || '-';
-    document.getElementById('r-reporter').textContent = (r.reporter && r.reporter.type === 'proxy' && r.reporter.proxyName) ? `村委/乡镇代报（${r.reporter.proxyName}）` : '责任人本人填报';
+    document.getElementById('r-reporter').textContent = (r.reporter && r.reporter.type === 'proxy' && r.reporter.proxyName) ? `村委/镇/街道代报（${r.reporter.proxyName}）` : '责任人本人填报';
     document.getElementById('r-note').textContent = r.note || '无';
     document.getElementById('r-count').textContent = (r.processPhotos || []).length;
     document.getElementById('r-photos').innerHTML = (r.processPhotos || []).map(p => `
@@ -367,15 +380,29 @@ function hasStageData(s, st) {
 function stageViewFields(s, st) {
     let html = '';
     if (s.fields && st.fields) {
-        const pairs = s.fields.filter(f => st.fields[f.k]).map(f => `${f.label}：${st.fields[f.k]}`);
+        const pairs = s.fields.filter(f => f.type !== 'files' && st.fields[f.k]).map(f => `${f.label}：${st.fields[f.k]}`);
         if (pairs.length) html += `<div style="margin-top:4px;font-size:12px;color:var(--text-sub);">${esc(pairs.join('；'))}</div>`;
+        s.fields.filter(f => f.type === 'files').forEach(f => {
+            const files = st.fields[f.k] || [];
+            if (!files.length) return;
+            html += `<div style="margin-top:4px;font-size:12px;color:var(--text-sub);">${f.label}：${files.map((fl, i) => `<span style="color:var(--primary);cursor:pointer;" onclick="viewStageFile('${s.key}','${f.k}',${i})">${esc(fl.name)}</span>`).join('、')}</div>`;
+        });
+    }
+    if (st.reporter || st.reportTime) {
+        const extra = [st.reporter ? `填报人：${st.reporter}` : '', st.reportTime ? `填报时间：${st.reportTime}` : ''].filter(Boolean).join('；');
+        html += `<div style="margin-top:4px;font-size:12px;color:var(--text-sub);">${esc(extra)}</div>`;
     }
     if (s.key === 'rectify' && st.types) {
         [['mgmt', '管理措施'], ['eng', '工程措施']].forEach(t => {
             if (!st.types[t[0]]) return;
             normRectArr(st[t[0]]).forEach((d, i) => {
-                const pairs = RECTIFY_FIELDS[t[0]].filter(f => d[f.k]).map(f => `${f.label}：${d[f.k]}`);
+                const pairs = RECTIFY_FIELDS[t[0]].filter(f => f.type !== 'photos' && d[f.k]).map(f => `${f.label}：${d[f.k]}`);
                 if (pairs.length) html += `<div style="margin-top:4px;font-size:12px;color:var(--text-sub);">【${t[1]} ${i + 1}】${esc(pairs.join('；'))}</div>`;
+                RECTIFY_FIELDS[t[0]].filter(f => f.type === 'photos').forEach(f => {
+                    const photos = d[f.k] || [];
+                    if (!photos.length) return;
+                    html += `<div style="margin-top:4px;font-size:12px;color:var(--text-sub);">【${t[1]} ${i + 1}】${f.label}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0;">${photos.map(p => `<img src="${p}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:zoom-in;" onclick="preview('${encodeURIComponent(p)}')">`).join('')}</div>`;
+                });
             });
         });
     }
@@ -392,6 +419,10 @@ function openFile(f) {
 }
 function viewPlanFile() { openFile(sub.handleReport && sub.handleReport.planFile); }
 function viewTestFile() { openFile(sub.handleReport && sub.handleReport.testFile); }
+function viewStageFile(sKey, fKey, i) {
+    const fl = ((((((sub.handleReport || {}).stages || {})[sKey] || {}).fields || {})[fKey]) || [])[i];
+    openFile(fl);
+}
 function renderReportFileRow() {
     document.getElementById('report-row').innerHTML = reportFile ? fileItemHtml(reportFile, 'viewReportFile', 'delReportFile')
         : `<span class="file-add" onclick="document.getElementById('f-report').click()"><i class="fa-solid fa-file-arrow-up"></i>上传竣工验收报告（PDF / 图片，≤5MB）</span>`;

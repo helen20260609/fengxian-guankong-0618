@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>易积水点</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.page-hero .ph-sub { display: none; }
+
+.content-sheet.page-body-sheet { margin-top: 0; padding-top: 18px; border-radius: 0; box-shadow: none; border: none; background: transparent; }
+.content-sheet .search-bar { align-items: center; gap: 10px; margin-top: 4px; background: transparent; box-shadow: none; border: none; padding: 0; }
+.content-sheet .search-input-wrapper { display: flex; align-items: center; background: var(--card); border-radius: var(--radius); box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); min-height: 40px; }
+.content-sheet .search-input-wrapper input { background: transparent; border-color: transparent; height: 40px; padding-top: 0; padding-bottom: 0; }
+.content-sheet .filter-trigger {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 14px;
+    background: var(--card);
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 8px var(--shadow);
+    cursor: pointer;
+    position: relative;
+    transition: all .15s;
+}
+.content-sheet .filter-trigger.active { color: var(--primary); border-color: var(--primary); background: rgba(var(--primary-rgb),.08); }
+.content-sheet .filter-trigger:active { transform: scale(.96); }
+.content-sheet .filter-trigger .badge-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    border: 1.5px solid var(--card);
+    display: none;
+}
+.content-sheet .filter-trigger .badge-num {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid var(--card);
+    box-sizing: border-box;
+}
+
+.search-input-wrapper .clear-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--text2);
+    color: #fff;
+    font-size: 10px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+}
+
+.selected-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.tag { background: rgba(var(--primary-rgb),.08); color: var(--primary); border: 1px solid rgba(var(--primary-rgb),.18); border-radius: 999px; padding: 4px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.tag i { cursor: pointer; font-size: 10px; }
+
+.point-card { cursor: pointer; transition: transform .12s; background: var(--card); border-radius: 12px; box-shadow: 0 2px 10px var(--shadow); border: 1px solid var(--border); padding: 14px 16px; margin-bottom: 12px; overflow: hidden; position: relative; }
+.point-card:active { transform: scale(.99); }
+.point-card.high-risk::before,
+.point-card.major-risk::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--danger);
+}
+.point-card-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.point-location { font-size: 17px; font-weight: 700; color: #1F1F1F; line-height: 1.35; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.point-address { font-size: 13px; color: #7F7F7F; line-height: 1.4; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+.point-address i { margin-right: 4px; color: var(--primary); font-size: 12px; }
+
+.point-info { font-size: 13px; color: #595959; line-height: 1.6; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+.point-info .info-label { color: #8C8C8C; }
+.point-info .info-sep { color: #BFBFBF; margin: 0 16px; }
+.point-info .info-value { font-weight: 500; color: #595959; }
+
+.point-measures { font-size: 13px; color: #595959; line-height: 1.6; padding: 8px 0; }
+.point-measures .info-label { color: #8C8C8C; }
+.point-measures .info-value { font-weight: 500; color: #595959; }
+
+.point-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; gap: 10px; }
+.point-left-meta { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
+.point-meta-line { font-size: 13px; color: #595959; display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.point-meta-line i { color: #8C8C8C; font-size: 12px; flex-shrink: 0; }
+.point-meta-line .meta-label { color: #8C8C8C; flex-shrink: 0; }
+.point-meta-line .meta-value { color: #262626; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.point-meta-line .meta-empty { color: #BFBFBF; }
+.point-call {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #E6FFED;
+    color: #52C41A;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    text-decoration: none;
+    transition: all .15s;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+.point-call:active { transform: scale(.94); background: #52C41A; color: #fff; }
+.point-call.hidden { display: none; }
+
+.risk-tag {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    border: none;
+    line-height: 1.3;
+}
+.risk-tag.major { color: #F5222D; background: #FFF1F0; }
+.risk-tag.high { color: #FA8C16; background: #FFF7E6; }
+.risk-tag.general { color: #D48806; background: #FFFBF0; }
+.risk-tag.low { color: #1677FF; background: #E6F4FF; }
+.risk-tag .dot { width: 6px; height: 6px; border-radius: 50%; }
+.risk-tag.major .dot { background: #F5222D; }
+.risk-tag.high .dot { background: #FA8C16; }
+.risk-tag.general .dot { background: #D48806; }
+.risk-tag.low .dot { background: #1677FF; }
+
+.loading { text-align: center; padding: 16px; color: var(--text2); font-size: 13px; }
+.loading i { margin-right: 6px; }
+
+.filter-section { margin-bottom: 18px; }
+.filter-section .filter-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px; }
+.filter-section .filter-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.filter-chip { padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text-primary); cursor: pointer; transition: all .15s; }
+.filter-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.filter-chip.major.active { background: var(--danger); border-color: var(--danger); }
+.filter-chip.high.active { background: #e65100; border-color: #e65100; }
+.filter-chip.general.active { background: #c78000; border-color: #c78000; }
+.filter-chip.low.active { background: var(--primary); border-color: var(--primary); }
+
+.filter-input-field {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+.filter-input-field:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(var(--primary-rgb),.1); }
+
+.date-range-row { display: flex; align-items: center; gap: 10px; }
+.date-range-row .filter-input-field { flex: 1; }
+.date-range-row span { color: var(--text2); font-size: 13px; flex-shrink: 0; }
+
+.sheet-footer { display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+.sheet-footer .btn { flex: 1; height: 44px; border-radius: 10px; }
+
+.modal-sheet {
+    display: block !important;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: transform .25s ease, opacity .25s ease;
+    z-index: 1001;
+}
+.modal-sheet.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+.modal-mask { display: none; opacity: 0; transition: opacity .25s ease; z-index: 1000; }
+.modal-mask.show { display: block; opacity: 1; }
+
+.bottom-spacer { height: 20px; }
+.empty-state { text-align: center; padding: 40px 16px; color: var(--text2); }
+.empty-state i { font-size: 40px; margin-bottom: 10px; display: block; }
+.empty-state .empty-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.empty-state .empty-desc { font-size: 13px; }
+
+:root[data-theme="dark"] .tag { background: rgba(var(--primary-rgb),.15); border-color: rgba(var(--primary-rgb),.3); }
+:root[data-theme="dark"] .content-sheet .search-input-wrapper input { background: var(--input-bg); }
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="phone-shell">
+        <div class="status-bar light">
+            <span class="sb-time" id="statusTime">9:41</span>
+            <span class="sb-icons">
+                <i class="fa-solid fa-signal"></i>
+                <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+                <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+            </span>
+        </div>
+
+        <div class="page-hero">
+            <div class="ph-back" onclick="App.back()"><i class="fa-solid fa-chevron-left"></i></div>
+            <div class="ph-title">易积水点</div>
+        </div>
+
+        <div class="content-sheet page-body-sheet">
+            <div class="search-bar">
+                <div class="search-input-wrapper" style="flex:1">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="searchInput" placeholder="搜索位置、原因、措施、责任单位、地址、联系人、电话" autocomplete="off">
+                    <button class="clear-btn" id="clearSearch" onclick="clearSearch(event)"><i class="fa-solid fa-times"></i></button>
+                </div>
+                <div class="filter-trigger" id="filterTrigger" onclick="openDrawer()">
+                    <i class="fa-solid fa-filter"></i> 筛选
+                    <span class="badge-dot" id="filterDot"></span>
+                    <span class="badge-num" id="filterBadge" style="display:none">0</span>
+                </div>
+            </div>
+
+            <div class="selected-tags" id="selectedTags"></div>
+
+            <div class="section-v2" id="listSection" style="background:transparent;box-shadow:none;border:none;padding:0;margin:0">
+                <div class="sv2-head" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;padding-left:0">
+                    <div class="sv2-title" style="padding-left:0">
+                        <i class="fa-solid fa-water" style="color:var(--primary);margin-right:6px"></i>点位列表
+                    </div>
+                    <div class="sv2-more" id="totalCount" style="font-size:13px;color:var(--text2)">共 0 处</div>
+                </div>
+                <div class="card-list" id="cardList"></div>
+                <div class="loading" id="loading" style="display:none"><i class="fa-solid fa-circle-notch fa-spin"></i> 加载中…</div>
+                <div class="empty-state" id="empty" style="display:none">
+                    <i class="fa-regular fa-folder-open"></i>
+                    <div class="empty-title">暂无符合条件的数据</div>
+                    <div class="empty-desc">请调整筛选或搜索条件</div>
+                </div>
+                <div class="bottom-spacer"></div>
+            </div>
+        </div>
+
+        <!-- 筛选抽屉 -->
+        <div class="modal-mask" id="drawerOverlay" onclick="closeDrawer()"></div>
+        <div class="modal-sheet" id="drawer">
+            <div class="sheet-header">
+                <div class="sheet-title">筛选条件</div>
+                <div class="sheet-close" onclick="closeDrawer()"><i class="fa-solid fa-times"></i></div>
+            </div>
+            <div id="drawerBody"></div>
+            <div class="sheet-footer">
+                <button class="btn btn-outline" onclick="resetFilters()">重置</button>
+                <button class="btn btn-primary" onclick="confirmFilters()">确定</button>
+            </div>
+        </div>
+    </div>
+    <div class="phone-home-indicator"></div>
+</div>
+
+<script src="../../data/waterlogging-point-data.js"></script>
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function(){
+    var riskOptions = [
+        { key: 'all', label: '全部', cls: '' },
+        { key: '重大', label: '重大风险', cls: 'major' },
+        { key: '较大', label: '较大风险', cls: 'high' },
+        { key: '一般', label: '一般风险', cls: 'general' },
+        { key: '低', label: '低风险', cls: 'low' }
+    ];
+
+    function normalizeRiskLevel(raw) {
+        var v = String(raw || '').trim();
+        if (v.indexOf('重大') !== -1) return '重大';
+        if (v.indexOf('较大') !== -1 || v.indexOf('橙') !== -1) return '较大';
+        if (v.indexOf('一般') !== -1 || v.indexOf('黄') !== -1) return '一般';
+        if (v.indexOf('低') !== -1 || v.indexOf('蓝') !== -1) return '低';
+        return '低';
+    }
+
+    function getRiskInfo(raw) {
+        var level = normalizeRiskLevel(raw);
+        var map = {
+            '重大': { label: '重大风险', cls: 'major', color: '#d93025' },
+            '较大': { label: '较大风险', cls: 'high', color: '#e65100' },
+            '一般': { label: '一般风险', cls: 'general', color: '#c78000' },
+            '低': { label: '低风险', cls: 'low', color: '#1a73e8' }
+        };
+        return map[level];
+    }
+
+    function getInitialData() {
+        var data = (typeof waterloggingPointData !== 'undefined' && Array.isArray(waterloggingPointData)) ? waterloggingPointData : [];
+        data = data.map(function(item, idx) {
+            var clone = Object.assign({}, item);
+            clone.id = item.no ? ('wp_' + item.no + '_' + idx) : ('wp_' + idx);
+            clone._riskLevel = normalizeRiskLevel(item.riskLevel);
+            return clone;
+        });
+        // 默认按风险等级降序：重大>较大>一般>低
+        var order = { '重大': 4, '较大': 3, '一般': 2, '低': 1 };
+        data.sort(function(a, b) { return order[b._riskLevel] - order[a._riskLevel]; });
+        try { localStorage.setItem('waterloggingPointData', JSON.stringify(data)); } catch (e) {}
+        return data;
+    }
+
+    var allData = getInitialData();
+    var selectedFilters = {};
+
+    function getFilteredData() {
+        var keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+        return allData.filter(function(item) {
+            if (selectedFilters.riskLevel && selectedFilters.riskLevel !== 'all') {
+                if (item._riskLevel !== selectedFilters.riskLevel) return false;
+            }
+            if (keyword) {
+                var hay = (
+                    (item.location || '') + ' ' +
+                    (item.reason || '') + ' ' +
+                    (item.measures || '') + ' ' +
+                    (item.responsibleUnit || '') + ' ' +
+                    (item.detailAddress || '') + ' ' +
+                    (item.contactName || '') + ' ' +
+                    (item.phone || '') + ' ' +
+                    (item.reportUnit || '') + ' ' +
+                    (item.reporter || '')
+                ).toLowerCase();
+                if (hay.indexOf(keyword) === -1) return false;
+            }
+            if (selectedFilters.reportDateStart && item.reportDate && item.reportDate < selectedFilters.reportDateStart) return false;
+            if (selectedFilters.reportDateEnd && item.reportDate && item.reportDate > selectedFilters.reportDateEnd) return false;
+            return true;
+        });
+    }
+
+    function renderTags() {
+        var container = document.getElementById('selectedTags');
+        var tags = [];
+        if (selectedFilters.riskLevel && selectedFilters.riskLevel !== 'all') {
+            var opt = riskOptions.find(function(o) { return o.key === selectedFilters.riskLevel; });
+            tags.push({ key: 'riskLevel', label: '风险等级：' + (opt ? opt.label : selectedFilters.riskLevel) });
+        }
+        if (selectedFilters.reportDateStart) tags.push({ key: 'reportDateStart', label: '填报日期起：' + selectedFilters.reportDateStart });
+        if (selectedFilters.reportDateEnd) tags.push({ key: 'reportDateEnd', label: '填报日期止：' + selectedFilters.reportDateEnd });
+        container.innerHTML = tags.map(function(t) {
+            return '<div class="tag">' + App.escapeHtml(t.label) + '<i class="fa-solid fa-times" onclick="removeFilter(\'' + t.key + '\')"></i></div>';
+        }).join('');
+    }
+
+    window.removeFilter = function(key) {
+        delete selectedFilters[key];
+        renderTags();
+        renderFilterDot();
+        refresh();
+    };
+
+    function renderFilterDot() {
+        var activeCount = 0;
+        if (selectedFilters.riskLevel && selectedFilters.riskLevel !== 'all') activeCount++;
+        if (selectedFilters.reportDateStart) activeCount++;
+        if (selectedFilters.reportDateEnd) activeCount++;
+        var badge = document.getElementById('filterBadge');
+        var trigger = document.getElementById('filterTrigger');
+        if (activeCount > 0) {
+            badge.textContent = activeCount;
+            badge.style.display = 'inline-flex';
+            trigger.classList.add('active');
+        } else {
+            badge.style.display = 'none';
+            trigger.classList.remove('active');
+        }
+    }
+
+    function renderCard(item) {
+        var risk = getRiskInfo(item.riskLevel);
+        var cardClass = 'point-card tap';
+        if (risk.cls === 'major' || risk.cls === 'high') cardClass += ' high-risk';
+
+        var hasPhone = item.phone && String(item.phone).trim();
+        var phoneRaw = hasPhone ? String(item.phone).replace(/\s/g, '').replace(/\*/g, '') : '';
+        var contactName = item.contactName && String(item.contactName).trim();
+        var unitName = item.responsibleUnit && String(item.responsibleUnit).trim();
+
+        var contactLine = contactName
+            ? '<div class="point-meta-line"><i class="fa-regular fa-user"></i><span class="meta-value">' + App.escapeHtml(contactName) + (hasPhone ? '·' + App.escapeHtml(phoneRaw) : '') + '</span></div>'
+            : '<div class="point-meta-line"><i class="fa-regular fa-user"></i><span class="meta-value">联系人未填报</span></div>';
+        var unitLine = unitName
+            ? '<div class="point-meta-line"><i class="fa-regular fa-building"></i><span class="meta-value">' + App.escapeHtml(unitName) + '</span></div>'
+            : '<div class="point-meta-line"><i class="fa-regular fa-building"></i><span class="meta-empty">责任单位未填报</span></div>';
+        var callBtn = hasPhone
+            ? '<a class="point-call tap" onclick="event.stopPropagation();window.location.href=\'tel:' + App.escapeHtml(phoneRaw) + '\'"><i class="fa-solid fa-phone"></i></a>'
+            : '';
+
+        var impactLine = '<span class="info-label">影响范围：</span><span class="info-value">' + App.escapeHtml(item.impactRange || '—') + '</span>' +
+            '<span class="info-sep">│</span>' +
+            '<span class="info-label">原因：</span><span class="info-value">' + App.escapeHtml(item.reason || '—') + '</span>';
+        var measuresLine = '<span class="info-label">整改措施：</span><span class="info-value">' + App.escapeHtml(item.measures || '—') + '</span>';
+
+        return '<div class="' + cardClass + '" onclick="App.go(\'waterlogging-point-detail.html?id=' + encodeURIComponent(item.id) + '\')">' +
+            '<div class="point-card-header">' +
+                '<div class="point-location">' + App.escapeHtml(item.location || '—') + '</div>' +
+                '<div class="risk-tag ' + risk.cls + '"><span class="dot"></span>' + App.escapeHtml(risk.label) + '</div>' +
+            '</div>' +
+            '<div class="point-info">' + impactLine + '</div>' +
+            '<div class="point-address"><i class="fa-solid fa-location-dot"></i>' + App.escapeHtml(item.detailAddress || '—') + '</div>' +
+            '<div class="point-footer">' +
+                '<div class="point-left-meta">' + contactLine + '</div>' +
+                callBtn +
+            '</div>' +
+        '</div>';
+    }
+
+    function renderList() {
+        var data = getFilteredData();
+        var container = document.getElementById('cardList');
+        var empty = document.getElementById('empty');
+        document.getElementById('totalCount').textContent = '共 ' + data.length + ' 处';
+        if (data.length === 0) {
+            container.innerHTML = '';
+            empty.style.display = 'block';
+            return;
+        }
+        empty.style.display = 'none';
+        container.innerHTML = data.map(renderCard).join('');
+    }
+
+    function refresh() {
+        renderTags();
+        renderList();
+    }
+
+    function initSearch() {
+        var input = document.getElementById('searchInput');
+        var clearBtn = document.getElementById('clearSearch');
+        input.addEventListener('input', function() {
+            clearBtn.style.display = input.value ? 'flex' : 'none';
+            refresh();
+        });
+        input.addEventListener('focus', function() { clearBtn.style.display = input.value ? 'flex' : 'none'; });
+    }
+
+    window.clearSearch = function(e) {
+        if (e) e.stopPropagation();
+        document.getElementById('searchInput').value = '';
+        document.getElementById('clearSearch').style.display = 'none';
+        refresh();
+    };
+
+    function renderDrawer() {
+        var body = document.getElementById('drawerBody');
+        var riskHtml = '<div class="filter-section">' +
+            '<div class="filter-title">风险等级</div>' +
+            '<div class="filter-options">' +
+            riskOptions.map(function(opt) {
+                var active = selectedFilters.riskLevel === opt.key || (!selectedFilters.riskLevel && opt.key === 'all');
+                return '<div class="filter-chip ' + opt.cls + (active ? ' active' : '') + '" onclick="selectFilter(\'riskLevel\', \'' + opt.key + '\')">' + App.escapeHtml(opt.label) + '</div>';
+            }).join('') +
+            '</div></div>';
+
+        var dateHtml = '<div class="filter-section">' +
+            '<div class="filter-title">填报日期</div>' +
+            '<div class="date-range-row">' +
+                '<input type="date" class="filter-input-field" id="drawerDateStart" value="' + App.escapeHtml(selectedFilters.reportDateStart || '') + '">' +
+                '<span>至</span>' +
+                '<input type="date" class="filter-input-field" id="drawerDateEnd" value="' + App.escapeHtml(selectedFilters.reportDateEnd || '') + '">' +
+            '</div>' +
+            '</div>';
+
+        body.innerHTML = riskHtml + dateHtml;
+    }
+
+    window.selectFilter = function(key, val) {
+        selectedFilters[key] = val;
+        renderDrawer();
+    };
+
+    window.openDrawer = function() {
+        renderDrawer();
+        document.getElementById('drawerOverlay').classList.add('show');
+        document.getElementById('drawer').classList.add('show');
+    };
+
+    window.closeDrawer = function() {
+        document.getElementById('drawerOverlay').classList.remove('show');
+        document.getElementById('drawer').classList.remove('show');
+    };
+
+    window.confirmFilters = function() {
+        var startInput = document.getElementById('drawerDateStart');
+        var endInput = document.getElementById('drawerDateEnd');
+        if (startInput && startInput.value) selectedFilters.reportDateStart = startInput.value;
+        else delete selectedFilters.reportDateStart;
+        if (endInput && endInput.value) selectedFilters.reportDateEnd = endInput.value;
+        else delete selectedFilters.reportDateEnd;
+        renderTags();
+        renderFilterDot();
+        closeDrawer();
+        refresh();
+    };
+
+    window.resetFilters = function() {
+        selectedFilters = {};
+        renderDrawer();
+    };
+
+    function init() {
+        initSearch();
+        renderTags();
+        renderFilterDot();
+        renderList();
+
+        var now = new Date();
+        document.getElementById('statusTime').textContent =
+            String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    }
+
+    init();
+})();
+</script>
+</body>
+</html>

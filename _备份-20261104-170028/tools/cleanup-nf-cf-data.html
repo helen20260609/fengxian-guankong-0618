@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>清理农房/城房错乱数据</title>
+<style>
+    body{font-family:"Microsoft YaHei",sans-serif;max-width:900px;margin:24px auto;padding:0 16px;color:#202124;}
+    h2{border-left:4px solid #1a73e8;padding-left:10px;}
+    .card{background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin:12px 0;}
+    .btn{background:#1a73e8;color:#fff;border:0;border-radius:6px;padding:10px 20px;cursor:pointer;font-size:14px;}
+    .btn:hover{background:#1557b0;}
+    .btn.danger{background:#d93025;}
+    pre{background:#f5f7fa;padding:12px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px;}
+    .ok{color:#188038;}
+    .warn{color:#d93025;}
+</style>
+</head>
+<body>
+<h2>农房 / 城房错乱数据清理工具</h2>
+
+<div class="card">
+    <h3>当前数据状况</h3>
+    <button class="btn" onclick="scan()">扫描</button>
+    <pre id="scanResult">点击"扫描"查看...</pre>
+</div>
+
+<div class="card">
+    <h3>清理操作</h3>
+    <p>本操作将：</p>
+    <ol>
+        <li>把 <code>urbanHouseArchData</code> / <code>urbanHouseArchDraft</code> 中所有 <code>NF-</code> 前缀的键改为 <code>CF-</code>（保留原数据）</li>
+        <li>清理 <code>houseArchData</code> / <code>houseArchDraft</code>（农房）中由详情页兜底逻辑误创建的空记录（默认 <code>riskLevel: '第二类'</code> 且无业务字段的）</li>
+        <li>清除一次性迁移标记 <code>urbanNoMigratedToCF</code>，让新逻辑（每次加载都迁移）生效</li>
+    </ol>
+    <button class="btn danger" onclick="cleanup()">立即清理</button>
+    <pre id="cleanResult">等待清理...</pre>
+</div>
+
+<script>
+const NF = /^NF-/i;
+
+function scan() {
+    const out = [];
+    ['urbanHouseArchData', 'urbanHouseArchDraft', 'houseArchData', 'houseArchDraft'].forEach(key => {
+        let data = {};
+        try { data = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
+        const allKeys = Object.keys(data);
+        const nfKeys = allKeys.filter(k => NF.test(k));
+        const cfKeys = allKeys.filter(k => /^CF-/i.test(k));
+        out.push(`[${key}] 共 ${allKeys.length} 条 | NF- ${nfKeys.length} 条 | CF- ${cfKeys.length} 条`);
+        if (nfKeys.length && key.startsWith('urban')) {
+            out.push(`  ⚠️ 城镇仓库残留 NF- 编号: ${nfKeys.slice(0, 5).join(', ')}${nfKeys.length > 5 ? ' ...' : ''}`);
+        }
+    });
+    out.push(`urbanNoMigratedToCF = ${localStorage.getItem('urbanNoMigratedToCF') || '(未设置)'}`);
+    document.getElementById('scanResult').textContent = out.join('\n');
+}
+
+function cleanup() {
+    const out = [];
+    let migrated = 0, removed = 0;
+
+    // 1. 迁移城镇 NF- → CF-
+    ['urbanHouseArchData', 'urbanHouseArchDraft'].forEach(key => {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        let all;
+        try { all = JSON.parse(raw); } catch (e) { return; }
+        const nfKeys = Object.keys(all).filter(k => NF.test(k));
+        if (!nfKeys.length) { out.push(`[${key}] 无 NF- 残留`); return; }
+        // 备份
+        try { localStorage.setItem(key + '.bak-' + Date.now(), raw); } catch (e) {}
+        nfKeys.forEach(oldKey => {
+            const newKey = oldKey.replace(NF, 'CF-');
+            const rec = all[oldKey];
+            if (rec && typeof rec === 'object') {
+                if (rec.no && NF.test(rec.no)) rec.no = rec.no.replace(NF, 'CF-');
+                if (rec.houseNo && NF.test(rec.houseNo)) rec.houseNo = rec.houseNo.replace(NF, 'CF-');
+            }
+            if (!all[newKey]) { all[newKey] = rec; migrated++; }
+            delete all[oldKey];
+        });
+        localStorage.setItem(key, JSON.stringify(all));
+        out.push(`[${key}] 迁移 ${nfKeys.length} 条 NF- → CF-`);
+    });
+
+    // 2. 清掉农房仓库里"兜底创建"的空记录（编号不在 00001-00085 范围内，且只有默认字段）
+    ['houseArchData', 'houseArchDraft'].forEach(key => {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        let all;
+        try { all = JSON.parse(raw); } catch (e) { return; }
+        const toDelete = [];
+        Object.keys(all).forEach(k => {
+            if (!NF.test(k)) return;
+            const m = k.match(/^NF-2025-(\d{5})$/i);
+            if (!m) return;
+            const seq = parseInt(m[1], 10);
+            const rec = all[k];
+            // 农房种子只有 1-85，超过范围的多半是详情页兜底误创建
+            if (seq > 85) {
+                // 进一步判断：是否几乎无业务字段
+                const bizKeys = Object.keys(rec).filter(k2 => !k2.startsWith('_') && rec[k2] && rec[k2] !== '' && rec[k2] !== '—' && k2 !== 'no');
+                if (bizKeys.length < 10) {
+                    toDelete.push(k);
+                }
+            }
+        });
+        if (toDelete.length) {
+            try { localStorage.setItem(key + '.bak-' + Date.now(), raw); } catch (e) {}
+            toDelete.forEach(k => { delete all[k]; removed++; });
+            localStorage.setItem(key, JSON.stringify(all));
+            out.push(`[${key}] 删除误创建空记录 ${toDelete.length} 条: ${toDelete.join(', ')}`);
+        } else {
+            out.push(`[${key}] 无误创建空记录`);
+        }
+    });
+
+    // 3. 清除一次性迁移标记（让新版每次加载都跑迁移）
+    localStorage.removeItem('urbanNoMigratedToCF');
+    out.push('已清除 urbanNoMigratedToCF 标记');
+
+    out.push(`\n✅ 完成：迁移 ${migrated} 条，删除 ${removed} 条`);
+    out.push('\n请按 Ctrl+Shift+R 强制刷新其他页面。');
+    document.getElementById('cleanResult').textContent = out.join('\n');
+}
+
+// 自动扫描一次
+scan();
+</script>
+</body>
+</html>

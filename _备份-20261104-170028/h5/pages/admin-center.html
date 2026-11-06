@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>管理后台</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/h5-frame.css">
+<style>
+.admin-hero { background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%); padding: 18px; color: #fff; }
+.admin-hero .ah-title { font-size: 19px; font-weight: 700; }
+.admin-hero .ah-sub { font-size: 12.5px; opacity: .85; margin-top: 5px; }
+
+.admin-tabs { display: flex; background: var(--card); border-bottom: 1px solid var(--border); position: -webkit-sticky; position: sticky; top: calc(34px + var(--nav-bar-height, 44px) + var(--safe-top, 0px)); z-index: 90; }
+.admin-tab { flex: 1; padding: 14px 4px; text-align: center; font-size: 13px; color: var(--text2); position: relative; cursor: pointer; }
+.admin-tab.active { color: var(--primary); font-weight: 700; }
+.admin-tab.active::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: 0; height: 3px; border-radius: 2px; background: var(--primary); }
+.admin-tab .tab-count { display: inline-block; min-width: 16px; padding: 1px 5px; border-radius: 5px; background: var(--danger); color: #fff; font-size: 9px; margin-left: 4px; }
+
+.admin-panel { display: none; padding-bottom: calc(var(--safe-bottom) + 80px); }
+.admin-panel.active { display: block; }
+
+.search-bar { margin: 14px; background: var(--card); border-radius: 6px; border: 1px solid var(--border); padding: 10px 12px; display: flex; align-items: center; gap: 8px; }
+.search-bar input { flex: 1; border: none; background: transparent; font-size: 13px; color: var(--text-primary); outline: none; }
+.search-bar input::placeholder { color: var(--text2); }
+
+.admin-list { padding: 0 14px; }
+.admin-card { background: var(--card); border-radius: 10px; padding: 14px; margin-bottom: 12px; box-shadow: 0 2px 8px var(--shadow); border: 1px solid var(--border); }
+.admin-card .ac-top { display: flex; align-items: center; gap: 12px; }
+.admin-card .ac-avatar { width: 44px; height: 44px; border-radius: 5px; background: var(--bg-hover); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; color: var(--primary); flex-shrink: 0; }
+.admin-card .ac-body { flex: 1; min-width: 0; }
+.admin-card .ac-title { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-card .ac-meta { font-size: 11px; color: var(--text2); margin-top: 4px; }
+.admin-card .ac-actions { display: flex; gap: 8px; margin-top: 12px; }
+.admin-card .ac-actions .btn { flex: 1; font-size: 12px; padding: 8px 0; }
+
+.admin-card .announce-item { border-left: 3px solid var(--border); padding-left: 10px; }
+.admin-card .announce-item.warning { border-left-color: var(--danger); }
+.admin-card .announce-item.notice { border-left-color: var(--warning); }
+.admin-card .announce-item.tip { border-left-color: var(--primary); }
+
+.approval-reason { background: var(--bg-hover); border-radius: 5px; padding: 10px; font-size: 11px; color: var(--text-primary); margin-top: 10px; line-height: 1.5; }
+
+.bottom-actions { position: -webkit-sticky; position: sticky; bottom: 0; width: 100%; max-width: 390px; padding: 12px 14px calc(12px + var(--safe-bottom, 0px)); background: var(--card); border-top: 1px solid var(--border); display: flex; gap: 10px; z-index: 100; }
+.bottom-actions .btn { flex: 1; }
+
+.empty-state { padding: 40px 0; text-align: center; color: var(--text2); }
+.empty-state i { font-size: 38px; margin-bottom: 10px; }
+.empty-state .empty-title { font-size: 13px; }
+
+.modal-form .form-item { margin-bottom: 14px; }
+.modal-form .form-item label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--text-primary); }
+.modal-form .form-item label .req { color: var(--danger); }
+.modal-form .form-item input, .modal-form .form-item select, .modal-form .form-item textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); font-size: 13px; background: var(--input-bg); color: var(--text-primary); font-family: inherit; }
+.modal-form .form-item input:focus, .modal-form .form-item select:focus, .modal-form .form-item textarea:focus { outline: none; border-color: var(--primary); }
+.modal-form .form-item textarea { min-height: 80px; resize: vertical; }
+.modal-form .radio-group { display: flex; gap: 16px; flex-wrap: wrap; }
+.modal-form .radio-item { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.modal-form .radio-item input { width: 18px; height: 18px; accent-color: var(--primary); }
+
+.detail-section { margin-bottom: 14px; }
+.detail-section .ds-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+.detail-section .ds-value { font-size: 13px; color: var(--text-primary); line-height: 1.5; }
+.detail-section .ds-content { background: var(--bg-hover); border-radius: 6px; padding: 12px; font-size: 12px; line-height: 1.6; color: var(--text-primary); }
+
+.sub-tabs { display: flex; gap: 10px; padding: 14px 14px 0; }
+.sub-tab { flex: 1; text-align: center; padding: 10px; border-radius: 6px; background: var(--card); border: 1px solid var(--border); font-size: 12px; color: var(--text2); cursor: pointer; }
+.sub-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+@media print {
+    .phone-frame, .status-bar, .nav-bar, .admin-tabs, .bottom-actions { display: none !important; }
+    body { background: #fff; }
+    .phone-shell { width: 100%; max-width: none; }
+}
+</style>
+</head>
+<body>
+<div class="phone-frame">
+    <div class="side-button side-button-left mute"></div>
+    <div class="side-button side-button-left volume-up"></div>
+    <div class="side-button side-button-left volume-down"></div>
+    <div class="side-button side-button-right power"></div>
+    <div class="phone-shell">
+
+    <div class="status-bar light">
+        <span class="sb-time" id="statusTime">9:41</span>
+        <span class="sb-icons">
+            <i class="fa-solid fa-signal"></i>
+            <i class="fa-solid fa-wifi" style="margin-left:4px"></i>
+            <i class="fa-solid fa-battery-full" style="margin-left:4px"></i>
+        </span>
+    </div>
+
+    <div class="nav-bar" id="navBar"></div>
+
+    <div class="admin-hero">
+        <div class="ah-title">管理后台</div>
+        <div class="ah-sub">用户 · 公告 · 审批 一站式管理</div>
+    </div>
+
+    <div class="admin-tabs">
+        <div class="admin-tab active" onclick="switchMainTab('users')">用户管理</div>
+        <div class="admin-tab" onclick="switchMainTab('announcements')">公告发布</div>
+        <div class="admin-tab" onclick="switchMainTab('approvals')">权限审批<span class="tab-count" id="approvalBadge">2</span></div>
+    </div>
+
+    <!-- 用户管理 -->
+    <div class="admin-panel active" id="panelUsers">
+        <div class="search-bar">
+            <i class="fa-solid fa-magnifying-glass" style="color:var(--text2)"></i>
+            <input type="text" id="userSearch" placeholder="搜索姓名、部门">
+        </div>
+        <div class="admin-list" id="userList">
+            <!-- 动态填充 -->
+        </div>
+
+        <div class="bottom-actions">
+            <button class="btn btn-primary" onclick="openUserModal()"><i class="fa-solid fa-plus"></i> 新增用户</button>
+        </div>
+    </div>
+
+    <!-- 公告发布 -->
+    <div class="admin-panel" id="panelAnnouncements">
+        <div class="admin-list" id="announcementList" style="padding-top:14px">
+            <!-- 动态填充 -->
+        </div>
+
+        <div class="bottom-actions">
+            <button class="btn btn-primary" onclick="openPublishModal()"><i class="fa-solid fa-bullhorn"></i> 发布公告</button>
+        </div>
+    </div>
+
+    <!-- 权限审批 -->
+    <div class="admin-panel" id="panelApprovals">
+        <div class="sub-tabs">
+            <div class="sub-tab active" onclick="switchApprovalSub('pending')">待审批</div>
+            <div class="sub-tab" onclick="switchApprovalSub('approved')">已通过</div>
+            <div class="sub-tab" onclick="switchApprovalSub('rejected')">已驳回</div>
+        </div>
+        <div class="admin-list" id="approvalList" style="padding-top:14px">
+            <!-- 动态填充 -->
+        </div>
+    </div>
+
+    <!-- 用户编辑/新增弹窗 -->
+    <div class="modal-mask" id="userModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title" id="userModalTitle">新增用户</div>
+                <div class="sheet-close tap" onclick="closeUserModal()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="modal-form">
+                <div class="form-item">
+                    <label>姓名 <span class="req">*</span></label>
+                    <input type="text" id="userNameInput" placeholder="填写用户姓名">
+                    <div class="error-msg" id="userNameInputError"></div>
+                </div>
+                <div class="form-item">
+                    <label>手机号 <span class="req">*</span></label>
+                    <input type="tel" id="userPhoneInput" placeholder="填写手机号">
+                    <div class="error-msg" id="userPhoneInputError"></div>
+                </div>
+                <div class="form-item">
+                    <label>角色 <span class="req">*</span></label>
+                    <select id="userRoleInput">
+                        <option value="public">普通用户</option>
+                        <option value="inspector">巡查人员</option>
+                        <option value="manager">管理人员</option>
+                        <option value="enterprise">企业人员</option>
+                    </select>
+                    <div class="error-msg" id="userRoleInputError"></div>
+                </div>
+                <div class="form-item">
+                    <label>部门</label>
+                    <input type="text" id="userDeptInput" placeholder="填写部门">
+                </div>
+                <div class="form-item">
+                    <label>职位</label>
+                    <input type="text" id="userPositionInput" placeholder="填写职位">
+                </div>
+                <div class="form-item">
+                    <label>状态</label>
+                    <div class="radio-group">
+                        <label class="radio-item"><input type="radio" name="userStatus" value="enabled" checked> 启用</label>
+                        <label class="radio-item"><input type="radio" name="userStatus" value="disabled"> 禁用</label>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-block" onclick="saveUser()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 公告详情弹窗 -->
+    <div class="modal-mask" id="announceDetailModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title">公告详情</div>
+                <div class="sheet-close tap" onclick="closeAnnounceDetailModal()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div id="announceDetailContent">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 发布公告弹窗 -->
+    <div class="modal-mask" id="publishModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title">发布公告</div>
+                <div class="sheet-close tap" onclick="closePublishModal()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="modal-form">
+                <div class="form-item">
+                    <label>标题 <span class="req">*</span></label>
+                    <input type="text" id="annTitleInput" placeholder="填写公告标题">
+                    <div class="error-msg" id="annTitleInputError"></div>
+                </div>
+                <div class="form-item">
+                    <label>类型 <span class="req">*</span></label>
+                    <select id="annTypeInput">
+                        <option value="notice">通知公告</option>
+                        <option value="warning">预警信息</option>
+                        <option value="tip">工作提示</option>
+                    </select>
+                    <div class="error-msg" id="annTypeInputError"></div>
+                </div>
+                <div class="form-item">
+                    <label>等级 <span class="req">*</span></label>
+                    <select id="annLevelInput">
+                        <option value="red">紧急</option>
+                        <option value="orange">重要</option>
+                        <option value="blue" selected>提示</option>
+                    </select>
+                    <div class="error-msg" id="annLevelInputError"></div>
+                </div>
+                <div class="form-item">
+                    <label>发布单位</label>
+                    <input type="text" id="annUnitInput" value="区应急管理局">
+                </div>
+                <div class="form-item">
+                    <label>发布区域</label>
+                    <input type="text" id="annRegionInput" placeholder="填写区域，如：全区">
+                </div>
+                <div class="form-item">
+                    <label>联系电话</label>
+                    <input type="text" id="annContactInput" placeholder="填写联系人及电话">
+                </div>
+                <div class="form-item">
+                    <label>内容 <span class="req">*</span></label>
+                    <textarea id="annContentInput" placeholder="填写公告内容"></textarea>
+                    <div class="error-msg" id="annContentInputError"></div>
+                </div>
+                <button class="btn btn-primary btn-block" onclick="publishAnnouncement()">立即发布</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 审批驳回弹窗 -->
+    <div class="modal-mask" id="rejectModal">
+        <div class="modal-sheet">
+            <div class="sheet-header">
+                <div class="sheet-title">填写驳回原因</div>
+                <div class="sheet-close tap" onclick="closeRejectModal()"><i class="fa-solid fa-xmark"></i></div>
+            </div>
+            <div class="modal-form">
+                <div class="form-item">
+                    <label>驳回原因 <span class="req">*</span></label>
+                    <textarea id="rejectReasonInput" placeholder="填写驳回原因"></textarea>
+                    <div class="error-msg" id="rejectReasonInputError"></div>
+                </div>
+                <button class="btn btn-danger btn-block" onclick="confirmReject()">确认驳回</button>
+            </div>
+        </div>
+    </div>
+
+    </div>
+</div>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/risk-data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+(function() {
+    if (!App.isManager || !App.isManager()) {
+        App.showToast('仅管理人员可访问管理后台');
+        setTimeout(function() { App.back(); }, 1500);
+        return;
+    }
+
+    App.renderNavBar('管理后台');
+
+    var roleLabels = DataStore.roleLabels;
+    var typeLabels = { warning: '预警信息', notice: '通知公告', tip: '工作提示' };
+    var approvalTypeLabels = { account: '账号开通', role: '角色变更', permission: '权限申请' };
+    var currentApprovalSub = 'pending';
+    var editingUserId = null;
+    var currentRejectId = null;
+
+    function updateApprovalBadge() {
+        var count = DataStore.pendingApprovals.filter(function(a) { return a.status === 'pending'; }).length;
+        var badge = document.getElementById('approvalBadge');
+        badge.textContent = count;
+        badge.style.display = count > 0 ? 'inline-block' : 'none';
+    }
+
+    // ===== 标签切换 =====
+    window.switchMainTab = function(tab) {
+        document.querySelectorAll('.admin-tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelector('.admin-tab:nth-child(' + (tab === 'users' ? 1 : (tab === 'announcements' ? 2 : 3)) + ')').classList.add('active');
+        document.querySelectorAll('.admin-panel').forEach(function(p) { p.classList.remove('active'); });
+        document.getElementById('panel' + (tab.charAt(0).toUpperCase() + tab.slice(1))).classList.add('active');
+        if (tab === 'users') renderUsers();
+        if (tab === 'announcements') renderAnnouncements();
+        if (tab === 'approvals') renderApprovals();
+    };
+
+    window.switchApprovalSub = function(status) {
+        currentApprovalSub = status;
+        document.querySelectorAll('.sub-tab').forEach(function(t, i) {
+            t.classList.toggle('active', (status === 'pending' && i === 0) || (status === 'approved' && i === 1) || (status === 'rejected' && i === 2));
+        });
+        renderApprovals();
+    };
+
+    // ===== 用户管理 =====
+    window.renderUsers = function() {
+        var keyword = document.getElementById('userSearch').value.trim().toLowerCase();
+        var list = DataStore.users.filter(function(u) {
+            return !keyword || u.name.toLowerCase().indexOf(keyword) !== -1 || u.dept.toLowerCase().indexOf(keyword) !== -1;
+        });
+        var container = document.getElementById('userList');
+        if (list.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fa-regular fa-folder-open"></i><div class="empty-title">未找到用户</div></div>';
+            return;
+        }
+        container.innerHTML = list.map(function(u) {
+            return '<div class="admin-card tap" onclick="openUserModal(\'' + u.id + '\')">' +
+                '<div class="ac-top">' +
+                    '<div class="ac-avatar" style="background:' + (u.status === 'enabled' ? 'rgba(var(--primary-rgb),.12);color:var(--primary)' : 'var(--bg-hover);color:var(--text2)') + '">' + u.name.charAt(0) + '</div>' +
+                    '<div class="ac-body">' +
+                        '<div class="ac-title">' + App.escapeHtml(u.name) + ' <span class="role-chip" style="font-size: 10px;padding:1px 6px;border-radius:4px;background:rgba(var(--primary-rgb),.12);color:var(--primary)">' + roleLabels[u.role] + '</span></div>' +
+                        '<div class="ac-meta">' + App.escapeHtml(u.dept) + ' · ' + App.escapeHtml(u.position || '') + ' · ' + (u.status === 'enabled' ? '已启用' : '已禁用') + '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="ac-actions">' +
+                    '<button class="btn btn-outline" style="font-size: 11px" onclick="event.stopPropagation();toggleUserStatus(\'' + u.id + '\')">' + (u.status === 'enabled' ? '禁用' : '启用') + '</button>' +
+                    '<button class="btn btn-primary" style="font-size: 11px" onclick="event.stopPropagation();openUserModal(\'' + u.id + '\')">编辑</button>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    };
+
+    window.openUserModal = function(id) {
+        editingUserId = id || null;
+        App.clearFormErrors('#userModal');
+        document.getElementById('userModalTitle').textContent = id ? '编辑用户' : '新增用户';
+        if (id) {
+            var u = DataStore.getUser(id);
+            document.getElementById('userNameInput').value = u.name;
+            document.getElementById('userPhoneInput').value = u.phone;
+            document.getElementById('userRoleInput').value = u.role;
+            document.getElementById('userDeptInput').value = u.dept;
+            document.getElementById('userPositionInput').value = u.position || '';
+            var radios = document.getElementsByName('userStatus');
+            for (var i = 0; i < radios.length; i++) { radios[i].checked = radios[i].value === u.status; }
+        } else {
+            document.getElementById('userNameInput').value = '';
+            document.getElementById('userPhoneInput').value = '';
+            document.getElementById('userRoleInput').value = 'public';
+            document.getElementById('userDeptInput').value = '';
+            document.getElementById('userPositionInput').value = '';
+            var radios = document.getElementsByName('userStatus');
+            for (var i = 0; i < radios.length; i++) { radios[i].checked = radios[i].value === 'enabled'; }
+        }
+        document.getElementById('userModal').classList.add('show');
+    };
+
+    window.closeUserModal = function() {
+        document.getElementById('userModal').classList.remove('show');
+    };
+
+    window.saveUser = function() {
+        var status = 'enabled';
+        var radios = document.getElementsByName('userStatus');
+        for (var i = 0; i < radios.length; i++) { if (radios[i].checked) status = radios[i].value; }
+
+        var v = App.validateForm([
+            { id: 'userNameInput', name: '姓名', rules: ['required'] },
+            { id: 'userPhoneInput', name: '手机号', rules: ['required', 'phone'] },
+            { id: 'userRoleInput', name: '角色', rules: ['required'] }
+        ], '#userModal');
+        if (!v.valid) return;
+
+        var name = document.getElementById('userNameInput').value.trim();
+        var phone = document.getElementById('userPhoneInput').value.trim();
+        var role = document.getElementById('userRoleInput').value;
+        var dept = document.getElementById('userDeptInput').value.trim();
+        var position = document.getElementById('userPositionInput').value.trim();
+
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('保存中...');
+        setTimeout(function() {
+            if (editingUserId) {
+                DataStore.updateUser(editingUserId, { name: name, phone: phone, role: role, dept: dept, position: position, status: status });
+            } else {
+                DataStore.addUser({ name: name, phone: phone, role: role, dept: dept, position: position, status: status });
+            }
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            closeUserModal();
+            renderUsers();
+            App.showToast(editingUserId ? '用户已更新' : '用户已添加');
+        }, 600);
+    };
+
+    window.toggleUserStatus = function(id) {
+        event.stopPropagation();
+        var u = DataStore.getUser(id);
+        var action = u.status === 'enabled' ? '禁用' : '启用';
+        App.confirm('确定' + action + '用户「' + u.name + '」？', function() {
+            DataStore.toggleUserStatus(id);
+            renderUsers();
+            App.showToast('已' + action);
+        });
+    };
+
+    // ===== 公告发布 =====
+    window.renderAnnouncements = function() {
+        var container = document.getElementById('announcementList');
+        if (DataStore.realTimeReleases.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fa-regular fa-bell-slash"></i><div class="empty-title">暂无公告</div></div>';
+            return;
+        }
+        container.innerHTML = DataStore.realTimeReleases.map(function(item) {
+            return '<div class="admin-card tap" onclick="openAnnounceDetail(\'' + item.id + '\')">' +
+                '<div class="announce-item ' + item.type + '">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+                        '<div class="ac-title" style="flex:1">' + App.escapeHtml(item.title) + '</div>' +
+                        '<span class="status-tag ' + (item.level === 'red' ? 'pending' : (item.level === 'orange' ? 'handling' : 'closed')) + '" style="font-size: 10px;margin-left:8px;flex-shrink:0">' + typeLabels[item.type] + '</span>' +
+                    '</div>' +
+                    '<div class="ac-meta">' + App.escapeHtml(item.unit) + ' · ' + App.escapeHtml(item.region) + ' · ' + App.relativeTime(item.time) + '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    };
+
+    window.openAnnounceDetail = function(id) {
+        var item = DataStore.getRealTimeRelease(id);
+        if (!item) return;
+        document.getElementById('announceDetailContent').innerHTML =
+            '<div class="detail-section"><div class="ds-label">标题</div><div class="ds-value">' + App.escapeHtml(item.title) + '</div></div>' +
+            '<div class="detail-section"><div class="ds-label">类型 / 等级</div><div class="ds-value">' + typeLabels[item.type] + ' · ' + (item.level === 'red' ? '紧急' : (item.level === 'orange' ? '重要' : '提示')) + '</div></div>' +
+            '<div class="detail-section"><div class="ds-label">发布单位 / 区域</div><div class="ds-value">' + App.escapeHtml(item.unit) + ' · ' + App.escapeHtml(item.region) + '</div></div>' +
+            '<div class="detail-section"><div class="ds-label">发布时间</div><div class="ds-value">' + App.formatDate(item.time, 'yyyy-MM-dd hh:mm') + '</div></div>' +
+            '<div class="detail-section"><div class="ds-label">内容</div><div class="ds-content">' + App.escapeHtml(item.content) + '</div></div>' +
+            '<div class="detail-section"><div class="ds-label">联系方式</div><div class="ds-value">' + App.escapeHtml(item.contact) + '</div></div>';
+        document.getElementById('announceDetailModal').classList.add('show');
+    };
+
+    window.closeAnnounceDetailModal = function() {
+        document.getElementById('announceDetailModal').classList.remove('show');
+    };
+
+    window.openPublishModal = function() {
+        App.clearFormErrors('#publishModal');
+        document.getElementById('annTitleInput').value = '';
+        document.getElementById('annTypeInput').value = 'notice';
+        document.getElementById('annLevelInput').value = 'blue';
+        document.getElementById('annUnitInput').value = DataStore.user.org;
+        document.getElementById('annRegionInput').value = '';
+        document.getElementById('annContactInput').value = DataStore.user.name + ' ' + DataStore.user.phone;
+        document.getElementById('annContentInput').value = '';
+        document.getElementById('publishModal').classList.add('show');
+    };
+
+    window.closePublishModal = function() {
+        document.getElementById('publishModal').classList.remove('show');
+    };
+
+    window.publishAnnouncement = function() {
+        var v = App.validateForm([
+            { id: 'annTitleInput', name: '标题', rules: ['required'] },
+            { id: 'annTypeInput', name: '类型', rules: ['required'] },
+            { id: 'annLevelInput', name: '等级', rules: ['required'] },
+            { id: 'annContentInput', name: '内容', rules: ['required'] }
+        ], '#publishModal');
+        if (!v.valid) return;
+
+        var title = document.getElementById('annTitleInput').value.trim();
+        var type = document.getElementById('annTypeInput').value;
+        var level = document.getElementById('annLevelInput').value;
+        var unit = document.getElementById('annUnitInput').value.trim();
+        var region = document.getElementById('annRegionInput').value.trim();
+        var contact = document.getElementById('annContactInput').value.trim();
+        var content = document.getElementById('annContentInput').value.trim();
+
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('发布中...');
+        setTimeout(function() {
+            DataStore.addAnnouncement({ title: title, type: type, level: level, unit: unit, region: region, content: content, contact: contact });
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            closePublishModal();
+            renderAnnouncements();
+            App.showToast('公告已发布');
+        }, 600);
+    };
+
+    // ===== 权限审批 =====
+    window.renderApprovals = function() {
+        var list = DataStore.pendingApprovals.filter(function(a) { return a.status === currentApprovalSub; });
+        var container = document.getElementById('approvalList');
+        if (list.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fa-regular fa-clipboard"></i><div class="empty-title">暂无' + (currentApprovalSub === 'pending' ? '待审批' : (currentApprovalSub === 'approved' ? '已通过' : '已驳回')) + '申请</div></div>';
+            return;
+        }
+        container.innerHTML = list.map(function(a) {
+            var statusTag = a.status === 'pending' ? '<span class="status-tag pending" style="font-size: 10px">待审批</span>' :
+                (a.status === 'approved' ? '<span class="status-tag closed" style="font-size: 10px">已通过</span>' : '<span class="status-tag rejected" style="font-size: 10px">已驳回</span>');
+            var actions = a.status === 'pending' ?
+                '<div class="ac-actions">' +
+                    '<button class="btn btn-outline" style="font-size: 11px" onclick="openRejectModal(\'' + a.id + '\')">驳回</button>' +
+                    '<button class="btn btn-primary" style="font-size: 11px" onclick="approveApproval(\'' + a.id + '\')">通过</button>' +
+                '</div>' : '';
+            var resultInfo = a.status !== 'pending' ?
+                '<div class="approval-reason"><b>' + (a.status === 'approved' ? '审批通过' : '审批驳回') + '</b> · ' + App.escapeHtml(a.handler) + ' · ' + App.escapeHtml(a.remark) + '</div>' : '';
+            return '<div class="admin-card">' +
+                '<div class="ac-top">' +
+                    '<div class="ac-avatar" style="background:rgba(var(--warning-rgb),.12);color:var(--warning)"><i class="fa-solid fa-user-check"></i></div>' +
+                    '<div class="ac-body">' +
+                        '<div class="ac-title">' + App.escapeHtml(a.applicant) + ' · ' + approvalTypeLabels[a.type] + ' ' + statusTag + '</div>' +
+                        '<div class="ac-meta">目标角色：' + roleLabels[a.targetRole] + ' · ' + App.relativeTime(a.time) + '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="approval-reason"><b>申请理由：</b>' + App.escapeHtml(a.reason) + '</div>' +
+                resultInfo +
+                actions +
+            '</div>';
+        }).join('');
+    };
+
+    window.approveApproval = function(id) {
+        App.confirm('确定通过该权限申请？', function() {
+            var btn = document.activeElement;
+            if (btn) btn.disabled = true;
+            App.showLoading('处理中...');
+            setTimeout(function() {
+                DataStore.approveApproval(id, { handler: DataStore.user.name });
+                App.hideLoading();
+                if (btn) btn.disabled = false;
+                updateApprovalBadge();
+                renderApprovals();
+                App.showToast('审批已通过');
+            }, 600);
+        });
+    };
+
+    window.openRejectModal = function(id) {
+        event.stopPropagation();
+        App.confirm('确定驳回该权限申请？', function() {
+            currentRejectId = id;
+            App.clearFormErrors('#rejectModal');
+            document.getElementById('rejectReasonInput').value = '';
+            document.getElementById('rejectModal').classList.add('show');
+        });
+    };
+
+    window.closeRejectModal = function() {
+        document.getElementById('rejectModal').classList.remove('show');
+    };
+
+    window.confirmReject = function() {
+        var v = App.validateForm([{ id: 'rejectReasonInput', name: '驳回原因', rules: ['required'] }], '#rejectModal');
+        if (!v.valid) return;
+        var reason = document.getElementById('rejectReasonInput').value.trim();
+
+        var btn = document.activeElement;
+        if (btn) btn.disabled = true;
+        App.showLoading('提交中...');
+        setTimeout(function() {
+            DataStore.rejectApproval(currentRejectId, { handler: DataStore.user.name, remark: reason });
+            App.hideLoading();
+            if (btn) btn.disabled = false;
+            closeRejectModal();
+            updateApprovalBadge();
+            renderApprovals();
+            App.showToast('已驳回');
+        }, 600);
+    };
+
+    // 初始化
+    updateApprovalBadge();
+    renderUsers();
+    document.getElementById('userSearch').addEventListener('input', App.debounce(renderUsers, 300));
+
+    // 实时清除/校验表单错误
+    var formFieldMap = {
+        '#userModal': [
+            { id: 'userNameInput', name: '姓名', rules: ['required'] },
+            { id: 'userPhoneInput', name: '手机号', rules: ['required', 'phone'] },
+            { id: 'userRoleInput', name: '角色', rules: ['required'] }
+        ],
+        '#publishModal': [
+            { id: 'annTitleInput', name: '标题', rules: ['required'] },
+            { id: 'annTypeInput', name: '类型', rules: ['required'] },
+            { id: 'annLevelInput', name: '等级', rules: ['required'] },
+            { id: 'annContentInput', name: '内容', rules: ['required'] }
+        ],
+        '#rejectModal': [
+            { id: 'rejectReasonInput', name: '驳回原因', rules: ['required'] }
+        ]
+    };
+    Object.keys(formFieldMap).forEach(function(selector) {
+        formFieldMap[selector].forEach(function(f) {
+            var el = document.getElementById(f.id);
+            if (!el) return;
+            var eventType = el.tagName === 'SELECT' ? 'change' : 'input';
+            el.addEventListener(eventType, function() { App.clearFieldError(f.id, selector); });
+            el.addEventListener('blur', function() { App.validateField(f, selector); });
+        });
+    });
+})();
+</script>
+</body>
+</html>

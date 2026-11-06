@@ -1196,6 +1196,105 @@ body {
 .hidden-count.zero-clear { color: var(--text-secondary); }
 
 /* 整改状态标签 */
+/* ===== 隐患详情弹窗（与巡查任务详情页统一风格） ===== */
+.issue-modal-overlay {
+ display: none;
+ position: fixed;
+ inset: 0;
+ background: rgba(0,0,0,0.45);
+ z-index: 1000;
+ align-items: center;
+ justify-content: center;
+ backdrop-filter: blur(2px);
+}
+.issue-modal-overlay.show { display: flex; }
+.issue-modal {
+ background: var(--bg-card);
+ border-radius: 12px;
+ width: 480px;
+ max-width: 92vw;
+ max-height: 86vh;
+ overflow-y: auto;
+ box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+ animation: issueModalIn 0.22s ease;
+}
+@keyframes issueModalIn {
+ from { opacity: 0; transform: translateY(16px) scale(0.97); }
+ to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.issue-modal-header {
+ display: flex;
+ align-items: center;
+ gap: 8px;
+ padding: 14px 18px;
+ background: var(--bg-hover);
+ border-bottom: 1px solid var(--border);
+ font-size: 15px;
+ font-weight: 700;
+ position: sticky;
+ top: 0;
+ border-radius: 12px 12px 0 0;
+}
+.issue-modal-header i { color: var(--primary); font-size: 14px; }
+.issue-modal-close {
+ margin-left: auto;
+ background: none;
+ border: none;
+ font-size: 18px;
+ color: var(--text-secondary);
+ cursor: pointer;
+ width: 28px;
+ height: 28px;
+ border-radius: 6px;
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ transition: all 0.2s;
+}
+.issue-modal-close:hover { background: var(--border); color: var(--text-primary); }
+.issue-modal-body { padding: 16px 18px; }
+.issue-info-list {
+ display: flex;
+ flex-direction: column;
+ gap: 0;
+}
+.issue-info-item {
+ display: flex;
+ align-items: flex-start;
+ padding: 10px 0;
+ border-bottom: 1px solid var(--border);
+}
+.issue-info-item:last-child { border-bottom: none; }
+.issue-info-label {
+ flex-shrink: 0;
+ width: 84px;
+ font-size: 13px;
+ font-weight: 600;
+ color: var(--text-secondary);
+ padding-top: 1px;
+}
+.issue-info-value {
+ flex: 1;
+ font-size: 14px;
+ color: var(--text-primary);
+ font-weight: 500;
+ line-height: 1.5;
+ word-break: break-all;
+}
+.issue-info-value .risk-tag { font-size: 12px; }
+.issue-modal-footer {
+ padding: 12px 18px;
+ border-top: 1px solid var(--border);
+ display: flex;
+ justify-content: flex-end;
+ gap: 10px;
+ border-radius: 0 0 12px 12px;
+}
+.issue-modal-footer .btn { height: 34px; }
+
+/* ===== 现场照片放大查看（放大层复用 pc-point-modal.js 的 openPhotoViewer） ===== */
+#modalIssuePhotos img { cursor: zoom-in; }
+
 .status-rectify {
  display: inline-flex;
  align-items: center;
@@ -2647,9 +2746,15 @@ const scopePointData = [
 ];
 
 // Issue data
+// 演示用现场照片占位图
+function issueDemoPhoto(label) {
+ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90"><rect width="120" height="90" fill="#fdecea"/><text x="60" y="40" font-size="11" fill="#c0392b" text-anchor="middle">现场照片</text><text x="60" y="58" font-size="10" fill="#c0392b" text-anchor="middle">${label}</text></svg>`;
+ return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
 const issueData = [
- { houseNo: 'FX-NC-ZF-0001', mainItem: '城镇自建房结构', subItem: '墙体/梁柱', content: '强度不足', risk: 'high', riskLabel: '严重安全隐患', status: 'pending-audit', statusLabel: '待审核', foundTime: '2025-06-02 09:30' },
- { houseNo: 'FX-NC-ZF-0002', mainItem: '城镇自建房结构', subItem: '构件（节点）', content: '连接节点不牢', risk: 'medium', riskLabel: '一定安全隐患', status: 'pending-handle', statusLabel: '待处置', foundTime: '2025-06-02 10:45' }
+ { houseNo: 'FX-NC-ZF-0001', address: '上海市奉贤区青村镇解放路120号', mainItem: '城镇自建房结构', subItem: '墙体', riskType: '墙体开裂变形', content: '现场实测：承重墙体多数受力裂缝，部分承重墙体明显位移和歪闪。', risk: 'high', riskLabel: '严重安全隐患', accident: '墙体酥碎或倒塌', status: 'pending-audit', statusLabel: '待审核', foundTime: '2025-06-02 09:30', photos: [issueDemoPhoto('墙体')] },
+ { houseNo: 'FX-NC-ZF-0002', address: '上海市奉贤区青村镇人民路88号', mainItem: '城镇自建房结构', subItem: '梁、柱', riskType: '梁柱开裂变形', content: '现场实测：梁、柱出现受力裂缝，个别梁柱节点破损和开裂明显。', risk: 'medium', riskLabel: '一定安全隐患', accident: '梁、柱倒塌，房屋坍塌或局部坍塌', status: 'pending-handle', statusLabel: '待处置', foundTime: '2025-06-02 10:45', photos: [issueDemoPhoto('梁、柱')] }
 ];
 
 const issueStatusMap = {
@@ -2909,15 +3014,63 @@ function viewIssue(idx) {
  let overlay = document.getElementById('issueModalOverlay');
  if (!overlay) {
   document.body.insertAdjacentHTML('beforeend', `
-   <div class="pc-modal-overlay" id="issueModalOverlay" onclick="closeIssueModal(event)">
-    <div class="pc-modal" onclick="event.stopPropagation()">
-     <div class="pc-modal-header">
-      <div class="pc-modal-title"><i class="fa-solid fa-triangle-exclamation"></i> 隐患详情</div>
-      <button class="pc-modal-close" onclick="closeIssueModal(event)"><i class="fa-solid fa-xmark"></i></button>
+   <div class="issue-modal-overlay" id="issueModalOverlay" onclick="if(event.target===this)closeIssueModal()">
+    <div class="issue-modal">
+     <div class="issue-modal-header">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      隐患详情
+      <button class="issue-modal-close" onclick="closeIssueModal()">&times;</button>
      </div>
-     <div class="pc-modal-body" id="issueModalBody"></div>
-     <div class="pc-modal-footer">
-      <button class="btn btn-secondary" onclick="closeIssueModal(event)">关闭</button>
+     <div class="issue-modal-body">
+      <div class="issue-info-list">
+       <div class="issue-info-item">
+        <span class="issue-info-label">唯一标识</span>
+        <span class="issue-info-value" id="modalIssueHouseNo">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">地址</span>
+        <span class="issue-info-value" id="modalIssueAddress">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">隐患主项</span>
+        <span class="issue-info-value" id="modalIssueMain">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">隐患分项</span>
+        <span class="issue-info-value" id="modalIssueSub">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">风险类型</span>
+        <span class="issue-info-value" id="modalIssueRiskType">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">分项内容</span>
+        <span class="issue-info-value" id="modalIssueContent">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">隐患等级</span>
+        <span class="issue-info-value" id="modalIssueRisk">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">可能导致事故</span>
+        <span class="issue-info-value" id="modalIssueAccident">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">整改状态</span>
+        <span class="issue-info-value" id="modalIssueStatus">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">上报时间</span>
+        <span class="issue-info-value" id="modalIssueTime">-</span>
+       </div>
+       <div class="issue-info-item">
+        <span class="issue-info-label">现场照片</span>
+        <span class="issue-info-value" id="modalIssuePhotos">-</span>
+       </div>
+      </div>
+     </div>
+     <div class="issue-modal-footer">
+      <button class="btn btn-secondary" onclick="closeIssueModal()">关闭</button>
      </div>
     </div>
    </div>
@@ -2925,51 +3078,48 @@ function viewIssue(idx) {
   overlay = document.getElementById('issueModalOverlay');
  }
  const riskClass = issue.risk === 'high' ? 'red' : issue.risk === 'medium' ? 'yellow' : 'blue';
- const statusInfo = issueStatusMap[issue.status] || { label: issue.statusLabel, icon: 'fa-circle-question' };
+ const statusMap2 = {
+  'pending-audit': { cls: 'pending-audit', icon: 'fa-user-clock' },
+  'pending-dispatch': { cls: 'pending-dispatch', icon: 'fa-paper-plane' },
+  'pending-handle': { cls: 'pending-handle', icon: 'fa-clock' },
+  'pending-accept': { cls: 'pending-accept', icon: 'fa-clipboard-check' },
+  'closed': { cls: 'closed', icon: 'fa-check-circle' },
+  'audit-reject': { cls: 'audit-reject', icon: 'fa-times-circle' },
+  'accept-reject': { cls: 'accept-reject', icon: 'fa-times-circle' }
+ };
+ const sm = statusMap2[issue.status] || statusMap2['pending-audit'];
  const houseNo = issue.houseNo || ('FX-NC-ZF-' + String(idx + 1).padStart(4, '0'));
- document.getElementById('issueModalBody').innerHTML = `
-  <div class="point-detail-section">
-   <div class="point-detail-section-title">隐患信息</div>
-   <div class="point-info-grid">
-    <div class="point-info-item">
-     <span class="point-info-label">唯一标识</span>
-     <span class="point-info-value">${houseNo}</span>
-    </div>
-    <div class="point-info-item">
-     <span class="point-info-label">隐患主项</span>
-     <span class="point-info-value">${issue.mainItem}</span>
-    </div>
-    <div class="point-info-item">
-     <span class="point-info-label">隐患分项</span>
-     <span class="point-info-value">${issue.subItem}</span>
-    </div>
-    <div class="point-info-item">
-     <span class="point-info-label">分项内容</span>
-     <span class="point-info-value">${issue.content}</span>
-    </div>
-    <div class="point-info-item">
-     <span class="point-info-label">隐患等级</span>
-     <span class="point-info-value"><span class="risk-tag ${riskClass}">${issue.riskLabel}</span></span>
-    </div>
-    <div class="point-info-item">
-     <span class="point-info-label">整改状态</span>
-     <span class="point-info-value"><i class="fa-solid ${statusInfo.icon}" style="margin-right:4px;"></i>${issue.statusLabel}</span>
-    </div>
-    <div class="point-info-item">
-     <span class="point-info-label">上报时间</span>
-     <span class="point-info-value">${issue.foundTime}</span>
-    </div>
-   </div>
-  </div>
- `;
- overlay.classList.add('active');
+ document.getElementById('modalIssueHouseNo').textContent = houseNo;
+ document.getElementById('modalIssueAddress').textContent = issue.address || '-';
+ document.getElementById('modalIssueMain').textContent = issue.mainItem;
+ document.getElementById('modalIssueSub').textContent = issue.subItem;
+ document.getElementById('modalIssueRiskType').textContent = issue.riskType || '-';
+ document.getElementById('modalIssueContent').textContent = issue.content;
+ document.getElementById('modalIssueRisk').innerHTML = '<span class="risk-tag ' + riskClass + '">' + issue.riskLabel + '</span>';
+ document.getElementById('modalIssueAccident').textContent = issue.accident || '-';
+ document.getElementById('modalIssueStatus').innerHTML = '<span class="status-rectify ' + sm.cls + '"><i class="fas ' + sm.icon + '" style="margin-right:4px;"></i>' + issue.statusLabel + '</span>';
+ document.getElementById('modalIssueTime').textContent = issue.foundTime;
+ const photosEl = document.getElementById('modalIssuePhotos');
+ if (issue.photos && issue.photos.length) {
+  photosEl.innerHTML = issue.photos.map(function(p) {
+   return '<img src="' + p + '" alt="现场照片" title="点击放大查看" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #e0e0e0;margin:0 6px 6px 0;">';
+  }).join('');
+ } else {
+  photosEl.textContent = '-';
+ }
+ overlay.classList.add('show');
 }
 
-function closeIssueModal(event) {
- if (event) event.stopPropagation();
+function closeIssueModal() {
  const overlay = document.getElementById('issueModalOverlay');
- if (overlay) overlay.classList.remove('active');
+ if (overlay) overlay.classList.remove('show');
 }
+
+// ===== 现场照片放大查看：点击缩略图调用 pc-point-modal.js 的 openPhotoViewer =====
+document.addEventListener('click', function (e) {
+ var img = e.target.closest('#modalIssuePhotos img');
+ if (img && typeof openPhotoViewer === 'function') openPhotoViewer(img.src);
+});
 
 // Init
 renderFlow();

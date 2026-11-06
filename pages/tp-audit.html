@@ -275,7 +275,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 </div>
 
 <!-- 审核列表 -->
-<div class="list-card">
+<div class="list-card" id="auditWorkspace">
     <div class="list-header">
         <div class="list-title"><i class="fas fa-list-check"></i> 申报审核</div>
     </div>
@@ -421,8 +421,8 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
     </div>
 </div>
 
-<!-- 审核记录与附件归档 -->
-<div class="list-card">
+<!-- 审核记录与附件归档（仅监管端） -->
+<div class="list-card" id="auditArchive">
     <div class="list-header">
         <div class="list-title"><i class="fas fa-folder-open"></i> 审核记录与附件归档</div>
     </div>
@@ -442,6 +442,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
                     <select id="recordResultFilter" onchange="renderAuditRecords()">
                         <option value="">全部</option>
                         <option>通过</option>
+                        <option>核验</option>
                         <option>驳回</option>
                     </select>
                 </div>
@@ -499,8 +500,26 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
         </div>
         <div class="modal-foot">
             <button class="list-btn list-btn-outline" onclick="closeAuditModal()">取 消</button>
+            <button class="list-btn" style="background:var(--warning);color:#fff;" onclick="doAudit('verify')"><i class="fas fa-search"></i> 发起核验</button>
             <button class="list-btn" style="background:var(--danger);color:#fff;" onclick="doAudit('reject')"><i class="fas fa-ban"></i> 驳 回</button>
             <button class="list-btn list-btn-success" onclick="doAudit('pass')"><i class="fas fa-check"></i> 通 过</button>
+        </div>
+    </div>
+</div>
+
+<!-- 附件原件预览弹窗 -->
+<div class="modal-mask" id="attachPreviewModal">
+    <div class="modal-box" style="width:860px;max-width:95vw;">
+        <div class="modal-head">
+            <div class="modal-title"><i class="fas fa-file-image" style="color:var(--primary);"></i> <span id="attachPreviewTitle">附件预览</span></div>
+            <button class="modal-close" onclick="closeAttachPreview()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="max-height:75vh;overflow:auto;">
+            <div id="attachPreviewBody" style="text-align:center;margin-bottom:14px;"></div>
+            <div id="attachCompareInfo"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="list-btn list-btn-outline" onclick="closeAttachPreview()">关 闭</button>
         </div>
     </div>
 </div>
@@ -520,6 +539,8 @@ window.addEventListener('message', function(e) {
 var PAGE_SIZE = 10;
 var orgPage = 1, expPage = 1;
 var pendingAudit = null; // { type: 'org'|'expert', applicationId }
+var pendingDetailApp = null; // 当前详情弹窗的申请（用于附件预览）
+var isPortalView = new URLSearchParams(location.search).get('portal') === '1';
 
 function isPendingStatus(s) { return s === '待审核' || s === '审核中' || s === '核验中'; }
 
@@ -569,6 +590,7 @@ function renderStats() {
 
 /* ---------- Tab 切换 ---------- */
 function switchTab(tab) {
+    if (isPortalView) tab = 'progress';
     document.querySelectorAll('.tab-bar .tab-item').forEach(function(el) {
         el.classList.toggle('active', el.getAttribute('data-tab') === tab);
     });
@@ -705,6 +727,65 @@ function resetExpertFilter() {
     renderExpertList();
 }
 
+/* ---------- 附件材料渲染与原件比对 ---------- */
+var ATTACH_LABELS = { legalCert: '企业法人证明', businessLicense: '营业执照', socialSecurity: '社保缴纳证明', calibration: '设备校准证书', qualCerts: '资质证书扫描件' };
+function renderAttachmentSection(at) {
+    var keys = Object.keys(ATTACH_LABELS);
+    var hasAny = keys.some(function(k) { return at[k] && (Array.isArray(at[k]) ? at[k].length : at[k].name); });
+    if (!hasAny) return '';
+    var html = '<div class="detail-section-title"><i class="fas fa-paperclip"></i> 附件材料（点击预览原件）</div>';
+    keys.forEach(function(k) {
+        var v = at[k];
+        if (!v) return;
+        var files = Array.isArray(v) ? v : [v];
+        files.forEach(function(f, i) {
+            if (!f || !f.name) return;
+            var isImg = /^image\//.test(f.type) || /\.(jpe?g|png)$/i.test(f.name);
+            var icon = isImg ? 'fa-image' : 'fa-file-pdf';
+            html += '<div class="attach-item" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+                '<span><i class="fas ' + icon + '" style="color:var(--primary);margin-right:6px;"></i><strong style="margin-right:8px;">' + esc(ATTACH_LABELS[k]) + '</strong>' + esc(f.name) + '</span>' +
+                '<span style="display:flex;gap:6px;flex-shrink:0;">' +
+                '<button class="list-btn list-btn-outline" style="padding:4px 12px;font-size:12px;" onclick="previewAttachment(\'' + esc(k) + '\',' + i + ')"><i class="fas fa-eye"></i> 预览原件</button>' +
+                '</span></div>';
+        });
+    });
+    return html;
+}
+
+// 当前预览的附件集合与位置
+var currentAttachSet = null;
+function previewAttachment(key, index) {
+    var app = pendingDetailApp;
+    if (!app) return;
+    var at = app.attachments || {};
+    var v = at[key];
+    if (!v) return;
+    var files = Array.isArray(v) ? v : [v];
+    var f = files[index];
+    if (!f || !f.dataUrl) { alert('该附件无预览数据（可能为早期未保存附件的申请）'); return; }
+    currentAttachSet = { label: ATTACH_LABELS[key] || '附件', file: f };
+    var isImg = /^image\//.test(f.type) || /\.(jpe?g|png)$/i.test(f.name);
+    var body = document.getElementById('attachPreviewBody');
+    document.getElementById('attachPreviewTitle').textContent = currentAttachSet.label + ' — ' + f.name;
+    if (isImg) {
+        body.innerHTML = '<img src="' + f.dataUrl + '" style="max-width:100%;max-height:65vh;display:block;margin:0 auto;border:1px solid var(--border);border-radius:8px;" alt="' + esc(f.name) + '">';
+    } else {
+        body.innerHTML = '<iframe src="' + f.dataUrl + '" style="width:100%;height:65vh;border:1px solid var(--border);border-radius:8px;" title="' + esc(f.name) + '"></iframe>';
+    }
+    // 比对信息
+    document.getElementById('attachCompareInfo').innerHTML =
+        '<div style="font-size:13px;line-height:2;">' +
+        '<div><strong>文件名称：</strong>' + esc(f.name) + '</div>' +
+        '<div><strong>文件类型：</strong>' + esc(f.type || '未知') + '　<strong>大小：</strong>' + (f.size ? (f.size / 1024).toFixed(1) + ' KB' : '-') + '</div>' +
+        '<div style="margin-top:8px;padding:10px;background:var(--bg-hover);border-radius:6px;color:var(--text-secondary);">请核对上方原件扫描件与申请填报信息是否一致，如不一致可点击「发起核验」记录核验事项。</div>' +
+        '</div>';
+    document.getElementById('attachPreviewModal').classList.add('open');
+}
+function closeAttachPreview() {
+    document.getElementById('attachPreviewModal').classList.remove('open');
+    currentAttachSet = null;
+}
+
 /* ---------- 申报详情弹窗 ---------- */
 function detailItem(label, value, full) {
     return '<div class="detail-item' + (full ? ' full' : '') + '"><span class="d-label">' + label + '</span>' + esc(value || '-') + '</div>';
@@ -715,12 +796,14 @@ function openDetail(type, applicationId) {
         ? (typeof getOrgApplicationById === 'function' ? getOrgApplicationById(applicationId) : null)
         : (typeof getExpertApplicationById === 'function' ? getExpertApplicationById(applicationId) : null);
     if (!app) { alert('未找到申报记录'); return; }
+    pendingDetailApp = app;
     var b = app.basic || {};
     var html = '';
     if (type === 'org') {
         html += '<div class="detail-section-title"><i class="fas fa-building"></i> 企业信息</div><div class="detail-grid">' +
             detailItem('申请编号', app.applicationId) +
             detailItem('当前状态', app.status) +
+            detailItem('申报来源', app.source || '机构自主申报') +
             detailItem('企业名称', b.enterpriseName) +
             detailItem('统一社会信用代码', b.creditCode) +
             detailItem('注册地址', b.address, true) +
@@ -762,6 +845,7 @@ function openDetail(type, applicationId) {
                 html += '<div class="attach-item"><i class="fas fa-user-tie"></i> ' + esc(ex.name || '-') + '（' + esc(ex.title || '-') + '，' + esc(ex.domain || '-') + '，' + esc(ex.phone || '-') + '）</div>';
             });
         }
+        html += renderAttachmentSection(app.attachments || {});
     } else {
         html += '<div class="detail-section-title"><i class="fas fa-user"></i> 基本信息</div><div class="detail-grid">' +
             detailItem('申请编号', app.applicationId) +
@@ -807,8 +891,8 @@ function openDetail(type, applicationId) {
         html += '<div style="font-size:13px;color:var(--text-secondary);">暂无审核记录</div>';
     } else {
         history.forEach(function(h) {
-            var txt = h.decision === 'pass' ? '通过' : '驳回';
-            var color = h.decision === 'pass' ? 'var(--success)' : 'var(--danger)';
+            var txt = h.decision === 'pass' ? '通过' : (h.decision === 'verify' ? '发起核验' : '驳回');
+            var color = h.decision === 'pass' ? 'var(--success)' : (h.decision === 'verify' ? 'var(--warning)' : 'var(--danger)');
             html += '<div class="attach-item"><i class="fas fa-circle" style="color:' + color + ';font-size:8px;"></i> ' +
                 esc(h.time || '-') + '　<span style="color:' + color + ';font-weight:600;">' + txt + '</span>（第' + esc(h.level || 1) + '级）　' +
                 esc(h.opinion || '无意见') + ' — ' + esc(h.operator || '-') + '</div>';
@@ -871,7 +955,7 @@ function openAudit(type, applicationId) {
         '<strong>' + esc(name || '-') + '</strong>（' + esc(app.applicationId) + '）<br>' +
         '当前状态：' + esc(app.status || '待审核') + '　|　本次审核：第 ' + lv + ' 级 / 共 ' + maxLevel + ' 级';
     var cfg = typeof getTPAuditConfig === 'function' ? getTPAuditConfig() : {};
-    var presets = (cfg.presetPass || []).concat(cfg.presetReject || []);
+    var presets = (cfg.presetPass || []).concat(cfg.presetReject || []).concat(cfg.presetVerify || []);
     document.getElementById('presetRow').innerHTML = presets.map(function(p) {
         return '<span class="preset-chip" onclick="fillOpinion(this)">' + esc(p) + '</span>';
     }).join('');
@@ -895,7 +979,7 @@ function openChangeAudit(changeId) {
         '当前状态：' + esc(req.status || '待审核') + '　|　变更原因：' + esc(req.reason || '-') +
         '<div style="margin-top:6px;border-top:1px dashed rgba(100,116,139,.35);padding-top:6px;">变更内容：' + diffRows + '</div>';
     var cfg = typeof getTPAuditConfig === 'function' ? getTPAuditConfig() : {};
-    var presets = (cfg.presetPass || []).concat(cfg.presetReject || []);
+    var presets = (cfg.presetPass || []).concat(cfg.presetReject || []).concat(cfg.presetVerify || []);
     document.getElementById('presetRow').innerHTML = presets.map(function(p) {
         return '<span class="preset-chip" onclick="fillOpinion(this)">' + esc(p) + '</span>';
     }).join('');
@@ -910,9 +994,11 @@ function doAudit(decision) {
     if (!pendingAudit) return;
     var opinion = document.getElementById('auditOpinion').value.trim();
     if (decision === 'reject' && !opinion) { alert('驳回时请填写审核意见'); return; }
+    if (decision === 'verify' && !opinion) { alert('发起核验时请填写核验事项'); return; }
     if (!opinion) opinion = decision === 'pass' ? '材料齐全，予以通过' : '不符合入库条件';
     var appType = pendingAudit.type;
     if (appType === 'change') {
+        if (decision === 'verify') { alert('变更申请不支持发起核验'); return; }
         var req = typeof auditOrgChangeRequest === 'function'
             ? auditOrgChangeRequest(pendingAudit.applicationId, '管理员', opinion, decision) : null;
         closeAuditModal();
@@ -930,7 +1016,9 @@ function doAudit(decision) {
         : auditExpertApplication(pendingAudit.applicationId, nextLevel, '管理员', opinion, decision);
     closeAuditModal();
     if (!app) { alert('审核操作失败'); return; }
-    if (decision === 'pass' && app.status === '已通过') {
+    if (decision === 'verify') {
+        alert('已发起核验：' + opinion + '\n核验完成后可继续审核（通过或驳回）。');
+    } else if (decision === 'pass' && app.status === '已通过') {
         alert('审核已通过，' + (appType === 'org' ? '机构' : '专家') + '信息已入库。');
     }
     refreshAll();
@@ -1221,6 +1309,7 @@ function resetQuery() {
 
 /* ---------- 初始化 ---------- */
 function refreshAll() {
+    if (isPortalView) return;
     renderStats();
     renderOrgList();
     renderExpertList();
@@ -1228,10 +1317,26 @@ function refreshAll() {
 }
 
 window.onload = function() {
+    if (isPortalView) {
+        document.querySelector('.stat-row').style.display = 'none';
+        document.getElementById('auditArchive').style.display = 'none';
+        document.querySelector('#auditWorkspace .tab-bar').style.display = 'none';
+        document.querySelector('#auditWorkspace .list-header .list-title').innerHTML = '<i class="fas fa-search"></i> 审核进度查询';
+        switchTab('progress');
+    }
     refreshAll();
     var params = new URLSearchParams(location.search);
     var tab = params.get('tab') || '';
     if (tab === 'expert' || tab === 'progress' || tab === 'org') switchTab(tab);
+    var linkedApplicationId = params.get('applicationId');
+    if (linkedApplicationId && !isPortalView) {
+        var linkedApp = typeof getOrgApplicationById === 'function' ? getOrgApplicationById(linkedApplicationId) : null;
+        if (linkedApp) {
+            switchTab('org');
+            if (isPendingStatus(linkedApp.status)) openAudit('org', linkedApplicationId);
+            else openDetail('org', linkedApplicationId);
+        }
+    }
     if (params.get('orgName') || params.get('orgCode')) {
         document.getElementById('queryType').value = 'org';
         onQueryTypeChange();
