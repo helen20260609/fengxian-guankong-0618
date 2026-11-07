@@ -522,8 +522,8 @@
         }
         .map-zoom-control {
             position: fixed;
-            /* 移到右上角：标题栏下方、贴右侧面板左缘外侧竖排 */
-            top: calc(88px + 18px);
+            /* 地图右下方：贴右侧面板左缘外侧竖排 */
+            bottom: 20px;
             transform: none;
             /* 面板宽 clamp(320px, 24%, 420px) + body右padding 20px + 间距 18px */
             right: calc(clamp(320px, 24%, 420px) + 38px);
@@ -1003,6 +1003,7 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
         }
+        .rect-chart-wide { grid-column: 1 / -1; }
         .rect-chart { height: 240px; width: 100%; }
         .rect-trend-chart { height: 240px; }
         .rect-trend-filter {
@@ -1586,49 +1587,6 @@
             background: linear-gradient(160deg, rgba(240, 81, 110, 0.32), rgba(240, 81, 110, 0.12));
             border-color: rgba(240, 81, 110, 0.7);
         }
-
-        /* ==================== 风险总览卡片组 ==================== */
-        .ov-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 8px 2px 2px; }
-        .ov-item:nth-child(3) { grid-column: 1 / -1; }
-        .ov-item {
-            background: rgba(13, 30, 55, 0.55);
-            border: 1px solid rgba(65, 199, 240, 0.22);
-            border-left: 3px solid var(--ov-color, #41c7f0);
-            border-radius: 8px;
-            padding: 8px 10px 7px;
-            box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.25);
-            transition: all 0.2s;
-        }
-        .ov-item:last-child { grid-column: span 2; }
-        /* 疑似危房卡片红色背景突出，点击筛选疑似危房列表 */
-        .ov-item.is-danger {
-            background: linear-gradient(135deg, rgba(240, 81, 110, 0.32), rgba(240, 81, 110, 0.12));
-            border: 1px solid rgba(240, 81, 110, 0.65);
-            border-left: 3px solid #f0516e;
-            box-shadow: 0 0 14px rgba(240, 81, 110, 0.25), inset 0 0 12px rgba(0, 0, 0, 0.25);
-            cursor: pointer;
-        }
-        .ov-item.is-danger:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 16px rgba(240, 81, 110, 0.4), inset 0 0 12px rgba(0, 0, 0, 0.25);
-        }
-        .ov-value {
-            font-size: 20px;
-            font-weight: 700;
-            font-family: 'Consolas', 'Monaco', monospace;
-            color: var(--ov-color, #41c7f0);
-            line-height: 1.15;
-            text-shadow: 0 0 10px var(--ov-color, rgba(65, 199, 240, 0.5));
-        }
-        .ov-value .ov-unit {
-            font-size: 11px;
-            font-weight: 400;
-            color: var(--text-secondary);
-            margin-left: 2px;
-            text-shadow: none;
-        }
-        .ov-label { font-size: 12px; color: var(--text-primary); margin-top: 3px; letter-spacing: 1px; }
-        .ov-item .ov-mom { margin-top: 4px; }
 
         /* 整治完成率进度条 */
         .progress-rate-bar {
@@ -3445,9 +3403,16 @@
                                     <div class="street-rank-section">
                                         <div class="street-rank-section-title">
                                             各类整治措施分布
-                                            <span class="street-rank-section-hint"><i class="fas fa-layer-group"></i>按类型分组·工程vs管理</span>
+                                            <span class="street-rank-section-hint"><i class="fas fa-layer-group"></i>按措施类型分组·工程vs管理对比</span>
                                         </div>
                                         <div id="compStackChart" class="rect-chart"></div>
+                                    </div>
+                                    <div class="street-rank-section rect-chart-wide">
+                                        <div class="street-rank-section-title">
+                                            各街镇措施类型分布
+                                            <span class="street-rank-section-hint"><i class="fas fa-layer-group"></i>街镇×细分措施堆叠</span>
+                                        </div>
+                                        <div id="compStreetStackChart" class="rect-chart"></div>
                                     </div>
                                 </div>
                                 <!-- 整治明细列表 -->
@@ -3698,10 +3663,6 @@
                     </div>
                 </div>
                 <div class="panel-col-scroll">
-                <div class="ov-card">
-                    <div class="panel-sub-title">风险总览</div>
-                    <div class="ov-grid" id="ovGrid"></div>
-                </div>
                 <div class="risk-grade-card">
                     <div class="panel-sub-title">风险辨识分级<button class="rg-detail-btn" onclick="openRiskDetail()" title="查看风险辨识分级明细"><i class="fas fa-chart-pie"></i></button></div>
                     <div class="risk-grade-body">
@@ -4505,7 +4466,6 @@
         // 统一刷新左右统计面板（全区 ↔ 街镇 联动）
         function refreshPanels() {
             renderGovStats();
-            renderOverview();
             renderRiskGrade();
             renderPatrol();
             renderRectify();
@@ -5388,7 +5348,7 @@
             });
         }
 
-        // ---- 风险总览：真实环比所需的时间工具 ----
+        // ---- 真实环比所需的时间工具 ----
         function _ovPeriod() {
             const now = new Date();
             const pad = n => String(n).padStart(2, '0');
@@ -5415,52 +5375,6 @@
         function _pctMom(cur, prev) {
             return prev > 0 ? (cur - prev) / prev * 100 : (cur > 0 ? 100 : 0);
         }
-        function _momBadge(pct) {
-            const abs = Math.abs(pct).toFixed(1);
-            let cls = 'is-flat', icon = 'fa-minus';
-            if (pct > 0.05) { cls = 'is-up'; icon = 'fa-arrow-up'; }
-            else if (pct < -0.05) { cls = 'is-down'; icon = 'fa-arrow-down'; }
-            return '<span class="patrol-mom ov-mom ' + cls + '"><i class="fas ' + icon + '"></i>' + abs + '%</span>';
-        }
-
-        // 风险总览：核心指标卡片组（数值 + 环比），疑似危房卡红底突出、点击筛选疑似危房列表
-        function renderOverview() {
-            const grid = document.getElementById('ovGrid');
-            if (!grid) return;
-            const data = scopeData();
-            const total = data.length;
-            const stats = getHouseBusinessStats(data);
-            const surveyed = stats.patrolHouses;
-            const coverRate = total > 0 ? surveyed / total * 100 : 0;
-            // 环比：基于档案排查/巡查/鉴定记录的真实日期，本月 vs 上月
-            const period = _ovPeriod();
-            let newCur = 0, newPrev = 0, survCur = 0, survPrev = 0, covPrevEnd = 0;
-            data.forEach(d => {
-                const dates = _recordDates(getFullHouseRecord(d.no));
-                if (!dates.length) return;
-                const first = dates[0];
-                const fm = first.slice(0, 7);
-                if (fm === period.curKey) { newCur++; survCur++; }
-                if (fm === period.prevKey) { newPrev++; survPrev++; }
-                if (first <= period.prevEnd) covPrevEnd++;
-            });
-            const prevCoverRate = total > 0 ? covPrevEnd / total * 100 : 0;
-
-            const urban = govCategory === 'urban';
-            const cards = [
-                { label: urban ? '城镇自建房数' : '农村自建房数', value: total, unit: '栋', mom: _pctMom(newCur, newPrev), color: '#41c7f0' },
-                { label: '已排查数', value: surveyed, unit: '栋', mom: _pctMom(survCur, survPrev), color: '#5fbdb0' },
-                { label: '排查覆盖率', value: coverRate.toFixed(1), unit: '%', mom: coverRate - prevCoverRate, color: '#f0c436' }
-            ];
-            grid.innerHTML = cards.map(c => {
-                return '<div class="ov-item" style="--ov-color:' + c.color + '">' +
-                    '<div class="ov-value">' + (typeof c.value === 'number' ? c.value.toLocaleString() : c.value) + '<span class="ov-unit">' + c.unit + '</span></div>' +
-                    '<div class="ov-label">' + c.label + '</div>' +
-                    _momBadge(c.mom) +
-                '</div>';
-            }).join('');
-        }
-
         function renderGovStats() {
             const data = scopeData();
             const total = data.length;
@@ -7350,6 +7264,7 @@
         let compInited = false;
         let compStreetChart = null;
         let compStackChart = null;
+        let compStreetStackChart = null;
         const COMP_PAGE_SIZE = 5;
         let compPage = 1;
 
@@ -7530,37 +7445,37 @@
             });
         }
 
-        // ---- 渲染：各类整治措施堆叠柱状图 ----
+        // ---- 渲染：各类整治措施分布（按措施类型分组，工程vs管理对比柱状图） ----
         function renderCompStackChart() {
             const el = document.getElementById('compStackChart');
             if (!el) return;
             if (!compStackChart) compStackChart = echarts.init(el);
             const data = getCompData();
-            // 按措施类型聚合：每类下工程/管理数量
+            // 按措施类型分组：每组统计工程/管理数量（类型池固定：工程3类+管理6类）
+            const types = RECT_ENG_TYPES.concat(RECT_MGMT_TYPES);
             const typeMap = {};
+            types.forEach(tp => typeMap[tp] = { eng: 0, mgmt: 0 });
             data.forEach(t => {
                 if (!typeMap[t.type]) typeMap[t.type] = { eng: 0, mgmt: 0 };
                 if (t.cat === 'eng') typeMap[t.type].eng++;
                 else typeMap[t.type].mgmt++;
             });
-            // 按总数量降序排列类型
-            const types = Object.keys(typeMap).sort((a, b) => (typeMap[b].eng + typeMap[b].mgmt) - (typeMap[a].eng + typeMap[a].mgmt));
-            const engData = types.map(t => typeMap[t].eng);
-            const mgmtData = types.map(t => typeMap[t].mgmt);
             compStackChart.setOption({
-                grid: { left: 50, right: 20, top: 36, bottom: 50 },
+                grid: { left: 44, right: 16, top: 34, bottom: 46 },
                 legend: {
                     data: ['工程措施', '管理措施'],
                     top: 0,
+                    left: 'center',
                     textStyle: { color: '#8fb3d9', fontSize: 11 },
                     itemWidth: 12,
-                    itemHeight: 8
+                    itemHeight: 8,
+                    icon: 'roundRect'
                 },
                 xAxis: {
                     type: 'category',
                     data: types,
                     axisLine: { lineStyle: { color: 'rgba(65,199,240,0.2)' } },
-                    axisLabel: { color: '#8fb3d9', fontSize: 10, rotate: 25, interval: 0 },
+                    axisLabel: { color: '#8fb3d9', fontSize: 10, rotate: 26, interval: 0 },
                     axisTick: { show: false }
                 },
                 yAxis: {
@@ -7572,18 +7487,17 @@
                     {
                         name: '工程措施',
                         type: 'bar',
-                        stack: 'total',
-                        barWidth: 20,
-                        data: engData,
-                        itemStyle: { color: '#4ade80', borderRadius: [0, 0, 0, 0] }
+                        barWidth: 12,
+                        barGap: '20%',
+                        data: types.map(tp => typeMap[tp].eng),
+                        itemStyle: { color: '#4ade80', borderRadius: [2, 2, 0, 0] }
                     },
                     {
                         name: '管理措施',
                         type: 'bar',
-                        stack: 'total',
-                        barWidth: 20,
-                        data: mgmtData,
-                        itemStyle: { color: '#41c7f0', borderRadius: [3, 3, 0, 0] }
+                        barWidth: 12,
+                        data: types.map(tp => typeMap[tp].mgmt),
+                        itemStyle: { color: '#41c7f0', borderRadius: [2, 2, 0, 0] }
                     }
                 ],
                 tooltip: {
@@ -7594,15 +7508,82 @@
                     textStyle: { color: '#e6f7ff', fontSize: 12 },
                     formatter: function(params) {
                         const type = params[0].axisValue;
-                        const eng = typeMap[type].eng;
-                        const mgmt = typeMap[type].mgmt;
+                        const eng = typeMap[type] ? typeMap[type].eng : 0;
+                        const mgmt = typeMap[type] ? typeMap[type].mgmt : 0;
                         return '<div style="font-weight:600;margin-bottom:4px">' + type + '</div>' +
                             '<div><span style="color:#4ade80">●</span> 工程措施：<b>' + eng + '</b> 项</div>' +
                             '<div><span style="color:#41c7f0">●</span> 管理措施：<b>' + mgmt + '</b> 项</div>' +
                             '<div style="margin-top:2px;border-top:1px solid rgba(111,182,217,0.2);padding-top:2px">合计：<b>' + (eng + mgmt) + '</b> 项</div>';
                     }
                 }
+            }, true);
+        }
+
+        // ---- 渲染：各街镇措施类型分布（街镇×措施类型堆叠柱状图） ----
+        function renderCompStreetStackChart() {
+            const el = document.getElementById('compStreetStackChart');
+            if (!el) return;
+            if (!compStreetStackChart) compStreetStackChart = echarts.init(el);
+            const data = getCompData();
+            // 街镇 × 措施类型矩阵
+            const streetMap = {};
+            data.forEach(t => {
+                if (!streetMap[t.street]) streetMap[t.street] = { total: 0 };
+                streetMap[t.street][t.type] = (streetMap[t.street][t.type] || 0) + 1;
+                streetMap[t.street].total++;
             });
+            const streets = Object.keys(streetMap).sort((a, b) => streetMap[b].total - streetMap[a].total);
+            // 类型顺序：工程类在前、管理类在后；仅保留实际出现的类型；色板复用全局 RECT_*_COLORS
+            const presentTypes = RECT_ENG_TYPES.concat(RECT_MGMT_TYPES).filter(tp => data.some(t => t.type === tp));
+            const colorOf = tp => RECT_ENG_COLORS[tp] || RECT_MGMT_COLORS[RECT_MGMT_TYPES.indexOf(tp)] || '#8fb3d9';
+            compStreetStackChart.setOption({
+                grid: { left: 44, right: 16, top: 34, bottom: 44 },
+                legend: {
+                    data: presentTypes,
+                    top: 0,
+                    left: 'center',
+                    textStyle: { color: '#8fb3d9', fontSize: 10 },
+                    itemWidth: 10,
+                    itemHeight: 8,
+                    itemGap: 8,
+                    icon: 'roundRect'
+                },
+                xAxis: {
+                    type: 'category',
+                    data: streets,
+                    axisLine: { lineStyle: { color: 'rgba(65,199,240,0.2)' } },
+                    axisLabel: { color: '#8fb3d9', fontSize: 10, rotate: 28, interval: 0 },
+                    axisTick: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    splitLine: { lineStyle: { color: 'rgba(65,199,240,0.08)' } },
+                    axisLabel: { color: '#8a9cb0', fontSize: 11 }
+                },
+                series: presentTypes.map(tp => ({
+                    name: tp,
+                    type: 'bar',
+                    stack: 'total',
+                    barWidth: 16,
+                    emphasis: { focus: 'series' },
+                    itemStyle: { color: colorOf(tp) },
+                    data: streets.map(st => streetMap[st][tp] || 0)
+                })),
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    backgroundColor: 'rgba(8,22,44,0.92)',
+                    borderColor: 'rgba(111,182,217,0.3)',
+                    textStyle: { color: '#e6f7ff', fontSize: 12 },
+                    formatter: function(params) {
+                        const street = params[0].axisValue;
+                        const rows = params.filter(p => p.value > 0).map(p =>
+                            '<div><span style="color:' + p.color + '">●</span> ' + p.seriesName + '：<b>' + p.value + '</b> 项</div>').join('');
+                        return '<div style="font-weight:600;margin-bottom:4px">' + street + '</div>' + rows +
+                            '<div style="margin-top:2px;border-top:1px solid rgba(111,182,217,0.2);padding-top:2px">合计：<b>' + (streetMap[street] ? streetMap[street].total : 0) + '</b> 项</div>';
+                    }
+                }
+            }, true);
         }
 
         // ---- 渲染：整治明细列表 ----
@@ -7681,15 +7662,18 @@
             }
             renderCompStreetChart();
             renderCompStackChart();
+            renderCompStreetStackChart();
             renderCompTaskList();
             requestAnimationFrame(function() {
                 if (compStreetChart) compStreetChart.resize();
                 if (compStackChart) compStackChart.resize();
+                if (compStreetStackChart) compStreetStackChart.resize();
             });
         }
         window.addEventListener('resize', () => {
             if (compStreetChart) compStreetChart.resize();
             if (compStackChart) compStackChart.resize();
+            if (compStreetStackChart) compStreetStackChart.resize();
         });
         // ESC 关闭弹窗
         document.addEventListener('keydown', e => {
@@ -8411,7 +8395,6 @@
             initHouseArchSeed();
             loadData();
             renderGovStats();
-            renderOverview();
             renderRiskGrade();
             renderPatrol();
             renderRectify();
