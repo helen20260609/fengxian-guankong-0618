@@ -380,6 +380,29 @@ function hideToast() {
             </table>
         </div>
     </div>
+
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-chart-line" style="color:var(--primary)"></i> 我的业绩
+            <span style="flex:1"></span>
+            <button class="btn btn-primary btn-sm" onclick="openPerfEntry()"><i class="fas fa-plus"></i> 业绩录入</button>
+        </div>
+        <div class="table-wrapper">
+            <table class="list-table">
+                <thead>
+                    <tr>
+                        <th>项目名称</th>
+                        <th>服务领域</th>
+                        <th>服务时间</th>
+                        <th>合同金额(万元)</th>
+                        <th>验收结论</th>
+                        <th>审核状态</th>
+                    </tr>
+                </thead>
+                <tbody id="perfTableBody"></tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <!-- 查阅资料弹窗 -->
@@ -428,6 +451,19 @@ function hideToast() {
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="closeReportModal()">取消</button>
             <button class="btn btn-success" onclick="submitReport()"><i class="fas fa-paper-plane"></i> 提交鉴定成果</button>
+        </div>
+    </div>
+</div>
+
+<!-- 业绩录入弹窗（机构门户自行录入历史业绩） -->
+<div class="modal-overlay" id="perfEntryModal">
+    <div class="modal" style="max-width:960px; width:960px;">
+        <div class="modal-header"><i class="fas fa-plus"></i> 业绩录入</div>
+        <div class="modal-body" style="padding:0;">
+            <iframe id="perfEntryFrame" style="width:100%; height:72vh; border:0; display:block;" src="about:blank"></iframe>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closePerfEntry()">关闭</button>
         </div>
     </div>
 </div>
@@ -563,6 +599,7 @@ function hideToast() {
         var names = orgPool.map(function(o) { return o.orgName; });
         currentOrgName = (saved && names.indexOf(saved) >= 0) ? saved : names[0];
         select.value = currentOrgName;
+        localStorage.setItem('wsCurrentOrg', currentOrgName);
     }
 
     function onOrgSwitch() {
@@ -572,6 +609,7 @@ function hideToast() {
         renderStats();
         renderTaskTable();
         renderNotifyBadge();
+        renderPerfList();
     }
 
     // ==================== 系统消息（报告上传提醒） ====================
@@ -988,6 +1026,80 @@ function hideToast() {
         });
     }
 
+    // ==================== 我的业绩（机构门户自行录入历史业绩） ====================
+    function escapeHtmlPerf(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // 合并数据层已入库业绩与本机构通过门户/录入页提交的本地记录（含待审核）
+    function getMyPerformances() {
+        var list = [];
+        var orgId = currentOrgId();
+        if (orgId && typeof getPerformancesByOrg === 'function') {
+            getPerformancesByOrg(orgId).forEach(function(p) { list.push(p); });
+        }
+        try {
+            var local = JSON.parse(localStorage.getItem('performanceData') || '[]');
+            if (Array.isArray(local)) {
+                local.forEach(function(item) {
+                    if (!item || item.orgName !== currentOrgName) return;
+                    var dup = list.some(function(p) { return String(p.id) === String(item.id); });
+                    if (!dup) list.unshift(item);
+                });
+            }
+        } catch (e) {}
+        return list;
+    }
+
+    function perfStatusTag(status) {
+        var cls = 'declined';
+        if (status === '待审核') cls = 'todo';
+        else if (status === '已通过') cls = 'accepted';
+        return '<span class="status-tag ' + cls + '">' + escapeHtmlPerf(status || '—') + '</span>';
+    }
+
+    function renderPerfList() {
+        var tbody = document.getElementById('perfTableBody');
+        if (!tbody) return;
+        var list = getMyPerformances();
+        if (!list.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-tip">暂无业绩记录，可点击右上角"业绩录入"提交历史业绩</td></tr>';
+            return;
+        }
+        tbody.innerHTML = list.map(function(p) {
+            return '<tr>' +
+                '<td>' + escapeHtmlPerf(p.projectName || '—') + '</td>' +
+                '<td>' + escapeHtmlPerf(p.domain || '—') + '</td>' +
+                '<td>' + escapeHtmlPerf(p.serviceTime || '—') + '</td>' +
+                '<td>' + (p.amount || p.amount === 0 ? p.amount : '—') + '</td>' +
+                '<td>' + escapeHtmlPerf(p.conclusion || '—') + '</td>' +
+                '<td>' + perfStatusTag(p.auditStatus) + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    function openPerfEntry() {
+        var src = 'tp-performance-entry.html?portal=1&org=' + encodeURIComponent(currentOrgName) + '&t=' + Date.now();
+        document.getElementById('perfEntryFrame').src = src;
+        document.getElementById('perfEntryModal').classList.add('show');
+    }
+
+    function closePerfEntry() {
+        document.getElementById('perfEntryModal').classList.remove('show');
+        document.getElementById('perfEntryFrame').src = 'about:blank';
+    }
+
+    // 录入页提交成功后刷新我的业绩列表
+    window.addEventListener('message', function(e) {
+        var d = e.data || {};
+        if (d.action === 'performanceEntrySaved') {
+            closePerfEntry();
+            renderPerfList();
+        } else if (d.action === 'closeModal') {
+            closePerfEntry();
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
         // 自动生成报告交付提醒任务并推送系统消息/短信
         if (typeof generateReportReminders === 'function') generateReportReminders();
@@ -997,6 +1109,7 @@ function hideToast() {
             renderStats();
             renderTaskTable();
         });
+        renderPerfList();
     });
 </script>
 </body>

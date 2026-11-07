@@ -17,14 +17,14 @@ const INITIAL_CREDIT_LEVEL = 'B';
 // credit:    信用档案（可由系统根据业绩/合同自动计算）
 function createDefaultData() {
     const orgs = [
-        { orgId: 'ORG-20260001', orgName: '上海建科检测技术有限公司', orgCode: '91310000123456789X', legalPerson: '张建科', phone: '021-12345678', region: '上海市黄浦区', field: '建筑工地', orgType: '检测机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 92.6, established: '2010-05-20' },
-        { orgId: 'ORG-20260002', orgName: '上海华安风险评估中心', orgCode: '91310000876543210Y', legalPerson: '李华安', phone: '021-87654321', region: '上海市静安区', field: '基坑', orgType: '评估机构', qual: '甲级', status: '正常', creditLevel: 'AA', score: 88.3, established: '2012-08-15' },
-        { orgId: 'ORG-20260003', orgName: '上海水利安全研究院', orgCode: '91310000567890123Z', legalPerson: '王水研', phone: '021-56789012', region: '上海市徐汇区', field: '交通', orgType: '研究院', qual: '乙级', status: '正常', creditLevel: 'AA', score: 85.7, established: '2015-03-10' },
-        { orgId: 'ORG-20260004', orgName: '上海安信消防技术有限公司', orgCode: '91310000345678901A', legalPerson: '陈消防', phone: '021-34567890', region: '上海市长宁区', field: '玻璃幕墙', orgType: '检测机构', qual: '乙级', status: '正常', creditLevel: 'A', score: 79.5, established: '2018-11-22' },
-        { orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', orgCode: '91310000987654321B', legalPerson: '刘燃气', phone: '021-98765432', region: '上海市浦东新区', field: '燃气', orgType: '服务机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 91.2, established: '2011-06-18' },
-        { orgId: 'ORG-20260006', orgName: '上海城市安全研究院', orgCode: '91310000678901234C', legalPerson: '赵城安', phone: '021-67890123', region: '上海市杨浦区', field: '高空坠物', orgType: '研究院', qual: '甲级', status: '正常', creditLevel: 'AA', score: 87.4, established: '2013-09-05' },
-        { orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', orgCode: '91310000456789012D', legalPerson: '孙房鉴', phone: '021-45678901', region: '上海市虹口区', field: '城镇自建房', orgType: '鉴定机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 93.5, established: '2008-04-12' },
-        { orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', orgCode: '91310000234567890E', legalPerson: '周村镇', phone: '021-23456789', region: '上海市闵行区', field: '农村自建房', orgType: '评估机构', qual: '乙级', status: '正常', creditLevel: 'A', score: 76.8, established: '2019-01-30' }
+        { orgId: 'ORG-20260001', orgName: '上海建科检测技术有限公司', orgCode: '91310000123456789X', legalPerson: '张建科', phone: '021-12345678', region: '上海市奉贤区南桥镇', field: '建筑工地', orgType: '检测机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 92.6, established: '2010-05-20' },
+        { orgId: 'ORG-20260002', orgName: '上海华安风险评估中心', orgCode: '91310000876543210Y', legalPerson: '李华安', phone: '021-87654321', region: '上海市奉贤区奉城镇', field: '基坑', orgType: '评估机构', qual: '甲级', status: '正常', creditLevel: 'AA', score: 88.3, established: '2012-08-15' },
+        { orgId: 'ORG-20260003', orgName: '上海水利安全研究院', orgCode: '91310000567890123Z', legalPerson: '王水研', phone: '021-56789012', region: '上海市奉贤区金汇镇', field: '交通', orgType: '研究院', qual: '乙级', status: '正常', creditLevel: 'AA', score: 85.7, established: '2015-03-10' },
+        { orgId: 'ORG-20260004', orgName: '上海安信消防技术有限公司', orgCode: '91310000345678901A', legalPerson: '陈消防', phone: '021-34567890', region: '上海市奉贤区西渡街道', field: '玻璃幕墙', orgType: '检测机构', qual: '乙级', status: '正常', creditLevel: 'A', score: 79.5, established: '2018-11-22' },
+        { orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', orgCode: '91310000987654321B', legalPerson: '刘燃气', phone: '021-98765432', region: '上海市奉贤区柘林镇', field: '燃气', orgType: '服务机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 91.2, established: '2011-06-18' },
+        { orgId: 'ORG-20260006', orgName: '上海城市安全研究院', orgCode: '91310000678901234C', legalPerson: '赵城安', phone: '021-67890123', region: '上海市奉贤区奉浦街道', field: '高空坠物', orgType: '研究院', qual: '甲级', status: '正常', creditLevel: 'AA', score: 87.4, established: '2013-09-05' },
+        { orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', orgCode: '91310000456789012D', legalPerson: '孙房鉴', phone: '021-45678901', region: '上海市奉贤区青村镇', field: '城镇自建房', orgType: '鉴定机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 93.5, established: '2008-04-12' },
+        { orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', orgCode: '91310000234567890E', legalPerson: '周村镇', phone: '021-23456789', region: '上海市奉贤区庄行镇', field: '农村自建房', orgType: '评估机构', qual: '乙级', status: '正常', creditLevel: 'A', score: 76.8, established: '2019-01-30' }
     ];
 
     const contracts = [
@@ -50,16 +50,16 @@ function createDefaultData() {
     ];
 
     const experts = [
-        { expertId: 'EXP-002', name: '王晓峰', gender: '男', birth: '1980-03-25', orgId: 'ORG-20260002', orgName: '上海华安风险评估中心', domain: '基坑', direction: '基坑监测', industryExpertGroup: '基坑与地下工程专家组', title: '教授级高工', titleOrg: '中国岩石力学学会', titleTime: '2018-09', years: '18', phone: '13800138002', email: 'wangxf@ha.com', address: '上海市静安区', workplace: '上海华安风险评估中心', serviceTime: '工作日 9:00-17:00', status: '正常' },
-        { expertId: 'EXP-003', name: '张淑芬', gender: '女', birth: '1978-11-08', orgId: 'ORG-20260003', orgName: '上海水利安全研究院', domain: '交通', direction: '桥梁安全', industryExpertGroup: '交通基础设施安全专家组', title: '研究员', titleOrg: '交通运输部', titleTime: '2016-12', years: '12', phone: '13800138003', email: 'zhangsf@sl.com', address: '上海市徐汇区', workplace: '上海水利安全研究院', serviceTime: '工作日 9:00-17:00', status: '正常' },
-        { expertId: 'EXP-004', name: '陈志强', gender: '男', birth: '1982-07-19', orgId: 'ORG-20260004', orgName: '上海安信消防技术有限公司', domain: '玻璃幕墙', direction: '消防检测', industryExpertGroup: '消防与应急救援专家组', title: '高级工程师', titleOrg: '上海市消防协会', titleTime: '2019-04', years: '10', phone: '13800138004', email: 'chenzq@ax.com', address: '上海市长宁区', workplace: '上海安信消防技术有限公司', serviceTime: '工作日 9:00-17:00；火灾应急随时响应', status: '正常' },
-        { expertId: 'EXP-005', name: '刘红梅', gender: '女', birth: '1976-05-30', orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', domain: '燃气', direction: '燃气安全', industryExpertGroup: '城镇燃气安全专家组', title: '教授级高工', titleOrg: '中国城市燃气协会', titleTime: '2014-11', years: '20', phone: '13800138005', email: 'liuhm@rq.com', address: '上海市浦东新区', workplace: '上海燃气安全技术服务中心', serviceTime: '全天候（燃气应急抢修响应）', status: '正常' },
-        { expertId: 'EXP-006', name: '赵建国', gender: '男', birth: '1979-09-14', orgId: 'ORG-20260006', orgName: '上海城市安全研究院', domain: '高空坠物', direction: '城市安全', industryExpertGroup: '城市运行安全专家组', title: '高级工程师', titleOrg: '上海市应急管理局', titleTime: '2017-08', years: '14', phone: '13800138006', email: 'zhaojg@cs.com', address: '上海市杨浦区', workplace: '上海城市安全研究院', serviceTime: '工作日 9:00-17:00', status: '正常' },
-        { expertId: 'EXP-007', name: '孙丽华', gender: '女', birth: '1981-12-03', orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', domain: '城镇自建房', direction: '房屋鉴定', industryExpertGroup: '房屋安全鉴定专家组', title: '研究员', titleOrg: '住建部', titleTime: '2020-01', years: '11', phone: '13800138007', email: 'sunlh@fj.com', address: '上海市虹口区', workplace: '上海房屋安全鉴定中心', serviceTime: '工作日 9:00-17:00', status: '正常' },
-        { expertId: 'EXP-008', name: '周海涛', gender: '男', birth: '1983-04-22', orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', domain: '农村自建房', direction: '村镇建筑', industryExpertGroup: '村镇建设安全专家组', title: '高级工程师', titleOrg: '上海市住建委', titleTime: '2021-05', years: '9', phone: '13800138008', email: 'zhouht@cz.com', address: '上海市闵行区', workplace: '上海村镇建设安全评估有限公司', serviceTime: '工作日 9:00-17:00', status: '正常' },
-        { expertId: 'EXP-009', name: '杨秀英', gender: '女', birth: '1972-03-15', orgId: '', orgName: '', domain: '城镇自建房', direction: '结构检测', industryExpertGroup: '房屋安全鉴定专家组', title: '教授级高工', titleOrg: '中国土木工程学会', titleTime: '2010-08', years: '28', phone: '13800138009', email: 'yangxy@example.com', address: '上海市浦东新区', workplace: '上海市', serviceTime: '周一至周五 9:00-18:00', status: '正常', expertType: '独立专家' },
-        { expertId: 'EXP-010', name: '黄志强', gender: '男', birth: '1968-07-21', orgId: '', orgName: '', domain: '基坑', direction: '地基处理', industryExpertGroup: '基坑与地下工程专家组', title: '高级工程师', titleOrg: '中国岩石力学与工程学会', titleTime: '2008-05', years: '32', phone: '13800138010', email: 'huangzq@example.com', address: '上海市徐汇区', workplace: '上海市', serviceTime: '工作日及周末可预约', status: '正常', expertType: '独立专家' },
-        { expertId: 'EXP-011', name: '周涛', gender: '男', birth: '1975-11-30', orgId: '', orgName: '', domain: '交通', direction: '道路桥梁', industryExpertGroup: '交通基础设施安全专家组', title: '注册结构师', titleOrg: '住建部执业资格注册中心', titleTime: '2012-09', years: '24', phone: '13800138011', email: 'zhout@example.com', address: '上海市黄浦区', workplace: '上海市', serviceTime: '全天候', status: '正常', expertType: '独立专家' }
+        { expertId: 'EXP-002', name: '王晓峰', gender: '男', birth: '1980-03-25', orgId: 'ORG-20260002', orgName: '上海华安风险评估中心', domain: '基坑', direction: '基坑监测', industryExpertGroup: '基坑与地下工程专家组', title: '教授级高工', titleLevel: '正高级', titleOrg: '中国岩石力学学会', titleTime: '2018-09', years: '18', phone: '13800138002', email: 'wangxf@ha.com', address: '上海市静安区', workplace: '上海华安风险评估中心', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-003', name: '张淑芬', gender: '女', birth: '1978-11-08', orgId: 'ORG-20260003', orgName: '上海水利安全研究院', domain: '交通', direction: '桥梁安全', industryExpertGroup: '交通基础设施安全专家组', title: '研究员', titleLevel: '正高级', titleOrg: '交通运输部', titleTime: '2016-12', years: '12', phone: '13800138003', email: 'zhangsf@sl.com', address: '上海市徐汇区', workplace: '上海水利安全研究院', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-004', name: '陈志强', gender: '男', birth: '1982-07-19', orgId: 'ORG-20260004', orgName: '上海安信消防技术有限公司', domain: '玻璃幕墙', direction: '消防检测', industryExpertGroup: '消防与应急救援专家组', title: '高级工程师', titleLevel: '副高级', titleOrg: '上海市消防协会', titleTime: '2019-04', years: '10', phone: '13800138004', email: 'chenzq@ax.com', address: '上海市长宁区', workplace: '上海安信消防技术有限公司', serviceTime: '工作日 9:00-17:00；火灾应急随时响应', status: '正常' },
+        { expertId: 'EXP-005', name: '刘红梅', gender: '女', birth: '1976-05-30', orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', domain: '燃气', direction: '燃气安全', industryExpertGroup: '城镇燃气安全专家组', title: '教授级高工', titleLevel: '正高级', titleOrg: '中国城市燃气协会', titleTime: '2014-11', years: '20', phone: '13800138005', email: 'liuhm@rq.com', address: '上海市浦东新区', workplace: '上海燃气安全技术服务中心', serviceTime: '全天候（燃气应急抢修响应）', status: '正常' },
+        { expertId: 'EXP-006', name: '赵建国', gender: '男', birth: '1979-09-14', orgId: 'ORG-20260006', orgName: '上海城市安全研究院', domain: '高空坠物', direction: '城市安全', industryExpertGroup: '城市运行安全专家组', title: '高级工程师', titleLevel: '副高级', titleOrg: '上海市应急管理局', titleTime: '2017-08', years: '14', phone: '13800138006', email: 'zhaojg@cs.com', address: '上海市杨浦区', workplace: '上海城市安全研究院', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-007', name: '孙丽华', gender: '女', birth: '1981-12-03', orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', domain: '城镇自建房', direction: '房屋鉴定', industryExpertGroup: '房屋安全鉴定专家组', title: '研究员', titleLevel: '正高级', titleOrg: '住建部', titleTime: '2020-01', years: '11', phone: '13800138007', email: 'sunlh@fj.com', address: '上海市虹口区', workplace: '上海房屋安全鉴定中心', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-008', name: '周海涛', gender: '男', birth: '1983-04-22', orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', domain: '农村自建房', direction: '村镇建筑', industryExpertGroup: '村镇建设安全专家组', title: '高级工程师', titleLevel: '副高级', titleOrg: '上海市住建委', titleTime: '2021-05', years: '9', phone: '13800138008', email: 'zhouht@cz.com', address: '上海市闵行区', workplace: '上海村镇建设安全评估有限公司', serviceTime: '工作日 9:00-17:00', status: '正常' },
+        { expertId: 'EXP-009', name: '杨秀英', gender: '女', birth: '1972-03-15', orgId: '', orgName: '', domain: '城镇自建房', direction: '结构检测', industryExpertGroup: '房屋安全鉴定专家组', title: '教授级高工', titleLevel: '正高级', titleOrg: '中国土木工程学会', titleTime: '2010-08', years: '28', phone: '13800138009', email: 'yangxy@example.com', address: '上海市浦东新区', workplace: '上海市', serviceTime: '周一至周五 9:00-18:00', status: '正常', expertType: '独立专家' },
+        { expertId: 'EXP-010', name: '黄志强', gender: '男', birth: '1968-07-21', orgId: '', orgName: '', domain: '基坑', direction: '地基处理', industryExpertGroup: '基坑与地下工程专家组', title: '高级工程师', titleLevel: '副高级', titleOrg: '中国岩石力学与工程学会', titleTime: '2008-05', years: '32', phone: '13800138010', email: 'huangzq@example.com', address: '上海市徐汇区', workplace: '上海市', serviceTime: '工作日及周末可预约', status: '正常', expertType: '独立专家' },
+        { expertId: 'EXP-011', name: '周涛', gender: '男', birth: '1975-11-30', orgId: '', orgName: '', domain: '交通', direction: '道路桥梁', industryExpertGroup: '交通基础设施安全专家组', title: '注册结构师', titleLevel: '副高级', titleOrg: '住建部执业资格注册中心', titleTime: '2012-09', years: '24', phone: '13800138011', email: 'zhout@example.com', address: '上海市黄浦区', workplace: '上海市', serviceTime: '全天候', status: '正常', expertType: '独立专家' }
     ];
 
     const credit = {};
@@ -86,12 +86,55 @@ function createDefaultData() {
                 scoreAfter: calc.score,
                 levelAfter: calc.level
             }],
-            snapshots: [{
-                date: nowStr(),
-                score: calc.score,
-                level: calc.level
-            }]
+            snapshots: buildSeedSnapshots(o.orgId, calc.score, calc.level)
         };
+    });
+
+    // 演示用信用行为记录（良好/不良行为），用于展示信用记录列表与单条事件详情
+    const demoCreditEvents = {
+        'ORG-20260001': [
+            { time: '2026-10-20 10:15:00', eventName: '评估报告获市级优秀案例', type: 'positive', scoreDelta: 3, dimension: 'quality', remark: '施工安全风险评估报告入选市级优秀案例库，予以加分' },
+            { time: '2026-08-12 14:30:00', eventName: '报告数据错误被退回整改', type: 'negative', scoreDelta: -5, dimension: 'behavior', remark: '风险清单数据与实际不符，报告被退回并要求限期整改' }
+        ],
+        'ORG-20260005': [
+            { time: '2026-09-28 09:40:00', eventName: '主动上报重大隐患线索', type: 'positive', scoreDelta: 2, dimension: 'behavior', remark: '巡查中主动上报燃气安全隐患线索并协助处置，予以加分' },
+            { time: '2026-07-30 16:05:00', eventName: '未按合同约定时间提交报告', type: 'negative', scoreDelta: -8, dimension: 'behavior', remark: '鉴定报告逾期 15 天提交，按合同条款予以扣分' }
+        ],
+        'ORG-20260007': [
+            { time: '2026-09-05 11:20:00', eventName: '鉴定结论与复核结果严重不符', type: 'negative', scoreDelta: -10, dimension: 'behavior', remark: '房屋安全鉴定结论经复核被推翻，记入不良行为记录' }
+        ]
+    };
+    Object.keys(demoCreditEvents).forEach(orgId => {
+        const entry = credit[orgId];
+        const org = orgs.find(o => o.orgId === orgId);
+        if (!entry || !org) return;
+        // 与 recordCreditEvent 一致按时间倒序（最新在前）：unshift 需从最旧开始
+        demoCreditEvents[orgId].slice().reverse().forEach(ev => {
+            entry.history.unshift({
+                time: ev.time, orgId: orgId, orgName: org.orgName,
+                eventName: ev.eventName, eventKey: '', type: ev.type,
+                scoreDelta: ev.scoreDelta, dimension: ev.dimension, remark: ev.remark
+            });
+        });
+        // 按含行为记录的口径重算，保证分值/等级/维度与记录一致
+        const calc = calculateCreditScoreFromDefaults(org, contracts.filter(c => c.orgId === orgId), performances.filter(p => p.orgId === orgId), entry);
+        entry.score = calc.score;
+        entry.creditLevel = calc.level;
+        entry.dimensions = calc.dimensions;
+        org.score = calc.score;
+        org.creditLevel = calc.level;
+        demoCreditEvents[orgId].slice().reverse().forEach(ev => {
+            entry.changeLog.unshift({
+                time: ev.time, orgId: orgId, orgName: org.orgName,
+                eventName: ev.eventName, eventKey: '', type: ev.type,
+                scoreDelta: ev.scoreDelta, dimension: ev.dimension, remark: ev.remark,
+                ruleId: '', scoreAfter: calc.score, levelAfter: calc.level
+            });
+        });
+        var todaySnap = { date: todayStr(), score: calc.score, level: calc.level };
+        var lastSnap = entry.snapshots[entry.snapshots.length - 1];
+        if (lastSnap && lastSnap.date === todaySnap.date) entry.snapshots[entry.snapshots.length - 1] = todaySnap;
+        else entry.snapshots.push(todaySnap);
     });
 
     const auditConfig = {
@@ -105,11 +148,22 @@ function createDefaultData() {
 
     const auditFlow = {};  // key: orgId, value: { currentLevel, history, status } 审核流程状态
 
-    return { orgs, contracts, performances, experts, credit, auditConfig, auditFlow, version: 4, creditRules: getDefaultCreditRules().slice(), creditRuleVersion: 1, creditLastCalcTime: '', orgApplications: [], expertApplications: [], orgChangeRequests: [], notifications: [] };
+    return { orgs, contracts, performances, experts, credit, auditConfig, auditFlow, version: 8, creditRules: getDefaultCreditRules().slice(), creditRuleVersion: 1, creditRuleHistory: [{ version: 1, time: nowStr(), summary: '初始规则版本', rules: getDefaultCreditRules().map(r => Object.assign({}, r)) }], creditLastCalcTime: '', orgApplications: [], expertApplications: [], orgChangeRequests: [], notifications: [], reminderRule: null };
 }
 
 function getDefaultExperts() {
     return createDefaultData().experts;
+}
+
+// 按职称名称推断职称等级（初级/中级/副高级/正高级），用于存量数据迁移与导入兜底
+function inferExpertTitleLevel(title) {
+    var t = (title || '').trim();
+    if (!t) return '';
+    // 先判正高（教授/研究员须精确匹配，避免误判副教授/副研究员）
+    if (t.indexOf('教授级') !== -1 || t.indexOf('正高级') !== -1 || t === '教授' || t === '研究员') return '正高级';
+    if (t.indexOf('高级') !== -1 || t === '副教授' || t === '副研究员' || t.indexOf('注册') !== -1) return '副高级';
+    if (t.indexOf('助理') !== -1 || t.indexOf('技术员') !== -1 || t.indexOf('初级') !== -1) return '初级';
+    return '中级';
 }
 
 function migrateTPData(data) {
@@ -131,7 +185,7 @@ function migrateTPData(data) {
         };
     }
     if (!data.auditFlow) data.auditFlow = {};
-    if (data.version !== 4) {
+    if ((data.version || 0) < 5) {
         // 当 experts 为空或只有名字缺失/不规范的数据时，用默认数据重新填充
         var defaults = createDefaultData().experts;
         if (!data.experts.length || data.experts.every(function(e) { return !e.name || !e.expertId; })) {
@@ -143,7 +197,24 @@ function migrateTPData(data) {
             });
         }
         migrateCreditSnapshots(data);
-        data.version = 4;
+        backfillCreditSnapshotHistory(data);
+        data.version = 5;
+        saveTPData(data);
+    }
+    // v6：机构服务区域由上海市辖区调整为奉贤区街道/乡镇
+    if ((data.version || 0) < 6) {
+        var regionMap = {
+            '上海市黄浦区': '上海市奉贤区南桥镇',
+            '上海市静安区': '上海市奉贤区奉城镇',
+            '上海市徐汇区': '上海市奉贤区金汇镇',
+            '上海市长宁区': '上海市奉贤区西渡街道',
+            '上海市浦东新区': '上海市奉贤区柘林镇',
+            '上海市杨浦区': '上海市奉贤区奉浦街道',
+            '上海市虹口区': '上海市奉贤区青村镇',
+            '上海市闵行区': '上海市奉贤区庄行镇'
+        };
+        data.orgs.forEach(function(o) { if (regionMap[o.region]) o.region = regionMap[o.region]; });
+        data.version = 6;
         saveTPData(data);
     }
     if (!data.orgApplications) data.orgApplications = [];
@@ -189,6 +260,27 @@ function migrateTPData(data) {
         });
         if (townChanged) saveTPData(data);
     }
+    // 专家补职称等级：存量数据按职称名称推断（初级/中级/副高级/正高级）
+    if (data.experts && data.experts.length) {
+        var titleLevelChanged = false;
+        data.experts.forEach(function(e) {
+            if (!e.titleLevel) { e.titleLevel = inferExpertTitleLevel(e.title); titleLevelChanged = true; }
+        });
+        if (titleLevelChanged) { data.version = 7; saveTPData(data); }
+    }
+    // 清理同名重复专家：同一姓名保留先出现的记录（系统默认数据），移除历史同步产生的重复项
+    if (data.experts && data.experts.length) {
+        var seenExpertNames = {};
+        var beforeExpertCount = data.experts.length;
+        data.experts = data.experts.filter(function(e) {
+            var key = e.name || '';
+            if (!key) return true;
+            if (seenExpertNames[key]) return false;
+            seenExpertNames[key] = true;
+            return true;
+        });
+        if (data.experts.length !== beforeExpertCount) { data.version = 8; saveTPData(data); }
+    }
     return data;
 }
 
@@ -219,6 +311,7 @@ function getTPData() {
             if (!Array.isArray(parsed.orgApplications)) parsed.orgApplications = [];
             if (!parsed.creditRules) parsed.creditRules = defaults.creditRules;
             if (!parsed.creditRuleVersion) parsed.creditRuleVersion = defaults.creditRuleVersion;
+            if (!Array.isArray(parsed.creditRuleHistory)) parsed.creditRuleHistory = defaults.creditRuleHistory || [];
             parsed.version = 4;
             saveTPData(parsed);
         }
@@ -691,6 +784,7 @@ function promoteApplicationToExpert(app) {
         direction: basic.direction || '',
         industryExpertGroup: basic.industryExpertGroup || '',
         title: basic.title || '',
+        titleLevel: basic.titleLevel || inferExpertTitleLevel(basic.title),
         titleOrg: basic.titleOrg || '',
         titleTime: basic.titleTime || '',
         years: basic.years || '',
@@ -917,14 +1011,69 @@ function calculateCreditScore(orgId) {
     return applyCreditRules(calculateCreditScoreFromDefaults(org, contracts, performances, creditRecord), creditRecord, ruleConfig);
 }
 
+// 基础信用构成：资质真实性（资质等级基准分）+ 信息完整性（资料关键字段完整率）
+// 完整率 100% 时基础信用等于资质基准分，资料缺失越多得分越低
+const BASE_CREDIT_REQUIRED_FIELDS = ['orgName', 'orgCode', 'legalPerson', 'phone', 'region', 'field', 'orgType', 'qual', 'established'];
+function getBaseCreditBreakdown(org) {
+    org = org || {};
+    const qualScore = org.qual === '甲级' ? 95 : (org.qual === '乙级' ? 88 : 80);
+    const missing = BASE_CREDIT_REQUIRED_FIELDS.filter(f => {
+        const v = org[f];
+        return v === undefined || v === null || String(v).trim() === '';
+    });
+    const completenessRate = (BASE_CREDIT_REQUIRED_FIELDS.length - missing.length) / BASE_CREDIT_REQUIRED_FIELDS.length;
+    return {
+        qualScore: qualScore,
+        completeness: Math.round(completenessRate * 100),
+        missing: missing,
+        baseCredit: Math.round(qualScore * (0.6 + 0.4 * completenessRate))
+    };
+}
+
+// 五维子项明细：用于信用详情展示，口径与 calculateCreditScoreFromDefaults 一致
+function getCreditDimensionDetails(orgId) {
+    const org = getOrgById(orgId);
+    if (!org) return null;
+    const contracts = getContractsByOrg(orgId);
+    const performances = getPerformancesByOrg(orgId);
+    const creditRecord = getCreditByOrg(orgId) || { history: [] };
+    const history = creditRecord.history || [];
+    const pct = r => Math.round(r * 100);
+
+    const totalContract = contracts.length || 1;
+    const fulfillRate = contracts.filter(c => c.status === '已验收').length / totalContract;
+
+    const totalPerf = performances.length || 1;
+    const passRate = performances.filter(p => p.auditStatus === '已通过').length / totalPerf;
+    const excellent = performances.filter(p => p.conclusion === '优秀').length;
+    const good = performances.filter(p => p.conclusion === '良好').length;
+    const excellentRate = (excellent + good * 0.8) / totalPerf;
+
+    const negatives = history.filter(h => h.type === 'negative');
+    const complaints = negatives.filter(h => h.eventKey === 'customer_complaint').length;
+
+    return {
+        hasBusinessData: contracts.length > 0 || performances.length > 0,
+        base: getBaseCreditBreakdown(org),
+        performance: { fulfillRate: pct(fulfillRate), onTimeRate: pct(fulfillRate) },
+        quality: { passRate: pct(passRate), acceptRate: pct(fulfillRate) },
+        behavior: {
+            violations: negatives.length - complaints,
+            complaints: complaints,
+            penalty: negatives.reduce((s, h) => s + Math.abs(h.scoreDelta || 0), 0)
+        },
+        satisfaction: { score: pct(excellentRate), excellentRate: pct(excellentRate) }
+    };
+}
+
 function calculateCreditScoreFromDefaults(org, contracts, performances, creditRecord) {
     if (!org) return { score: 0, level: 'C', dimensions: {} };
     contracts = contracts || [];
     performances = performances || [];
     creditRecord = creditRecord || { history: [] };
 
-    // 基础信用：资质与信息完整性（基于机构主数据）
-    const baseCredit = org.qual === '甲级' ? 95 : (org.qual === '乙级' ? 88 : 80);
+    // 基础信用：资质真实性 + 信息完整性（基于机构主数据）
+    const baseCredit = getBaseCreditBreakdown(org).baseCredit;
 
     // 履约信用：合同履约率 + 交付及时率
     const totalContract = contracts.length || 1;
@@ -992,7 +1141,7 @@ function calculateCreditScoreFromDefaults(org, contracts, performances, creditRe
 // ---------- 信用规则引擎 ----------
 const DEFAULT_CREDIT_RULES = [
     { ruleId: 'RULE-001', version: 1, name: '按时交付报告', eventKey: 'on_time_delivery', dimension: 'performance', type: 'positive', scoreDelta: 0.5, degradeLevel: false, degradeTo: '', enabled: true, description: '机构按合同期限按时交付报告，加 0.5 分' },
-    { ruleId: 'RULE-002', version: 1, name: '客户投诉核实', eventKey: 'customer_complaint', dimension: 'satisfaction', type: 'negative', scoreDelta: -2, degradeLevel: false, degradeTo: '', enabled: true, description: '经核实的客户投诉，扣 2 分' },
+    { ruleId: 'RULE-002', version: 1, name: '客户投诉核实', eventKey: 'customer_complaint', dimension: 'behavior', type: 'negative', scoreDelta: -2, degradeLevel: false, degradeTo: '', enabled: true, description: '经核实的客户投诉，扣 2 分' },
     { ruleId: 'RULE-003', version: 1, name: '行政处罚', eventKey: 'admin_penalty', dimension: 'behavior', type: 'negative', scoreDelta: -5, degradeLevel: true, degradeTo: '', enabled: true, description: '受到行政处罚，扣 5 分并强制降级一档' },
     { ruleId: 'RULE-004', version: 1, name: '报告质量优良', eventKey: 'quality_excellent', dimension: 'quality', type: 'positive', scoreDelta: 1, degradeLevel: false, degradeTo: '', enabled: true, description: '报告获评优良，加 1 分' },
     { ruleId: 'RULE-005', version: 1, name: '合同履约逾期', eventKey: 'delivery_overdue', dimension: 'performance', type: 'negative', scoreDelta: -1, degradeLevel: false, degradeTo: '', enabled: true, description: '未按合同期限交付，扣 1 分' }
@@ -1012,10 +1161,58 @@ function todayStr() {
     return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
 }
 
+// 信用分 → 等级换算（与 calculateCreditScoreFromDefaults 口径一致）
+function scoreToCreditLevel(s) {
+    if (s >= 90) return 'AAA';
+    if (s >= 85) return 'AA';
+    if (s >= 80) return 'A';
+    if (s >= 70) return 'B';
+    return 'C';
+}
+
+// 生成机构信用时序快照：近5个月每月15日一条（分数由当前分向前小幅递减，趋势上行）+ 今天一条
+function buildSeedSnapshots(orgId, score, level) {
+    var arr = [];
+    var seedNum = 0;
+    for (var k = 0; k < orgId.length; k++) seedNum += orgId.charCodeAt(k);
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    for (var m = 5; m >= 1; m--) {
+        var d = new Date();
+        d.setMonth(d.getMonth() - m);
+        d.setDate(15);
+        var dateStr = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        var delta = Math.round((seedNum % 3 + 1) * m * 0.6);
+        var s = Math.max(60, +(score - delta).toFixed(1));
+        arr.push({ date: dateStr, score: s, level: scoreToCreditLevel(s) });
+    }
+    arr.push({ date: todayStr(), score: score, level: level });
+    return arr;
+}
+
+// 存量数据迁移：无历史快照的机构按当前分向前铺 5 个月历史，保证趋势图可回溯
+function backfillCreditSnapshotHistory(data) {
+    data = data || getTPData();
+    if (!data.credit) return;
+    var now = new Date();
+    var monthStart = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-01';
+    Object.keys(data.credit).forEach(function(orgId) {
+        var record = data.credit[orgId];
+        if (!record.snapshots) record.snapshots = [];
+        var hasHistory = record.snapshots.some(function(s) { return String(s.date) < monthStart; });
+        if (hasHistory || record.score == null) return;
+        var hist = buildSeedSnapshots(orgId, record.score, record.creditLevel);
+        hist.pop();
+        record.snapshots = hist.concat(record.snapshots);
+    });
+}
+
 function getCreditRuleConfig() {
     const data = getTPData();
+    const rules = data.creditRules ? data.creditRules.slice() : DEFAULT_CREDIT_RULES.slice();
+    // 口径修正：客户投诉归入行为信用（标书口径：行为信用含违规记录、投诉情况）
+    rules.forEach(r => { if (r.eventKey === 'customer_complaint' && r.dimension === 'satisfaction') r.dimension = 'behavior'; });
     return {
-        rules: data.creditRules ? data.creditRules.slice() : DEFAULT_CREDIT_RULES.slice(),
+        rules: rules,
         version: data.creditRuleVersion || 1,
         lastCalcTime: data.creditLastCalcTime || ''
     };
@@ -1023,10 +1220,62 @@ function getCreditRuleConfig() {
 
 function saveCreditRuleConfig(config) {
     const data = getTPData();
-    data.creditRules = (config.rules || []).slice();
-    data.creditRuleVersion = config.version || 1;
+    const oldRules = (data.creditRules ? data.creditRules.slice() : DEFAULT_CREDIT_RULES.slice());
+    const newRules = (config.rules || []).slice();
+    const oldVersion = data.creditRuleVersion || 1;
+    const newVersion = config.version || 1;
+    data.creditRules = newRules;
+    data.creditRuleVersion = newVersion;
     data.creditLastCalcTime = config.lastCalcTime || '';
+    // 版本发生变化时自动存档快照，形成规则版本历史
+    if (newVersion !== oldVersion) {
+        if (!Array.isArray(data.creditRuleHistory)) data.creditRuleHistory = [];
+        if (data.creditRuleHistory.length === 0) {
+            data.creditRuleHistory.unshift({
+                version: oldVersion,
+                time: '',
+                summary: '变更前基线版本',
+                rules: oldRules.map(r => Object.assign({}, r))
+            });
+        }
+        data.creditRuleHistory.unshift({
+            version: newVersion,
+            time: nowStr(),
+            summary: summarizeRuleChange(oldRules, newRules),
+            rules: newRules.map(r => Object.assign({}, r))
+        });
+        if (data.creditRuleHistory.length > 20) data.creditRuleHistory.length = 20;
+    }
     saveTPData(data);
+}
+
+// 对比新旧规则集，生成变更摘要
+function summarizeRuleChange(oldRules, newRules) {
+    const parts = [];
+    const oldMap = {};
+    (oldRules || []).forEach(r => { oldMap[r.ruleId] = r; });
+    const newMap = {};
+    (newRules || []).forEach(r => { newMap[r.ruleId] = r; });
+    newRules.forEach(r => {
+        const old = oldMap[r.ruleId];
+        if (!old) { parts.push('新增规则「' + r.name + '」'); return; }
+        if (JSON.stringify(old) !== JSON.stringify(r)) {
+            if (old.enabled !== r.enabled && old.scoreDelta === r.scoreDelta && old.name === r.name) {
+                parts.push((r.enabled ? '启用' : '禁用') + '规则「' + r.name + '」');
+            } else {
+                parts.push('编辑规则「' + r.name + '」');
+            }
+        }
+    });
+    oldRules.forEach(r => {
+        if (!newMap[r.ruleId]) parts.push('删除规则「' + r.name + '」');
+    });
+    return parts.length ? parts.join('；') : '规则配置更新';
+}
+
+function getCreditRuleHistory() {
+    const data = getTPData();
+    return Array.isArray(data.creditRuleHistory) ? data.creditRuleHistory.slice() : [];
 }
 
 function getDefaultCreditRules() {
@@ -1337,10 +1586,53 @@ function markAllNotificationsRead(orgId) {
     });
     if (changed) saveTPData(data);
 }
+// 提醒规则配置（规则引擎简化版：总开关 / 提前提醒天数列表 / 逾期频率 / 推送渠道可调）
+// 读取时与默认值合并，存量数据无 reminderRule 字段也能直接使用，无需重置
+var DEFAULT_REMINDER_RULE = {
+    enabled: true,          // 提醒任务总开关
+    days: [7, 3, 1],        // 提前提醒天数（降序）；最小档=紧急，最大档=提示，中间档=预警
+    overdueDaily: true,     // 逾期后每日提醒（关闭则逾期不提醒）
+    channelSystem: true,    // 系统消息
+    channelSms: true        // 短信推送（模拟）
+};
+function getReminderRuleConfig() {
+    var data = getTPData();
+    var cfg = data.reminderRule || {};
+    var days = (Array.isArray(cfg.days) ? cfg.days : DEFAULT_REMINDER_RULE.days)
+        .map(function(n) { return parseInt(n, 10); })
+        .filter(function(n) { return !isNaN(n) && n > 0; });
+    days = days.filter(function(n, i) { return days.indexOf(n) === i; }).sort(function(a, b) { return b - a; });
+    if (!days.length) days = DEFAULT_REMINDER_RULE.days.slice();
+    return {
+        enabled: cfg.enabled !== false,
+        days: days,
+        overdueDaily: cfg.overdueDaily !== false,
+        channelSystem: cfg.channelSystem !== false,
+        channelSms: cfg.channelSms !== false
+    };
+}
+function saveReminderRuleConfig(cfg) {
+    var data = getTPData();
+    data.reminderRule = cfg;
+    saveTPData(data);
+}
+// 命中天数档位的提醒级别：最小档=urgent，最大档=notice，其余=warning
+function reminderLevelForDay(matchedDay, daysDesc) {
+    if (daysDesc.length <= 1) return 'warning';
+    if (matchedDay === daysDesc[daysDesc.length - 1]) return 'urgent';
+    if (matchedDay === daysDesc[0]) return 'notice';
+    return 'warning';
+}
 // 按合同服务期限自动生成提醒消息（按 合同+级别+日期 去重），返回本次新增条数
 function generateReportReminders() {
     var data = getTPData();
     if (!data.notifications) data.notifications = [];
+    var rule = getReminderRuleConfig();
+    if (!rule.enabled) return 0;
+    var channels = [];
+    if (rule.channelSystem) channels.push('system');
+    if (rule.channelSms) channels.push('sms');
+    if (!channels.length) return 0; // 未启用任何推送渠道
     var today = new Date();
     today.setHours(0, 0, 0, 0);
     var dateKey = todayStr();
@@ -1356,10 +1648,17 @@ function generateReportReminders() {
         deadline.setHours(0, 0, 0, 0);
         var diffDays = Math.ceil((deadline - today) / (1000 * 60 * 60 * 24));
         var level = null, levelText = '';
-        if (diffDays < 0) { level = 'overdue'; levelText = '报告已逾期 ' + Math.abs(diffDays) + ' 天'; }
-        else if (diffDays <= 1) { level = 'urgent'; levelText = '距交付期限仅剩 ' + diffDays + ' 天'; }
-        else if (diffDays <= 3) { level = 'warning'; levelText = '距交付期限剩 ' + diffDays + ' 天'; }
-        else if (diffDays <= 7) { level = 'notice'; levelText = '距交付期限剩 ' + diffDays + ' 天'; }
+        if (diffDays < 0) {
+            if (!rule.overdueDaily) return; // 规则关闭逾期提醒
+            level = 'overdue'; levelText = '报告已逾期 ' + Math.abs(diffDays) + ' 天';
+        } else {
+            // 命中规则天数窗口：取最小命中档位定级别
+            var matched = rule.days.filter(function(d) { return diffDays <= d; });
+            if (!matched.length) return;
+            var matchedDay = Math.min.apply(null, matched);
+            level = reminderLevelForDay(matchedDay, rule.days);
+            levelText = (level === 'urgent' ? '距交付期限仅剩 ' : '距交付期限剩 ') + diffDays + ' 天';
+        }
         if (!level) return;
         var dedupeKey = c.contractId + '|' + level + '|' + dateKey;
         if (data.notifications.some(function(n) { return n.dedupeKey === dedupeKey; })) return;
@@ -1378,8 +1677,8 @@ function generateReportReminders() {
             projectName: c.projectName || '',
             deadline: deadlineStr,
             diffDays: diffDays,
-            channels: ['system', 'sms'],
-            sms: { phone: org.phone || '', status: '已送达', time: nowStr() },
+            channels: channels,
+            sms: rule.channelSms ? { phone: org.phone || '', status: '已送达', time: nowStr() } : null,
             read: false,
             time: nowStr()
         });

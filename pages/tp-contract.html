@@ -90,8 +90,14 @@ body.tp-embed > .stat-row, body.tp-embed > .analysis-card { display: none !impor
 }
 .form-group textarea { resize: vertical; line-height: 1.5; }
 
+/* 日期范围（起止日期控件） */
+.date-range { display: flex; align-items: center; gap: 8px; }
+.date-range input { flex: 1; min-width: 0; }
+.date-range-sep { color: var(--text-secondary); font-size: 13px; flex-shrink: 0; }
+
 /* 可搜索机构下拉 */
 .org-search-wrap { position: relative; }
+.org-search-wrap input { width: 100%; }
 .org-search-wrap .org-search-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 12px; pointer-events: none; }
 .org-search-dropdown { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--input-border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); z-index: 50; }
 .org-search-dropdown.active { display: block; }
@@ -101,7 +107,7 @@ body.tp-embed > .stat-row, body.tp-embed > .analysis-card { display: none !impor
 .org-search-option .org-field { font-size: 12px; color: var(--text-secondary); }
 .org-search-empty { padding: 14px 12px; font-size: 13px; color: var(--text-secondary); text-align: center; }
 /* 只读字段样式 */
-.form-group input[readonly], .form-group select:disabled {
+.form-group input[readonly], .form-group select:disabled, .form-group input[type="date"]:disabled {
     background: var(--bg-hover);
     color: var(--text-secondary);
     cursor: not-allowed;
@@ -312,7 +318,11 @@ body.tp-embed > .stat-row, body.tp-embed > .analysis-card { display: none !impor
                 </div>
                 <div class="form-group">
                     <label>服务期限</label>
-                    <input type="text" id="modalServicePeriod" value="2026-04-01 ~ 2026-06-30">
+                    <div class="date-range">
+                        <input type="date" id="modalServiceStart" value="2026-04-01">
+                        <span class="date-range-sep">至</span>
+                        <input type="date" id="modalServiceEnd" value="2026-06-30">
+                    </div>
                 </div>
             </div>
             <div class="form-row">
@@ -502,7 +512,7 @@ body.tp-embed > .stat-row, body.tp-embed > .analysis-card { display: none !impor
     <div class="card-body">
         <div style="margin-bottom: 16px; padding: 14px 16px; background: var(--bg-secondary); border-radius: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px;">
             <div style="flex: 2; min-width: 260px; display: flex; align-items: center; gap: 8px;">
-                <input type="text" id="filterKeyword" placeholder="请输入项目合同或机构名称" style="flex: 1; min-width: 140px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
+                <input type="text" id="filterKeyword" placeholder="请输入项目名称或机构名称" style="flex: 1; min-width: 140px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);">
             </div>
             <div style="flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px;">
                 <label for="filterStatus" style="font-size: 13px; white-space: nowrap; color: var(--text-secondary);">合同状态：</label>
@@ -730,13 +740,38 @@ function refreshContractData() {
     renderStatCards();
 }
 
+function splitServicePeriod(val) {
+    var parts = (val || '').split('~');
+    var start = (parts[0] || '').trim();
+    var end = (parts[1] || '').trim();
+    var re = /^\d{4}-\d{2}-\d{2}$/;
+    return { start: re.test(start) ? start : '', end: re.test(end) ? end : '' };
+}
+
+function setModalServicePeriod(val) {
+    var p = splitServicePeriod(val);
+    document.getElementById('modalServiceStart').value = p.start;
+    document.getElementById('modalServiceEnd').value = p.end;
+}
+
+function getModalServicePeriod() {
+    var start = document.getElementById('modalServiceStart').value;
+    var end = document.getElementById('modalServiceEnd').value;
+    return (start && end) ? start + ' ~ ' + end : '';
+}
+
 function setContractModalReadOnly(readonly) {
-    var ids = ['modalProjectName', 'modalOrgName', 'modalServiceScope', 'modalServicePeriod', 'modalAmount', 'modalPayment', 'modalDeliverable', 'modalAcceptance'];
+    var ids = ['modalProjectName', 'modalOrgName', 'modalServiceScope', 'modalAmount', 'modalPayment', 'modalDeliverable', 'modalAcceptance'];
     ids.forEach(function(id) {
         document.getElementById(id).readOnly = readonly;
         if (document.getElementById(id).tagName === 'SELECT') {
             document.getElementById(id).disabled = readonly;
         }
+    });
+    // 日期控件不支持 readonly，统一用 disabled 控制
+    ['modalServiceStart', 'modalServiceEnd'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.disabled = readonly;
     });
     // 可搜索机构输入框同步只读
     var orgSearchInput = document.getElementById('orgSearchInput');
@@ -760,7 +795,7 @@ function viewContract(id) {
     initModalOrgSelect(data.orgId);
     fillContractOrgInfo(data.orgId);
     document.getElementById('modalServiceScope').value = data.serviceScope;
-    document.getElementById('modalServicePeriod').value = data.servicePeriod;
+    setModalServicePeriod(data.servicePeriod);
     document.getElementById('modalAmount').value = data.amount;
     document.getElementById('modalPayment').value = data.payment;
     document.getElementById('modalDeliverable').value = data.deliverable;
@@ -882,7 +917,7 @@ function addContract() {
     clearContractOrgInfo();
     fillContractOrgInfo(currentOrgId || '');
     document.getElementById('modalServiceScope').value = '建筑工地';
-    document.getElementById('modalServicePeriod').value = '2026-04-01 ~ 2026-06-30';
+    setModalServicePeriod('2026-04-01 ~ 2026-06-30');
     document.getElementById('modalAmount').value = '12.8';
     document.getElementById('modalPayment').value = '分期付款';
     document.getElementById('modalDeliverable').value = '施工安全风险评估报告、风险清单及管控建议';
@@ -908,6 +943,16 @@ function saveContract() {
     }
     var orgId = document.getElementById('modalOrgName').value;
     var org = getOrgById(orgId);
+    var servicePeriod = getModalServicePeriod();
+    if (!servicePeriod) {
+        alert('请选择服务期限的开始和结束日期');
+        return;
+    }
+    var periodParts = splitServicePeriod(servicePeriod);
+    if (periodParts.end < periodParts.start) {
+        alert('服务期限的结束日期不能早于开始日期');
+        return;
+    }
     var old = id ? contractData[id] : null;
     var contract = {
         contractId: id || 'HT-' + Date.now(),
@@ -916,7 +961,7 @@ function saveContract() {
         orgCode: org ? org.orgCode : '',
         projectName: projectName,
         serviceScope: document.getElementById('modalServiceScope').value,
-        servicePeriod: document.getElementById('modalServicePeriod').value,
+        servicePeriod: servicePeriod,
         amount: parseFloat(document.getElementById('modalAmount').value) || 0,
         payment: document.getElementById('modalPayment').value,
         deliverable: document.getElementById('modalDeliverable').value,
@@ -1031,7 +1076,7 @@ function editContract(id) {
     initModalOrgSelect(data.orgId);
     fillContractOrgInfo(data.orgId);
     document.getElementById('modalServiceScope').value = data.serviceScope;
-    document.getElementById('modalServicePeriod').value = data.servicePeriod;
+    setModalServicePeriod(data.servicePeriod);
     document.getElementById('modalAmount').value = data.amount;
     document.getElementById('modalPayment').value = data.payment;
     document.getElementById('modalDeliverable').value = data.deliverable;
@@ -1262,19 +1307,14 @@ function getPeriodTag(servicePeriod, status) {
     return null;
 }
 
-// 生成提醒列表：逾期 + 7天内 + 3天内 + 1天内
-// 提醒规则配置（localStorage 持久化）
-var REMINDER_RULE_KEY = 'tpReminderRule_v1';
+// 生成提醒列表：逾期 + 规则天数窗口内
+// 提醒规则配置（统一走数据层 getReminderRuleConfig/saveReminderRuleConfig 持久化）
 function getReminderRule() {
-    var def = { enabled: true, days: [7, 3, 1], overdueDaily: true, sms: true };
-    try {
-        var raw = localStorage.getItem(REMINDER_RULE_KEY);
-        if (raw) {
-            var r = JSON.parse(raw);
-            return { enabled: r.enabled !== false, days: Array.isArray(r.days) && r.days.length ? r.days : def.days, overdueDaily: r.overdueDaily !== false, sms: r.sms !== false };
-        }
-    } catch (e) {}
-    return def;
+    if (typeof getReminderRuleConfig === 'function') {
+        var c = getReminderRuleConfig();
+        return { enabled: c.enabled, days: c.days, overdueDaily: c.overdueDaily, sms: c.channelSms };
+    }
+    return { enabled: true, days: [7, 3, 1], overdueDaily: true, sms: true };
 }
 function openReminderRuleModal() {
     var rule = getReminderRule();
@@ -1294,13 +1334,15 @@ function saveReminderRule() {
         enabled: document.getElementById('ruleEnabled').checked,
         days: days,
         overdueDaily: document.getElementById('ruleOverdueDaily').checked,
-        sms: document.getElementById('ruleSms').checked
+        channelSystem: true,
+        channelSms: document.getElementById('ruleSms').checked
     };
-    localStorage.setItem(REMINDER_RULE_KEY, JSON.stringify(rule));
+    if (typeof saveReminderRuleConfig === 'function') saveReminderRuleConfig(rule);
+    if (typeof generateReportReminders === 'function') generateReportReminders(); // 按新规则立即重新扫描推送
     closeReminderRuleModal();
     renderReminderList();
     renderStatCards();
-    showTip('提醒规则已保存', 'success');
+    showTip('提醒规则已保存，并已按新规则重新扫描', 'success');
 }
 
 function generateReminders() {

@@ -112,6 +112,7 @@ body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background: va
 .dimension-name { font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
 .dimension-score { font-size: 22px; font-weight: 700; color: var(--text-primary); }
 .dimension-weight { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.dimension-sub { font-size: 11px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; opacity: .85; }
 
 /* 表格 */
 .data-table { width: 100%; border-collapse: collapse; }
@@ -473,11 +474,11 @@ body.tp-embed #creditModal .modal-close { display: none !important; }
                     <h3><i class="fas fa-layer-group"></i> 信用分由哪些内容组成</h3>
                     <div class="guide-formula">综合信用分 = 五维加权分 + 已启用规则的累计加减分（最低 0 分，最高 100 分）</div>
                     <ul style="margin-top:12px;">
-                        <li><strong>基础信用（25%）：</strong>主要参考机构资质情况。</li>
-                        <li><strong>履约信用（25%）：</strong>主要看合同履行和验收情况。</li>
-                        <li><strong>质量信用（25%）：</strong>主要看业绩审核结果和验收结论。</li>
-                        <li><strong>行为信用（15%）：</strong>记录机构日常良好或不良行为，不良行为会扣分。</li>
-                        <li><strong>客户评价（10%）：</strong>根据服务成果和业绩结论换算。</li>
+                        <li><strong>基础信用（25%）：</strong>由资质真实性（甲级 95 / 乙级 88 / 其他 80）和信息完整性（按机构资料关键字段完整率折算）组成，资料越完整得分越高。</li>
+                        <li><strong>履约信用（25%）：</strong>由合同履约率和交付及时率组成（已验收视为按时交付）。</li>
+                        <li><strong>质量信用（25%）：</strong>由报告合格率（业绩审核通过占比）和验收通过率（合同验收占比）组成。</li>
+                        <li><strong>行为信用（15%）：</strong>记录机构违规记录和客户投诉情况，不良行为按事件累计扣分。</li>
+                        <li><strong>客户评价（10%）：</strong>满意度评分按业绩优良率（优秀 + 良好×0.8）折算。</li>
                     </ul>
                     <p><strong>“暂无数据”不是 0 分：</strong>新机构还没有合同或业绩时，相关业务维度显示“暂无数据”，信用重算仍保持初始的 75 分、B 级。</p>
                 </section>
@@ -505,7 +506,7 @@ body.tp-embed #creditModal .modal-close { display: none !important; }
                     <h3><i class="fas fa-cogs"></i> 页面按钮和记录怎么看</h3>
                     <ul>
                         <li><strong>查询 / 重置：</strong>可按机构名称、统一社会信用代码和信用等级筛选台账。</li>
-                        <li><strong>规则配置：</strong>位于页面底部的“信用规则与计算”折叠区，可新增、编辑、启停或删除规则；保存后记得执行“保存并重算”。</li>
+                        <li><strong>规则配置：</strong>位于页面底部的“信用规则与计算”折叠区，可新增、编辑、启停或删除规则；保存后记得执行“保存并重算”。规则弹窗内的“版本记录”可查看历史版本，点击版本号可回看该版本的规则明细。</li>
                         <li><strong>重新计算：</strong>按最新业务数据和规则更新所有机构信用分，不会清空历史事件和变更记录。</li>
                         <li><strong>信用变更记录：</strong>默认折叠，展开后可查看初始化、信用事件和重新计算的结果，点击记录可查看详情。</li>
                     </ul>
@@ -626,9 +627,21 @@ body.tp-embed #creditModal .modal-close { display: none !important; }
                     当前规则版本：<span id="ruleVersionDisplay" style="font-weight:700;color:var(--primary);">1</span>
                     · 生效规则：<span id="ruleEnabledDisplay" style="font-weight:700;color:var(--success);">0</span> 条
                 </div>
-                <button class="btn btn-primary" style="padding:6px 14px;font-size:13px;" onclick="openRuleEditModal()">
-                    <i class="fas fa-plus"></i> 新增规则
-                </button>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-outline" style="padding:6px 14px;font-size:13px;" onclick="toggleRuleHistory()">
+                        <i class="fas fa-history"></i> 版本记录
+                    </button>
+                    <button class="btn btn-primary" style="padding:6px 14px;font-size:13px;" onclick="openRuleEditModal()">
+                        <i class="fas fa-plus"></i> 新增规则
+                    </button>
+                </div>
+            </div>
+            <!-- 规则版本历史面板 -->
+            <div id="ruleHistoryPanel" style="display:none;margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+                <div style="padding:8px 12px;background:var(--bg-page);font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border);">
+                    <i class="fas fa-history" style="color:var(--primary);"></i> 规则版本历史（点击版本号查看该版本规则明细）
+                </div>
+                <div id="ruleHistoryList" style="max-height:220px;overflow-y:auto;"></div>
             </div>
             <table class="data-table" id="ruleTable">
                 <thead>
@@ -658,6 +671,36 @@ body.tp-embed #creditModal .modal-close { display: none !important; }
     </div>
 </div>
 
+<!-- 规则版本明细弹窗 -->
+<div class="modal-overlay" id="ruleVersionDetailModal">
+    <div class="modal-container" style="width: 760px;">
+        <div class="modal-header">
+            <div class="modal-title"><i class="fas fa-history" style="color: var(--primary);"></i> 规则版本 V<span id="ruleVersionDetailNo">1</span> 明细</div>
+            <button class="modal-close" onclick="closeRuleVersionDetail()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="ruleVersionDetailMeta" style="margin-bottom:12px;font-size:13px;color:var(--text-secondary);"></div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>规则名称</th>
+                        <th>触发事件码</th>
+                        <th>维度</th>
+                        <th>类型</th>
+                        <th>分值变化</th>
+                        <th>等级处理</th>
+                        <th>启用</th>
+                    </tr>
+                </thead>
+                <tbody id="ruleVersionDetailTbody"></tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeRuleVersionDetail()">关闭</button>
+        </div>
+    </div>
+</div>
+
 <!-- 规则编辑弹窗 -->
 <div class="modal-overlay" id="ruleEditModal">
     <div class="modal-container" style="width: 560px;">
@@ -673,8 +716,8 @@ body.tp-embed #creditModal .modal-close { display: none !important; }
                     <input type="text" id="ruleEditName" placeholder="如：按时交付报告">
                 </div>
                 <div class="form-group">
-                    <label>事件编码 <span class="required">*</span><span style="color:var(--text-secondary);font-weight:normal;font-size:12px;">（系统识别事件的关键字）</span></label>
-                    <input type="text" id="ruleEditEventKey" placeholder="请输入事件编码，如 on_time_delivery">
+                    <label>事件编码 <span style="color:var(--text-secondary);font-weight:normal;font-size:12px;">（系统识别事件的关键字，留空由系统自动生成）</span></label>
+                    <input type="text" id="ruleEditEventKey" placeholder="留空由系统自动生成">
                 </div>
             </div>
             <div class="form-row">
@@ -710,14 +753,14 @@ body.tp-embed #creditModal .modal-close { display: none !important; }
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>强制降级</label>
+                    <label>强制降级 <span style="color:var(--text-secondary);font-weight:normal;font-size:12px;">（触发该规则时强制压低信用等级）</span></label>
                     <select id="ruleEditDegrade" onchange="onRuleDegradeChange()">
                         <option value="false">否</option>
                         <option value="true">是</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>目标等级</label>
+                    <label>目标等级 <span style="color:var(--text-secondary);font-weight:normal;font-size:12px;">（强制降级=是时可选）</span></label>
                     <select id="ruleEditDegradeTo">
                         <option value="">自动下降一档</option>
                         <option>AAA</option>
@@ -886,9 +929,22 @@ function renderTrendChart() {
         d.setMonth(d.getMonth() - i);
         var label = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
         months.push(label);
-        var seed = (i + 1) * 0.3;
-        var avg = rows.length ? (rows.reduce(function(sum, r) { return sum + r.score; }, 0) / rows.length) : 0;
-        avgScores.push((avg - seed + Math.random() * 0.5).toFixed(1));
+        // 取各机构截至该月末的最新快照分数求平均（时序回溯口径）
+        var endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+        var sum = 0, n = 0;
+        rows.forEach(function(r) {
+            var snaps = getCreditSnapshots(r.orgId);
+            var latest = null, latestDay = '', latestIdx = -1;
+            snaps.forEach(function(s, idx) {
+                var day = String(s.date).slice(0, 10);
+                var sd = new Date(day + 'T00:00:00');
+                if (sd <= endOfMonth && (latestDay === '' || day > latestDay || (day === latestDay && idx > latestIdx))) {
+                    latest = s.score; latestDay = day; latestIdx = idx;
+                }
+            });
+            if (latest != null) { sum += latest; n++; }
+        });
+        avgScores.push(n ? +(sum / n).toFixed(1) : null);
     }
     var el = document.getElementById('trendChart');
     if (!el) return;
@@ -903,6 +959,7 @@ function renderTrendChart() {
             data: avgScores,
             type: 'line',
             smooth: true,
+            connectNulls: true,
             symbol: 'circle',
             symbolSize: 8,
             lineStyle: { color: '#1a73e8', width: 3 },
@@ -1125,11 +1182,29 @@ function viewCreditDetail(orgId) {
         var hasScore = dim[key] !== null && dim[key] !== undefined;
         var score = hasScore ? dim[key] : 0;
         var color = !hasScore ? '#5f6368' : (score >= 90 ? '#1e8e3e' : (score >= 80 ? '#1a73e8' : (score >= 70 ? '#e37400' : '#d93025')));
+        var subHtml = '';
+        if (hasScore && typeof getCreditDimensionDetails === 'function') {
+            var det = getCreditDimensionDetails(orgId);
+            if (det) {
+                if (key === 'base') {
+                    subHtml = '<div class="dimension-sub">资质真实性 ' + det.base.qualScore + '<br>信息完整性 ' + det.base.completeness + '%</div>';
+                } else if (key === 'performance' && det.hasBusinessData) {
+                    subHtml = '<div class="dimension-sub">合同履约率 ' + det.performance.fulfillRate + '%<br>交付及时率 ' + det.performance.onTimeRate + '%</div>';
+                } else if (key === 'quality' && det.hasBusinessData) {
+                    subHtml = '<div class="dimension-sub">报告合格率 ' + det.quality.passRate + '%<br>验收通过率 ' + det.quality.acceptRate + '%</div>';
+                } else if (key === 'behavior') {
+                    subHtml = '<div class="dimension-sub">违规记录 ' + det.behavior.violations + ' 次<br>投诉 ' + det.behavior.complaints + ' 次</div>';
+                } else if (key === 'satisfaction' && det.hasBusinessData) {
+                    subHtml = '<div class="dimension-sub">满意度评分 ' + det.satisfaction.score + '<br>业绩优良率 ' + det.satisfaction.excellentRate + '%</div>';
+                }
+            }
+        }
         dimensionHtml += '<div class="dimension-card">' +
             '<div class="dimension-icon" style="background:' + color + '12;color:' + color + ';"><i class="fas fa-' + getDimensionIcon(key) + '"></i></div>' +
             '<div class="dimension-name">' + DIMENSION_NAMES[key] + '</div>' +
             '<div class="dimension-score">' + (hasScore ? score : '暂无数据') + '</div>' +
             '<div class="dimension-weight">权重 ' + Math.round(DIMENSION_WEIGHTS[key] * 100) + '%</div>' +
+            subHtml +
         '</div>';
     });
 
@@ -1214,11 +1289,11 @@ function renderDetailTrendChart(orgId) {
             formatter: function(params) {
                 var p = params[0];
                 var item = data[p.dataIndex] || {};
-                return p.name + '<br/>分数：' + p.value + '（等级 ' + (item.level || '-') + '）';
+                return String(p.name).slice(0, 10) + '<br/>分数：' + p.value + '（等级 ' + (item.level || '-') + '）';
             }
         },
         grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
-        xAxis: { type: 'category', data: data.map(function(d) { return d.time; }), axisLine: { lineStyle: { color: '#dadce0' } }, axisLabel: { color: getComputedStyle(document.body).color } },
+        xAxis: { type: 'category', data: data.map(function(d) { return d.time; }), axisLine: { lineStyle: { color: '#dadce0' } }, axisLabel: { color: getComputedStyle(document.body).color, formatter: function(v) { return String(v).slice(0, 10); } } },
         yAxis: { type: 'value', min: 0, max: 100, axisLine: { lineStyle: { color: '#dadce0' } }, axisLabel: { color: getComputedStyle(document.body).color }, splitLine: { lineStyle: { color: '#f0f0f0' } } },
         series: [{
             data: data.map(function(d) { return d.score; }),
@@ -1509,7 +1584,7 @@ function renderRuleTable() {
         var typeClass = r.type === 'positive' ? 'success' : 'danger';
         var typeText = r.type === 'positive' ? '加分' : '扣分';
         html += '<tr>' +
-            '<td>' + r.name + (r.description ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">' + r.description + '</div>' : '') + '</td>' +
+            '<td>' + r.name + ' <span style="font-size:11px;color:var(--text-secondary);background:var(--bg-hover);padding:1px 6px;border-radius:8px;" title="该规则的修订次数">v' + (r.version || 1) + '</span>' + (r.description ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">' + r.description + '</div>' : '') + '</td>' +
             '<td><code title="系统识别该信用事件的关键字，记录事件时据此匹配规则" style="font-size:12px;background:var(--bg-hover);padding:2px 6px;border-radius:4px;">' + r.eventKey + '</code></td>' +
             '<td>' + (DIMENSION_NAMES[r.dimension] || r.dimension) + '</td>' +
             '<td><span style="color:var(--' + typeClass + ');font-weight:600;">' + typeText + '</span></td>' +
@@ -1523,6 +1598,68 @@ function renderRuleTable() {
         '</tr>';
     });
     tbody.innerHTML = html;
+}
+
+// ---------- 规则版本历史 ----------
+function toggleRuleHistory() {
+    var panel = document.getElementById('ruleHistoryPanel');
+    var show = panel.style.display === 'none';
+    panel.style.display = show ? 'block' : 'none';
+    if (show) renderRuleHistory();
+}
+
+function renderRuleHistory() {
+    var list = document.getElementById('ruleHistoryList');
+    var history = getCreditRuleHistory();
+    if (!history.length) {
+        list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:13px;">暂无版本记录</div>';
+        return;
+    }
+    var html = '';
+    history.forEach(function(h, idx) {
+        html += '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;' + (idx < history.length - 1 ? 'border-bottom:1px solid var(--border);' : '') + 'font-size:13px;">' +
+            '<a class="table-link" style="font-weight:700;white-space:nowrap;" onclick="viewRuleVersion(' + h.version + ')" title="查看该版本规则明细">V' + h.version + '</a>' +
+            '<span style="flex:1;color:var(--text-primary);">' + h.summary + '</span>' +
+            '<span style="color:var(--text-secondary);font-size:12px;white-space:nowrap;">' + (h.time || '-') + ' · ' + (h.rules ? h.rules.length : 0) + ' 条规则</span>' +
+        '</div>';
+    });
+    list.innerHTML = html;
+}
+
+function viewRuleVersion(version) {
+    var history = getCreditRuleHistory();
+    var item = history.find(function(h) { return h.version === version; });
+    if (!item) return;
+    document.getElementById('ruleVersionDetailNo').textContent = version;
+    document.getElementById('ruleVersionDetailMeta').innerHTML =
+        '版本时间：' + (item.time || '-') + ' · 变更摘要：' + item.summary + ' · 共 ' + (item.rules ? item.rules.length : 0) + ' 条规则（历史版本为只读存档）';
+    var tbody = document.getElementById('ruleVersionDetailTbody');
+    var rules = item.rules || [];
+    if (!rules.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-secondary);">该版本无规则</td></tr>';
+    } else {
+        var html = '';
+        rules.forEach(function(r) {
+            var levelText = r.degradeLevel ? (r.degradeTo ? '强制降至' + r.degradeTo : '自动降一档') : '无';
+            var typeClass = r.type === 'positive' ? 'success' : 'danger';
+            var typeText = r.type === 'positive' ? '加分' : '扣分';
+            html += '<tr>' +
+                '<td>' + r.name + '</td>' +
+                '<td><code style="font-size:12px;background:var(--bg-hover);padding:2px 6px;border-radius:4px;">' + r.eventKey + '</code></td>' +
+                '<td>' + (DIMENSION_NAMES[r.dimension] || r.dimension) + '</td>' +
+                '<td><span style="color:var(--' + typeClass + ');font-weight:600;">' + typeText + '</span></td>' +
+                '<td>' + (r.scoreDelta > 0 ? '+' : '') + r.scoreDelta + '</td>' +
+                '<td>' + levelText + '</td>' +
+                '<td>' + (r.enabled ? '启用' : '禁用') + '</td>' +
+            '</tr>';
+        });
+        tbody.innerHTML = html;
+    }
+    document.getElementById('ruleVersionDetailModal').classList.add('active');
+}
+
+function closeRuleVersionDetail() {
+    document.getElementById('ruleVersionDetailModal').classList.remove('active');
 }
 
 function renderRuleToggle(rule) {
@@ -1590,7 +1727,15 @@ function saveRuleEdit() {
     var description = document.getElementById('ruleEditDesc').value.trim();
 
     if (!name) { alert('请输入规则名称'); return; }
-    if (!eventKey) { alert('请输入事件编码'); return; }
+    // 事件编码留空时自动生成唯一编码；编辑已有规则时清空则保留原编码，避免历史事件失配
+    if (!eventKey) {
+        if (ruleId) {
+            var existRule = getCreditRules().find(function(r) { return r.ruleId === ruleId; });
+            eventKey = existRule ? existRule.eventKey : ('rule_' + Date.now().toString(36));
+        } else {
+            eventKey = 'rule_' + Date.now().toString(36);
+        }
+    }
     if (isNaN(delta)) { alert('请输入分值变化'); return; }
 
     var rules = getCreditRules();
