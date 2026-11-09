@@ -198,7 +198,7 @@
         .tree-group-header,
         .tree-row {
             display: grid;
-            grid-template-columns: 50px 60px 100px 120px 120px 1fr 120px 100px 120px;
+            grid-template-columns: 50px 60px 100px 120px 120px 1fr 120px 100px 70px 120px;
             align-items: center;
         }
         .tree-table-header {
@@ -322,6 +322,13 @@
         .dark-mode .risk-yellow { background: rgba(250,204,21,0.15); color: #facc15; }
         .risk-blue { background: #e8f0fe; color: #1a73e8; }
         .dark-mode .risk-blue { background: rgba(59,130,246,0.15); color: #3b82f6; }
+        .key-star { cursor: pointer; font-size: 14px; color: #dadce0; transition: color 0.2s; user-select: none; }
+        .key-star.marked { color: #f9ab00; }
+        .key-star:hover { transform: scale(1.15); }
+        .dark-mode .key-star { color: #475569; }
+        .dark-mode .key-star.marked { color: #facc15; }
+        .key-badge { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; background: #fef3c7; color: #92400e; margin-left: 4px; }
+        .dark-mode .key-badge { background: rgba(250,204,21,0.15); color: #facc15; }
         .actions { display: flex; gap: 10px; align-items: center; }
         .action-link {
             font-size: 13px;
@@ -590,11 +597,12 @@
                             <div class="checkbox-col"><div class="custom-checkbox" id="selectAll" onclick="toggleSelectAll()"></div></div>
                             <div>序号</div>
                             <div>风险主项</div>
-                            <div>分项</div>
+                            <div>分项（部位）</div>
                             <div>分项内容</div>
                             <div>风险识别</div>
                             <div>可能导致事故</div>
                             <div>风险等级</div>
+                            <div style="text-align:center;" title="重点风险源标注">重点</div>
                             <div>操作</div>
                         </div>
                         <div id="tableBody">
@@ -702,14 +710,23 @@
             <div class="modal-body">
                 <p style="margin-bottom: 16px;">选择下载格式：</p>
                 <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button class="btn btn-secondary" onclick="downloadList('html')" style="justify-content: center;">
+                        <i class="fa-solid fa-eye"></i> HTML 格式（在线预览）
+                    </button>
+                    <button class="btn btn-secondary" onclick="downloadList('pdf')" style="justify-content: center;">
+                        <i class="fa-solid fa-file-pdf"></i> PDF 格式（可打印）
+                    </button>
+                    <button class="btn btn-secondary" onclick="downloadList('word')" style="justify-content: center;">
+                        <i class="fa-solid fa-file-word"></i> Word 格式（可编辑）
+                    </button>
+                    <button class="btn btn-secondary" onclick="downloadList('json')" style="justify-content: center;">
+                        <i class="fa-solid fa-file-code"></i> JSON 格式（可导入）
+                    </button>
                     <button class="btn btn-secondary" onclick="downloadList('csv')" style="justify-content: center;">
                         <i class="fa-solid fa-file-csv"></i> CSV 格式
                     </button>
                     <button class="btn btn-secondary" onclick="downloadList('excel')" style="justify-content: center;">
                         <i class="fa-solid fa-file-excel"></i> Excel 格式
-                    </button>
-                    <button class="btn btn-secondary" onclick="downloadList('pdf')" style="justify-content: center;">
-                        <i class="fa-solid fa-file-pdf"></i> PDF 格式
                     </button>
                 </div>
             </div>
@@ -734,6 +751,14 @@
             };
             const cfg = map[level] || map.blue;
             return `<span class="risk-tag ${cfg.class}">${cfg.text}</span>`;
+        }
+
+        // 重点风险源：默认自动标注红色（疑似危房）风险
+        let keyRiskIds = new Set(riskData.filter(i => i.level === 'red').map(i => i.id));
+
+        function toggleKeyRisk(id) {
+            if (keyRiskIds.has(id)) { keyRiskIds.delete(id); } else { keyRiskIds.add(id); }
+            renderTable();
         }
 
         function groupData(data) {
@@ -872,6 +897,9 @@
                             <div>${item.risk}</div>
                             <div>${item.accident}</div>
                             <div>${getRiskTag(item.level)}</div>
+                            <div style="text-align:center;">
+                                <i class="fa-solid fa-star key-star ${keyRiskIds.has(item.id) ? 'marked' : ''}" title="重点风险源标注" onclick="event.stopPropagation(); toggleKeyRisk(${item.id})"></i>
+                            </div>
                             <div>
                                 <div class="actions">
                                     <button class="action-link" onclick="event.stopPropagation(); viewItem(${item.id}, ${globalIdx})">
@@ -985,13 +1013,13 @@
                 return levelOrder[a.level] - levelOrder[b.level];
             });
             const body = document.getElementById('viewModalBody');
-            let html = '<div style="margin-bottom: 16px; font-size: 14px; color: var(--text-secondary);">已选择 ' + selectedItems.length + ' 条记录</div>';
+            let html = '<div style="margin-bottom: 16px; font-size: 14px; color: var(--text-secondary);">已选择 <b style="color: var(--text-primary);">' + selectedItems.length + '</b> 条记录（其中重点风险源 <b style="color: var(--text-primary);">' + selectedItems.filter(i => keyRiskIds.has(i.id)).length + '</b> 项）</div>';
             html += '<div class="tree-table-wrap" style="border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;">';
-            html += '<div class="tree-table-header" style="grid-template-columns: 60px 100px 120px 120px 1fr 120px 100px;">';
-            html += '<div>序号</div><div>风险主项</div><div>分项</div><div>分项内容</div><div>风险识别</div><div>可能导致事故</div><div>风险等级</div>';
+            html += '<div class="tree-table-header" style="grid-template-columns: 60px 100px 120px 120px 1fr 120px 100px 70px;">';
+            html += '<div>序号</div><div>风险主项</div><div>分项（部位）</div><div>分项内容</div><div>风险识别</div><div>可能导致事故</div><div>风险等级</div><div style="text-align:center;">重点</div>';
             html += '</div>';
             selectedItems.forEach((item, index) => {
-                html += '<div class="tree-row" style="grid-template-columns: 60px 100px 120px 120px 1fr 120px 100px;">';
+                html += '<div class="tree-row" style="grid-template-columns: 60px 100px 120px 120px 1fr 120px 100px 70px;">';
                 html += '<div>' + (index + 1) + '</div>';
                 html += '<div>' + item.main + '</div>';
                 html += '<div>' + item.sub + '</div>';
@@ -999,6 +1027,7 @@
                 html += '<div>' + item.risk + '</div>';
                 html += '<div>' + item.accident + '</div>';
                 html += '<div>' + getRiskTag(item.level) + '</div>';
+                html += '<div style="text-align:center;">' + (keyRiskIds.has(item.id) ? '<span class="key-badge" style="margin-left:0;"><i class="fa-solid fa-star"></i>重点</span>' : '') + '</div>';
                 html += '</div>';
             });
             html += '</div>';
@@ -1012,11 +1041,13 @@
             const body = document.getElementById('viewModalBody');
             body.innerHTML = `
                 <div class="detail-grid">
-                    <div class="detail-label">序号</div>
-                    <div class="detail-value">${displayIdx}</div>
+                    <div class="detail-label">风险编号</div>
+                    <div class="detail-value">${item.code || '—'}${keyRiskIds.has(item.id) ? ' <span class="key-badge"><i class="fa-solid fa-star"></i>重点</span>' : ''}</div>
+                    <div class="detail-label">风险名称</div>
+                    <div class="detail-value">${item.name || '—'}</div>
                     <div class="detail-label">风险主项</div>
                     <div class="detail-value">${item.main}</div>
-                    <div class="detail-label">分项</div>
+                    <div class="detail-label">分项（部位）</div>
                     <div class="detail-value">${item.sub}</div>
                     <div class="detail-label">分项内容</div>
                     <div class="detail-value">${item.content}</div>
@@ -1026,8 +1057,20 @@
                     <div class="detail-value">${item.accident}</div>
                     <div class="detail-label">风险等级</div>
                     <div class="detail-value">${getRiskTag(item.level)}</div>
+                    <div class="detail-label">适用房屋类型</div>
+                    <div class="detail-value">${item.houseTypes || '—'}</div>
+                    <div class="detail-label">适用结构形式</div>
+                    <div class="detail-value">${item.structTypes || '—'}</div>
+                    <div class="detail-label">适用建筑年代</div>
+                    <div class="detail-value">${item.buildYears || '—'}</div>
                     <div class="detail-label">主要防护措施</div>
                     <div class="detail-value">${item.measure.replace(/\n/g, '<br>')}</div>
+                    <div class="detail-label">相关标准</div>
+                    <div class="detail-value">${item.standard || '—'}</div>
+                    <div class="detail-label">检查要点</div>
+                    <div class="detail-value">${item.checkPoints || '—'}</div>
+                    <div class="detail-label">鉴定要求</div>
+                    <div class="detail-value">${item.appraisalReq || '—'}</div>
                     <div class="detail-label">工作依据</div>
                     <div class="detail-value">${item.basis}</div>
                 </div>
@@ -1059,7 +1102,7 @@
                 <div class="version-info">
                     <span class="version-badge">${version}</span>
                     <span>${name}</span>
-                    <span class="version-meta">${date} 发布 | ${selectedItems.length}条记录</span>
+                    <span class="version-meta">${date} 发布 | ${selectedItems.length}条记录（重点 ${selectedItems.filter(i => keyRiskIds.has(i.id)).length} 项）</span>
                 </div>
                 <div class="actions">
                     <button class="action-link" onclick="viewVersion('${version}')">
@@ -1100,22 +1143,74 @@
             });
             
             const levelMap = { red: '疑似危房', orange: '疑似严重损坏房', yellow: '疑似一般损坏房', blue: '完好房（基本完好房）' };
-            const headers = ['序号', '风险主项', '分项', '分项内容', '风险识别', '可能导致事故', '主要防护措施', '风险等级', '工作依据'];
+            const name = document.getElementById('listName').value || '城镇自建房风险清单';
+            const dateStr = new Date().toISOString().slice(0,10);
+            const headers = ['序号', '风险主项', '分项（部位）', '分项内容', '风险识别', '可能导致事故', '主要防护措施', '风险等级', '重点风险源', '工作依据'];
             const rows = items.map((item, index) => [
-                index + 1, item.main, item.sub, item.content, item.risk, item.accident, item.measure, levelMap[item.level] || item.level, item.basis
+                index + 1, item.main, item.sub, item.content, item.risk, item.accident, item.measure, levelMap[item.level] || item.level, keyRiskIds.has(item.id) ? '是' : '否', item.basis
             ]);
-            let csv = headers.join(',') + '\n';
-            rows.forEach(row => {
-                csv += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + '\n';
-            });
-            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+
+            if (format === 'json') {
+                const payload = {
+                    listName: name,
+                    version: document.getElementById('versionNo').value,
+                    generatedAt: dateStr,
+                    total: items.length,
+                    keyRiskCount: items.filter(i => keyRiskIds.has(i.id)).length,
+                    items: items.map((item, index) => ({
+                        seq: index + 1, main: item.main, sub: item.sub, content: item.content,
+                        risk: item.risk, accident: item.accident, measure: item.measure,
+                        level: levelMap[item.level] || item.level, keyRisk: keyRiskIds.has(item.id), basis: item.basis
+                    }))
+                };
+                saveBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' }), name + '_' + dateStr + '.json');
+            } else if (format === 'word' || format === 'excel') {
+                const ext = format === 'word' ? '.doc' : '.xls';
+                const mime = format === 'word' ? 'application/msword' : 'application/vnd.ms-excel';
+                let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office"><head><meta charset="utf-8"></head><body>';
+                html += '<h2 style="text-align:center;">' + name + '</h2>';
+                html += '<p style="text-align:center;font-size:12px;">生成日期：' + dateStr + ' | 版本：' + document.getElementById('versionNo').value + '</p>';
+                html += buildHtmlTable(headers, rows);
+                html += '</body></html>';
+                saveBlob(new Blob(['\ufeff' + html], { type: mime + ';charset=utf-8;' }), name + '_' + dateStr + ext);
+            } else if (format === 'html' || format === 'pdf') {
+                const win = window.open('', '_blank');
+                win.document.write('<html><head><meta charset="utf-8"><title>' + name + '</title><style>body{font-family:"Microsoft YaHei",sans-serif;font-size:12px;margin:16px;} h2{text-align:center;margin-bottom:4px;} .meta{text-align:center;font-size:11px;color:#666;margin-bottom:12px;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #333;padding:5px 7px;font-size:11px;text-align:left;} th{background:#f0f0f0;} .tip{position:sticky;top:0;background:#e8f0fe;color:#1557b0;padding:8px 12px;font-size:12px;border-radius:6px;margin-bottom:12px;} @media print{.tip{display:none;}body{margin:8mm;}}</style></head><body>');
+                if (format === 'html') {
+                    win.document.write('<div class="tip">在线预览模式：可直接浏览清单内容，也可通过浏览器“打印”另存为 PDF。</div>');
+                }
+                win.document.write('<h2>' + name + '</h2><p class="meta">生成日期：' + dateStr + ' | 版本：' + document.getElementById('versionNo').value + '</p>');
+                win.document.write(buildHtmlTable(headers, rows));
+                win.document.write('</body></html>');
+                win.document.close(); win.focus();
+                if (format === 'pdf') setTimeout(() => win.print(), 400);
+            } else {
+                let csv = headers.join(',') + '\n';
+                rows.forEach(row => {
+                    csv += row.map(cell => '"' + String(cell).replace(/"/g, '""').replace(/\n/g, ' ') + '"').join(',') + '\n';
+                });
+                saveBlob(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }), name + '_' + dateStr + '.csv');
+            }
+            closeModal('downloadModal');
+            showToast(format === 'html' ? '已在新窗口打开 HTML 预览' : format === 'pdf' ? '已打开打印窗口，可另存为PDF' : '下载成功');
+        }
+
+        function saveBlob(blob, filename) {
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            const name = document.getElementById('listName').value || '城镇自建房风险清单';
-            link.download = `${name}_${new Date().toISOString().slice(0,10)}.csv`;
+            link.download = filename;
             link.click();
-            closeModal('downloadModal');
-            showToast('下载成功');
+            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        }
+
+        function buildHtmlTable(headers, rows) {
+            let html = '<table border="1" cellspacing="0" cellpadding="5" style="border-collapse:collapse;width:100%;font-size:12px;">';
+            html += '<thead><tr>' + headers.map(h => '<th style="background:#f0f0f0;">' + h + '</th>').join('') + '</tr></thead><tbody>';
+            rows.forEach(row => {
+                html += '<tr>' + row.map(cell => '<td>' + String(cell).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g, '<br>') + '</td>').join('') + '</tr>';
+            });
+            html += '</tbody></table>';
+            return html;
         }
 
         function openModal(id) {

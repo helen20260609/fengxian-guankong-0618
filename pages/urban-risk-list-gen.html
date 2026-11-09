@@ -872,36 +872,57 @@
             }, 1000);
         }
 
+        // 版本对比：基于版本 id 确定性生成"上一版本"伪快照，演示新增/删除/修改差异
         function compareItem(id) {
             const item = versionData.find(v => v.id === id);
             if (!item) return;
+            const prevVersion = item.version.replace(/V(\d+)\.(\d+)/, (m, major, minor) =>
+                parseInt(minor) > 0 ? `V${major}.${parseInt(minor) - 1}` : `V${Math.max(1, parseInt(major) - 1)}.9`);
+
+            // 用版本 id 做种子的确定性伪随机，保证同一版本每次对比结果一致
+            function seededRand(seed) { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+            const rand = seededRand(item.id * 7919);
+
+            // 基于当前条目生成上一版本快照：随机删减/修改少量条目
+            const curCount = item.count;
+            const removedN = Math.min(Math.floor(rand() * 3) + 1, Math.max(1, Math.floor(curCount * 0.08)));
+            const addedN = Math.floor(rand() * 3) + 1;
+            const changedN = Math.floor(rand() * 3) + 1;
+            const prevCount = Math.max(1, curCount - addedN + removedN);
+
+            // 构造示意条目名（按主项轮换）
+            const mains = ['建筑结构信息', '建筑基本信息', '选址规划', '房屋设计', '施工建设'];
+            const removed = []; const added = []; const changed = [];
+            for (let i = 0; i < removedN; i++) removed.push({ main: mains[Math.floor(rand()*mains.length)], content: '旧条目 ' + (i+1) + '（已在新版移除）' });
+            for (let i = 0; i < addedN; i++) added.push({ main: mains[Math.floor(rand()*mains.length)], content: '新增条目 ' + (i+1) + '（新版补充）' });
+            for (let i = 0; i < changedN; i++) changed.push({ main: mains[Math.floor(rand()*mains.length)], content: '修改条目 ' + (i+1) + '（描述/等级调整）' });
+
+            const diffRows = (list, badge, color) => list.map(x =>
+                '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px;">' +
+                '<span><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:600;background:' + color + '22;color:' + color + ';margin-right:6px;">' + badge + '</span>' + x.main + ' / ' + x.content + '</span>' +
+                '</div>').join('');
+
             const body = document.getElementById('compareModalBody');
             body.innerHTML = `
                 <div style="font-size: 13px; line-height: 1.6;">
-                    <p style="margin-bottom: 12px; color: var(--text-secondary);">对比版本：<strong>${item.name} ${item.version}</strong> 与上一版本</p>
-                    <div style="background: var(--bg-hover); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span>当前版本</span>
-                            <span class="version-badge">${item.version}</span>
+                    <p style="margin-bottom: 12px; color: var(--text-secondary);">对比版本：<strong>${item.name} ${item.version}</strong> 与 <strong>${prevVersion}</strong></p>
+                    <div style="display:flex;gap:12px;margin-bottom:14px;">
+                        <div style="flex:1;background:var(--bg-hover);border-radius:6px;padding:12px;text-align:center;">
+                            <div style="font-size:12px;color:var(--text-secondary);">当前版本</div>
+                            <div class="version-badge" style="margin:4px 0;">${item.version}</div>
+                            <div style="font-size:18px;font-weight:700;">${curCount}</div>
+                            <div style="font-size:11px;color:var(--text-secondary);">条目数</div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
-                            <span>条目数</span>
-                            <span>${item.count}</span>
-                        </div>
-                    </div>
-                    <div style="background: var(--bg-hover); border-radius: 6px; padding: 12px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span>上一版本</span>
-                            <span class="version-badge">${item.version.replace(/\d+$/, m => parseInt(m) - 1)}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; color: var(--text-secondary);">
-                            <span>条目数</span>
-                            <span>${item.count}</span>
+                        <div style="flex:1;background:var(--bg-hover);border-radius:6px;padding:12px;text-align:center;">
+                            <div style="font-size:12px;color:var(--text-secondary);">上一版本</div>
+                            <div class="version-badge" style="margin:4px 0;">${prevVersion}</div>
+                            <div style="font-size:18px;font-weight:700;">${prevCount}</div>
+                            <div style="font-size:11px;color:var(--text-secondary);">条目数</div>
                         </div>
                     </div>
-                    <p style="margin-top: 12px; color: var(--text-secondary);">
-                        <i class="fa-solid fa-info-circle"></i> 两版本无差异
-                    </p>
+                    <div style="margin-bottom:10px;"><strong style="color:#16a34a;">新增 ${added.length} 条</strong>${diffRows(added, '增', '#16a34a')}</div>
+                    <div style="margin-bottom:10px;"><strong style="color:#dc2626;">删除 ${removed.length} 条</strong>${diffRows(removed, '删', '#dc2626')}</div>
+                    <div><strong style="color:#d97706;">修改 ${changed.length} 条</strong>${diffRows(changed, '改', '#d97706')}</div>
                 </div>
             `;
             openModal('compareModal');
