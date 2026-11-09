@@ -1293,6 +1293,7 @@ input.cat-filter {
     background: #166534;
 }
 </style>
+    <link rel="stylesheet" href="ui-modal.css">
 </head>
 <body>
 
@@ -1419,7 +1420,7 @@ input.cat-filter {
             <div class="section-header">
                 <i class="fa-solid fa-map-location-dot"></i>
                 选择巡查范围
-                <span style="font-size:12px;font-weight:400;color:var(--text-secondary);margin-left:8px;">（可选择街镇或下钻到社区，可多选）</span>
+                <span style="font-size:12px;font-weight:400;color:var(--text-secondary);margin-left:8px;">（可选择街镇或下钻到村，可多选）</span>
             </div>
             <div class="section-body">
                 <div class="town-card-actions">
@@ -1546,6 +1547,19 @@ input.cat-filter {
                     <span style="font-size:12px;color:var(--text-secondary);font-weight:600;">已选清单：</span>
                     <div id="selectedRiskListTags" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- 关联预防措施（按所选风险清单自动带入，6.1.2.9.4） -->
+        <div class="section-card" style="margin-bottom:16px;">
+            <div class="section-header">
+                <i class="fa-solid fa-shield-halved"></i>
+                关联预防措施
+                <span style="font-size:12px;font-weight:400;color:var(--text-secondary);margin-left:8px;">（按所选风险清单自动带入，随任务下发，指导责任单位规范执行）</span>
+                <span id="carriedMeasureCount" style="margin-left:auto;font-size:12px;color:var(--primary);font-weight:600;"></span>
+            </div>
+            <div class="section-body">
+                <div id="carriedMeasurePanel"></div>
             </div>
         </div>
 
@@ -1711,6 +1725,7 @@ input.cat-filter {
     </div>
 </div>
 
+<script src="./urban-risk-data.js"></script>
 <script src="./org-data.js"></script>
 <script src="./org-modal.js"></script>
 
@@ -2014,7 +2029,7 @@ let currentStep = 1;
 const totalSteps = 3;
 const stepHints = {
     1: '请填写城镇自建房巡查任务基本信息，带 * 号为必填项',
-    2: '选择巡查范围与城镇自建房检查项，支持选择街镇或下钻到社区。',
+    2: '选择巡查范围与城镇自建房检查项，支持选择街镇或下钻到村。',
     3: '请确认城镇自建房巡查任务信息无误后发布'
 };
 
@@ -2075,7 +2090,7 @@ function nextStep() {
     }
     if (currentStep === 2) {
         // 统一验证：所有任务类型都用同一套校验
-        if (selectedTownIds.size === 0 && selectedVillageIds.size === 0 && selectedCategoryIds.size === 0) { alert('请至少选择一个巡查街镇/城镇社区或房屋类别'); return; }
+        if (selectedTownIds.size === 0 && selectedVillageIds.size === 0 && selectedCategoryIds.size === 0) { alert('请至少选择一个巡查街镇/社区或房屋类别'); return; }
         if (customPatrolItems.length === 0 && selectedRiskListIds.size === 0) { alert('请至少添加一个城镇自建房检查项或选择城镇自建房风险清单'); return; }
     }
     if (currentStep < totalSteps) {
@@ -2095,9 +2110,9 @@ function saveDraft() {
     alert('任务草稿已暂存！');
 }
 
-function confirmPublish() {
+async function confirmPublish() {
     const confirmMsg = isReturnedMode ? '确认重新提交该城镇自建房巡查任务？提交后将重新进入审核流程。' : (isEditMode ? '确认保存对该城镇自建房巡查任务的修改？' : '确认发布该城镇自建房巡查任务？发布后任务将立即生效。');
-    if (!confirm(confirmMsg)) return;
+    if (!await uiConfirm(confirmMsg)) return;
 
     // 构造任务对象
     const name = document.getElementById('taskName').value.trim();
@@ -2118,7 +2133,7 @@ function confirmPublish() {
     let town = '';
     let village = '';
     const scopeText = buildSelectedScopeText();
-    // 所有任务类型统一：取第一个选中的镇或社区
+    // 所有任务类型统一：取第一个选中的镇或村
     if (selectedTownIds.size > 0) {
         const firstTownId = Array.from(selectedTownIds)[0];
         const townObj = townData.find(t => t.id === firstTownId);
@@ -2140,6 +2155,29 @@ function confirmPublish() {
     const houseCount = categoryHouseCount;
     const total = categoryHouseCount;
 
+    // 巡查房屋清单：一次任务涉及多套房，每套房生成一条清单；
+    // 清单内检查项按房屋风险分布生成（完好房=蓝 / 疑似一般损坏房=黄 / 疑似危房=红），一条风险作为一项
+    const selectedHouses = [];
+    selectedCategoryIds.forEach(catId => {
+        getCategorySelectedHouses(catId).forEach(p => selectedHouses.push(p));
+    });
+    const selectedProjects = selectedHouses.map((p, i) => {
+        const checkItems = buildHouseCheckItems(p.riskDistribution);
+        return {
+            id: p.id,
+            houseNo: 'FX-NC-ZF-' + String(i + 1).padStart(4, '0'),
+            name: p.name,
+            typeLabel: p.typeLabel,
+            enterprise: p.enterprise,
+            regionLabel: p.regionLabel,
+            address: p.address,
+            riskDistribution: { red: 0, yellow: 0, blue: 0 },
+            checkItems: checkItems,
+            status: 'pending'
+        };
+    });
+    // 新建任务全部房屋为待巡查：风险分布为0、隐患数为0，巡查上报后才更新
+
     // 人员名称
     const personNames = _selectedPersons.map(p => p.name).join('、');
     const firstPerson = _selectedPersons[0];
@@ -2152,6 +2190,7 @@ function confirmPublish() {
         type,
         typeLabel: typeMap[type] || '-',
         houseCount,
+        selectedProjects,
         town,
         village,
         houseType: '',
@@ -2196,7 +2235,18 @@ function confirmPublish() {
             newTask.createBy = tasks[idx].createBy || newTask.createBy;
             newTask.inspected = tasks[idx].inspected || 0;
             newTask.total = total;
-            newTask.hiddenCount = tasks[idx].hiddenCount || 0;
+            // 保留已巡查房屋的巡查状态，隐患数按已巡查房屋的疑似一般损坏房、疑似危房检查项重算
+            const prevHouses = Array.isArray(tasks[idx].selectedProjects) ? tasks[idx].selectedProjects : [];
+            let inspectedHidden = 0;
+            newTask.selectedProjects.forEach(np => {
+                const prev = prevHouses.find(pp => pp.id === np.id);
+                if (prev && prev.status === 'inspected') {
+                    np.status = 'inspected';
+                    np.time = prev.time;
+                    inspectedHidden += (np.checkItems || []).filter(it => it.level !== 'blue').length;
+                }
+            });
+            newTask.hiddenCount = inspectedHidden;
             newTask.hiddenFixed = tasks[idx].hiddenFixed || 0;
             newTask.status = tasks[idx].status || status;
             newTask.statusLabel = tasks[idx].statusLabel || statusLabel;
@@ -2219,6 +2269,44 @@ function confirmPublish() {
     } else {
         window.location.href = 'urban-patrol-task-management.html';
     }
+}
+
+// ===== 检查项生成：一条风险作为一项检查项，等级对应 完好房（基本完好房）(蓝)/疑似一般损坏房(黄)/疑似危房(红) =====
+function buildHouseCheckItems(dist) {
+    const d = dist || {};
+    const pools = {
+        red: [
+            { main: '城镇自建房结构', sub: '墙体/梁柱', content: '墙体、梁柱、基础构件缺陷', risk: '房屋结构用材不符合国家相关规范要求，构件破损形成安全隐患', accident: '坍塌、人员伤亡' },
+            { main: '城镇自建房结构', sub: '构件（节点）', content: '连接节点不牢', risk: '焊接施工不符合国家相关规范要求，接头缺陷扩展', accident: '坍塌、人员伤亡' }
+        ],
+        yellow: [
+            { main: '城镇自建房结构', sub: '墙体/梁柱', content: '强度不足', risk: '结构强度检测不符合国家相关规范要求', accident: '坍塌、人员伤亡' },
+            { main: '城镇自建房结构', sub: '屋面', content: '防水层老化破损', risk: '屋面防水层老化导致渗漏，影响结构耐久性', accident: '渗漏、财产受损' }
+        ],
+        blue: [
+            { main: '城镇自建房结构', sub: '日常检查', content: '外观及使用情况检查', risk: '未发现明显结构异常', accident: '-' }
+        ]
+    };
+    const items = [];
+    let seq = 0;
+    const push = (level, count) => {
+        // 原型演示：红/黄每级最多取2条、蓝色1条；正式环境应取房屋档案全量风险项
+        const n = Math.min(count, level === 'blue' ? 1 : 2);
+        for (let i = 0; i < n; i++) {
+            const tpl = pools[level][i % pools[level].length];
+            items.push({ id: ++seq, main: tpl.main, sub: tpl.sub, content: tpl.content, risk: tpl.risk, accident: tpl.accident, level: level, result: 'normal' });
+        }
+    };
+    push('red', (parseInt(d.red, 10) || 0) + (parseInt(d.orange, 10) || 0));
+    push('yellow', parseInt(d.yellow, 10) || 0);
+    push('blue', parseInt(d.blue, 10) || 0);
+    return items;
+}
+
+function countCheckItemsByLevel(items) {
+    const c = { red: 0, yellow: 0, blue: 0 };
+    (items || []).forEach(it => { if (c[it.level] !== undefined) c[it.level]++; });
+    return c;
 }
 
 // ===== Demo Data: Projects =====
@@ -2281,6 +2369,10 @@ function updateConfirmInfo() {
     // 统一展示：所有任务类型都显示街镇+检查项/风险清单+房屋类别
     const selectedScopeText = buildSelectedScopeText();
     const selectedRiskListNames = riskListData.filter(rl => selectedRiskListIds.has(rl.id)).map(rl => rl.name);
+    // 自动带入的关联预防措施（6.1.2.9.4）
+    const carriedNames = typeof collectCarriedMeasures === 'function'
+        ? [...collectCarriedMeasures().keys()].map(id => { const m = urbanMeasureLibData.find(x => x.id === id); return m ? m.name : null; }).filter(Boolean)
+        : [];
     
     // 构建自定义检查项表格HTML
     let customItemsHtml = '';
@@ -2324,6 +2416,7 @@ function updateConfirmInfo() {
         <div style="margin-bottom:8px;"><strong style="color:var(--text-secondary);">城镇自建房检查项</strong></div>
         ${customItemsHtml || '<span style="color:var(--text-secondary);">-</span>'}
         <div style="margin-top:8px;"><strong style="color:var(--text-secondary);">城镇自建房风险清单：</strong>${selectedRiskListNames.join('、') || '-'}</div>
+        <div style="margin-top:8px;"><strong style="color:var(--text-secondary);">关联预防措施（自动带入）：</strong>${carriedNames.length ? carriedNames.join('、') + `（共 ${carriedNames.length} 条，随任务下发指导执行）` : '-'}</div>
         <div style="margin-top:8px;"><strong style="color:var(--text-secondary);">按房屋类别选择：</strong>${selectedCategoryIds.size > 0 ? Array.from(selectedCategoryIds).map(catId => houseCategoryConfig[catId].name + '（' + getCategorySelectedHouses(catId).length + '栋）').join('、') : '-'}</div>
         ${zeroHouseWarning}
     `;
@@ -2361,7 +2454,7 @@ const townData = [
     },
     {
         id: 'tuqiao', name: '柘林镇',
-        villages: ['新寺社区','胡桥社区','王家圩社区','法华社区','夹路社区','营房社区']
+        villages: ['新寺居委','胡桥居委','王家圩社区','法华社区','夹路社区','营房社区']
     },
     {
         id: 'xinsi', name: '金汇镇',
@@ -2390,7 +2483,7 @@ function switchStep2ByType(type) {
     renderHouseCategoryCards();
 }
 
-// 渲染街镇卡片（支持下钻到社区）
+// 渲染街镇卡片（支持下钻到村）
 function renderTownCards() {
     const grid = document.getElementById('townCardGrid');
     grid.innerHTML = townData.map(town => {
@@ -2407,7 +2500,7 @@ function renderTownCards() {
                 <div class="village-list" onclick="event.stopPropagation();">
                     <label class="village-item town-all-item ${allSelected ? 'selected' : ''}">
                         <input type="checkbox" ${allSelected ? 'checked' : ''} onchange="toggleTownSelect('${town.id}')">
-                        <span><strong>全镇</strong>（${town.villages.length} 个行政社区）</span>
+                        <span><strong>全镇</strong>（${town.villages.length} 个社区）</span>
                     </label>
                     ${town.villages.map(v => {
                         const vid = town.id + '_' + v;
@@ -2427,7 +2520,7 @@ function renderTownCards() {
             <div class="town-card ${isTownSelected || allVillagesSelected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''} ${partialSelected ? 'partial' : ''}"
                  onclick="toggleTownExpand('${town.id}')" style="position:relative;">
                 <span class="town-name">${town.name}</span>
-                <span class="town-meta">${selectedVillageCount > 0 ? '已选 ' + selectedVillageCount + ' 个社区' : (town.villages.length + ' 个行政社区')}</span>
+                <span class="town-meta">${selectedVillageCount > 0 ? '已选 ' + selectedVillageCount + ' 个村' : (town.villages.length + ' 个社区')}</span>
                 <i class="fas fa-chevron-down expand-icon"></i>
                 ${isTownSelected || allVillagesSelected ? '<div class="check-icon"><i class="fas fa-check"></i></div>' : ''}
                 ${villageHtml}
@@ -2612,9 +2705,9 @@ function renderCustomPatrolItems() {
                 <td style="text-align:center;">
                     <select class="cp-input" style="width:100%;min-width:70px;" onchange="updateCustomPatrolItem(${idx}, 'riskLevel', this.value)">
                         <option value="" ${!item.riskLevel ? 'selected' : ''}>请选择</option>
-                        <option value="第三类" ${item.riskLevel === '第三类' ? 'selected' : ''} style="color:#d93025;">第三类（红）</option>
-                        <option value="第二类" ${item.riskLevel === '第二类' ? 'selected' : ''} style="color:#f9ab00;">第二类（黄）</option>
-                        <option value="第一类" ${item.riskLevel === '第一类' ? 'selected' : ''} style="color:#1a73e8;">第一类（蓝）</option>
+                        <option value="疑似危房" ${item.riskLevel === '疑似危房' ? 'selected' : ''} style="color:#d93025;">疑似危房</option>
+                        <option value="疑似一般损坏房" ${item.riskLevel === '疑似一般损坏房' ? 'selected' : ''} style="color:#f9ab00;">疑似一般损坏房</option>
+                        <option value="完好房（基本完好房）" ${item.riskLevel === '完好房（基本完好房）' ? 'selected' : ''} style="color:#1a73e8;">完好房（基本完好房）</option>
                     </select>
                 </td>
                 <td class="cp-action">
@@ -2632,13 +2725,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ===== 风险清单数据 =====
-const riskListData = [
-    { id: 'rl1', name: '城镇自建房结构安全风险清单', version: 'V2.1', genTime: '2026-06-20', itemCount: 45 },
-    { id: 'rl2', name: '城镇自建房使用安全风险清单', version: 'V1.5', genTime: '2026-06-18', itemCount: 32 },
-    { id: 'rl3', name: '城镇自建房消防风险清单', version: 'V3.0', genTime: '2026-06-15', itemCount: 28 },
-    { id: 'rl4', name: '城镇自建房周边环境风险清单', version: 'V1.2', genTime: '2026-06-10', itemCount: 18 },
-    { id: 'rl5', name: '城镇自建房施工过程风险清单', version: 'V2.3', genTime: '2026-06-05', itemCount: 22 }
-];
+const riskListData = urbanRiskLists;
 
 function renderRiskListTable() {
     const tbody = document.getElementById('riskListTableBody');
@@ -2698,6 +2785,51 @@ function renderSelectedRiskListBar() {
             </span>
         `).join('');
     }
+    renderCarriedMeasures();
+}
+
+// ===== 关联预防措施自动带入（6.1.2.9.4）：按所选风险清单匹配风险条目，聚合其 measureIds 关联措施（匹配器与清单定义统一在 urban-risk-data.js） =====
+const RISK_LIST_MEASURE_MATCH = URBAN_LIST_MEASURE_MATCH;
+function stripHtmlSafe(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return d.textContent || '';
+}
+// 汇总所选清单带入的措施：Map<measureId, {sources:Set}>
+function collectCarriedMeasures() {
+    return collectUrbanCarriedMeasures([...selectedRiskListIds]);
+}
+function renderCarriedMeasures() {
+    const host = document.getElementById('carriedMeasurePanel');
+    const countEl = document.getElementById('carriedMeasureCount');
+    if (!host || typeof urbanMeasureLibData === 'undefined') return;
+    if (!selectedRiskListIds.size) {
+        host.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;">请先勾选上方风险清单，系统将自动带入清单内风险条目关联的预防措施</div>';
+        countEl.textContent = '';
+        return;
+    }
+    const map = collectCarriedMeasures();
+    if (!map.size) {
+        host.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;">所选清单的风险条目暂未关联预防措施，可到「风险清单编制」中为条目关联措施</div>';
+        countEl.textContent = '';
+        return;
+    }
+    const byType = {};
+    map.forEach((v, mid) => {
+        const m = urbanMeasureLibData.find(x => x.id === mid);
+        if (!m) return;
+        (byType[m.type] = byType[m.type] || []).push({ m, sources: v.sources });
+    });
+    const TYPE_COLOR = { '工程措施': '#1a73e8', '管理措施': '#188038', '传统工艺措施': '#b06000', '宣教措施': '#9334e6' };
+    host.innerHTML = URBAN_MEASURE_TYPES.filter(t => byType[t]).map(t => `
+        <div style="margin-bottom:12px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:${TYPE_COLOR[t] || 'var(--text)'};"><i class="fa-solid fa-layer-group" style="margin-right:4px;"></i>${t}（${byType[t].length} 条）</div>
+            <div>${byType[t].map(({ m, sources }) => {
+                const tip = `${stripHtmlSafe(m.desc)}\n责任主体：${m.owner || '-'}\n来源条目：${[...sources].slice(0, 5).join('、')}${sources.size > 5 ? ' 等' : ''}`;
+                return `<span style="display:inline-block;padding:3px 10px;margin:0 6px 6px 0;border-radius:10px;background:rgba(26,115,232,.08);border:1px solid rgba(26,115,232,.25);color:var(--text);font-size:12px;cursor:default;" title="${tip.replace(/"/g, '&quot;')}">${m.name}${(m.grades && m.grades.length) ? `<span style="color:var(--primary);">（分级×${m.grades.length}）</span>` : ''}</span>`;
+            }).join('')}</div>
+        </div>`).join('');
+    countEl.textContent = `共带入 ${map.size} 条`;
 }
 
 // ===== Init =====
@@ -2993,5 +3125,6 @@ if (typeof renderHouseCategoryCards === 'function') renderHouseCategoryCards();
 if (typeof initEditMode === 'function') initEditMode();
 </script>
 
+    <script src="ui-modal.js"></script>
 </body>
 </html>

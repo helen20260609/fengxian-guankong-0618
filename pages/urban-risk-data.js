@@ -673,3 +673,37 @@ const urbanMeasurePresetTemplates = [
     if (ids.length) item.measureIds = ids;
   });
 })();
+
+// ===== 巡查任务/预警生成兼容层（与农房模块口径一致，城镇化命名）=====
+const urbanRiskLists = [
+  { id: 'rl1', name: '城镇自建房结构安全风险清单', version: 'V2.1', genTime: '2026-06-20', itemCount: 45 },
+  { id: 'rl2', name: '城镇自建房使用安全风险清单', version: 'V1.5', genTime: '2026-06-18', itemCount: 32 },
+  { id: 'rl3', name: '城镇自建房消防风险清单', version: 'V3.0', genTime: '2026-06-15', itemCount: 28 },
+  { id: 'rl4', name: '城镇自建房周边环境风险清单', version: 'V1.2', genTime: '2026-06-10', itemCount: 18 },
+  { id: 'rl5', name: '城镇自建房施工过程风险清单', version: 'V2.3', genTime: '2026-06-05', itemCount: 22 }
+];
+
+// 清单 → 风险条目匹配器（各生成入口共用，口径一致）
+const URBAN_LIST_MEASURE_MATCH = {
+  rl1: r => r.main === '建筑结构信息',
+  rl2: r => r.main === '建筑基本信息',
+  rl3: r => /消防|燃气|用电|电气/.test((r.sub || '') + (r.content || '') + (r.risk || '')),
+  rl4: r => r.main === '选址规划' || /周边|地质|边坡|洪涝|切坡/.test((r.sub || '') + (r.content || '') + (r.risk || '')),
+  rl5: r => ['施工建设', '房屋设计', '竣工验收'].includes(r.main)
+};
+
+// 汇总所选清单带入的措施：Map<measureId, { sources:Set(来源分项) }>
+function collectUrbanCarriedMeasures(listIds) {
+  const map = new Map();
+  (listIds || []).forEach(rlId => {
+    const matcher = URBAN_LIST_MEASURE_MATCH[rlId];
+    if (!matcher) return;
+    riskData.filter(matcher).forEach(r => {
+      (r.measureIds || []).forEach(mid => {
+        if (!map.has(mid)) map.set(mid, { sources: new Set() });
+        map.get(mid).sources.add(r.sub);
+      });
+    });
+  });
+  return map;
+}

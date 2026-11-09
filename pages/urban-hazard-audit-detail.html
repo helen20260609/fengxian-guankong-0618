@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>城镇自建房 - 排查任务审核详情</title>
+<link rel="stylesheet" href="./all.min.css">
+<style>
+:root {
+    --primary: #1a73e8; --primary-dark: #1557b0; --primary-light: #e8f0fe;
+    --secondary: #0097a7; --danger: #d93025; --warning: #e65100; --success: #1e8e3e;
+    --bg-dark: #f0f2f5; --bg-card: #ffffff; --bg-hover: #e8eaed;
+    --text-primary: #202124; --text-secondary: #5f6368; --border: #dadce0;
+    --shadow: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #dadce0;
+}
+:root[data-theme="dark"] {
+    --primary: #1e6fdb; --primary-dark: #1557b0; --primary-light: #e8f1fd;
+    --secondary: #00b4d8; --danger: #ef4444; --warning: #f59e0b; --success: #10b981;
+    --bg-dark: #0a1628; --bg-card: #112240; --bg-hover: #1a2f4a;
+    --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border: #1e3a5f;
+    --shadow: rgba(0,0,0,0.3); --input-bg: rgba(255,255,255,0.05); --input-border: #1e3a5f;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif; background: var(--bg-dark); color: var(--text-primary); padding: 20px; min-height: 100vh; }
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+.page-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.page-title i { color: var(--primary); }
+.btn { height: 34px; padding: 0 16px; border-radius: 6px; border: none; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s; }
+.btn-default { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
+.btn-default:hover { background: var(--bg-hover); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { filter: brightness(0.92); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { filter: brightness(0.92); }
+.btn-warning { background: var(--warning); color: #fff; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 任务信息卡 */
+.info-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+.info-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.info-title { font-size: 17px; font-weight: 700; }
+.info-no { font-size: 12px; color: var(--text-secondary); margin-left: 10px; }
+.info-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+.info-item { font-size: 13px; }
+.info-item .lbl { color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; }
+.info-item .val { font-weight: 600; }
+.status-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.status-tag.pending-audit { background: rgba(230,81,0,0.12); color: var(--warning); }
+.status-tag.completed { background: rgba(30,142,62,0.12); color: var(--success); }
+.status-tag.rejected { background: rgba(217,48,37,0.12); color: var(--danger); }
+
+/* 审核结果横幅 */
+.audit-banner { border-radius: 8px; padding: 12px 16px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 10px; }
+.audit-banner.pass { background: rgba(30,142,62,0.08); border: 1px solid rgba(30,142,62,0.3); color: var(--success); }
+.audit-banner.reject { background: rgba(217,48,37,0.08); border: 1px solid rgba(217,48,37,0.3); color: var(--danger); }
+.audit-banner .txt { color: var(--text-primary); }
+
+/* 双视图切换 */
+.view-tabs { display: inline-flex; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 4px; gap: 4px; margin-bottom: 12px; }
+.view-tab { height: 32px; padding: 0 18px; border-radius: 6px; border: none; background: transparent; color: var(--text-secondary); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.view-tab.active { background: var(--primary); color: #fff; }
+.legend { display: inline-flex; gap: 14px; align-items: center; font-size: 12px; color: var(--text-secondary); margin-left: 14px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+/* 地图 */
+.map-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; position: relative; }
+.map-container { width: 100%; height: 560px; position: relative; background: linear-gradient(135deg, #e8f0e9 0%, #f2f6ee 50%, #e9f1f5 100%); overflow: hidden; }
+:root[data-theme="dark"] .map-container { background: linear-gradient(135deg, #0d1f16 0%, #10202c 100%); }
+.map-container svg { width: 100%; height: 100%; display: block; cursor: grab; }
+.map-watermark { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: var(--text-secondary); background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; opacity: 0.85; }
+.house-marker { cursor: pointer; }
+.house-marker .pin { stroke: #fff; stroke-width: 1.5; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
+.house-marker.selected .sel-ring { display: block; }
+.house-marker .sel-ring { display: none; fill: none; stroke: var(--primary); stroke-width: 2.5; stroke-dasharray: 4 3; }
+.marker-label { font-size: 11px; fill: var(--text-primary); paint-order: stroke; stroke: var(--bg-card); stroke-width: 3px; font-weight: 600; }
+
+/* 列表 */
+.table-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.table-wrapper { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th { background: var(--bg-hover); padding: 11px 12px; text-align: left; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+.data-table td { padding: 11px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+.data-table tbody tr { cursor: pointer; }
+.data-table tbody tr:hover { background: var(--bg-hover); }
+.data-table tbody tr.excluded { opacity: 0.5; }
+.risk-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.risk-badge.red { background: rgba(217,48,37,0.12); color: var(--danger); }
+.risk-badge.yellow { background: rgba(230,81,0,0.12); color: var(--warning); }
+.risk-badge.blue { background: rgba(26,115,232,0.12); color: var(--primary); }
+.risk-badge.gray { background: rgba(128,128,128,0.12); color: #888; }
+.exclude-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 4px; font-size: 11px; background: rgba(128,128,128,0.15); color: var(--text-secondary); }
+.src-tag { font-size: 12px; color: var(--text-secondary); }
+.action-link { background: none; border: none; color: var(--primary); font-size: 13px; cursor: pointer; padding: 2px 6px; }
+.action-link:hover { text-decoration: underline; }
+
+/* 批量操作条 */
+.batch-bar { display: none; align-items: center; gap: 12px; background: var(--primary-light); border: 1px solid var(--primary); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; }
+.batch-bar.show { display: flex; }
+
+/* 审核操作区 */
+.audit-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-top: 16px; }
+.audit-panel h3 { font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.audit-panel h3 i { color: var(--warning); }
+.audit-panel textarea { width: 100%; min-height: 80px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); padding: 10px; font-size: 13px; font-family: inherit; resize: vertical; outline: none; }
+.audit-panel textarea:focus { border-color: var(--primary); }
+.audit-actions { display: flex; gap: 10px; margin-top: 12px; justify-content: flex-end; }
+
+/* 弹窗 */
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 1000; }
+.modal-mask.show { display: flex; }
+.modal { background: var(--bg-card); border-radius: 12px; width: 860px; max-width: 94vw; max-height: 88vh; overflow: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-card); z-index: 2; }
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-close { background: none; border: none; font-size: 18px; color: var(--text-secondary); cursor: pointer; }
+.modal-body { padding: 18px 20px; }
+.detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.detail-item { font-size: 13px; }
+.detail-item .lbl { color: var(--text-secondary); font-size: 12px; margin-bottom: 3px; }
+.detail-item .val { font-weight: 600; }
+.section-title { font-size: 14px; font-weight: 700; margin: 16px 0 10px; display: flex; align-items: center; gap: 8px; }
+.section-title i { color: var(--primary); font-size: 13px; }
+.check-item { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.check-item .ci-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.check-item .ci-part { font-weight: 700; font-size: 13px; }
+.check-item .ci-content { font-size: 13px; margin-bottom: 4px; }
+.check-item .ci-desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.photo-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.photo-thumbs img { width: 96px; height: 66px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 2000; cursor: zoom-out; }
+.lightbox.show { display: flex; }
+.lightbox img { max-width: 90vw; max-height: 86vh; border-radius: 8px; }
+.reject-modal { width: 520px; }
+.reject-modal textarea { width: 100%; min-height: 90px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text-primary); padding: 10px; font-size: 13px; font-family: inherit; resize: vertical; outline: none; }
+</style>
+<link rel="stylesheet" href="ui-modal.css">
+</head>
+<body>
+
+<div class="page-header">
+    <div class="page-title"><i class="fa-solid fa-clipboard-check"></i>排查任务审核详情</div>
+    <button class="btn btn-default" onclick="history.back()"><i class="fa-solid fa-arrow-left"></i> 返回列表</button>
+</div>
+
+<!-- 任务信息 -->
+<div class="info-card">
+    <div class="info-head">
+        <div>
+            <span class="info-title" id="task-name">-</span>
+            <span class="info-no" id="task-no"></span>
+        </div>
+        <span id="task-status"></span>
+    </div>
+    <div class="info-grid">
+        <div class="info-item"><div class="lbl">镇/街道 / 社区</div><div class="val" id="info-region">-</div></div>
+        <div class="info-item"><div class="lbl">巡查人员</div><div class="val" id="info-person">-</div></div>
+        <div class="info-item"><div class="lbl">房屋数量</div><div class="val" id="info-houses">-</div></div>
+        <div class="info-item"><div class="lbl">隐患数量</div><div class="val" id="info-hazards">-</div></div>
+        <div class="info-item"><div class="lbl">上报时间</div><div class="val" id="info-submit">-</div></div>
+        <div class="info-item"><div class="lbl">截止时间</div><div class="val" id="info-deadline">-</div></div>
+    </div>
+</div>
+
+<!-- 审核结果横幅（已审核任务） -->
+<div class="audit-banner" id="audit-banner" style="display:none;"></div>
+
+<!-- 视图切换 -->
+<div style="display:flex;align-items:center;flex-wrap:wrap;">
+    <div class="view-tabs">
+        <button class="view-tab active" data-view="map"><i class="fa-solid fa-map-location-dot"></i> 地图视图</button>
+        <button class="view-tab" data-view="list"><i class="fa-solid fa-list"></i> 列表视图</button>
+    </div>
+    <div class="legend">
+        <span><i style="background:#d93025;"></i>疑似危房（严重）</span>
+        <span><i style="background:#e65100;"></i>疑似一般损坏房（一定）</span>
+        <span><i style="background:#1a73e8;"></i>完好房（基本完好房）（未发现）</span>
+        <span><i style="background:#9aa0a6;"></i>待巡查/已排除</span>
+    </div>
+</div>
+
+<!-- 批量操作条 -->
+<div class="batch-bar" id="batch-bar">
+    <span><i class="fa-solid fa-check-square" style="color:var(--primary);"></i> 已选 <b id="batch-count">0</b> 栋房屋</span>
+    <button class="btn btn-warning" id="btn-batch-exclude" style="height:30px;"><i class="fa-solid fa-ban"></i> 排除隐患</button>
+    <button class="btn btn-default" id="btn-batch-include" style="height:30px;"><i class="fa-solid fa-rotate-left"></i> 取消排除</button>
+    <span style="color:var(--text-secondary);font-size:12px;">排除后该房屋的隐患不进入分发处置环节</span>
+</div>
+
+<!-- 地图视图 -->
+<div class="map-card" id="view-map">
+    <div class="map-container" id="map-container"></div>
+    <div class="map-watermark"><i class="fa-solid fa-circle-info"></i> 示意地图（非真实地理底图）</div>
+</div>
+
+<!-- 列表视图 -->
+<div class="table-card" id="view-list" style="display:none;">
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:36px;"><input type="checkbox" id="check-all"></th>
+                    <th>房屋编号</th>
+                    <th>房屋地址</th>
+                    <th>户主</th>
+                    <th>结构形式</th>
+                    <th>建成时间</th>
+                    <th>风险等级</th>
+                    <th>隐患数</th>
+                    <th>填报途径</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="house-table-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 审核操作区 -->
+<div class="audit-panel" id="audit-panel">
+    <h3><i class="fa-solid fa-clipboard-check"></i>任务审核</h3>
+    <textarea id="audit-opinion" placeholder="填写审核意见（审核通过/退回时随结果一并记录）..."></textarea>
+    <div class="audit-actions">
+        <button class="btn btn-danger" id="btn-reject"><i class="fa-solid fa-rotate-left"></i> 退回任务</button>
+        <button class="btn btn-success" id="btn-pass"><i class="fa-solid fa-check"></i> 审核通过</button>
+    </div>
+</div>
+
+<!-- 房屋详情弹窗 -->
+<div class="modal-mask" id="house-modal-mask">
+    <div class="modal">
+        <div class="modal-head">
+            <div class="modal-title" id="hm-title">房屋详情</div>
+            <button class="modal-close" onclick="closeHouseModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body" id="hm-body"></div>
+    </div>
+</div>
+
+<!-- 退回原因弹窗 -->
+<div class="modal-mask" id="reject-modal-mask">
+    <div class="modal reject-modal">
+        <div class="modal-head">
+            <div class="modal-title">退回任务</div>
+            <button class="modal-close" onclick="closeRejectModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">退回后任务返回"任务回退"状态，由巡查方修改后重新提交审核。</div>
+            <textarea id="reject-reason" placeholder="请填写退回原因（必填）..."></textarea>
+            <div class="audit-actions">
+                <button class="btn btn-default" onclick="closeRejectModal()">取消</button>
+                <button class="btn btn-danger" id="btn-reject-confirm"><i class="fa-solid fa-rotate-left"></i> 确认退回</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 照片灯箱 -->
+<div class="lightbox" id="lightbox"><img id="lightbox-img" src="" alt="现场照片"></div>
+
+<script src="../js/house-arch-data.js"></script>
+<script src="urban-audit-seed.js"></script>
+<script>
+(function() {
+    // ===== 数据 =====
+    let task = null;
+    let houses = [];
+    let selected = new Set();
+    let currentView = 'map';
+
+    const LEVEL_ORDER = { red: 0, yellow: 1, blue: 2, none: 3 };
+    const RISK_META = {
+        red:    { label: '疑似危房', desc: '存在严重安全隐患', color: '#d93025', cls: 'red' },
+        yellow: { label: '疑似一般损坏房', desc: '存在一定安全隐患', color: '#e65100', cls: 'yellow' },
+        blue:   { label: '完好房（基本完好房）', desc: '未发现安全隐患', color: '#1a73e8', cls: 'blue' },
+        none:   { label: '待巡查', desc: '尚未填报', color: '#9aa0a6', cls: 'gray' }
+    };
+    // 与 urban-risk-task-detail.html 同步口径一致的部位映射
+    const ARCH_PART_MAP = [
+        ['屋面', '屋面'], ['地基', '地基基础'], ['基础', '地基基础'], ['木构', '木构架'],
+        ['楼梯', '楼梯间'], ['阳台', '阳台'], ['外墙', '外墙'], ['梁柱', '梁柱'], ['梁', '梁柱'],
+        ['楼板', '楼板'], ['排水', '排水系统'], ['墙', '承重墙']
+    ];
+    function mapArchHazardPart(part) {
+        const hit = ARCH_PART_MAP.find(kv => (part || '').indexOf(kv[0]) >= 0);
+        return hit ? hit[1] : '房屋结构';
+    }
+
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    function nowStr() {
+        const d = new Date();
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+    function saveTask() {
+        try {
+            const tasks = JSON.parse(localStorage.getItem('urbanPatrolTasks') || '[]');
+            const idx = tasks.findIndex(t => Number(t.id) === Number(task.id));
+            if (idx >= 0) { tasks[idx] = task; localStorage.setItem('urbanPatrolTasks', JSON.stringify(tasks)); }
+        } catch (e) { console.warn('保存任务失败', e); }
+    }
+
+    function houseRisk(h) {
+        if (h.status !== 'inspected') return 'none';
+        let r = 'blue';
+        (h.checkItems || []).forEach(it => {
+            if (it.level === 'red') r = 'red';
+            else if (it.level === 'yellow' && r !== 'red') r = 'yellow';
+        });
+        return r;
+    }
+    function hazardCount(h) {
+        return (h.checkItems || []).filter(it => it.level === 'red' || it.level === 'yellow').length;
+    }
+    function isExcluded(h) {
+        return (task.excludedHouses || []).includes(h.houseNo);
+    }
+    function isPendingAudit() { return task.status === 'pending-audit'; }
+
+    // ===== 顶部信息 =====
+    function renderHeader() {
+        document.getElementById('task-name').textContent = task.name || '-';
+        document.getElementById('task-no').textContent = task.no || '';
+        const st = document.getElementById('task-status');
+        if (isPendingAudit()) st.innerHTML = '<span class="status-tag pending-audit">待审核</span>';
+        else if (task.auditResult && task.auditResult.result === '通过') st.innerHTML = '<span class="status-tag completed">审核通过</span>';
+        else if (task.auditResult && task.auditResult.result === '驳回') st.innerHTML = '<span class="status-tag rejected">已退回</span>';
+        else st.innerHTML = '<span class="status-tag completed">' + (task.statusLabel || task.status) + '</span>';
+
+        document.getElementById('info-region').textContent = (task.town || '-') + (task.village ? ' / ' + task.village : '');
+        document.getElementById('info-person').textContent = task.person || '-';
+        document.getElementById('info-houses').textContent = houses.length + ' 栋';
+        let red = 0, yellow = 0;
+        houses.forEach(h => (h.checkItems || []).forEach(it => { if (it.level === 'red') red++; else if (it.level === 'yellow') yellow++; }));
+        document.getElementById('info-hazards').textContent = (red + yellow) + ' 条（严重 ' + red + ' / 一定 ' + yellow + '）';
+        document.getElementById('info-submit').textContent = task.submitAuditTime || task.finishTime || '-';
+        document.getElementById('info-deadline').textContent = task.endDate || '-';
+
+        // 审核结果横幅
+        const banner = document.getElementById('audit-banner');
+        if (task.auditResult && task.auditResult.result) {
+            const r = task.auditResult;
+            const pass = r.result === '通过';
+            banner.className = 'audit-banner ' + (pass ? 'pass' : 'reject');
+            banner.style.display = 'flex';
+            banner.innerHTML = '<i class="fa-solid ' + (pass ? 'fa-circle-check' : 'fa-rotate-left') + '" style="margin-top:2px;"></i>' +
+                '<div><b>审核' + r.result + '</b>　' + (r.auditor || '') + '　' + (r.time || '') +
+                (r.opinion ? '<div class="txt" style="margin-top:4px;">审核意见：' + r.opinion + '</div>' : '') +
+                (r.reason ? '<div class="txt" style="margin-top:4px;">退回原因：' + r.reason + '</div>' : '') +
+                (pass && (r.excludedHouses || []).length ? '<div class="txt" style="margin-top:4px;">排除房屋：' + r.excludedHouses.length + ' 栋（隐患不进入分发处置）</div>' : '') +
+                '</div>';
+        } else {
+            banner.style.display = 'none';
+        }
+        document.getElementById('audit-panel').style.display = isPendingAudit() ? 'block' : 'none';
+        document.getElementById('batch-bar').classList.toggle('show', isPendingAudit() && selected.size > 0);
+    }
+
+    // ===== 地图视图 =====
+    const VW = 1000, VH = 560;
+    let viewState = { scale: 1, tx: 0, ty: 0 };
+    let dragging = false, dragStart = null;
+
+    function housePositions() {
+        const withCoord = houses.filter(h => h.lng != null && h.lat != null);
+        const pos = {};
+        if (withCoord.length >= Math.max(2, houses.length * 0.5)) {
+            const lngs = withCoord.map(h => h.lng), lats = withCoord.map(h => h.lat);
+            let minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+            let minLat = Math.min(...lats), maxLat = Math.max(...lats);
+            // 避免零距离
+            if (maxLng - minLng < 0.002) { minLng -= 0.001; maxLng += 0.001; }
+            if (maxLat - minLat < 0.002) { minLat -= 0.001; maxLat += 0.001; }
+            const pad = 90;
+            houses.forEach((h, i) => {
+                if (h.lng != null && h.lat != null) {
+                    pos[h.houseNo] = {
+                        x: pad + (h.lng - minLng) / (maxLng - minLng) * (VW - pad * 2),
+                        y: VH - pad - (h.lat - minLat) / (maxLat - minLat) * (VH - pad * 2)
+                    };
+                } else {
+                    pos[h.houseNo] = gridPos(i);
+                }
+            });
+        } else {
+            houses.forEach((h, i) => { pos[h.houseNo] = gridPos(i); });
+        }
+        return pos;
+    }
+    function gridPos(i) {
+        const cols = Math.ceil(Math.sqrt(houses.length * (VW / VH)));
+        const rows = Math.ceil(houses.length / cols);
+        const cx = (i % cols) + 0.5, cy = Math.floor(i / cols) + 0.5;
+        return { x: 90 + cx / cols * (VW - 180), y: 70 + cy / rows * (VH - 160) };
+    }
+
+    function renderMap() {
+        const container = document.getElementById('map-container');
+        const pos = housePositions();
+        // 村界：以点位凸包外扩的圆角多边形（示意）
+        const pts = houses.map(h => pos[h.houseNo]);
+        const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+        const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+        const boundaryPts = pts.map(p => {
+            const dx = p.x - cx, dy = p.y - cy;
+            return [cx + dx * 1.45, cy + dy * 1.55];
+        });
+        // 按角度排序形成包络
+        boundaryPts.sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx));
+        const boundary = boundaryPts.map(p => p.map(v => Math.round(v)).join(',')).join(' ');
+
+        let markers = '';
+        houses.forEach(h => {
+            const p = pos[h.houseNo];
+            const risk = isExcluded(h) ? 'none' : houseRisk(h);
+            const meta = RISK_META[risk];
+            const sel = selected.has(h.houseNo) ? ' selected' : '';
+            const label = h.owner || (h.name || '').slice(0, 4) || h.houseNo;
+            markers += `
+            <g class="house-marker${sel}" data-no="${h.houseNo}" transform="translate(${p.x},${p.y})">
+                <circle class="sel-ring" r="17"></circle>
+                <path class="pin" d="M0,-16 C-8,-16 -13,-10 -13,-3 C-13,6 0,14 0,14 C0,14 13,6 13,-3 C13,-10 8,-16 0,-16 Z" fill="${meta.color}"></path>
+                <circle r="4.5" cy="-5" fill="#fff"></circle>
+                <text class="marker-label" y="30" text-anchor="middle">${label}</text>
+            </g>`;
+        });
+
+        container.innerHTML = `
+        <svg id="audit-svg" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet">
+            <g id="map-root">
+                <polygon points="${boundary}" fill="rgba(26,115,232,0.05)" stroke="#1a73e8" stroke-width="1.5" stroke-dasharray="7 5"></polygon>
+                <text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="15" font-weight="700" fill="var(--text-secondary)" opacity="0.7">${task.village || task.town || ''} 任务范围示意</text>
+                ${markers}
+            </g>
+        </svg>`;
+
+        const svg = document.getElementById('audit-svg');
+        svg.addEventListener('wheel', e => {
+            e.preventDefault();
+            const rect = svg.getBoundingClientRect();
+            const factor = e.deltaY < 0 ? 1.12 : 0.9;
+            zoomAt(factor, e.clientX - rect.left, e.clientY - rect.top, rect);
+        }, { passive: false });
+        svg.addEventListener('mousedown', e => {
+            if (e.button !== 0 || e.target.closest('.house-marker')) return;
+            dragging = true; dragStart = { x: e.clientX - viewState.tx, y: e.clientY - viewState.ty };
+            svg.style.cursor = 'grabbing';
+        });
+        window.addEventListener('mousemove', e => {
+            if (!dragging) return;
+            viewState.tx = e.clientX - dragStart.x; viewState.ty = e.clientY - dragStart.y;
+            applyTransform();
+        });
+        window.addEventListener('mouseup', () => { dragging = false; svg.style.cursor = 'grab'; });
+
+        svg.querySelectorAll('.house-marker').forEach(g => {
+            g.addEventListener('click', e => {
+                e.stopPropagation();
+                openHouseModal(g.dataset.no);
+            });
+        });
+    }
+    function zoomAt(factor, mx, my, rect) {
+        const ns = Math.min(3, Math.max(0.6, viewState.scale * factor));
+        const px = mx / rect.width * VW, py = my / rect.height * VH;
+        const k = ns / viewState.scale;
+        viewState.tx = px - (px - viewState.tx) * k;
+        viewState.ty = py - (py - viewState.ty) * k;
+        viewState.scale = ns;
+        applyTransform();
+    }
+    function applyTransform() {
+        const root = document.getElementById('map-root');
+        if (root) root.setAttribute('transform', `translate(${viewState.tx},${viewState.ty}) scale(${viewState.scale})`);
+    }
+
+    // ===== 列表视图 =====
+    function renderList() {
+        const tbody = document.getElementById('house-table-body');
+        const sorted = [...houses].sort((a, b) => LEVEL_ORDER[houseRisk(a)] - LEVEL_ORDER[houseRisk(b)]);
+        tbody.innerHTML = sorted.map(h => {
+            const risk = houseRisk(h);
+            const meta = RISK_META[risk];
+            const ex = isExcluded(h);
+            const hz = hazardCount(h);
+            return `<tr data-no="${h.houseNo}" class="${ex ? 'excluded' : ''}">
+                <td><input type="checkbox" class="row-check" data-no="${h.houseNo}" ${selected.has(h.houseNo) ? 'checked' : ''} ${isPendingAudit() ? '' : 'disabled'}></td>
+                <td style="font-weight:600;">${h.houseNo}</td>
+                <td>${h.address || h.name || '-'}</td>
+                <td>${h.owner || '-'}</td>
+                <td>${h.structure || '-'}</td>
+                <td>${h.year ? h.year + ' 年' : '-'}</td>
+                <td><span class="risk-badge ${meta.cls}">${meta.label}</span>${ex ? '<span class="exclude-tag">已排除</span>' : ''}</td>
+                <td>${hz} 条</td>
+                <td><span class="src-tag">${h.fillSource === 'h5' ? 'H5端上传' : 'PC端填报'}</span></td>
+                <td>${h.status === 'inspected' ? '已填报' : '待巡查'}</td>
+                <td><button class="action-link" data-view-no="${h.houseNo}">查看</button></td>
+            </tr>`;
+        }).join('');
+
+        tbody.querySelectorAll('.row-check').forEach(cb => {
+            cb.addEventListener('click', e => e.stopPropagation());
+            cb.addEventListener('change', () => {
+                if (cb.checked) selected.add(cb.dataset.no); else selected.delete(cb.dataset.no);
+                syncSelectionUI();
+            });
+        });
+        tbody.querySelectorAll('tr').forEach(tr => {
+            tr.addEventListener('click', () => openHouseModal(tr.dataset.no));
+        });
+        tbody.querySelectorAll('[data-view-no]').forEach(b => {
+            b.addEventListener('click', e => { e.stopPropagation(); openHouseModal(b.dataset.viewNo); });
+        });
+        syncCheckAll();
+    }
+
+    function syncCheckAll() {
+        const all = document.getElementById('check-all');
+        all.checked = houses.length > 0 && selected.size === houses.length;
+        all.indeterminate = selected.size > 0 && selected.size < houses.length;
+    }
+    function syncSelectionUI() {
+        document.getElementById('batch-count').textContent = selected.size;
+        document.getElementById('batch-bar').classList.toggle('show', isPendingAudit() && selected.size > 0);
+        syncCheckAll();
+        // 地图高亮
+        document.querySelectorAll('.house-marker').forEach(g => {
+            g.classList.toggle('selected', selected.has(g.dataset.no));
+        });
+        // 列表勾选态
+        document.querySelectorAll('.row-check').forEach(cb => { cb.checked = selected.has(cb.dataset.no); });
+    }
+
+    // ===== 房屋详情弹窗 =====
+    window.openHouseModal = function(no) {
+        const h = houses.find(x => x.houseNo === no);
+        if (!h) return;
+        const risk = houseRisk(h);
+        const meta = RISK_META[risk];
+        const items = [...(h.checkItems || [])].sort((a, b) => (LEVEL_ORDER[a.level] ?? 3) - (LEVEL_ORDER[b.level] ?? 3));
+        document.getElementById('hm-title').innerHTML = (h.name || h.houseNo) + '　<span class="risk-badge ' + meta.cls + '">' + meta.desc + '</span>' + (isExcluded(h) ? '<span class="exclude-tag">已排除</span>' : '');
+        document.getElementById('hm-body').innerHTML = `
+            <div class="detail-grid">
+                <div class="detail-item"><div class="lbl">房屋编号</div><div class="val">${h.houseNo}</div></div>
+                <div class="detail-item"><div class="lbl">户主</div><div class="val">${h.owner || '-'}</div></div>
+                <div class="detail-item"><div class="lbl">联系电话</div><div class="val">${h.phone || '-'}</div></div>
+                <div class="detail-item"><div class="lbl">结构形式</div><div class="val">${h.structure || '-'}</div></div>
+                <div class="detail-item"><div class="lbl">建成时间</div><div class="val">${h.year ? h.year + ' 年' : '-'}</div></div>
+                <div class="detail-item"><div class="lbl">层数 / 面积</div><div class="val">${h.floors ? h.floors + ' 层' : '-'} / ${h.area ? h.area + ' ㎡' : '-'}</div></div>
+                <div class="detail-item"><div class="lbl">房屋用途</div><div class="val">${h.typeLabel || '-'}</div></div>
+                <div class="detail-item"><div class="lbl">填报途径 / 时间</div><div class="val">${h.fillSource === 'h5' ? 'H5端上传' : 'PC端填报'} / ${h.time || '-'}</div></div>
+            </div>
+            <div class="detail-item" style="margin-bottom:6px;"><div class="lbl">房屋地址</div><div class="val">${h.address || '-'}</div></div>
+            <div class="section-title"><i class="fa-solid fa-list-check"></i>排查记录（${items.length} 项检查）</div>
+            ${items.length ? items.map(it => {
+                const m = RISK_META[it.level] || RISK_META.blue;
+                return `<div class="check-item">
+                    <div class="ci-head">
+                        <span class="ci-part">${it.main || ''}${it.sub ? ' · ' + it.sub : ''}</span>
+                        <span class="risk-badge ${m.cls}">${m.label}</span>
+                    </div>
+                    <div class="ci-content">${it.content || ''}</div>
+                    ${it.risk ? `<div class="ci-desc">风险：${it.risk}${it.accident ? '；可能事故：' + it.accident : ''}</div>` : ''}
+                    ${it.description ? `<div class="ci-desc">现场描述：${it.description}</div>` : ''}
+                    ${(it.photos && it.photos.length) ? `<div class="photo-thumbs">${it.photos.map(p => `<img src="${p}" onclick="showLightbox('${encodeURIComponent(p)}')">`).join('')}</div>` : ''}
+                </div>`;
+            }).join('') : '<div style="color:var(--text-secondary);font-size:13px;">暂无排查记录</div>'}
+        `;
+        document.getElementById('house-modal-mask').classList.add('show');
+    };
+    window.closeHouseModal = function() { document.getElementById('house-modal-mask').classList.remove('show'); };
+    window.showLightbox = function(encodedSrc) {
+        document.getElementById('lightbox-img').src = decodeURIComponent(encodedSrc);
+        document.getElementById('lightbox').classList.add('show');
+    };
+    document.getElementById('lightbox').addEventListener('click', () => document.getElementById('lightbox').classList.remove('show'));
+    document.getElementById('house-modal-mask').addEventListener('click', e => { if (e.target.id === 'house-modal-mask') closeHouseModal(); });
+
+    // ===== 批量排除/取消 =====
+    function setExcluded(nos, flag) {
+        if (!Array.isArray(task.excludedHouses)) task.excludedHouses = [];
+        nos.forEach(no => {
+            const i = task.excludedHouses.indexOf(no);
+            if (flag && i === -1) task.excludedHouses.push(no);
+            if (!flag && i >= 0) task.excludedHouses.splice(i, 1);
+        });
+        saveTask();
+        selected.clear();
+        renderAll();
+    }
+    document.getElementById('btn-batch-exclude').addEventListener('click', async () => {
+        const nos = [...selected].filter(no => !isExcluded(houses.find(h => h.houseNo === no)));
+        if (!nos.length) { alert('所选房屋均已被排除'); return; }
+        const ok = window.uiConfirm ? await uiConfirm(`确定排除所选 ${nos.length} 栋房屋的隐患吗？\n排除后其隐患不进入分发处置环节。`) : confirm('确定排除所选房屋隐患？');
+        if (ok) setExcluded(nos, true);
+    });
+    document.getElementById('btn-batch-include').addEventListener('click', () => {
+        const nos = [...selected].filter(no => isExcluded(houses.find(h => h.houseNo === no)));
+        if (!nos.length) { alert('所选房屋均未被排除'); return; }
+        setExcluded(nos, false);
+    });
+    document.getElementById('check-all').addEventListener('change', e => {
+        if (e.target.checked) houses.forEach(h => selected.add(h.houseNo)); else selected.clear();
+        syncSelectionUI();
+    });
+
+    // ===== 审核提交 =====
+    async function passAudit() {
+        const opinion = document.getElementById('audit-opinion').value.trim();
+        const exCount = (task.excludedHouses || []).length;
+        let red = 0, yellow = 0;
+        houses.forEach(h => {
+            if (isExcluded(h)) return;
+            (h.checkItems || []).forEach(it => { if (it.level === 'red') red++; else if (it.level === 'yellow') yellow++; });
+        });
+        const msg = `审核通过后：\n· 任务正式办结（已完成），排查结果进入分发处置环节\n· 入库隐患 ${red + yellow} 条（严重 ${red} / 一定 ${yellow}）` + (exCount ? `\n· ${exCount} 栋房屋已排除，其隐患不入库` : '') + `\n\n确定审核通过吗？`;
+        const ok = window.uiConfirm ? await uiConfirm(msg) : confirm(msg);
+        if (!ok) return;
+
+        task.status = 'completed';
+        task.statusLabel = '已完成';
+        task.statusClass = 'completed';
+        task.auditResult = { result: '通过', opinion: opinion, auditor: '区房管局审核员', time: nowStr(), excludedHouses: [...(task.excludedHouses || [])] };
+        syncHazardsToArch();
+        saveTask();
+        alert('审核已通过，排查结果进入分发处置环节');
+        window.location.href = 'urban-hazard-audit-list.html';
+    }
+
+    // 审核通过时：各房隐患写入房屋档案（口径同填报同步），排除房屋标记驳回
+    function syncHazardsToArch() {
+        if (typeof patchHouseRecord !== 'function' || typeof initHouseArchSeed !== 'function') return;
+        try {
+            initHouseArchSeed();
+            const taskId = String(task.id);
+            houses.forEach(h => {
+                if (!h.houseNo || h.status !== 'inspected') return;
+                const excluded = isExcluded(h);
+                const srcLabel = h.fillSource === 'h5' ? '巡查人员上报' : '排查发现';
+                patchHouseRecord(h.houseNo, function(rec) {
+                    rec.houseType = '城镇自建房';
+                    if (!rec.name) rec.name = h.name || '';
+                    if (!rec.address) rec.address = h.address || '';
+                    if (!rec.community) rec.community = h.village || '';
+                    if (!rec.owner) rec.owner = h.owner || '';
+                    if (!rec.responsibleDept) rec.responsibleDept = (h.town || '') + '城建中心';
+                    if (!rec.responsiblePerson) rec.responsiblePerson = h.owner || '';
+                    if (!excluded) {
+                        const riskLabel = houseRisk(h) === 'red' ? '疑似危房' : houseRisk(h) === 'yellow' ? '疑似一般损坏房' : '完好房（基本完好房）';
+                        rec.riskLevel = riskLabel;
+                        rec.riskDisplayLevel = riskLabel;
+                    }
+                    const kept = (rec.hazards || []).filter(x => x._taskId !== taskId);
+                    const derived = (h.checkItems || [])
+                        .filter(it => it.level === 'red' || it.level === 'yellow')
+                        .map(it => ({
+                            part: mapArchHazardPart(it.sub || it.main),
+                            type: it.sub || '安全隐患',
+                            level: it.level === 'red' ? '疑似危房' : '疑似一般损坏房',
+                            desc: it.description || it.risk || it.content || '',
+                            accident: it.accident || '',
+                            photos: it.photos || [],
+                            reportTime: h.time || '',
+                            source: srcLabel,
+                            _taskId: taskId,
+                            auditState: excluded ? '已驳回' : '已通过',
+                            flowStatus: excluded ? '' : '待处置'
+                        }));
+                    rec.hazards = kept.concat(derived);
+                });
+            });
+        } catch (e) { console.warn('隐患入库失败', e); }
+    }
+
+    function openRejectModal() {
+        document.getElementById('reject-reason').value = '';
+        document.getElementById('reject-modal-mask').classList.add('show');
+    }
+    window.closeRejectModal = function() { document.getElementById('reject-modal-mask').classList.remove('show'); };
+    document.getElementById('reject-modal-mask').addEventListener('click', e => { if (e.target.id === 'reject-modal-mask') closeRejectModal(); });
+
+    async function rejectAudit() {
+        const reason = document.getElementById('reject-reason').value.trim();
+        if (!reason) { alert('请填写退回原因'); return; }
+        const ok = window.uiConfirm ? await uiConfirm('确定退回该任务吗？退回后任务进入"任务回退"状态。') : confirm('确定退回该任务？');
+        if (!ok) return;
+        task.status = 'rejected';
+        task.statusLabel = '任务回退';
+        task.statusClass = 'rejected';
+        task.auditResult = { result: '驳回', reason: reason, opinion: document.getElementById('audit-opinion').value.trim(), auditor: '区房管局审核员', time: nowStr() };
+        saveTask();
+        alert('任务已退回');
+        window.location.href = 'urban-hazard-audit-list.html';
+    }
+    document.getElementById('btn-pass').addEventListener('click', passAudit);
+    document.getElementById('btn-reject').addEventListener('click', openRejectModal);
+    document.getElementById('btn-reject-confirm').addEventListener('click', rejectAudit);
+
+    // ===== 视图切换 =====
+    document.querySelectorAll('.view-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.view-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentView = btn.dataset.view;
+            document.getElementById('view-map').style.display = currentView === 'map' ? 'block' : 'none';
+            document.getElementById('view-list').style.display = currentView === 'list' ? 'block' : 'none';
+        });
+    });
+
+    // 主题同步
+    window.addEventListener('message', e => {
+        if (e.data && e.data.action === 'setTheme') document.documentElement.setAttribute('data-theme', e.data.theme);
+    });
+
+    function renderAll() {
+        renderHeader();
+        renderMap();
+        renderList();
+    }
+
+    // ===== Init =====
+    if (typeof ensureAuditSeedTasks === 'function') ensureAuditSeedTasks();
+    const id = parseInt(new URLSearchParams(window.location.search).get('id'), 10);
+    let tasks = [];
+    try { tasks = JSON.parse(localStorage.getItem('urbanPatrolTasks') || '[]'); } catch (e) { tasks = []; }
+    task = tasks.find(t => Number(t.id) === id) || null;
+    if (!task) {
+        document.body.innerHTML = '<div style="padding:60px;text-align:center;color:#888;">未找到任务数据<br><br><a href="urban-hazard-audit-list.html" style="color:#1a73e8;">返回审核列表</a></div>';
+        return;
+    }
+    houses = Array.isArray(task.selectedProjects) ? task.selectedProjects : [];
+    if (!houses.length && Array.isArray(task.houseNos) && typeof getHouseRecord === 'function') {
+        houses = task.houseNos.map((no, i) => {
+            const rec = getHouseRecord(no) || {};
+            return { id: i + 1, houseNo: no, name: rec.name || no, address: rec.address || '', owner: rec.owner || '',
+                structure: rec.category || rec.structure || '', year: rec.year || '', floors: rec.floors || '', area: rec.area || '',
+                phone: rec.phone || '', typeLabel: rec.houseNature || rec.houseTypeLabel || '', village: rec.community || '',
+                status: 'inspected', time: '', fillSource: 'pc', checkItems: [] };
+        });
+        task.selectedProjects = houses;
+    }
+    renderAll();
+})();
+</script>
+<script src="ui-modal.js"></script>
+</body>
+</html>

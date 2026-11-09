@@ -1,4 +1,4 @@
-﻿// 通用弹窗函数与检查项渲染（用于 pages/gas-risk-task-*.html）
+// 通用弹窗函数与检查项渲染（用于 pages/gas-risk-task-*.html）
 
 // 房屋来源徽标（无 source 字段的页面不显示）
 const POINT_SOURCE_BADGES = { assigned: '指派', archive: '档案', manual: '新增' };
@@ -487,7 +487,7 @@ function openPointFillModal(point, catalog, onSave, options) {
     const editItems = Array.isArray(opts.items) ? opts.items : null;
     // 检查项分两部分：清单内（按目录 gi 对应）+ 清单外新增隐患（extraHazard 标记）
     const stdItems = editItems ? editItems.filter(it => !it.extraHazard) : null;
-    const extraTypes = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const extraTypes = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     const extraHazards = editItems
         ? editItems.filter(it => it.extraHazard && extraTypes.indexOf(it.sub) !== -1)
             .map(it => ({ type: it.sub, level: it.level, photos: Array.isArray(it.photos) ? it.photos.slice() : [], description: it.description || '' }))
@@ -565,7 +565,7 @@ function buildFillModalContent() {
 // ===== 清单外问题：本次排查新增隐患（选填）=====
 // 勾选隐患类型 → 该类必须上传对应现场照片，并逐项做排查判断（第三类/第二类/第一类）
 function buildExtraHazardsSection() {
-    const types = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const types = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     if (!types.length) return '';
     const boxes = types.map((t, ti) => {
         const checked = fillContext.extraHazards.some(h => h.type === t);
@@ -587,7 +587,7 @@ function buildExtraHazardsSection() {
 }
 
 function buildExtraHazardCard(type) {
-    const types = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const types = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     const ti = types.indexOf(type);
     const h = fillContext.extraHazards.find(x => x.type === type);
     if (ti === -1 || !h) return '';
@@ -618,7 +618,7 @@ function buildExtraHazardCard(type) {
 }
 
 function fillExtraToggle(ti, checked) {
-    const types = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const types = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     const type = types[ti];
     if (!type || !fillContext) return;
     const idx = fillContext.extraHazards.findIndex(h => h.type === type);
@@ -633,7 +633,7 @@ function fillExtraToggle(ti, checked) {
 }
 
 function fillExtraLevel(ti, level) {
-    const types = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const types = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     const h = fillContext && fillContext.extraHazards.find(x => x.type === types[ti]);
     if (!h) return;
     h.level = level;
@@ -647,7 +647,7 @@ function fillExtraLevel(ti, level) {
 
 // ===== 清单外隐患照片：多图上传，点击放大 =====
 function buildExtraPhotoRowHtml(ti) {
-    const types = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const types = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     const h = fillContext.extraHazards.find(x => x.type === types[ti]);
     const photos = h ? h.photos : [];
     const thumbs = photos.map((src, i) => `
@@ -670,7 +670,7 @@ function fillExtraPhotoTrigger(ti) {
 }
 
 function fillExtraPhotoChange(ti, input) {
-    const types = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const types = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     const h = fillContext && fillContext.extraHazards.find(x => x.type === types[ti]);
     if (!h || !input.files || input.files.length === 0) return;
     Array.from(input.files).forEach(file => {
@@ -685,7 +685,7 @@ function fillExtraPhotoChange(ti, input) {
 }
 
 function fillExtraPhotoRemove(ti, idx) {
-    const types = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const types = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     const h = fillContext && fillContext.extraHazards.find(x => x.type === types[ti]);
     if (!h) return;
     h.photos.splice(idx, 1);
@@ -693,7 +693,7 @@ function fillExtraPhotoRemove(ti, idx) {
 }
 
 function fillExtraPhotoView(ti, idx) {
-    const types = window.RURAL_EXTRA_HAZARD_TYPES || [];
+    const types = (window.URBAN_EXTRA_HAZARD_TYPES || window.RURAL_EXTRA_HAZARD_TYPES || []);
     const h = fillContext && fillContext.extraHazards.find(x => x.type === types[ti]);
     if (!h || !h.photos[idx]) return;
     openPhotoViewer(h.photos[idx]);

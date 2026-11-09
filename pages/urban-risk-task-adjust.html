@@ -401,7 +401,6 @@ body {
  border-radius: 4px;
  font-size: 12px;
  font-weight: 600;
- white-space: nowrap;
 }
 .risk-tag.red { background: rgba(217,48,37,0.12); color: var(--risk-red); }
 
@@ -1314,6 +1313,7 @@ body {
 .status-rectify.accept-reject { color: var(--danger); background: rgba(217,48,37,0.10); }
 
 </style>
+    <link rel="stylesheet" href="ui-modal.css">
 </head>
 <body>
 
@@ -1362,6 +1362,10 @@ body {
    <button class="tab-btn" data-tab="tab-issue" onclick="switchTab(this)">
     <i class="fa-solid fa-triangle-exclamation"></i> 发现隐患清单
     <span class="tab-badge" id="tabBadgeIssue">2</span>
+   </button>
+   <button class="tab-btn" data-tab="tab-measure" onclick="switchTab(this)">
+    <i class="fa-solid fa-shield-halved"></i> 关联预防措施
+    <span class="tab-badge" id="tabBadgeMeasure">0</span>
    </button>
   </div>
 
@@ -1448,7 +1452,7 @@ body {
      <tbody id="scopeTableBody">
   <tr>
   <td><strong>FX-NC-ZF-0001</strong></td>
-  <td>上海市奉贤区青村镇解放村解放路120号</td>
+  <td>上海市奉贤区青村镇解放社区解放路120号</td>
   <td>
   <span class="risk-distribution">
   <span class="risk-item"><span class="risk-dot red"></span>1</span>
@@ -1583,6 +1587,30 @@ body {
     <div class="empty-state" id="issueEmpty" style="display:none;">
      <i class="fas fa-check-circle"></i>
      <p>暂未发现问题</p>
+    </div>
+    </div>
+   </div>
+  </div>
+
+  <!-- ========== Tab 4: 关联预防措施（随任务带入，指导责任单位规范执行） ========== -->
+  <div class="tab-content" id="tab-measure">
+   <div class="section-card" style="border-radius: 0 0 10px 10px;">
+    <div class="section-body" style="padding: 0;">
+    <div style="padding:10px 14px;font-size:12px;color:var(--text-secondary);border-bottom:1px solid var(--border);"><i class="fa-solid fa-circle-info" style="color:var(--primary);margin-right:4px;"></i>以下预防措施由任务关联的风险清单自动带入，指导责任单位规范执行；措施的新增与维护请前往「预防措施库」。</div>
+    <table class="data-table" id="adjustMeasureTable" style="display: table;">
+     <thead>
+      <tr>
+      <th>措施名称</th>
+      <th style="width:110px;">措施类型</th>
+      <th>措施描述</th>
+      <th style="width:180px;">责任主体建议</th>
+      </tr>
+     </thead>
+     <tbody id="adjustMeasureTableBody"></tbody>
+    </table>
+    <div class="empty-state" id="adjustMeasureEmpty" style="display:none;">
+     <i class="fas fa-shield-halved"></i>
+     <p>该任务暂未带入预防措施</p>
     </div>
     </div>
    </div>
@@ -1921,6 +1949,7 @@ body {
  </div>
 </div>
 
+<script src="./urban-risk-data.js"></script>
 <script>
 // Tab switch
 function switchTab(btn) {
@@ -1929,6 +1958,48 @@ function switchTab(btn) {
  btn.classList.add('active');
  document.getElementById(btn.dataset.tab).classList.add('active');
 }
+
+// ===== 关联预防措施页签（随任务自动带入，6.1.2.9.4） =====
+function renderAdjustMeasures() {
+ const tbody = document.getElementById('adjustMeasureTableBody');
+ if (!tbody || typeof urbanMeasureLibData === 'undefined' || typeof collectUrbanCarriedMeasures !== 'function') return;
+ let listIds = ['rl1'];
+ try {
+  const taskId = new URLSearchParams(window.location.search).get('id');
+  const saved = JSON.parse(localStorage.getItem('urbanPatrolTasks') || '[]');
+  const task = saved.find(t => String(t.id) === String(taskId));
+  if (task && Array.isArray(task.selectedRiskListIds) && task.selectedRiskListIds.length) listIds = task.selectedRiskListIds;
+ } catch (e) { /* 数据异常时按默认清单演示 */ }
+ const carried = collectUrbanCarriedMeasures(listIds);
+ const rows = [...carried.keys()].map(mid => urbanMeasureLibData.find(x => x.id === mid)).filter(Boolean);
+ const badge = document.getElementById('tabBadgeMeasure');
+ if (badge) badge.textContent = rows.length;
+ const empty = document.getElementById('adjustMeasureEmpty');
+ const table = document.getElementById('adjustMeasureTable');
+ if (!rows.length) {
+  tbody.innerHTML = '';
+  if (empty) empty.style.display = '';
+  if (table) table.style.display = 'none';
+  return;
+ }
+ if (empty) empty.style.display = 'none';
+ if (table) table.style.display = 'table';
+ const TYPE_STYLE = {
+  '工程措施': 'background:rgba(26,115,232,.12);color:#1a73e8;',
+  '管理措施': 'background:rgba(24,128,56,.12);color:#188038;',
+  '传统工艺措施': 'background:rgba(176,96,0,.12);color:#b06000;',
+  '宣教措施': 'background:rgba(147,52,230,.12);color:#9334e6;'
+ };
+ const strip = html => { const d = document.createElement('div'); d.innerHTML = html || ''; return d.textContent || ''; };
+ tbody.innerHTML = rows.map(m => `
+  <tr>
+   <td><strong>${m.name}</strong></td>
+   <td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;${TYPE_STYLE[m.type] || 'background:var(--bg-hover);'}">${m.type}</span></td>
+   <td style="color:var(--text-secondary);line-height:1.6;">${strip(m.desc)}</td>
+   <td style="font-size:12px;">${m.owner || '-'}</td>
+  </tr>`).join('');
+}
+renderAdjustMeasures();
 
 // Theme sync
 window.addEventListener('message', function(e) {
@@ -2162,13 +2233,13 @@ function saveAdjustDraft(type) {
   data: getAdjustDraftData(type),
   savedAt: new Date().toLocaleString('zh-CN', { hour12: false })
  };
- const key = `ruralRiskTaskAdjustDraft_${taskData.id}_${type}`;
+ const key = `urbanRiskTaskAdjustDraft_${taskData.id}_${type}`;
  localStorage.setItem(key, JSON.stringify(draft));
  alert('暂存成功！');
 }
 
 function restoreAdjustDraft(type) {
- const key = `ruralRiskTaskAdjustDraft_${taskData.id}_${type}`;
+ const key = `urbanRiskTaskAdjustDraft_${taskData.id}_${type}`;
  const raw = localStorage.getItem(key);
  if (!raw) return;
 
@@ -2222,19 +2293,34 @@ function restoreAllAdjustDrafts() {
 }
 
 // ===== Terminate Adjust =====
-function confirmTerminateAdjust() {
+async function confirmTerminateAdjust() {
  const reason = document.getElementById('terminateReason').value.trim();
  if (!reason) {
   alert('请输入任务终止原因');
   return;
  }
- if (confirm('确认终止该巡查任务？终止后任务将不可继续执行。')) {
+ if (await uiConfirm('确认终止该巡查任务？终止后任务将不可继续执行。')) {
+  try {
+   const taskId = new URLSearchParams(window.location.search).get('id');
+   const saved = JSON.parse(localStorage.getItem('urbanPatrolTasks') || '[]');
+   const task = saved.find(t => String(t.id) === String(taskId));
+   if (task) {
+    const now = new Date();
+    task.status = 'terminated';
+    task.statusLabel = '已终止';
+    task.statusClass = 'terminated';
+    task.terminateReason = reason;
+    task.terminateTime = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    localStorage.setItem('urbanPatrolTasks', JSON.stringify(saved));
+   }
+  } catch (e) { /* 数据异常时静默 */ }
   alert('任务终止成功！');
+  window.location.href = 'urban-patrol-task-management.html';
  }
 }
 
 // ===== Deadline Adjust =====
-function confirmDeadlineAdjust() {
+async function confirmDeadlineAdjust() {
  const newDeadline = document.getElementById('newDeadline').value;
  const reason = document.getElementById('deadlineReason').value.trim();
  
@@ -2247,13 +2333,13 @@ function confirmDeadlineAdjust() {
   return;
  }
  
- if (confirm(`确认将截止时间从 ${document.getElementById('currentDeadline').value} 调整至 ${newDeadline}？`)) {
+ if (await uiConfirm(`确认将截止时间从 ${document.getElementById('currentDeadline').value} 调整至 ${newDeadline}？`)) {
   alert('截止时间调整成功！');
  }
 }
 
 // ===== Person Adjust =====
-function confirmPersonAdjust() {
+async function confirmPersonAdjust() {
  const newPersonId = document.getElementById('newAssignPerson').value;
  const reason = document.getElementById('personReason').value.trim();
  
@@ -2269,7 +2355,7 @@ function confirmPersonAdjust() {
  const selectedPersons = personData.filter(p => newPersonId.split(',').includes(p.id));
  const names = selectedPersons.map(p => p.name).join('、');
  
- if (confirm(`确认将巡查人员调整为 ${names}？`)) {
+ if (await uiConfirm(`确认将巡查人员调整为 ${names}？`)) {
   alert('巡查人员调整成功！');
  }
 }
@@ -2438,17 +2524,17 @@ function addNewScopePoint() {
  openScopeModal();
 }
 
-function removeScopePoint(id) {
+async function removeScopePoint(id) {
  const item = document.querySelector(`.scope-item[data-id="${id}"]`);
  if (item) {
   const name = item.querySelector('.scope-name').textContent;
-  if (confirm(`确认删除巡查房屋 "${name}"？`)) {
+  if (await uiConfirm(`确认删除巡查房屋 "${name}"？`)) {
   item.remove();
   }
  }
 }
 
-function confirmScopeAdjust() {
+async function confirmScopeAdjust() {
  const reason = document.getElementById('scopeReason').value.trim();
  
  if (!reason) {
@@ -2456,7 +2542,7 @@ function confirmScopeAdjust() {
   return;
  }
  
- if (confirm('确认提交巡查房屋调整？')) {
+ if (await uiConfirm('确认提交巡查房屋调整？')) {
   alert('巡查房屋调整成功！');
  }
 }
@@ -2535,7 +2621,7 @@ function clearPersonSelection() {
  document.getElementById('selectedPersonDisplay').innerHTML = '';
 }
 
-function confirmAssign() {
+async function confirmAssign() {
  const personIds = document.getElementById('assignPerson').value;
  if (!personIds) {
   alert('请先选择巡查人员');
@@ -2543,7 +2629,7 @@ function confirmAssign() {
  }
  const selectedPersons = personData.filter(p => personIds.split(',').includes(p.id));
  const names = selectedPersons.map(p => p.name).join('、');
- if (confirm(`确认将任务分配给以下人员？\n\n${names}`)) {
+ if (await uiConfirm(`确认将任务分配给以下人员？\n\n${names}`)) {
   alert('分配成功！');
   // 实际项目中这里会调用API提交分配
  }
@@ -2710,15 +2796,15 @@ const flowSteps = [
 
 // Scope data
 const scopeData = [
- { id: 1, houseNo: 'FX-NC-ZF-0001', name: '青村镇解放路120号自建房', type: '城镇自建房', enterprise: '青村镇社区镇建设管理办公室', address: '上海市奉贤区青村镇解放村解放路120号', risk: 'high', riskLabel: '第三类', riskDistribution: { red: 1, yellow: 0, blue: 0 }, status: 'inspected', statusLabel: '已巡查', time: '2025-06-02 09:15', checkItems: [
+ { id: 1, houseNo: 'FX-NC-ZF-0001', name: '青村镇解放路120号自建房', type: '城镇自建房', enterprise: '青村镇村镇建设管理办公室', address: '上海市奉贤区青村镇解放社区解放路120号', risk: 'high', riskLabel: '疑似危房', riskDistribution: { red: 1, yellow: 0, blue: 0 }, status: 'inspected', statusLabel: '已巡查', time: '2025-06-02 09:15', checkItems: [
   { id: 1, main: '城镇自建房结构', sub: '墙体/梁柱', content: '墙体、梁柱、基础构件缺陷', risk: '房屋结构用材不符合国家相关规范要求形成管体破裂', accident: '坍塌、人员伤亡', level: 'red', result: 'normal' },
   { id: 2, main: '城镇自建房结构', sub: '墙体/梁柱', content: '强度不足', risk: '结构强度检测不符合国家相关规范要求', accident: '坍塌、人员伤亡', level: 'yellow', result: 'abnormal' }
  ]},
- { id: 2, houseNo: 'FX-NC-ZF-0002', name: '青村镇人民路88号隐患点', type: '城镇自建房结构', enterprise: '青村镇社区镇建设管理办公室', address: '上海市奉贤区青村镇人民社区人民路88号', risk: 'medium', riskLabel: '第二类', riskDistribution: { red: 0, yellow: 1, blue: 0 }, status: 'inspected', statusLabel: '已巡查', time: '2025-06-02 10:30', checkItems: [
+ { id: 2, houseNo: 'FX-NC-ZF-0002', name: '青村镇人民路88号隐患点', type: '城镇自建房结构', enterprise: '青村镇村镇建设管理办公室', address: '上海市奉贤区青村镇人民社区人民路88号', risk: 'medium', riskLabel: '疑似一般损坏房', riskDistribution: { red: 0, yellow: 1, blue: 0 }, status: 'inspected', statusLabel: '已巡查', time: '2025-06-02 10:30', checkItems: [
   { id: 3, main: '城镇自建房结构', sub: '构件（节点）', content: '连接节点不牢', risk: '焊接施工不符合国家相关规范要求，造成焊接接头缺陷扩展造成坍塌', accident: '坍塌、人员伤亡', level: 'yellow', result: 'recheck' }
  ]},
- { id: 3, houseNo: 'FX-NC-ZF-0003', name: '青村镇建设路55号农户基础', type: '农户', enterprise: '青村镇社区委会', address: '上海市奉贤区青村镇建设村建设路55号', risk: 'high', riskLabel: '第三类', riskDistribution: { red: 1, yellow: 0, blue: 0 }, status: 'pending', statusLabel: '待巡查', time: '', checkItems: []},
- { id: 4, houseNo: 'FX-NC-ZF-0004', name: '青村镇光明路200号自建房', type: '城镇自建房', enterprise: '青村镇社区镇建设管理办公室', address: '上海市奉贤区青村镇光明社区光明路200号', risk: 'low', riskLabel: '第一类', riskDistribution: { red: 0, yellow: 0, blue: 1 }, status: 'pending', statusLabel: '待巡查', time: '', checkItems: []}
+ { id: 3, houseNo: 'FX-NC-ZF-0003', name: '青村镇建设路55号农户基础', type: '农户', enterprise: '青村镇村委会', address: '上海市奉贤区青村镇建设村建设路55号', risk: 'high', riskLabel: '疑似危房', riskDistribution: { red: 1, yellow: 0, blue: 0 }, status: 'pending', statusLabel: '待巡查', time: '', checkItems: []},
+ { id: 4, houseNo: 'FX-NC-ZF-0004', name: '青村镇光明路200号自建房', type: '城镇自建房', enterprise: '青村镇村镇建设管理办公室', address: '上海市奉贤区青村镇光明社区光明路200号', risk: 'low', riskLabel: '完好房（基本完好房）', riskDistribution: { red: 0, yellow: 0, blue: 1 }, status: 'pending', statusLabel: '待巡查', time: '', checkItems: []}
 ];
 
 // 巡查房屋弹窗数据
@@ -2753,8 +2839,8 @@ function issueDemoPhoto(label) {
 }
 
 const issueData = [
- { houseNo: 'FX-NC-ZF-0001', address: '上海市奉贤区青村镇解放路120号', mainItem: '城镇自建房结构', subItem: '墙体', riskType: '墙体开裂变形', content: '现场实测：承重墙体多数受力裂缝，部分承重墙体明显位移和歪闪。', risk: 'high', riskLabel: '严重安全隐患', accident: '墙体酥碎或倒塌', status: 'pending-audit', statusLabel: '待审核', foundTime: '2025-06-02 09:30', photos: [issueDemoPhoto('墙体')] },
- { houseNo: 'FX-NC-ZF-0002', address: '上海市奉贤区青村镇人民路88号', mainItem: '城镇自建房结构', subItem: '梁、柱', riskType: '梁柱开裂变形', content: '现场实测：梁、柱出现受力裂缝，个别梁柱节点破损和开裂明显。', risk: 'medium', riskLabel: '一定安全隐患', accident: '梁、柱倒塌，房屋坍塌或局部坍塌', status: 'pending-handle', statusLabel: '待处置', foundTime: '2025-06-02 10:45', photos: [issueDemoPhoto('梁、柱')] }
+ { houseNo: 'FX-NC-ZF-0001', address: '上海市奉贤区南桥镇杨王社区1号', mainItem: '建筑结构信息', subItem: '梁、柱', riskType: '梁柱开裂变形', content: '现场实测：梁、柱节点损坏严重，梁、柱普遍开裂，有明显变形和位移。', risk: 'high', riskLabel: '严重安全隐患', accident: '梁、柱倒塌，房屋坍塌或局部坍塌', status: 'pending-audit', statusLabel: '待审核', foundTime: '2025-06-02 09:30', photos: [issueDemoPhoto('梁、柱')] },
+ { houseNo: 'FX-NC-ZF-0002', address: '上海市奉贤区南桥镇杨王社区2号', mainItem: '建筑结构信息', subItem: '墙体', riskType: '墙体开裂变形', content: '现场实测：承重墙体有少量受力裂缝和变形。', risk: 'medium', riskLabel: '一定安全隐患', accident: '墙体酥碎或倒塌', status: 'pending-handle', statusLabel: '待处置', foundTime: '2025-06-02 10:45', photos: [issueDemoPhoto('墙体')] }
 ];
 
 const issueStatusMap = {
@@ -3130,7 +3216,14 @@ renderHiddenCount();
 renderAuditHistory();
 restoreAllAdjustDrafts();
 </script>
+<script>
+// 城镇自建房隐患上报：仅保留 隐患描述/现场照片（去掉 紧急程度/处置方式/影响范围），标题为"隐患上报"
+window.POINT_MODAL_ABNORMAL_FIELDS = ['description', 'photos'];
+window.POINT_MODAL_ABNORMAL_TITLE = '隐患上报';
+window.POINT_MODAL_PHOTOS_LABEL = '现场照片';
+</script>
 <script src="./pc-point-modal.js"></script>
 
 
+    <script src="ui-modal.js"></script>
 </body></html>
