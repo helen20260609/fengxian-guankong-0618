@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="./all.min.css">
     <script src="../js/third-party-data.js"></script>
     <script src="../js/house-arch-data.js"></script>
+<script src="rural-risk-data.js"></script>
     <script>
         // =========================================================
         // 房屋建筑档案状态联动数据层（已接入 house-arch-data.js 统一数据层）
@@ -260,9 +261,9 @@
             if (area !== undefined && area !== '—') {
                 record.street = area.replace(/^奉贤区/, '');
             }
-            // 房屋性质 → houseType
+            // 房屋性质 → houseNature（住宅/非住宅，不得写入 houseType，避免污染房屋类别）
             const ht = getVal('房屋性质');
-            if (ht !== undefined && ht !== '—') record.houseType = ht;
+            if (ht !== undefined && ht !== '—') record.houseNature = ht;
             // 路号信息 → address
             const addr = getVal('路号信息');
             if (addr !== undefined && addr !== '—') record.address = addr;
@@ -353,6 +354,53 @@
             if (v === '发现隐患') return '存在一定安全隐患(第二类)';
             if (v === '需整改') return '存在严重安全隐患(第三类)';
             return v;
+        }
+
+        // ===== 风险等级综合研判（引用 rural-risk-data.js 规则引擎，6.1.2.17.1 预设规则判定分级）=====
+        function houseLevelToColor(lv) { return lv === '第三类' ? 'red' : (lv === '第二类' ? 'yellow' : 'blue'); }
+        function colorToHouseLevel(c) { return (c === 'red' || c === 'orange') ? '第三类' : (c === 'yellow' ? '第二类' : '第一类'); }
+        // 从房屋档案基础信息提取五因子：房屋类型/结构形式/建筑年代/地理区域/历史问题
+        function getHouseRiskFactors(rec) {
+            rec = rec || currentHouseArch || {};
+            let libJbxx = [], libJsqk = [], libJgxx = [];
+            try {
+                const libBasic = (typeof getBasicData === 'function') ? getBasicData() : {};
+                libJbxx = libBasic.jbxx || []; libJsqk = libBasic.jsqk || []; libJgxx = libBasic.jgxx || [];
+            } catch (e) {}
+            const lv = function(rows, label) {
+                const row = (rows || []).find(function(x){ return x && x[0] === label; });
+                return row ? String(row[1] || '') : '';
+            };
+            // 房屋类型（口径与研判规则一致：独立住宅/集合住宅/非住宅/辅助用房）
+            const houseType = lv(libJbxx, '房屋类型') || '独立住宅';
+            // 结构形式：档案口径（砖混/砖木/土木/石木…）映射到研判规则口径
+            const rawStruct = lv(libJbxx, '结构类型') || lv(libJsqk, '结构类型');
+            let structureType = '';
+            const structMap = [['砖混', '砌体结构'], ['砌体', '砌体结构'], ['砖木', '木（竹）结构'], ['木（竹）', '木（竹）结构'], ['土木', '土木/石木结构'], ['石木', '土木/石木结构'], ['混杂', '混杂结构'], ['窑洞', '窑洞'], ['框架', '钢筋混凝土结构'], ['钢筋混凝土', '钢筋混凝土结构'], ['钢', '钢结构']];
+            for (let mi = 0; mi < structMap.length; mi++) { if (rawStruct.indexOf(structMap[mi][0]) >= 0) { structureType = structMap[mi][1]; break; } }
+            if (!structureType && rawStruct && rawStruct !== '—') structureType = '其他';
+            // 建筑年代：由建成/建造时间推算房龄分档
+            const yearText = lv(libJbxx, '建成时间') || lv(libJbxx, '建造时间') || lv(libJbxx, '具体年份');
+            const ym = String(yearText).match(/(19|20)\d{2}/);
+            let buildYear = '';
+            if (ym) { const age = new Date().getFullYear() - parseInt(ym[0], 10); buildYear = age > 40 ? '40年以上' : (age >= 20 ? '20-40年' : '20年以下'); }
+            // 地理区域：隐患点周边 / 重点区域（人员聚集场所）
+            let region = '';
+            const regionText = lv(libJbxx, '所在区域类型') + ' ' + lv(libJbxx, '所在区域（区域类型）');
+            if (/隐患点|地质灾害|采空|洪涝/.test(regionText)) region = '隐患点周边';
+            else if (lv(libJbxx, '人员聚集场所周边') === '是' || lv(libJbxx, '是否人员聚集场所') === '是') region = '重点区域';
+            // 历史问题：改扩建记录 / 既往隐患记录
+            let history = '';
+            const rebuild = lv(libJsqk, '是否改扩建'), rebuildInfo = lv(libJgxx, '改扩建情况');
+            if (rebuild === '是' || rebuild === '有' || rebuildInfo === '改扩建' || rebuildInfo === '有') history = '有改扩建记录';
+            else if ((rec.hazardRecords || []).length > 0 || (rec.riskRecords || []).length > 0) history = '有既往隐患记录';
+            return { houseType: houseType, structureType: structureType, buildYear: buildYear, region: region, history: history };
+        }
+        // 综合研判入口：基准等级 + 五因子 → { level, score, basis[] }
+        function suggestHouseRiskLevel(rec, baseLevelText) {
+            if (typeof suggestRuralLevel !== 'function' || typeof getRuralLevelRules !== 'function') return null;
+            const r = suggestRuralLevel({ level: houseLevelToColor(baseLevelText || '第一类'), houseType: '不限', structureType: '不限' }, getHouseRiskFactors(rec), getRuralLevelRules());
+            return { level: colorToHouseLevel(r.level), score: r.score, basis: r.basis };
         }
 
         // 风险信息记录唯一编号
@@ -2418,22 +2466,31 @@
                 </div>
                 <div class="form-item">
                     <label class="form-label">风险等级</label>
-                    <select class="form-input form-select" id="manualRiskLevel">
+                    <select class="form-input form-select" id="manualRiskLevel" onchange="refreshManualRiskSuggest()">
                         <option>第三类</option>
                         <option>第二类</option>
                         <option>第一类</option>
                     </select>
                 </div>
                 <div class="form-item">
-                    <label class="form-label">状态</label>
+                    <label class="form-label">风险状态</label>
                     <select class="form-input form-select" id="manualRiskStatus">
-                        <option>未闭环</option>
-                        <option>已闭环</option>
+                        <option>待核实</option>
+                        <option>已核实</option>
+                        <option>处置中</option>
+                        <option>已销号</option>
                     </select>
+                </div>
+                <div class="form-item form-item-full" id="manualRiskSuggestWrap" style="background:#f6f9ff;border:1px dashed #c3d6fb;border-radius:6px;padding:8px 12px;">
+                    <!-- 综合研判建议由 refreshManualRiskSuggest() 渲染 -->
                 </div>
                 <div class="form-item form-item-full">
                     <label class="form-label">空间位置</label>
                     <input class="form-input" type="text" id="manualRiskSpatial" placeholder="如：上海市奉贤区西渡街道XX村XX号">
+                </div>
+                <div class="form-item form-item-full">
+                    <label class="form-label">潜在危害 <span style="font-weight:normal;color:#909399;font-size:12px;">（按风险类型自动带入，可修改）</span></label>
+                    <textarea class="form-input" id="manualRiskHazard" rows="2" placeholder="选择风险类型后自动带入"></textarea>
                 </div>
                 <div class="form-item form-item-full">
                     <label class="form-label">防范措施建议 <span style="font-weight:normal;color:#909399;font-size:12px;">（按风险类型自动带入，可修改）</span></label>
@@ -2589,6 +2646,16 @@
                     <div class="form-item">
                         <label class="form-label">验收标准</label>
                         <input class="form-input" id="mlAccept" placeholder="如：裂缝不再发展">
+                    </div>
+                    <div class="form-item form-item-full">
+                        <label class="form-label">施工示意图 <span style="font-weight:normal;color:#909399;font-size:12px;">（图文结合，便于农村工匠理解操作）</span></label>
+                        <input type="file" id="mlImgFile" accept="image/*" style="font-size:12px;" onchange="onMlImgChange(this)">
+                        <input type="hidden" id="mlImg">
+                        <div id="mlImgPreview" style="margin-top:6px;"></div>
+                    </div>
+                    <div class="form-item form-item-full">
+                        <label class="form-label">阶段性节点 <span style="font-weight:normal;color:#909399;font-size:12px;">（涉及农房改造补助资金申请时填写）</span></label>
+                        <input class="form-input" id="mlFunding" placeholder="如：3个月内完成补助申请，6个月内启动施工，12个月内完成整改">
                     </div>
                 </div>
             </div>
@@ -2877,6 +2944,9 @@
             { key: 'quality', icon: 'fa-check-circle', title: '最新质检信息', tag: '质量检查', ruralOnly: true },
             { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '事件记录', ruralOnly: true },
             { key: 'taskFlow', icon: 'fa-tasks', title: '任务记录', tag: '排查任务', ruralOnly: true },
+            { key: 'maintenance', icon: 'fa-wrench', title: '维修记录', tag: '全周期档案' },
+            { key: 'renovation', icon: 'fa-hammer', title: '改造记录', tag: '全周期档案' },
+            { key: 'elimination', icon: 'fa-check-double', title: '消险记录', tag: '闭环完成' },
             { key: 'changeLog', icon: 'fa-history', title: '留痕记录', tag: '修改留痕', ruralOnly: true }
         ];
 
@@ -2886,6 +2956,8 @@
             { key: 'jsqk', title: '建设情况', icon: 'fa-hard-hat', count: 7 },
             { key: 'glqk', title: '管理情况', icon: 'fa-file-alt', count: 2 },
             { key: 'designConstruction', title: '设计施工信息', icon: 'fa-hard-hat', count: 5, ruralOnly: true },
+            { key: 'jgtd', title: '结构特点', icon: 'fa-building', count: 4 },
+            { key: 'jzcl', title: '建筑材料', icon: 'fa-cubes', count: 3 },
             { key: 'syxx', title: '使用信息', icon: 'fa-home', count: 13, ruralOnly: true },
             { key: 'safeStatus', title: '房屋安全状况', icon: 'fa-shield-alt', count: 2, ruralOnly: true },
             { key: 'qtxx', title: '其他信息', icon: 'fa-info-circle', count: 10, ruralOnly: true }
@@ -3914,7 +3986,7 @@
             renderStatusPanel();
             const area = document.getElementById('contentArea');
             // 治理节点已收编进「隐患台账」详情与侧栏一级入口，兜底：非法 currentSidebar 归位到 risk
-            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'risk', 'hazard', 'assessment', 'evaluation', 'plan', 'measure', 'measureLib', 'controlSituation', 'accept', 'close', 'quality', 'emergency', 'taskFlow', 'changeLog'];
+            const __VALID_SIDEBARS = ['basic', 'discovery', 'survey', 'patrol', 'risk', 'hazard', 'assessment', 'evaluation', 'plan', 'measure', 'measureLib', 'controlSituation', 'accept', 'close', 'quality', 'emergency', 'taskFlow', 'maintenance', 'renovation', 'elimination', 'changeLog'];
             if (__VALID_SIDEBARS.indexOf(currentSidebar) === -1) currentSidebar = 'risk';
             if (currentSidebar === 'basic') {
                 area.innerHTML = renderBasicContent();
@@ -4548,9 +4620,34 @@
                     viewItem('是否进行过抗震加固（选填）') + '<div class="info-item rural-view-empty"></div>' +
                 '</div>';
             }
+            // 结构特点/建筑材料（一房一档 6.1.2.23.3）：按房屋记录渲染，农房/城镇通用
+            let jgtdViewHtml = '';
+            if (currentSubTab === 'jgtd') {
+                const sf = s.structureFeatures || {};
+                const sfItem = function(label, value) {
+                    const v = value || '';
+                    return '<div class="info-item"><div class="info-label">' + label + '</div><div class="info-value' + (v ? '' : ' empty') + '">' + (v || '—') + '</div></div>';
+                };
+                jgtdViewHtml = '<div class="info-grid info-grid-2col">' +
+                    sfItem('基础形式', sf.basicForm) +
+                    sfItem('承重体系', sf.bearingSystem) +
+                    sfItem('楼盖形式', sf.floorForm) +
+                    sfItem('屋面形式', sf.roofForm) +
+                '</div>';
+            }
+            let jzclViewHtml = '';
+            if (currentSubTab === 'jzcl') {
+                const mats = Array.isArray(s.buildMaterials) ? s.buildMaterials : [];
+                jzclViewHtml = mats.length
+                    ? '<div class="table-wrap"><table class="arch-table"><thead><tr><th>序号</th><th>材料类型</th><th>强度等级/规格</th><th>生产厂家/来源</th></tr></thead><tbody>' +
+                        mats.map(function(m, i) {
+                            return '<tr><td>' + (i + 1) + '</td><td>' + (m.type || '—') + '</td><td>' + (m.strength || '—') + '</td><td>' + (m.manufacturer || '—') + '</td></tr>';
+                        }).join('') + '</tbody></table></div>'
+                    : '<div class="record-empty">暂无建筑材料记录</div>';
+            }
             const bodyHtml = currentSubTab === 'designConstruction'
                 ? designConstructionHtml
-                : ((!isUrbanHouse() && currentSubTab === 'jbxx') ? jbxxViewHtml : ((!isUrbanHouse() && currentSubTab === 'safeStatus') ? safeStatusViewHtml : ((!isUrbanHouse() && currentSubTab === 'qtxx') ? qtxxViewHtml : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>')));
+                : (currentSubTab === 'jgtd' ? jgtdViewHtml : (currentSubTab === 'jzcl' ? jzclViewHtml : ((!isUrbanHouse() && currentSubTab === 'jbxx') ? jbxxViewHtml : ((!isUrbanHouse() && currentSubTab === 'safeStatus') ? safeStatusViewHtml : ((!isUrbanHouse() && currentSubTab === 'qtxx') ? qtxxViewHtml : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>')))));
 
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
@@ -6129,6 +6226,12 @@
 
             if (key === 'emergency') {
                 html += renderEmergencyContent(s);
+            } else if (key === 'maintenance') {
+                html += renderMaintenanceContent(s);
+            } else if (key === 'renovation') {
+                html += renderRenovationContent(s);
+            } else if (key === 'elimination') {
+                html += renderEliminationContent(s);
             } else if (key === 'risk') {
                 html += renderRiskContent(s);
             } else if (key === 'taskFlow') {
@@ -6163,6 +6266,8 @@
                 // 鉴定/评估：记录卡片头部已含新增填报按钮，底栏不再重复
             } else if (key === 'emergency') {
                 // 应急处置：记录列表已含新增/编辑/删除，底栏不再重复
+            } else if (key === 'maintenance' || key === 'renovation' || key === 'elimination') {
+                // 维修/改造/消险记录：列表头部已含新增按钮（消险为只读档案），底栏不再重复
             } else if (key === 'accept') {
                 // 阶段性验收：填报卡片列表已含编辑/新增按钮，此处不再显示底部按钮
             } else if (key === 'control') {
@@ -6745,9 +6850,25 @@
             renderContent();
         }
 
-        // 风险记录状态推导（1:1 模型）：
-        //   未闭环 = 关联隐患未销号
-        //   已闭环 = 关联隐患已销号
+        // ===== 风险状态四态（6.1.2.17.2）：待核实 / 已核实 / 处置中 / 已销号 =====
+        const RISK_STATUS_OPTIONS = ['待核实', '已核实', '处置中', '已销号'];
+        // 历史数据口径迁移：未闭环→处置中，已闭环→已销号
+        const MANUAL_STATUS_LEGACY = { '未闭环': '处置中', '已闭环': '已销号' };
+        function __riskStatusTagCls(st) {
+            return st === '已销号' ? 'safe' : (st === '处置中' ? 'warning' : (st === '已核实' ? 'info' : 'danger'));
+        }
+        // 手动录入记录风险编号：RA-<房屋编号>-M<序号>（与派生记录 RA-<编号>-NNN 区分）
+        function nextManualRiskArchiveNo(s) {
+            const list = (s && Array.isArray(s.manualRiskRecords)) ? s.manualRiskRecords : [];
+            let max = 0;
+            list.forEach(function(it){
+                const m = /-M(\d+)$/.exec(String((it && it.archiveNo) || ''));
+                if (m) max = Math.max(max, parseInt(m[1], 10));
+            });
+            return 'RA-' + ((s && s.no) || 'X') + '-M' + String(max + 1).padStart(2, '0');
+        }
+        // 风险记录状态推导（1:1 模型，四态口径）：
+        //   已销号 = 关联隐患已销号；处置中 = 整治/验收阶段；已核实 = 已核实/已分级；其余待核实
         //   （无隐患的排查/巡查不生成风险记录；无 hazardId 仅为旧数据兜底）
         function __riskRecordStatus(s, rr) {
             if (!s || !rr) return { text: '—', cls: 'info' };
@@ -6755,9 +6876,11 @@
             if (!hid) return { text: '无隐患', cls: 'info' };
             const hz = (s.hazardRecords || []).find(function(h){ return h.id === hid; });
             if (!hz) return { text: '无隐患', cls: 'info' };
-            return hz.currentStatus === HAZARD_STATUS.CLOSED
-                ? { text: '已闭环', cls: 'safe' }
-                : { text: '未闭环', cls: 'warning' };
+            if (hz.currentStatus === HAZARD_STATUS.CLOSED) return { text: '已销号', cls: 'safe' };
+            const stage = rr.stage || '';
+            if (stage === 'rectifying' || stage === 'accepting') return { text: '处置中', cls: 'warning' };
+            if (stage === 'verified' || stage === 'graded') return { text: '已核实', cls: 'info' };
+            return { text: '待核实', cls: 'danger' };
         }
 
         // ========== 三层档案：风险级档案 UI 辅助 ==========
@@ -6913,16 +7036,17 @@
             typeSel.innerHTML = '<option value="">请选择（自动带入描述模板与防范建议）</option>' +
                 Object.keys(lib).map(function(t){ return '<option value="' + escapeHtml(t) + '">' + escapeHtml(t) + '</option>'; }).join('');
             typeSel.value = rec.riskTypeKey || '';
-            document.getElementById('manualRiskModalTitle').textContent = id ? '编辑手动录入记录' : '手动录入风险记录';
+            document.getElementById('manualRiskModalTitle').textContent = id ? ('编辑手动录入记录' + (rec.archiveNo ? '（' + rec.archiveNo + '）' : '')) : '手动录入风险记录';
             document.getElementById('manualRiskName').value = rec.riskName || '';
             document.getElementById('manualRiskDate').value = rec.date || todayStr;
             document.getElementById('manualRiskPerson').value = rec.person || '';
             document.getElementById('manualRiskType').value = rec.hazardType || '';
             document.getElementById('manualRiskLocation').value = rec.location || '';
             document.getElementById('manualRiskLevel').value = rec.riskLevel || '第三类';
-            document.getElementById('manualRiskStatus').value = rec.status || '未闭环';
+            document.getElementById('manualRiskStatus').value = MANUAL_STATUS_LEGACY[rec.status] || rec.status || '待核实';
             document.getElementById('manualRiskSpatial').value = rec.spatialLocation || '';
             document.getElementById('manualRiskPrevention').value = rec.prevention || '';
+            document.getElementById('manualRiskHazard').value = rec.potentialHazard || '';
             document.getElementById('manualRiskDesc').value = rec.desc || '';
             document.getElementById('manualRiskDescRich').innerHTML = rec.descRich || escapeHtml(rec.desc || '');
             // 关联监测点勾选列表
@@ -6955,6 +7079,33 @@
             }
             document.getElementById('manualRiskDeleteBtn').style.display = id ? '' : 'none';
             document.getElementById('manualRiskModal').classList.add('open');
+            refreshManualRiskSuggest();
+        }
+
+        // 综合研判建议面板：基于房屋五因子 + 当前所选等级实时计算
+        function refreshManualRiskSuggest() {
+            const wrap = document.getElementById('manualRiskSuggestWrap');
+            if (!wrap) return;
+            const cur = document.getElementById('manualRiskLevel').value;
+            const sug = suggestHouseRiskLevel(currentHouseArch, cur);
+            if (!sug) { wrap.innerHTML = '<span style="font-size:12px;color:#909399;">综合研判引擎未加载</span>'; return; }
+            window.__manualRiskSuggest = sug;
+            const clsOf = function(l){ return l === '第三类' ? 'danger' : (l === '第二类' ? 'warning' : 'info'); };
+            const raised = sug.level !== cur;
+            wrap.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                '<span style="font-size:13px;font-weight:600;color:#1d4ed8;"><i class="fas fa-brain"></i> 综合研判建议</span>' +
+                '<span class="tag ' + clsOf(sug.level) + '">' + sug.level + '</span>' +
+                (raised
+                    ? '<button type="button" class="modal-btn" style="padding:2px 10px;font-size:12px;" onclick="adoptManualRiskSuggest()">采用建议</button><span style="font-size:12px;color:#e6a23c;">当前所选等级低于建议等级</span>'
+                    : '<span style="font-size:12px;color:#67c23a;">当前等级已达建议水平</span>') +
+                '</div>' +
+                '<div style="font-size:12px;color:#606266;margin-top:4px;">依据：' + escapeHtml(sug.basis.join('；')) + '</div>';
+        }
+        function adoptManualRiskSuggest() {
+            const sug = window.__manualRiskSuggest;
+            if (!sug) return;
+            document.getElementById('manualRiskLevel').value = sug.level;
+            refreshManualRiskSuggest();
         }
 
         // ===== 消息通知中心（6.1.2.17.2 演示）=====
@@ -6999,6 +7150,7 @@
             document.getElementById('manualRiskDesc').value = tpl;
             document.getElementById('manualRiskDescRich').innerHTML = escapeHtml(tpl);
             document.getElementById('manualRiskPrevention').value = item.prevention || '';
+            document.getElementById('manualRiskHazard').value = item.hazard || '';
         }
 
         // 富文本工具栏：插入现场照片（FileReader → dataURL，沿用现有照片模式）
@@ -7043,9 +7195,12 @@
                 status: document.getElementById('manualRiskStatus').value,
                 spatialLocation: document.getElementById('manualRiskSpatial').value.trim(),
                 prevention: document.getElementById('manualRiskPrevention').value.trim(),
+                potentialHazard: document.getElementById('manualRiskHazard').value.trim(),
                 desc: document.getElementById('manualRiskDescRich').innerText.trim(),
                 descRich: (richHtml === '<br>' || richHtml === '') ? '' : richHtml,
-                monitorPointIds: Array.from(document.querySelectorAll('.manual-mp-check:checked')).map(function(cb){ return cb.value; })
+                monitorPointIds: Array.from(document.querySelectorAll('.manual-mp-check:checked')).map(function(cb){ return cb.value; }),
+                suggestLevel: (window.__manualRiskSuggest && window.__manualRiskSuggest.level) || '',
+                levelBasis: (window.__manualRiskSuggest && window.__manualRiskSuggest.basis) || []
             };
             if (!rec.date) { alert('请选择发现日期'); return; }
             if (!rec.hazardType) { alert('请填写隐患类型'); return; }
@@ -7054,7 +7209,7 @@
             const now = new Date();
             const pad = function(n){ return (n < 10 ? '0' : '') + n; };
             const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
-            const FIELD_LABELS = { riskName: '风险名称', date: '发现日期', person: '发现人', hazardType: '隐患类型', location: '隐患部位', riskLevel: '风险等级', status: '状态', spatialLocation: '空间位置', prevention: '防范措施建议', desc: '风险描述', monitorPointIds: '关联监测点' };
+            const FIELD_LABELS = { riskName: '风险名称', date: '发现日期', person: '发现人', hazardType: '隐患类型', location: '隐患部位', riskLevel: '风险等级', status: '风险状态', spatialLocation: '空间位置', prevention: '防范措施建议', potentialHazard: '潜在危害', desc: '风险描述', monitorPointIds: '关联监测点' };
             const idx = s.manualRiskRecords.findIndex(function(it){ return String(it.id) === String(rec.id); });
             if (idx >= 0) {
                 const old = s.manualRiskRecords[idx];
@@ -7068,11 +7223,13 @@
                     return FIELD_LABELS[k] + '：' + ov + ' → ' + nv;
                 });
                 rec.opLogs = Array.isArray(old.opLogs) ? old.opLogs : [];
+                rec.archiveNo = old.archiveNo || nextManualRiskArchiveNo(s); // 编号一经写入不覆盖
                 if (changes.length) rec.opLogs.push({ time: ts, operator: rec.person || '当前用户', action: '修改', content: changes.join('；') });
                 else rec.opLogs.push({ time: ts, operator: rec.person || '当前用户', action: '保存', content: '内容无变化' });
                 s.manualRiskRecords[idx] = rec;
             } else {
-                rec.opLogs = [{ time: ts, operator: rec.person || '当前用户', action: '录入', content: '新增手动录入风险记录' }];
+                rec.archiveNo = nextManualRiskArchiveNo(s);
+                rec.opLogs = [{ time: ts, operator: rec.person || '当前用户', action: '录入', content: '新增手动录入风险记录（编号 ' + rec.archiveNo + '）' }];
                 s.manualRiskRecords.unshift(rec);
             }
             // 录入/修改后自动触发消息通知（6.1.2.17.2），推送至责任人与监管人员
@@ -7108,7 +7265,19 @@
             if (!currentRiskRecordKey) {
                 // 来源二：手动录入记录（持久化在房屋档案 manualRiskRecords）
                 const manualRecords = (Array.isArray(s.manualRiskRecords) ? s.manualRiskRecords.slice() : []);
-                const manualStatusOf = function(it){ return it.status === '已闭环' ? { text: '已闭环', cls: 'safe' } : { text: '未闭环', cls: 'warning' }; };
+                // 历史数据迁移：补风险编号、状态口径未闭环/已闭环 → 四态
+                let migrated = false;
+                manualRecords.forEach(function(it){
+                    if (!it.archiveNo) { it.archiveNo = nextManualRiskArchiveNo(s); migrated = true; }
+                    const norm = MANUAL_STATUS_LEGACY[it.status];
+                    if (norm) { it.status = norm; migrated = true; }
+                    if (!it.status) { it.status = '待核实'; migrated = true; }
+                });
+                if (migrated) saveCurrentHouseArch(s);
+                const manualStatusOf = function(it){
+                    const st = it.status || '待核实';
+                    return { text: st, cls: __riskStatusTagCls(st) };
+                };
                 const combined = records.map(function(it){ return { kind: 'derived', it: it }; })
                     .concat(manualRecords.map(function(it){ return { kind: 'manual', it: it }; }))
                     .sort(function(a, b){ return String(b.it.date || '').slice(0, 10).localeCompare(String(a.it.date || '').slice(0, 10)); });
@@ -7140,24 +7309,19 @@
                         '暂无风险信息记录<br><span style="font-size:12px;">风险信息记录支持「风险隐患核实」关联与手动录入</span><br>' +
                         '<button class="bottom-btn primary" style="margin-top:14px;padding:5px 16px;font-size:13px;" onclick="openManualRiskModal()"><i class="fas fa-plus"></i> 手动录入</button></div>';
                 }
-                // 状态筛选chip（含手动录入记录）
-                const filter = window.riskStatusFilter || 'all';
+                // 状态筛选chip（含手动录入记录，四态）
+                let filter = window.riskStatusFilter || 'all';
+                if (filter === 'open' || filter === 'closed') { filter = 'all'; window.riskStatusFilter = 'all'; } // 旧口径兜底
                 const statusOfItem = function(en){ return en.kind === 'manual' ? manualStatusOf(en.it) : __riskRecordStatus(s, en.it); };
-                const cntAll = combined.length;
-                const cntOpen = combined.filter(function(en){ return statusOfItem(en).text === '未闭环'; }).length;
-                const cntClosed = combined.filter(function(en){ return statusOfItem(en).text === '已闭环'; }).length;
                 const filtered = combined.filter(function(en){
-                    const st = statusOfItem(en).text;
-                    if (filter === 'open') return st === '未闭环';
-                    if (filter === 'closed') return st === '已闭环';
-                    return true;
+                    return filter === 'all' || statusOfItem(en).text === filter;
                 });
                 const paged = paginateSlice('riskList', filtered);
-                const chips = [
-                    { key: 'all', label: '全部', count: cntAll },
-                    { key: 'open', label: '未闭环', count: cntOpen },
-                    { key: 'closed', label: '已闭环', count: cntClosed }
-                ];
+                const chips = [{ key: 'all', label: '全部', count: combined.length }].concat(
+                    RISK_STATUS_OPTIONS.map(function(st){
+                        return { key: st, label: st, count: combined.filter(function(en){ return statusOfItem(en).text === st; }).length };
+                    })
+                );
                 const chipsHtml = chips.map(function(c){
                     return '<span class="hazard-filter-chip' + (filter === c.key ? ' active' : '') + '" data-risk-filter="' + c.key + '">' + c.label + '(' + c.count + ')</span>';
                 }).join('');
@@ -7168,12 +7332,19 @@
                         const mst = manualStatusOf(it);
                         const mTypeCell = (it.hazardType || '—') + (it.location ? '<span style="color:#909399;font-size:12px;"> / ' + it.location + '</span>' : '');
                         return '<tr class="record-row manual-risk-row" data-manual-id="' + it.id + '" style="cursor:pointer;">' +
-                            '<td style="color:#c0c4cc;">—</td>' +
+                            '<td style="font-family:monospace;font-size:12px;">' + (it.archiveNo || '—') + '</td>' +
                             '<td><span class="tag info">手动录入</span></td>' +
                             '<td>' + (String(it.date || '').slice(0, 10) || '—') + '</td>' +
                             '<td>' + (it.person || '—') + '</td>' +
                             '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + mTypeCell + '</td>' +
-                            '<td><span class="tag ' + (it.riskLevel === '第三类' ? 'danger' : (it.riskLevel === '第二类' ? 'warning' : 'info')) + '">' + (it.riskLevel || '—') + '</span></td>' +
+                            '<td><span class="tag ' + (it.riskLevel === '第三类' ? 'danger' : (it.riskLevel === '第二类' ? 'warning' : 'info')) + '">' + (it.riskLevel || '—') + '</span>' +
+                                (function(){
+                                    const sugLv = it.suggestLevel || '';
+                                    if (!sugLv || sugLv === (it.riskLevel || '')) return '';
+                                    const basisTxt = (Array.isArray(it.levelBasis) && it.levelBasis.length) ? '研判依据：' + it.levelBasis.join('；') : '';
+                                    return '<div style="font-size:11px;color:#e6a23c;line-height:1.3;margin-top:2px;" title="' + escapeHtml(basisTxt) + '">建议：' + sugLv + '</div>';
+                                })() +
+                            '</td>' +
                             '<td style="color:#c0c4cc;">—</td>' +
                             '<td><span class="tag ' + mst.cls + '">' + mst.text + '</span></td>' +
                             '<td class="actions"><a class="view-link" href="javascript:void(0)">查看/编辑</a></td>' +
@@ -7203,7 +7374,13 @@
                         '<td>' + (String(it.date || '').slice(0, 10) || '—') + '</td>' +
                         '<td>' + (it.person || '—') + '</td>' +
                         hzCell +
-                        '<td><span class="tag ' + (it.riskLevel === '第三类' ? 'danger' : (it.riskLevel === '第二类' ? 'warning' : 'info')) + '">' + (it.riskLevel || '—') + '</span></td>' +
+                        '<td><span class="tag ' + (it.riskLevel === '第三类' ? 'danger' : (it.riskLevel === '第二类' ? 'warning' : 'info')) + '">' + (it.riskLevel || '—') + '</span>' +
+                            (function(){
+                                const sug = suggestHouseRiskLevel(s, it.riskLevel || '第一类');
+                                if (!sug || sug.level === (it.riskLevel || '')) return '';
+                                return '<div style="font-size:11px;color:#e6a23c;line-height:1.3;margin-top:2px;" title="' + escapeHtml('研判依据：' + sug.basis.join('；')) + '">建议：' + sug.level + '</div>';
+                            })() +
+                        '</td>' +
                         stageCell +
                         '<td><span class="tag ' + st.cls + '">' + st.text + '</span></td>' +
                         '<td class="actions"><a class="view-link" href="javascript:void(0)">查看</a></td>' +
@@ -7256,6 +7433,14 @@
                     kvR('来源', srcLabel) + kvR('发现日期', String(r.date || '').slice(0, 10)) +
                     kvR('发现人', r.person) + kvR('排查/巡查单位', r.org) +
                     kvR('结论', r.conclusion) + kvR('风险等级', r.riskLevel) +
+                    (function(){
+                        const sug = suggestHouseRiskLevel(s, r.riskLevel || '第一类');
+                        if (!sug) return '';
+                        const sugCls = sug.level === '第三类' ? 'danger' : (sug.level === '第二类' ? 'warning' : 'info');
+                        const raised = sug.level !== (r.riskLevel || '');
+                        return kvR('综合研判建议', '<span class="tag ' + sugCls + '">' + sug.level + '</span>' + (raised ? ' <span style="font-size:12px;color:#e6a23c;">高于当前等级，建议调整</span>' : '')) +
+                            '<div class="info-item full-width" style="grid-column:1 / -1;"><div class="info-label">研判依据</div><div class="info-value rural-only" style="font-size:12px;color:#606266;">' + escapeHtml(sug.basis.join('；')) + '</div></div>';
+                    })() +
                     kvR('隐患描述', r.hazardDesc) +
                     '<div class="info-item full-width" style="grid-column:1 / -1;"><div class="info-label">现场照片</div>' + photoHtml + '</div>' +
                 '</div>' +
@@ -7396,17 +7581,21 @@
             const lib = (typeof getMeasureLibrary === 'function') ? getMeasureLibrary() : [];
             const chosen = (rp.measureIds || []).map(function(id){ return lib.find(function(m){ return m.id === id; }); }).filter(Boolean);
             const custom = rp.tempMeasures || [];
+            const fundingText = (chosen.find(function(m){ return m.fundingNodes; }) || {}).fundingNodes || '';
             const ds = (typeof getDeadlineStatus === 'function') ? getDeadlineStatus(rp.deadline) : { cls: 'info', text: '—' };
-            const measureCard = function(name, desc, tag, extra) {
-                return '<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px;background:var(--bg-hover, #fafbfc);">' +
-                    '<div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:600;font-size:13px;">' + escapeHtml(name) + '</span>' +
+            const measureCard = function(name, desc, tag, extra, m) {
+                const bodyHtml = '<div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:600;font-size:13px;">' + escapeHtml(name) + '</span>' +
                     (tag ? '<span class="tag info" style="font-size:11px;">' + escapeHtml(tag) + '</span>' : '<span class="tag warning" style="font-size:11px;">临时措施</span>') +
                     (extra || '') + '</div>' +
                     '<div style="font-size:12px;color:var(--text-secondary, #606266);margin-top:4px;line-height:1.7;">' + escapeHtml(desc || '') + '</div>' +
+                    (m && m.fundingNodes ? '<div style="font-size:12px;color:#b7791f;margin-top:4px;"><i class="fas fa-coins"></i> 阶段性节点：' + escapeHtml(m.fundingNodes) + '</div>' : '');
+                return '<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px;background:var(--bg-hover, #fafbfc);display:flex;gap:10px;align-items:flex-start;">' +
+                    (m && m.img ? '<img src="' + m.img + '" style="width:84px;height:56px;object-fit:cover;border:1px solid var(--border);border-radius:4px;flex-shrink:0;cursor:pointer;" onclick="viewPhotoOnline(\'' + m.img + '\')">' : '') +
+                    '<div style="flex:1;">' + bodyHtml + '</div>' +
                 '</div>';
             };
             let measureHtml = chosen.map(function(m){
-                return measureCard(m.name, m.desc + (m.requirement ? '　实施要求：' + m.requirement : '') + (m.acceptStd ? '　验收标准：' + m.acceptStd : ''), m.tag);
+                return measureCard(m.name, m.desc + (m.requirement ? '　实施要求：' + m.requirement : '') + (m.acceptStd ? '　验收标准：' + m.acceptStd : ''), m.tag, '', m);
             }).join('');
             measureHtml += custom.map(function(c){
                 return measureCard(c.name, c.desc, '', '<span style="font-size:11px;color:#909399;margin-left:auto;">' + escapeHtml(c.addTime || '') + '</span>');
@@ -7439,6 +7628,7 @@
                     '<div style="flex:1;min-width:220px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;background:' + (rp.deadlineUrgent ? '#fef0f0' : '#f0f7ff') + ';">' +
                         '<div style="font-size:12px;color:#909399;">执行期限（按风险等级自动生成' + (rp.deadlineText ? '：' + escapeHtml(rp.deadlineText) : '') + '）</div>' +
                         '<div style="font-size:16px;font-weight:600;color:' + (rp.deadlineUrgent ? 'var(--danger)' : 'var(--primary)') + ';margin-top:4px;">' + escapeHtml(rp.deadline || '—') + '</div>' +
+                        (fundingText ? '<div style="font-size:12px;color:#b7791f;margin-top:6px;"><i class="fas fa-coins"></i> 涉补助资金·阶段性节点：' + escapeHtml(fundingText) + '</div>' : '') +
                     '</div>' +
                     '<div style="flex:1;min-width:220px;border:1px solid var(--border);border-radius:6px;padding:10px 12px;background:var(--bg-hover, #fafbfc);">' +
                         '<div style="font-size:12px;color:#909399;">任务派发状态</div>' +
@@ -7470,7 +7660,8 @@
             document.getElementById('rectPickList').innerHTML = tags.map(function(tag){
                 const items = lib.filter(function(m){ return m.tag === tag; }).map(function(m){
                     const checked = cur.indexOf(m.id) !== -1;
-                    return '<label style="display:block;border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:6px;cursor:pointer;font-size:12px;">' +
+                    return '<label style="display:block;border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:6px;cursor:pointer;font-size:12px;overflow:hidden;">' +
+                        (m.img ? '<img src="' + m.img + '" style="float:right;height:36px;margin-left:8px;border-radius:3px;border:1px solid var(--border);">' : '') +
                         '<input type="checkbox" class="rect-pick-check" value="' + m.id + '"' + (checked ? ' checked' : '') + '> <b>' + escapeHtml(m.name) + '</b>' +
                         '<div style="color:var(--text-secondary, #606266);margin-top:2px;line-height:1.6;">' + escapeHtml(m.desc || '') + '</div>' +
                     '</label>';
@@ -7553,8 +7744,10 @@
             const body = tags.map(function(tag){
                 const rows = lib.filter(function(m){ return m.tag === tag; }).map(function(m){
                     return '<tr>' +
+                        '<td style="width:64px;text-align:center;">' + (m.img ? '<img src="' + m.img + '" style="height:40px;max-width:60px;border:1px solid var(--border);border-radius:3px;cursor:pointer;" onclick="viewPhotoOnline(\'' + m.img + '\')">' : '<span style="color:#c0c4cc;font-size:12px;">—</span>') + '</td>' +
                         '<td style="font-weight:600;">' + escapeHtml(m.name) + '</td>' +
-                        '<td style="font-size:12px;color:var(--text-secondary, #606266);line-height:1.6;">' + escapeHtml(m.desc || '') + '</td>' +
+                        '<td style="font-size:12px;color:var(--text-secondary, #606266);line-height:1.6;">' + escapeHtml(m.desc || '') +
+                            (m.fundingNodes ? '<div style="color:#b7791f;margin-top:4px;"><i class="fas fa-coins"></i> 阶段性节点：' + escapeHtml(m.fundingNodes) + '</div>' : '') + '</td>' +
                         '<td style="font-size:12px;color:var(--text-secondary, #606266);">' + escapeHtml(m.requirement || '—') + '</td>' +
                         '<td style="font-size:12px;color:var(--text-secondary, #606266);">' + escapeHtml(m.dutyAdvice || '—') + '</td>' +
                         '<td style="font-size:12px;color:var(--text-secondary, #606266);">' + escapeHtml(m.acceptStd || '—') + '</td>' +
@@ -7565,15 +7758,22 @@
                     '</tr>';
                 }).join('');
                 return '<div class="info-section-title" style="margin-top:16px;"><i class="fas fa-tag"></i> ' + escapeHtml(tag) + '（' + lib.filter(function(m){ return m.tag === tag; }).length + '）</div>' +
-                    '<table class="data-table"><thead><tr><th style="width:110px;">措施名称</th><th>措施描述</th><th style="width:16%;">实施要求</th><th style="width:14%;">责任人建议</th><th style="width:14%;">验收标准</th><th style="width:90px;">操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
+                    '<table class="data-table"><thead><tr><th style="width:70px;">示意图</th><th style="width:100px;">措施名称</th><th>措施描述</th><th style="width:15%;">实施要求</th><th style="width:13%;">责任人建议</th><th style="width:13%;">验收标准</th><th style="width:90px;">操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
             }).join('');
             return '<div class="section-card">' +
                 '<div class="info-section-title"><i class="fas fa-book"></i> 整改措施库' +
                     '<span style="font-size:12px;font-weight:normal;color:#909399;margin-left:8px;">独立存储 · 支持标签分类 · 风险关联时从中选取或临时新增</span>' +
-                    '<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="openMeasureLibModal(null)"><i class="fas fa-plus"></i> 新增措施</button>' +
+                    '<button class="btn btn-default btn-sm" style="margin-left:auto;" onclick="importMeasureLib()"><i class="fas fa-cloud-download-alt"></i> 一键导入预置模板</button>' +
+                    '<button class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="openMeasureLibModal(null)"><i class="fas fa-plus"></i> 新增措施</button>' +
                 '</div>' +
                 body +
             '</div>';
+        }
+        function importMeasureLib() {
+            if (typeof importMeasureLibSeed !== 'function') return;
+            const r = importMeasureLibSeed();
+            alert('导入完成：新增 ' + r.added + ' 条模板，补齐示意图/阶段性节点 ' + r.updated + ' 处');
+            renderContent();
         }
         function openMeasureLibModal(id) {
             measureLibEditId = id;
@@ -7585,7 +7785,21 @@
             document.getElementById('mlReq').value = m ? (m.requirement || '') : '';
             document.getElementById('mlDuty').value = m ? (m.dutyAdvice || '') : '';
             document.getElementById('mlAccept').value = m ? (m.acceptStd || '') : '';
+            document.getElementById('mlImg').value = m ? (m.img || '') : '';
+            document.getElementById('mlImgFile').value = '';
+            document.getElementById('mlImgPreview').innerHTML = (m && m.img) ? '<img src="' + m.img + '" style="height:56px;border:1px solid var(--border);border-radius:4px;">' : '';
+            document.getElementById('mlFunding').value = m ? (m.fundingNodes || '') : '';
             document.getElementById('measureLibModal').classList.add('open');
+        }
+        function onMlImgChange(input) {
+            const f = input.files && input.files[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('mlImg').value = e.target.result;
+                document.getElementById('mlImgPreview').innerHTML = '<img src="' + e.target.result + '" style="height:56px;border:1px solid var(--border);border-radius:4px;">';
+            };
+            reader.readAsDataURL(f);
         }
         function closeMeasureLibModal() {
             document.getElementById('measureLibModal').classList.remove('open');
@@ -7603,7 +7817,9 @@
                 desc: document.getElementById('mlDesc').value.trim(),
                 requirement: document.getElementById('mlReq').value.trim(),
                 dutyAdvice: document.getElementById('mlDuty').value.trim(),
-                acceptStd: document.getElementById('mlAccept').value.trim()
+                acceptStd: document.getElementById('mlAccept').value.trim(),
+                img: document.getElementById('mlImg').value,
+                fundingNodes: document.getElementById('mlFunding').value.trim()
             });
             closeMeasureLibModal();
             renderContent();
@@ -7666,6 +7882,9 @@
             '</div>';
             const histHtml = filtered.length ? filtered.map(function(h){
                 const photos = (h.photos || []).map(function(u){
+                    if (/^data:image\//.test(u)) {
+                        return '<img src="' + u + '" onclick="viewPhotoOnline(\'' + u + '\')" style="height:52px;border:1px solid var(--border);border-radius:4px;margin-right:4px;cursor:zoom-in;">';
+                    }
                     return '<span class="tag info" style="font-size:11px;margin-right:4px;"><i class="fas fa-image"></i> ' + escapeHtml(u) + '</span>';
                 }).join('');
                 const extras = [];
@@ -7673,6 +7892,7 @@
                     if (h.extra.evacuation) extras.push('撤离记录：' + h.extra.evacuation);
                     if (h.extra.artisan) extras.push('工匠：' + h.extra.artisan);
                     if (h.extra.purchase) extras.push('采购证明：' + h.extra.purchase);
+                    if (h.extra.hiddenAccept) extras.push('隐蔽工程验收：' + h.extra.hiddenAccept);
                 }
                 return '<div class="ct-node">' +
                     '<div class="ct-node-dot"></div>' +
@@ -7721,8 +7941,10 @@
         }
 
         // 状态操作弹窗：按目标状态动态生成必传字段
+        let rectProcPhotos = {};   // 当前弹窗已选照片 dataURL（key=规则key）
         function openRectProcModal(riskRecordId, toState) {
             rectProcTargetId = { id: riskRecordId, to: toState };
+            rectProcPhotos = {};
             const st = RECT_PROCESS_STATES[toState] || {};
             document.getElementById('rectProcModalTitle').textContent = st.label || toState;
             document.getElementById('rectProcRole').textContent = st.role || '';
@@ -7730,15 +7952,17 @@
             const wrap = document.getElementById('rectProcFields');
             let html = '';
             rules.forEach(function(rule){
+                const reqMark = rule.optional ? '' : ' <span style="color:var(--danger);">*</span>';
                 if (rule.isPhoto) {
-                    html += '<div class="form-item form-item-full"><label class="form-label">' + rule.label + ' <span style="color:var(--danger);">*</span></label>' +
-                        '<input class="form-input" id="procField_' + rule.key + '" placeholder="照片文件名，多个用英文逗号分隔，如：现场1.jpg,现场2.jpg"></div>';
+                    html += '<div class="form-item form-item-full"><label class="form-label">' + rule.label + reqMark + '</label>' +
+                        '<input type="file" accept="image/*" multiple style="font-size:12px;" onchange="onProcPhotoChange(this,\'' + rule.key + '\')">' +
+                        '<div id="procPhotoPreview_' + rule.key + '" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div></div>';
                 } else if (rule.key === 'note' || rule.key === 'conclusion') {
-                    html += '<div class="form-item form-item-full"><label class="form-label">' + rule.label + ' <span style="color:var(--danger);">*</span></label>' +
+                    html += '<div class="form-item form-item-full"><label class="form-label">' + rule.label + reqMark + '</label>' +
                         '<textarea class="form-input" id="procField_' + rule.key + '" rows="3" placeholder="' + (toState === 'rejected' ? '如：局部抹面空鼓，需返工' : '') + '"></textarea></div>';
                 } else {
-                    const ph = { evacuation: '如：已撤离2人，安置至村委会', artisan: '如：乡村工匠张师傅（持证）/ 某某施工队', purchase: '如：采购单编号001' }[rule.key] || '';
-                    html += '<div class="form-item form-item-full"><label class="form-label">' + rule.label + ' <span style="color:var(--danger);">*</span></label>' +
+                    const ph = { evacuation: '如：已撤离2人，安置至村委会', artisan: '如：乡村工匠张师傅（持证）/ 某某施工队', purchase: '如：采购单编号001', hiddenAccept: '如：基础钢筋绑扎验收合格，附验收单编号' }[rule.key] || '';
+                    html += '<div class="form-item form-item-full"><label class="form-label">' + rule.label + reqMark + '</label>' +
                         '<input class="form-input" id="procField_' + rule.key + '" placeholder="' + ph + '"></div>';
                 }
             });
@@ -7747,6 +7971,26 @@
             }
             wrap.innerHTML = html;
             document.getElementById('rectProcModal').classList.add('open');
+        }
+        // 照片选择：多图 FileReader → dataURL 暂存并预览
+        function onProcPhotoChange(input, key) {
+            const files = Array.prototype.slice.call(input.files || []);
+            if (!files.length) return;
+            rectProcPhotos[key] = rectProcPhotos[key] || [];
+            files.forEach(function(f){
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    rectProcPhotos[key].push(e.target.result);
+                    const wrap = document.getElementById('procPhotoPreview_' + key);
+                    if (wrap) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.style.cssText = 'height:52px;border:1px solid var(--border);border-radius:4px;';
+                        wrap.appendChild(img);
+                    }
+                };
+                reader.readAsDataURL(f);
+            });
         }
         function closeRectProcModal() {
             document.getElementById('rectProcModal').classList.remove('open');
@@ -7758,11 +8002,10 @@
             const rules = (typeof RECT_STATE_RULES !== 'undefined') ? (RECT_STATE_RULES[rectProcTargetId.to] || []) : [];
             const payload = { to: rectProcTargetId.to, operator: '当前用户' };
             rules.forEach(function(rule){
+                if (rule.isPhoto) { payload[rule.key] = rectProcPhotos[rule.key] || []; return; }
                 const el = document.getElementById('procField_' + rule.key);
                 if (!el) return;
-                const v = el.value.trim();
-                if (rule.isPhoto) payload[rule.key] = v ? v.split(',').map(function(t){ return t.trim(); }).filter(Boolean) : [];
-                else payload[rule.key] = v;
+                payload[rule.key] = el.value.trim();
             });
             if (!rules.length) {
                 const el = document.getElementById('procField_note');
@@ -8799,6 +9042,94 @@
             return recordListWrapper('应急事件记录', listHtml, { icon: 'fa-first-aid', showAdd: 'addCrudRecord(\'emergency\')' });
         }
 
+        // ---------------- 维修记录 / 改造记录 / 消险记录（一房一档·全生命周期档案 6.1.2.23.3）----------------
+        function renderMaintenanceContent(s) {
+            const records = Array.isArray(s.maintenanceRecords) ? s.maintenanceRecords : [];
+            if (!records.length) {
+                return recordListWrapper('维修记录', '<div class="empty-tip">暂无维修记录</div>', { icon: 'fa-wrench', showAdd: 'addCrudRecord(\'maintenance\')' });
+            }
+            const activeIndex = Math.min(recordViewState.maintenance || 0, records.length - 1);
+            const listHtml = recordListTable(
+                ['维修时间', '维修内容', '维修单位', '维修费用', '备注'],
+                records.map(d => [d.time || '—', d.content || '—', d.unit || '—', d.cost || '—', d.remark || '—']),
+                'maintenance',
+                activeIndex,
+                { showCrud: { edit: 'openCrudModal(\'maintenance\'', delete: 'deleteCrudRecord(\'maintenance\'' }, records: records }
+            );
+            return recordListWrapper('维修记录', listHtml, { icon: 'fa-wrench', showAdd: 'addCrudRecord(\'maintenance\')' });
+        }
+
+        function renderRenovationContent(s) {
+            const records = Array.isArray(s.renovationRecords) ? s.renovationRecords : [];
+            if (!records.length) {
+                return recordListWrapper('改造记录', '<div class="empty-tip">暂无改造记录</div>', { icon: 'fa-hammer', showAdd: 'addCrudRecord(\'renovation\')' });
+            }
+            const activeIndex = Math.min(recordViewState.renovation || 0, records.length - 1);
+            const listHtml = recordListTable(
+                ['改造时间', '改造内容', '改造单位', '审批文件', '备注'],
+                records.map(d => [d.time || '—', d.content || '—', d.unit || '—', d.approvalFile || '—', d.remark || '—']),
+                'renovation',
+                activeIndex,
+                { showCrud: { edit: 'openCrudModal(\'renovation\'', delete: 'deleteCrudRecord(\'renovation\'' }, records: records }
+            );
+            return recordListWrapper('改造记录', listHtml, { icon: 'fa-hammer', showAdd: 'addCrudRecord(\'renovation\')' });
+        }
+
+        // 消险记录：只读档案卡（来源于销号申请/审核数据），形成"隐患发现-整治-消险"闭环留痕
+        function renderEliminationContent(s) {
+            const info = s.eliminationInfo || {};
+            const applied = s.closeStatus && s.closeStatus !== '未申请';
+            let statusText = '未申请销号';
+            let statusCls = 'warning';
+            if (s.closeStatus === '已通过') { statusText = '审核通过·已销号'; statusCls = 'safe'; }
+            else if (s.closeStatus === '已驳回') { statusText = '审核驳回·待整改'; statusCls = 'danger'; }
+            else if (s.closeStatus === '待审核' || s.closeStatus === '审核中') { statusText = '已申请·待审核'; statusCls = 'warning'; }
+            const fileLinks = (info.certFiles || []).map(function(f) {
+                const name = (typeof f === 'string') ? f : (f && f.name) || '附件';
+                return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;color:#1890ff;"><i class="fas fa-paperclip"></i>' + String(name).replace(/</g, '&lt;') + '</span>';
+            }).join('') || '<span class="info-value empty">—</span>';
+            // 闭环时间轴：隐患发现 → 隐患整治 → 隐患消险
+            const firstHazard = (s.hazardRecords || [])[0] || {};
+            const discoverTime = firstHazard.createdAt || (s.inspectionRecords && s.inspectionRecords[0] && s.inspectionRecords[0].checkDate) || '';
+            const governDone = (s.governStatus === '已治理' || s.governance === 'done');
+            const steps = [
+                { label: '隐患发现', time: discoverTime, done: !!discoverTime },
+                { label: '隐患整治', time: governDone ? (info.applyTime || s.rectDeadline || '') : '', done: governDone },
+                { label: '隐患消险', time: (s.closeStatus === '已通过') ? (info.reviewTime || info.applyTime || '') : '', done: s.closeStatus === '已通过' }
+            ];
+            const timelineHtml = steps.map(function(st, i) {
+                const dotCls = st.done ? 'background:var(--safe,#52c41a);' : 'background:#d9d9d9;';
+                const txtCls = st.done ? 'color:var(--text-primary);' : 'color:#bfbfbf;';
+                return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;position:relative;">' +
+                    (i > 0 ? '<div style="position:absolute;left:-50%;top:9px;width:100%;height:2px;' + (st.done ? 'background:var(--safe,#52c41a);' : 'background:#e8e8e8;') + '"></div>' : '') +
+                    '<div style="width:18px;height:18px;border-radius:50%;' + dotCls + 'z-index:1;"></div>' +
+                    '<div style="margin-top:8px;font-size:13px;font-weight:500;' + txtCls + '">' + st.label + '</div>' +
+                    '<div style="font-size:12px;color:#909399;margin-top:2px;">' + (st.time || '—') + '</div>' +
+                '</div>';
+            }).join('');
+            const kvItem = function(label, value) {
+                const v = value || '';
+                return '<div class="info-item"><div class="info-label">' + label + '</div><div class="info-value' + (v ? '' : ' empty') + '">' + (v || '—') + '</div></div>';
+            };
+            let html = '<div style="padding:10px 14px;background:#f5f7fa;border:1px solid var(--border);border-radius:4px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">' +
+                '<i class="fas fa-check-double" style="color:var(--primary);"></i><span style="font-weight:500;">销号状态：</span>' +
+                '<span class="tag ' + statusCls + '">' + statusText + '</span>' +
+                (applied ? '' : '<span style="font-size:12px;color:#909399;">整治完成后可在「验收销项」或「隐患销号申请」页面发起销号申请</span>') +
+            '</div>';
+            html += '<div class="record-section-title"><i class="fas fa-stream"></i> 隐患闭环时间轴</div>' +
+                '<div style="display:flex;padding:18px 30px 6px;">' + timelineHtml + '</div>';
+            html += '<div class="record-section-title" style="margin-top:18px;"><i class="fas fa-archive"></i> 消险档案信息</div>' +
+                '<div class="info-grid info-grid-2col">' +
+                    kvItem('原隐患等级', s.originalRiskLevel || s.riskDisplayLevel || s.riskLevel) +
+                    kvItem('销号申请时间', info.applyTime) +
+                    kvItem('审核时间', info.reviewTime) +
+                    kvItem('审核人', info.reviewer) +
+                '</div>' +
+                '<div style="margin-top:10px;"><div class="info-label" style="margin-bottom:6px;">销号证明文件</div><div>' + fileLinks + '</div></div>' +
+                (info.note ? '<div style="margin-top:10px;"><div class="info-label" style="margin-bottom:6px;">备注</div><div class="info-value">' + String(info.note).replace(/</g, '&lt;') + '</div></div>' : '');
+            return html;
+        }
+
         let editModalSubTab = 'jbxx';
         let surveyEditModalSubTab = 'survey1';
         let patrolEditModalSubTab = 'patrol1';
@@ -9705,6 +10036,28 @@
                     { key: 'hasQualificationTeam', label: '是否正规施工', type: 'select', options: ['否', '是'] },
                     { key: 'builder', label: '建造工匠', type: 'text' },
                     { key: 'buildYear', label: '建造年份', type: 'text' }
+                ]
+            },
+            maintenance: {
+                title: '维修记录',
+                dataPath: 'maintenanceRecords',
+                fields: [
+                    { key: 'time', label: '维修时间', type: 'text' },
+                    { key: 'content', label: '维修内容', type: 'textarea', full: true },
+                    { key: 'unit', label: '维修单位', type: 'text' },
+                    { key: 'cost', label: '维修费用', type: 'text' },
+                    { key: 'remark', label: '备注', type: 'textarea' }
+                ]
+            },
+            renovation: {
+                title: '改造记录',
+                dataPath: 'renovationRecords',
+                fields: [
+                    { key: 'time', label: '改造时间', type: 'text' },
+                    { key: 'content', label: '改造内容', type: 'textarea', full: true },
+                    { key: 'unit', label: '改造单位', type: 'text' },
+                    { key: 'approvalFile', label: '审批文件', type: 'text' },
+                    { key: 'remark', label: '备注', type: 'textarea' }
                 ]
             },
             measureManage: {
@@ -11668,7 +12021,63 @@
             }
         });
 
+        // 建筑材料编辑表单行操作：增删前先把未保存输入同步回记录
+        function syncBuildMaterialInputs() {
+            if (!Array.isArray(currentHouseArch.buildMaterials)) currentHouseArch.buildMaterials = [];
+            document.querySelectorAll('#editModalForm .form-input[data-midx]').forEach(function(input) {
+                const i = parseInt(input.dataset.midx, 10);
+                if (currentHouseArch.buildMaterials[i]) currentHouseArch.buildMaterials[i][input.dataset.mfield] = input.value;
+            });
+        }
+        function addBuildMaterialRow() {
+            syncBuildMaterialInputs();
+            currentHouseArch.buildMaterials.push({ type: '', strength: '', manufacturer: '' });
+            renderEditModalForm();
+        }
+        function removeBuildMaterialRow(i) {
+            if (!Array.isArray(currentHouseArch.buildMaterials)) return;
+            syncBuildMaterialInputs();
+            currentHouseArch.buildMaterials.splice(i, 1);
+            renderEditModalForm();
+        }
+
         function renderEditModalForm() {
+            // 结构特点（一房一档）：绑定房屋记录 structureFeatures
+            if (editModalSubTab === 'jgtd') {
+                const sf = currentHouseArch.structureFeatures || {};
+                const sfFields = [
+                    ['基础形式', 'basicForm', sf.basicForm],
+                    ['承重体系', 'bearingSystem', sf.bearingSystem],
+                    ['楼盖形式', 'floorForm', sf.floorForm],
+                    ['屋面形式', 'roofForm', sf.roofForm]
+                ];
+                const sfHtml = sfFields.map(function(f) {
+                    return '<div class="form-item">' +
+                        '<label class="form-label">' + f[0] + '</label>' +
+                        '<input class="form-input" type="text" data-field="' + f[1] + '" value="' + ((f[2] || '') + '').replace(/"/g, '&quot;') + '">' +
+                        '</div>';
+                }).join('');
+                document.getElementById('editModalForm').innerHTML = '<div class="form-grid">' + sfHtml + '</div>';
+                return;
+            }
+            // 建筑材料（一房一档）：编辑材料清单（每行 类型/强度/厂家）
+            if (editModalSubTab === 'jzcl') {
+                const mats = Array.isArray(currentHouseArch.buildMaterials) ? currentHouseArch.buildMaterials : [];
+                const rowsHtml = mats.map(function(m, i) {
+                    return '<tr>' +
+                        '<td>' + (i + 1) + '</td>' +
+                        '<td><input class="form-input" data-midx="' + i + '" data-mfield="type" value="' + ((m.type || '') + '').replace(/"/g, '&quot;') + '"></td>' +
+                        '<td><input class="form-input" data-midx="' + i + '" data-mfield="strength" value="' + ((m.strength || '') + '').replace(/"/g, '&quot;') + '"></td>' +
+                        '<td><input class="form-input" data-midx="' + i + '" data-mfield="manufacturer" value="' + ((m.manufacturer || '') + '').replace(/"/g, '&quot;') + '"></td>' +
+                        '<td><a href="javascript:void(0)" style="color:var(--danger,#f5222d);" onclick="removeBuildMaterialRow(' + i + ')">删除</a></td>' +
+                    '</tr>';
+                }).join('');
+                document.getElementById('editModalForm').innerHTML =
+                    '<div class="table-wrap"><table class="arch-table"><thead><tr><th>序号</th><th>材料类型</th><th>强度等级/规格</th><th>生产厂家/来源</th><th>操作</th></tr></thead>' +
+                    '<tbody>' + (rowsHtml || '<tr><td colspan="5" style="text-align:center;color:#909399;">暂无材料，请点击下方按钮添加</td></tr>') + '</tbody></table></div>' +
+                    '<div style="margin-top:10px;"><button class="bottom-btn" type="button" onclick="addBuildMaterialRow()"><i class="fas fa-plus"></i> 添加材料</button></div>';
+                return;
+            }
             if (editModalSubTab === 'designConstruction') {
                 const list = currentHouseArch.designConstructionRecords || [];
                 const idx = Math.min(recordViewState.designConstruction || 0, Math.max(list.length - 1, 0));
@@ -12289,6 +12698,36 @@
         }
 
         function saveBasicEdit() {
+            // 结构特点（一房一档）
+            if (editModalSubTab === 'jgtd') {
+                if (!currentHouseArch.structureFeatures) currentHouseArch.structureFeatures = {};
+                document.querySelectorAll('#editModalForm .form-input[data-field]').forEach(function(input) {
+                    currentHouseArch.structureFeatures[input.dataset.field] = input.value;
+                });
+                currentSubTab = editModalSubTab;
+                delete currentHouseArch._syncedAt;
+                saveCurrentHouseArch(currentHouseArch);
+                closeBasicEditModal();
+                renderSidebar();
+                renderContent();
+                return;
+            }
+            // 建筑材料（一房一档）
+            if (editModalSubTab === 'jzcl') {
+                const mats = Array.isArray(currentHouseArch.buildMaterials) ? currentHouseArch.buildMaterials : [];
+                document.querySelectorAll('#editModalForm .form-input[data-midx]').forEach(function(input) {
+                    const i = parseInt(input.dataset.midx, 10);
+                    if (mats[i]) mats[i][input.dataset.mfield] = input.value;
+                });
+                currentHouseArch.buildMaterials = mats.filter(function(m) { return (m.type || m.strength || m.manufacturer); });
+                currentSubTab = editModalSubTab;
+                delete currentHouseArch._syncedAt;
+                saveCurrentHouseArch(currentHouseArch);
+                closeBasicEditModal();
+                renderSidebar();
+                renderContent();
+                return;
+            }
             if (editModalSubTab === 'designConstruction') {
                 const list = currentHouseArch.designConstructionRecords || [];
                 const idx = Math.min(recordViewState.designConstruction || 0, Math.max(list.length - 1, 0));
@@ -14209,6 +14648,13 @@
                             return '<option value="' + o + '"' + (o === cur ? ' selected' : '') + '>' + o + '</option>';
                         }).join('') +
                         '</select>';
+                } else if (field === 'riskStatus') {
+                    const cur = MANUAL_STATUS_LEGACY[v] || v || '待核实';
+                    control = '<select class="form-input form-select risk-edit-input" data-scope="' + scope + '" data-field="' + field + '">' +
+                        RISK_STATUS_OPTIONS.map(function(o) {
+                            return '<option value="' + o + '"' + (o === cur ? ' selected' : '') + '>' + o + '</option>';
+                        }).join('') +
+                        '</select>';
                 } else if (field === 'discoveryTime') {
                     control = '<input class="form-input risk-edit-input" type="date" data-scope="' + scope + '" data-field="' + field + '" value="' + esc + '">';
                 } else {
@@ -14230,6 +14676,20 @@
                         return item(f[0], scope, f[1], src[f[1]]);
                     }).join('') + '</div>';
             }).join('');
+            // 综合研判（只读横幅，6.1.2.17.1 预设规则自动判定分级）
+            const riskSug = suggestHouseRiskLevel(currentHouseArch, info.riskLevel || '第三类');
+            if (riskSug) {
+                const sugCls = riskSug.level === '第三类' ? 'danger' : (riskSug.level === '第二类' ? 'warning' : 'info');
+                const raised = riskSug.level !== (info.riskLevel || '第三类');
+                html += '<div style="background:#f6f9ff;border:1px dashed #c3d6fb;border-radius:6px;padding:8px 12px;margin-top:8px;">' +
+                    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+                        '<span style="font-size:13px;font-weight:600;color:#1d4ed8;"><i class="fas fa-brain"></i> 综合研判建议</span>' +
+                        '<span class="tag ' + sugCls + '">' + riskSug.level + '</span>' +
+                        (raised ? '<span style="font-size:12px;color:#e6a23c;">当前等级低于建议等级，请在上方手动调整</span>' : '<span style="font-size:12px;color:#67c23a;">当前等级已达建议水平</span>') +
+                    '</div>' +
+                    '<div style="font-size:12px;color:#606266;margin-top:4px;">依据：' + escapeHtml(riskSug.basis.join('；')) + '</div>' +
+                '</div>';
+            }
             const recFields = [
                 ['辨识日期', 'identifyDate'], ['隐患类型', 'hazardType'], ['隐患部位', 'hazardPart'],
                 ['填报人/辨识人', 'identifyPerson'], ['隐患描述', 'hazardDesc'], ['可能后果', 'possibleConsequence'], ['管控建议', 'controlSuggestion']
@@ -14283,6 +14743,9 @@
             const idx = Math.min(recordViewState.risk || 0, Math.max(s.riskIdentification.length - 1, 0));
             if (!s.riskIdentification[idx]) s.riskIdentification[idx] = {};
             const rec = s.riskIdentification[idx];
+            // 保存前快照，用于操作日志对比
+            const oldInfo = Object.assign({}, s.riskInfo), oldCls = Object.assign({}, s.riskClassification), oldRec = Object.assign({}, rec);
+            const hadName = !!(s.riskInfo.riskName || '').trim();
             document.querySelectorAll('#riskEditForm .risk-edit-input').forEach(function(input) {
                 const field = input.dataset.field;
                 const val = input.value;
@@ -14294,8 +14757,42 @@
                     rec[field] = val;
                 }
             });
+            // 操作日志：逐字段记录旧值→新值（6.1.2.17.2 可追溯）
+            const LOG_LABELS = {
+                info: { riskName:'风险名称', riskType:'风险类型', riskLevel:'风险等级', discoveryTime:'发现时间', discoveryMethod:'发现方式', discoverer:'发现人', riskStatus:'风险状态', riskPart:'风险部位', spatialLocation:'空间位置', riskDesc:'风险描述', relatedHouse:'关联房屋', relatedOwner:'关联户主', relatedUser:'关联使用人', relatedInspectionId:'关联排查记录', relatedAppraisalId:'关联鉴定报告', relatedPatrolId:'关联巡查记录', relatedTaskId:'关联整治任务' },
+                cls: { basis:'评定依据', assessTime:'评定时间', assessor:'评定人' },
+                record: { identifyDate:'辨识日期', hazardType:'隐患类型', hazardPart:'隐患部位', identifyPerson:'填报人/辨识人', hazardDesc:'隐患描述', possibleConsequence:'可能后果', controlSuggestion:'管控建议', photos:'现场照片' }
+            };
+            const operator = s.riskClassification.assessor || s.riskInfo.discoverer || '当前用户';
+            let changeCnt = 0;
+            ['info', 'cls', 'record'].forEach(function(scope) {
+                const target = scope === 'info' ? s.riskInfo : (scope === 'cls' ? s.riskClassification : rec);
+                const old = scope === 'info' ? oldInfo : (scope === 'cls' ? oldCls : oldRec);
+                const labels = LOG_LABELS[scope];
+                Object.keys(labels).forEach(function(f) {
+                    const ov = old[f] !== undefined && old[f] !== null ? String(old[f]) : '';
+                    const nv = target[f] !== undefined && target[f] !== null ? String(target[f]) : '';
+                    if (ov === nv) return;
+                    changeCnt++;
+                    if (f === 'photos') { // 照片不记 dataURL，避免日志膨胀
+                        addChangeLog(s, scope + '.' + f, labels[f], '', '（照片已更新）', 'manual', '', operator);
+                    } else {
+                        addChangeLog(s, scope + '.' + f, labels[f], ov, nv, 'manual', '', operator);
+                    }
+                });
+            });
             delete s._syncedAt; // 编辑后标记为未同步
             saveCurrentHouseArch(s);
+            // 消息通知：有实质变更时推送责任人/监管人员
+            if (changeCnt > 0 && typeof pushNotification === 'function') {
+                pushNotification(s, {
+                    riskName: s.riskInfo.riskName || ((s.name || '该房屋') + ' 风险隐患'),
+                    hazardType: s.riskInfo.riskType || '',
+                    riskLevel: s.riskInfo.riskLevel || '',
+                    location: s.riskInfo.spatialLocation || ''
+                }, hadName ? '风险信息修改' : '新风险录入');
+                if (typeof renderNotifyBadge === 'function') renderNotifyBadge();
+            }
             closeRiskEditModal();
             renderSidebar();
             renderContent();

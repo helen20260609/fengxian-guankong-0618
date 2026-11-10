@@ -177,13 +177,19 @@ function __pushToServer(apiLabel, obj) {
         }).catch(function() { /* 后端未启动时静默失败，仍保留 localStorage */ });
     } catch (e) { /* ignore */ }
 }
-// 从后端拉取并覆盖 localStorage；done 回调无论成败都会执行
+// 从后端拉取并与本地合并（服务端覆盖同号记录，本地独有记录保留）；done 回调无论成败都会执行
+// 与农村侧 syncRuralHouseArchFromServer 策略一致，避免服务端旧数据整包替换导致本地记录丢失
 function __pullFromServer(apiLabel, storageKey, done) {
     fetch('/api/' + apiLabel)
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(obj) {
             if (obj && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length > 0) {
-                try { localStorage.setItem(storageKey, JSON.stringify(obj)); } catch (e) {}
+                try {
+                    var local = {};
+                    try { local = JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch (e2) {}
+                    var merged = Object.assign({}, local, obj);
+                    localStorage.setItem(storageKey, JSON.stringify(merged));
+                } catch (e) {}
             }
         })
         .catch(function() { /* 后端不可用时忽略 */ })
@@ -395,6 +401,80 @@ const DEFAULT_HOUSE_STATUS = {
 
 // 规范化单条记录：保持 risk/riskLevel、governance/governStatus 两对字段一致，
 // 销号通过则统一为 safe/完好房（基本完好房） + done/已治理，并补全编号。
+
+// ========== 一房一档·全周期档案补种（6.1.2.23.3：结构特点/建筑材料/维修记录/改造记录）==========
+function generateStructureFeatures(rec) {
+    const seed = parseInt(String(rec && rec.no || '').replace(/\D/g, '') || '0', 10);
+    const st = (rec && rec.structure) || {};
+    const basicForms = ['条形基础', '独立基础', '桩基础', '筏板基础'];
+    const bearingSystems = ['砖混承重体系', '框架承重体系', '底部框架-上部砖混体系', '内框架承重体系'];
+    const floorForms = ['现浇钢筋混凝土楼板', '预制混凝土空心板', '钢-混凝土组合楼盖', '木楼板'];
+    const roofForms = ['平屋顶（现浇钢筋混凝土）', '坡屋面（机制平瓦）', '平屋顶（预制板）', '坡屋面（小青瓦）'];
+    return {
+        basicForm: st.foundationType || basicForms[seed % basicForms.length],
+        bearingSystem: st.structureType || bearingSystems[seed % bearingSystems.length],
+        floorForm: st.floorMaterial || floorForms[(seed + 1) % floorForms.length],
+        roofForm: st.roofType || roofForms[(seed + 2) % roofForms.length]
+    };
+}
+
+function generateBuildMaterials(rec) {
+    const seed = parseInt(String(rec && rec.no || '').replace(/\D/g, '') || '0', 10);
+    const masonry = [
+        { type: '砌体材料（烧结普通砖）', strength: 'MU10', manufacturer: '本地机砖厂' },
+        { type: '砌体材料（混凝土小型空心砌块）', strength: 'MU10', manufacturer: '市建材有限公司' },
+        { type: '砌体材料（蒸压灰砂砖）', strength: 'MU15', manufacturer: '区新型建材厂' }
+    ];
+    const concrete = [
+        { type: '混凝土（主体结构）', strength: 'C25', manufacturer: '区商品混凝土搅拌站' },
+        { type: '混凝土（主体结构）', strength: 'C30', manufacturer: '市商品混凝土有限公司' },
+        { type: '混凝土（圈梁/构造柱）', strength: 'C20', manufacturer: '现场拌制' }
+    ];
+    const extras = [
+        { type: '钢筋', strength: 'HRB400', manufacturer: '本地钢材市场采购' },
+        { type: '砌筑砂浆', strength: 'M7.5 水泥砂浆', manufacturer: '现场拌制' },
+        { type: '防水材料（屋面）', strength: 'SBS 改性沥青卷材', manufacturer: '市防水材料厂' }
+    ];
+    return [masonry[seed % masonry.length], concrete[seed % concrete.length], extras[seed % extras.length]];
+}
+
+function generateLifecycleRecords(rec, kind) {
+    const seed = parseInt(String(rec && rec.no || '').replace(/\D/g, '') || '0', 10);
+    const hasRisk = rec && rec.risk && rec.risk !== 'safe';
+    const done = rec && (rec.governStatus === '已治理' || rec.governance === 'done' || rec.closeStatus === '已通过');
+    const list = [];
+    if (kind === 'maintenance') {
+        const contents = ['屋面防水层翻修、渗漏处理', '墙体裂缝压力灌浆修补', '外立面抹灰层铲除重做', '阳台栏板加固、防锈处理', '落水管更换、屋面排水疏通'];
+        const units = ['街道房屋维修应急中心', '具资质的维修施工企业', '物业服务企业', '产权人自行组织维修'];
+        const count = hasRisk ? (1 + seed % 2) : (seed % 3 === 0 ? 1 : 0);
+        for (let i = 0; i < count; i++) {
+            list.push({
+                id: 'WX-' + (rec.no || '') + '-' + String(i + 1).padStart(2, '0'),
+                time: '202' + (3 + (seed + i) % 3) + '-0' + ((seed + i) % 9 + 1) + '-1' + (i % 9),
+                content: contents[(seed + i) % contents.length],
+                unit: units[(seed + i) % units.length],
+                cost: (0.5 + ((seed + i) % 6) * 0.5).toFixed(1) + ' 万元',
+                remark: done ? '维修完成后纳入整治销号档案' : ''
+            });
+        }
+    } else {
+        const contents = ['沿街立面改造', '内部功能布局改造（经审批）', '加装电梯（业主协商一致）', '危房落架大修'];
+        const units = ['具资质的施工总承包企业', '区建筑工程公司', '街道城市更新实施主体', '专业加固施工单位'];
+        const approvals = ['建设工程规划许可证', '既有建筑改造审批表', '加装电梯联合审查意见', '修缮工程备案表'];
+        if (seed % 4 === 0 || done) {
+            list.push({
+                id: 'GZ-' + (rec.no || '') + '-01',
+                time: '202' + (2 + seed % 4) + '-0' + (seed % 9 + 1) + '-2' + (seed % 8),
+                content: contents[seed % contents.length],
+                unit: units[seed % units.length],
+                approvalFile: approvals[seed % approvals.length],
+                remark: seed % 2 === 0 ? '改造后结构安全复核合格' : ''
+            });
+        }
+    }
+    return list;
+}
+
 function normalizeHouseRecord(record) {
     if (!record) return record;
     const rec = record;
@@ -427,6 +507,12 @@ function normalizeHouseRecord(record) {
     if (!rec.riskClassification) rec.riskClassification = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.riskClassification));
     if (!rec.emergencyResponse) rec.emergencyResponse = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.emergencyResponse));
     if (!rec.closeInfo) rec.closeInfo = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.closeInfo));
+
+    // 一房一档全周期档案（6.1.2.23.3）：结构特点/建筑材料/维修记录/改造记录（幂等补种）
+    if (!rec.structureFeatures) rec.structureFeatures = generateStructureFeatures(rec);
+    if (!Array.isArray(rec.buildMaterials)) rec.buildMaterials = generateBuildMaterials(rec);
+    if (!Array.isArray(rec.maintenanceRecords)) rec.maintenanceRecords = generateLifecycleRecords(rec, 'maintenance');
+    if (!Array.isArray(rec.renovationRecords)) rec.renovationRecords = generateLifecycleRecords(rec, 'renovation');
 
     // 销号已通过：强制无风险/已治理，但保留原始风险等级用于统计
     if (rec.closeStatus === '已通过') {
@@ -1366,7 +1452,7 @@ function generateHouseSeed() {
         const riskIdentification = generateRiskIdentification(no, originalRisk, i);
         const riskClassification = {
             level: originalRiskLevel,
-            basis: '依据《农村住房危险性鉴定标准》综合评定为' + originalRiskLevel,
+            basis: '依据《危险房屋鉴定标准》综合评定为' + originalRiskLevel,
             assessTime: inspectionRecords.length ? inspectionRecords[0].checkDate : '',
             assessor: RESPONSIBLE_PERSONS[i % RESPONSIBLE_PERSONS.length]
         };
@@ -1528,7 +1614,14 @@ function initHouseArchSeed() {
         return seed;
     }
     // 规范化已存在的数据，确保各页面读取一致
-    Object.keys(all).forEach(no => normalizeHouseRecord(all[no]));
+    Object.keys(all).forEach(no => {
+        normalizeHouseRecord(all[no]);
+        // 迁移：城镇档案评定依据误引农房标准的历史种子数据
+        const rc = all[no] && all[no].riskClassification;
+        if (rc && typeof rc.basis === 'string' && rc.basis.indexOf('农村住房危险性鉴定标准') !== -1) {
+            rc.basis = rc.basis.replace('农村住房危险性鉴定标准', '危险房屋鉴定标准');
+        }
+    });
     setHouseArchStorage(all);
     // 若 closeApplyData 为空则根据现有房屋数据同步生成
     if (getCloseApplyStorage().length === 0) {
@@ -1602,3 +1695,525 @@ function getZoneCheckinHistory() {
 }
 
 // 在需要的地方调用，例如：initHouseArchSeed();
+
+
+// ========== 消息通知（城镇治理演示：localStorage 持久化）==========
+const URBAN_HOUSE_NOTIFY_KEY = 'urbanHouseArchNotify';
+function getNotifications() {
+    try { return JSON.parse(localStorage.getItem(URBAN_HOUSE_NOTIFY_KEY) || '[]'); } catch (e) { return []; }
+}
+function pushNotification(rec, riskRec, action) {
+    if (!rec) return;
+    const list = getNotifications();
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    const receivers = [rec.owner, rec.responsiblePerson].filter(Boolean);
+    if (!receivers.length) receivers.push('监管人员');
+    receivers.forEach(who => {
+        list.unshift({
+            id: 'NT' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+            time: ts,
+            receiver: who,
+            title: '【' + (action || '风险信息') + '】' + (riskRec.riskName || riskRec.hazardType || '风险记录'),
+            content: (rec.no || '') + ' ' + (riskRec.hazardType || '') + '（' + (riskRec.riskLevel || '') + '）' + (riskRec.location ? ' @' + riskRec.location : ''),
+            houseNo: rec.no || '',
+            read: false
+        });
+    });
+    try { localStorage.setItem(URBAN_HOUSE_NOTIFY_KEY, JSON.stringify(list.slice(0, 100))); } catch (e) {}
+}
+
+// 到期状态（与农房口径一致：治理详情页共用）
+function getDeadlineStatus(deadlineStr) {
+    if (!deadlineStr) return { cls: 'info', text: '未设置', days: null };
+    const diff = Math.ceil((new Date(deadlineStr) - new Date()) / 86400000);
+    if (diff < 0) return { cls: 'danger', text: '已超期 ' + (-diff) + ' 天', days: diff, overdue: true };
+    if (diff <= 15) return { cls: 'warning', text: '临近到期（剩 ' + diff + ' 天）', days: diff, near: true };
+    return { cls: 'safe', text: '剩 ' + diff + ' 天', days: diff };
+}
+
+/* ================= 6.1.2.23.1 房屋安全风险治理（城镇自建房口径，函数与农房一致、字段适配） ================= */
+const GOV_MANAGE_TYPES = ['停止使用', '停止经营', '封控警示', '人员撤离', '持续监控'];
+// 按措施类型的动态扩展字段（标书：如「人员撤离」需填写撤离人数、安置方式、撤离确认人）
+const GOV_MANAGE_EXTRA_FIELDS = {
+    '人员撤离': [
+        { key: 'evacueeCount', label: '撤离人数', placeholder: '如：5人' },
+        { key: 'settleMode', label: '安置方式', placeholder: '如：投靠亲友 / 村临时安置点' },
+        { key: 'evacConfirm', label: '撤离确认人', placeholder: '如：村干部张三' }
+    ],
+    '封控警示': [
+        { key: 'closureRange', label: '封控范围', placeholder: '如：房屋周边5米拉设警戒线' }
+    ],
+    '持续监控': [
+        { key: 'monitorFreq', label: '巡查/监测频次', placeholder: '如：每日1次' },
+        { key: 'monitorDevice', label: '监测设备', placeholder: '如：倾角计、裂缝计（可选）' }
+    ]
+};
+const GOV_ENG_TYPES = ['拆除重建', '维修加固', '局部改造', '防护设施增设'];
+const GOV_ENG_NODES = ['基础验收', '材料进场验收', '主体验收'];
+// 旧工程措施词库 → 标书四类映射（存量数据归并展示）
+const GOV_ENG_TYPE_MAP = {
+    '拆除重建': '拆除重建',
+    '结构加固': '维修加固', '基础加固': '维修加固', '墙体修复': '维修加固', '屋面修缮': '维修加固', '维修加固': '维修加固',
+    '局部改造': '局部改造', '排水改造': '局部改造', '电气改造': '局部改造', '消防改造': '局部改造',
+    '防护设施增设': '防护设施增设'
+};
+
+// 施工单位机构库：资质等级 / 信用评分 / 历史业绩，选择施工单位时展示辅助决策
+const CONTRACTOR_LIB_KEY = 'urbanHouseContractorLib';
+const CONTRACTOR_LIBRARY_SEED = [
+    { id: 'CT-001', name: '奉贤城建建筑工程有限公司', qualification: '建筑工程施工总承包二级', credit: 92, history: '近三年完成城镇自建房加固修缮工程 96 项，验收合格率 100%', phone: '021-57410001' },
+    { id: 'CT-002', name: '上海南桥建设发展有限公司', qualification: '建筑工程施工总承包二级', credit: 88, history: '近三年完成城镇危旧房改造工程 58 项，无质量投诉', phone: '021-57410002' },
+    { id: 'CT-003', name: '华建城镇建设工程队', qualification: '建筑装修装饰工程专业承包三级', credit: 85, history: '承接城镇房屋局部改造、屋面修缮 130 余项', phone: '021-57410003' },
+    { id: 'CT-004', name: '东方古建修缮工程公司', qualification: '特种工程（结构补强）专业承包', credit: 90, history: '完成砖木结构老房加固 52 项，含历史保护建筑 8 栋', phone: '021-57410004' },
+    { id: 'CT-005', name: '金汇镇建筑工匠合作社', qualification: '村镇建筑工匠备案（A级）', credit: 82, history: '本街镇房屋维修加固 230 余户，熟悉城区工艺', phone: '021-57410005' },
+    { id: 'CT-006', name: '临港新片区建设工程公司', qualification: '建筑工程施工总承包一级', credit: 95, history: '承担拆除重建类项目 38 项，含集中安置点建设 3 处', phone: '021-57410006' }
+];
+function getContractorLibrary() {
+    try {
+        const list = JSON.parse(localStorage.getItem(CONTRACTOR_LIB_KEY) || 'null');
+        if (Array.isArray(list) && list.length) return list;
+    } catch (e) {}
+    const seed = JSON.parse(JSON.stringify(CONTRACTOR_LIBRARY_SEED));
+    try { localStorage.setItem(CONTRACTOR_LIB_KEY, JSON.stringify(seed)); } catch (e) {}
+    return seed;
+}
+function saveContractorLibrary(list) {
+    try { localStorage.setItem(CONTRACTOR_LIB_KEY, JSON.stringify(list || [])); } catch (e) {}
+}
+
+function __govNow() {
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' : '') + n;
+    return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+}
+function __govToday() { return __govNow().slice(0, 10); }
+
+// 幂等补齐治理字段（只增不改，档案页既有读口不受影响）
+function ensureGovernData(rec) {
+    if (!rec) return;
+    rec.manageRecords = Array.isArray(rec.manageRecords) ? rec.manageRecords : [];
+    rec.projectRecords = Array.isArray(rec.projectRecords) ? rec.projectRecords : [];
+    rec.manageRecords.forEach((m, i) => {
+        if (!m.id) m.id = 'GM-' + (rec.no || 'X') + '-' + String(i + 1).padStart(3, '0');
+        if (!m.status) m.status = (m.isDone || m.actualEndTime) ? '已结束' : '实施中';
+        if (!m.extras || typeof m.extras !== 'object') m.extras = {};
+        if (!Array.isArray(m.changes)) m.changes = [];
+    });
+    rec.projectRecords.forEach((p, i) => {
+        if (!p.id) p.id = 'GE-' + (rec.no || 'X') + '-' + String(i + 1).padStart(3, '0');
+        if (!p.engType) p.engType = GOV_ENG_TYPE_MAP[p.projectName] || '维修加固';
+        if (p.companyId === undefined) {
+            const hit = CONTRACTOR_LIBRARY_SEED.find(c => c.name === p.company);
+            p.companyId = hit ? hit.id : '';
+        }
+        if (p.leader === undefined) p.leader = p.manager || '';
+        if (p.budget === undefined) p.budget = p.fund || 0;
+        if (!p.fundSource) p.fundSource = '城镇房屋安全专项整治资金 + 业主自筹';
+        if (!p.planFiles || typeof p.planFiles !== 'object' || Array.isArray(p.planFiles)) {
+            p.planFiles = { design: [], org: [], safety: [] };
+        }
+        if (!Array.isArray(p.nodes) || !p.nodes.length) {
+            const done = !!p.isDone;
+            p.nodes = GOV_ENG_NODES.map(name => ({
+                name: name,
+                status: done ? '已验收' : '待验收',
+                time: done ? (p.endDate || '') : '',
+                conclusion: done ? '合格' : '',
+                recorder: done ? (p.acceptChecker || '') : '',
+                photos: []
+            }));
+        }
+        if (p.acceptReport === undefined) {
+            p.acceptReport = p.isDone ? {
+                conclusion: p.acceptConclusion || '合格',
+                staff: p.acceptChecker || '',
+                unit: p.acceptUnit || '',
+                date: p.acceptDate || p.endDate || '',
+                photos: []
+            } : null;
+        }
+    });
+    if (rec.governTask === undefined) rec.governTask = null;
+}
+
+// ---- 管理措施 ----
+function addGovernManage(rec, payload) {
+    ensureGovernData(rec);
+    const seq = rec.manageRecords.length + 1;
+    const item = {
+        id: 'GM-' + (rec.no || 'X') + '-' + String(seq).padStart(3, '0') + '-' + Date.now() % 1000,
+        measureType: payload.measureType || '',
+        implementPart: payload.implementPart || '',
+        startTime: payload.startTime || __govToday(),
+        planEndTime: payload.planEndTime || '',
+        actualEndTime: '',
+        requirement: payload.requirement || '',
+        dutyUnit: payload.dutyUnit || '',
+        dutyPerson: payload.dutyPerson || '',
+        phone: payload.phone || '',
+        measureDesc: payload.measureDesc || payload.measureType || '',
+        implementPhotos: Array.isArray(payload.implementPhotos) ? payload.implementPhotos : [],
+        completePhotos: [],
+        isDone: false,
+        status: '实施中',
+        extras: payload.extras || {},
+        changes: [],
+        effectEvaluation: '',
+        riskControlled: false,
+        reporter: payload.reporter || '当前用户',
+        reportTime: __govNow()
+    };
+    rec.manageRecords.unshift(item);
+    if (rec.governance === 'pending') { rec.governance = 'doing'; rec.governStatus = '整治中'; }
+    return item;
+}
+function finishGovernManage(rec, id, payload) {
+    ensureGovernData(rec);
+    const m = rec.manageRecords.find(x => x.id === id);
+    if (!m) return { ok: false, msg: '未找到措施记录' };
+    m.completePhotos = (payload && payload.completePhotos) || [];
+    m.effectEvaluation = (payload && payload.effectEvaluation) || '';
+    m.riskControlled = !!(payload && payload.riskControlled);
+    m.actualEndTime = (payload && payload.actualEndTime) || __govToday();
+    m.isDone = true;
+    m.status = '已结束';
+    syncGovernHouseStatus(rec);
+    return { ok: true };
+}
+// 变更/延长申请：提交进入待审批；审批通过才更新计划结束时间，履历可追溯
+function addGovernChange(rec, id, payload) {
+    ensureGovernData(rec);
+    const m = rec.manageRecords.find(x => x.id === id);
+    if (!m) return { ok: false, msg: '未找到措施记录' };
+    m.changes.push({
+        id: 'CHG-' + id + '-' + (m.changes.length + 1),
+        time: __govNow(),
+        applicant: (payload && payload.applicant) || '当前用户',
+        reason: (payload && payload.reason) || '',
+        oldEnd: m.planEndTime || '',
+        newEnd: (payload && payload.newEnd) || '',
+        status: '待审批',
+        auditor: '',
+        auditTime: '',
+        auditOpinion: ''
+    });
+    return { ok: true };
+}
+function auditGovernChange(rec, id, changeId, pass, auditor, opinion) {
+    ensureGovernData(rec);
+    const m = rec.manageRecords.find(x => x.id === id);
+    if (!m) return { ok: false, msg: '未找到措施记录' };
+    const c = m.changes.find(x => x.id === changeId);
+    if (!c || c.status !== '待审批') return { ok: false, msg: '变更记录不存在或已审批' };
+    c.status = pass ? '已审批' : '已驳回';
+    c.auditor = auditor || '当前用户';
+    c.auditTime = __govNow();
+    c.auditOpinion = opinion || '';
+    if (pass && c.newEnd) m.planEndTime = c.newEnd;
+    return { ok: true };
+}
+
+// ---- 工程措施 ----
+function addGovernEng(rec, payload) {
+    ensureGovernData(rec);
+    const seq = rec.projectRecords.length + 1;
+    const item = {
+        id: 'GE-' + (rec.no || 'X') + '-' + String(seq).padStart(3, '0') + '-' + Date.now() % 1000,
+        engType: payload.engType || '维修加固',
+        projectName: payload.engType || '维修加固',
+        scope: payload.scope || '',
+        startDate: payload.startDate || __govToday(),
+        endDate: payload.endDate || '',
+        companyId: payload.companyId || '',
+        company: payload.company || '',
+        leader: payload.leader || '',
+        manager: payload.leader || '',
+        phone: payload.phone || '',
+        budget: payload.budget || 0,
+        fund: payload.budget || 0,
+        fundSource: payload.fundSource || '',
+        planFiles: payload.planFiles || { design: [], org: [], safety: [] },
+        nodes: GOV_ENG_NODES.map(name => ({ name: name, status: '待验收', time: '', conclusion: '', recorder: '', photos: [] })),
+        acceptReport: null,
+        status: '进行中',
+        isDone: false,
+        progress: 0,
+        reporter: payload.reporter || '当前用户',
+        reportTime: __govNow(),
+        remark: payload.remark || ''
+    };
+    rec.projectRecords.unshift(item);
+    if (rec.governance === 'pending') { rec.governance = 'doing'; rec.governStatus = '整治中'; }
+    return item;
+}
+// 关键节点验收（基础验收 / 材料进场验收 / 主体验收）
+function saveGovernEngNode(rec, id, nodeName, payload) {
+    ensureGovernData(rec);
+    const p = rec.projectRecords.find(x => x.id === id);
+    if (!p) return { ok: false, msg: '未找到工程措施' };
+    const node = (p.nodes || []).find(n => n.name === nodeName);
+    if (!node) return { ok: false, msg: '未找到节点' };
+    node.status = '已验收';
+    node.time = (payload && payload.time) || __govToday();
+    node.conclusion = (payload && payload.conclusion) || '合格';
+    node.recorder = (payload && payload.recorder) || '当前用户';
+    node.photos = (payload && payload.photos) || [];
+    const doneCnt = p.nodes.filter(n => n.status === '已验收').length;
+    p.progress = Math.round(doneCnt / p.nodes.length * 90);
+    return { ok: true };
+}
+// 竣工验收报告 → 工程措施完成 → 联动更新房屋治理状态
+function finishGovernEng(rec, id, report) {
+    ensureGovernData(rec);
+    const p = rec.projectRecords.find(x => x.id === id);
+    if (!p) return { ok: false, msg: '未找到工程措施' };
+    if (!report || !report.conclusion || !report.date) return { ok: false, msg: '请填写验收结论与验收日期' };
+    p.acceptReport = {
+        conclusion: report.conclusion,
+        staff: report.staff || '',
+        unit: report.unit || '',
+        date: report.date,
+        photos: report.photos || []
+    };
+    p.isDone = true;
+    p.status = '已完成';
+    p.progress = 100;
+    p.endDate = report.date;
+    syncGovernHouseStatus(rec);
+    pushNotification(rec, { riskName: '工程措施竣工验收', hazardType: p.engType || '工程措施', riskLevel: p.acceptReport.conclusion }, '治理完成');
+    return { ok: true };
+}
+// 联动：任一工程措施竣工，或全部管理措施结束且无工程措施 → 房屋标记「已治理」
+function syncGovernHouseStatus(rec) {
+    if (!rec) return;
+    const engDone = (rec.projectRecords || []).some(p => p.isDone);
+    const mgAllDone = (rec.manageRecords || []).length > 0 &&
+        rec.manageRecords.every(m => m.isDone || m.status === '已结束') &&
+        !(rec.projectRecords || []).length;
+    if ((engDone || mgAllDone) && rec.governance !== 'done') {
+        rec.governance = 'done';
+        rec.governStatus = '已整治';
+        if (!rec.completeDate) rec.completeDate = __govToday();
+        return;
+    }
+    // 有正在进行的管理/工程措施且房屋仍是待整治 → 联动为整治中，保持地图状态一致
+    const anyDoing = (rec.manageRecords || []).some(m => !(m.isDone || m.status === '已结束')) ||
+        (rec.projectRecords || []).some(p => !p.isDone);
+    if (anyDoing && rec.governance === 'pending') {
+        rec.governance = 'doing';
+        rec.governStatus = '整治中';
+    }
+}
+
+// ---- 排查任务下发（批量 / 定向指派） ----
+function dispatchGovernTask(nos, payload) {
+    if (!Array.isArray(nos) || !nos.length) return 0;
+    let cnt = 0;
+    nos.forEach(no => {
+        patchHouseRecord(no, rec => {
+            ensureGovernData(rec);
+            rec.governTask = {
+                taskNo: 'PT-' + no,
+                taskType: (payload && payload.taskType) || '批量下发',
+                dispatcher: (payload && payload.dispatcher) || '当前用户',
+                dispatchTime: __govNow(),
+                deadline: (payload && payload.deadline) || '',
+                status: '已下发'
+            };
+        });
+        cnt++;
+    });
+    return cnt;
+}
+
+// ---- 单条记录治理派生信息（列表页用） ----
+function govStatsOf(rec) {
+    ensureGovernData(rec);
+    const mTotal = rec.manageRecords.length;
+    const mDone = rec.manageRecords.filter(m => m.isDone || m.status === '已结束').length;
+    const pTotal = rec.projectRecords.length;
+    const pDone = rec.projectRecords.filter(p => p.isDone).length;
+    const today = __govToday();
+    const mOverdue = rec.manageRecords.filter(m => !(m.isDone || m.status === '已结束') && m.planEndTime && m.planEndTime < today).length;
+    return { mTotal: mTotal, mDone: mDone, pTotal: pTotal, pDone: pDone, mOverdue: mOverdue };
+}
+
+// ---- 治理多维统计（按区域 / 措施类型 / 完成情况） ----
+function govListStats(records) {
+    const s = {
+        total: 0, doing: 0, done: 0, pending: 0, overdue: 0,
+        byTown: {}, byManageType: {}, byEngType: {}
+    };
+    (records || []).forEach(rec => {
+        if (rec.risk === 'safe') return;
+        s.total++;
+        const g = rec.governance || 'pending';
+        if (g === 'done') s.done++;
+        else if (g === 'doing') s.doing++;
+        else if (g === 'overdue') s.overdue++;
+        else s.pending++;
+        const town = rec.street || '未知';
+        s.byTown[town] = (s.byTown[town] || 0) + 1;
+        (rec.manageRecords || []).forEach(m => {
+            const t = m.measureType || '其他';
+            s.byManageType[t] = (s.byManageType[t] || 0) + 1;
+        });
+        (rec.projectRecords || []).forEach(p => {
+            const t = p.engType || GOV_ENG_TYPE_MAP[p.projectName] || '其他';
+            s.byEngType[t] = (s.byEngType[t] || 0) + 1;
+        });
+    });
+    return s;
+}
+
+/* ================= 6.1.2.23.1 演示数据种子（农房安全风险治理） ================= */
+// SVG 占位照片（dataURL），供演示页面缩略图 / 灯箱查看
+function govDemoPhoto(text, bg) {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200">'
+        + '<rect width="320" height="200" fill="' + bg + '"/>'
+        + '<rect x="8" y="8" width="304" height="184" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2" stroke-dasharray="8 6"/>'
+        + '<text x="160" y="92" fill="#fff" font-size="20" text-anchor="middle" font-family="sans-serif">' + text + '</text>'
+        + '<text x="160" y="124" fill="rgba(255,255,255,.85)" font-size="13" text-anchor="middle" font-family="sans-serif">演示照片</text>'
+        + '</svg>';
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+function govAddDays(iso, n) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d.getTime())) return iso;
+    d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// 一次性把存量种子记录充实为可演示数据（幂等，本地标记只执行一次；force 可重灌）
+function seedGovernDemoData(force) {
+    const FLAG = 'urbanHouseGovernDemoV1';
+    try { if (!force && localStorage.getItem(FLAG)) return 0; } catch (e) {}
+    const recs = getAllHouseRecords().filter(r => r.houseType === '城镇自建房' && r.risk && r.risk !== 'safe');
+    const persons = ['李志强', '王建国', '陈明华', '周敏', '张建军', '刘伟', '赵敏'];
+    const fundSources = ['城镇房屋安全专项整治资金 + 业主自筹', '业主自筹', '区镇两级财政补助'];
+    const pickPhotos = v => Array.isArray(v) ? v.filter(u => typeof u === 'string' && u.indexOf('data:image') === 0) : [];
+    recs.forEach((rec, i) => {
+        patchHouseRecord(rec.no, r => {
+            ensureGovernData(r);
+            const base = r.no;
+            // ---- 管理措施：照片 / 扩展字段 / 变更履历 ----
+            r.manageRecords.forEach((m, mi) => {
+                const ip = pickPhotos(m.implementPhotos);
+                m.implementPhotos = ip.length ? ip : [govDemoPhoto(m.measureType + '落实照', '#c5221f'), govDemoPhoto('现场管控照', '#e37400')];
+                if (!m.extras) m.extras = {};
+                if (m.measureType === '人员撤离' && !m.extras.evacueeCount) {
+                    m.extras.evacueeCount = (3 + ((i + mi) % 4)) + '人';
+                    m.extras.settleMode = (i + mi) % 2 ? '投靠亲友' : '社区临时安置点';
+                    m.extras.evacConfirm = '社区干部 ' + persons[(i + mi) % persons.length];
+                }
+                if (m.measureType === '封控警示' && !m.extras.closureRange) m.extras.closureRange = '房屋周边' + (3 + (i % 4)) + '米拉设警戒线，出入口张贴警示标识';
+                if (m.measureType === '持续监控' && !m.extras.monitorFreq) {
+                    m.extras.monitorFreq = ['每日1次', '每周2次', '每周3次'][i % 3];
+                    m.extras.monitorDevice = ['倾角计1个', '裂缝计2个', '人工巡查'][i % 3];
+                }
+                if (m.status === '已结束') {
+                    const cp = pickPhotos(m.completePhotos);
+                    m.completePhotos = cp.length ? cp : [govDemoPhoto('管控解除确认', '#188038'), govDemoPhoto('现场复查照', '#188038')];
+                    if (!m.effectEvaluation) m.effectEvaluation = '风险已有效控制，未发生次生问题';
+                }
+            });
+            // 变更履历：i%4===0 → 已审批（自动延长结束时间）；i%5===0 → 待审批（演示批准/驳回按钮）
+            if (i % 4 === 0 || i % 5 === 0) {
+                const target = r.manageRecords.find(m => m.status === '实施中');
+                if (target && !target.changes.length) {
+                    const pending = i % 5 === 0;
+                    const chg = {
+                        id: 'CH-' + base + '-001',
+                        oldEnd: target.planEndTime,
+                        newEnd: govAddDays(target.planEndTime, 30),
+                        reason: ['雨季连续降雨无法施工', '住户搬迁协调中', '等待维修资金审批下达'][i % 3],
+                        applyTime: govAddDays(target.startTime, 10) + ' 10:20',
+                        applicant: target.reporter || persons[i % persons.length],
+                        status: pending ? '待审批' : '已审批',
+                        auditor: pending ? '' : '王建国',
+                        auditTime: pending ? '' : govAddDays(target.startTime, 12) + ' 15:40'
+                    };
+                    target.changes.push(chg);
+                    if (!pending) target.planEndTime = chg.newEnd;
+                }
+            }
+            // ---- 工程措施：机构库 / 方案文件 / 节点时间轴 / 竣工照片 ----
+            r.projectRecords.forEach((p, pi) => {
+                const ct = CONTRACTOR_LIBRARY_SEED[(i + pi) % CONTRACTOR_LIBRARY_SEED.length];
+                p.companyId = ct.id;
+                p.company = ct.name;
+                if (!p.leader) p.leader = persons[(i + pi) % persons.length];
+                if (!p.budget) p.budget = 5 + ((i * 7 + pi * 3) % 20);
+                p.fundSource = fundSources[(i + pi) % fundSources.length];
+                p.planFiles = {
+                    design: [base + '-设计图纸.pdf', base + '-结构计算书.pdf'],
+                    org: [base + '-施工组织设计.pdf'],
+                    safety: pi % 2 ? [base + '-安全专项方案.pdf'] : [base + '-安全专项方案.pdf', base + '-应急预案.pdf']
+                };
+                const doneCnt = p.isDone ? 3 : (p.progress >= 70 ? 2 : (p.progress >= 30 ? 1 : 0));
+                const nodeDays = [20, 45, 75];
+                p.nodes.forEach((n, ni) => {
+                    if (ni < doneCnt) {
+                        n.status = '已验收';
+                        n.time = (p.isDone && ni === 2) ? (p.endDate || govAddDays(p.startDate, nodeDays[ni])) : govAddDays(p.startDate, nodeDays[ni]);
+                        n.conclusion = '合格';
+                        n.recorder = persons[(i + pi + ni) % persons.length];
+                        n.photos = [govDemoPhoto(n.name + '现场照', '#1a73e8')];
+                    } else {
+                        n.status = '待验收';
+                        n.time = ''; n.conclusion = ''; n.recorder = ''; n.photos = [];
+                    }
+                });
+                if (p.isDone && p.acceptReport && !pickPhotos(p.acceptReport.photos).length) {
+                    p.acceptReport.photos = [govDemoPhoto('竣工后整体照', '#188038'), govDemoPhoto('验收签字页', '#188038')];
+                }
+            });
+            // ---- 排查任务下发（含已逾期 / 临期 / 远期三类期限） ----
+            if (!r.governTask && i % 3 !== 0) {
+                r.governTask = {
+                    taskNo: 'RW-' + base,
+                    taskType: i % 2 ? '批量下发' : '定向指派',
+                    dispatcher: i % 2 ? '区房管局' : (r.street || '') + '房管办',
+                    dispatchTime: '2026-10-' + String(5 + (i % 20)).padStart(2, '0') + ' 09:30',
+                    deadline: ['2026-11-25', '2026-12-20', '2026-10-30'][Math.floor(i / 3) % 3],
+                    status: '已下发'
+                };
+            }
+            // ---- 特色案例补充：逾期封控 / 临期监控 ----
+            if (i % 6 === 0 && !r.manageRecords.some(m => m.status === '实施中' && m.planEndTime < '2026-11-10')) {
+                r.manageRecords.push({
+                    id: 'GM-' + base + '-D1', measureType: '封控警示', implementPart: '整栋房屋',
+                    startTime: '2026-08-15', planEndTime: '2026-10-15', actualEndTime: '',
+                    requirement: '立即对危险区域采取封控，设置围挡和警示标识',
+                    dutyUnit: (r.street || '') + '房管办', dutyPerson: persons[i % persons.length], phone: '13812345678',
+                    measureDesc: '封控警示：设置围挡、警示标识，安排专人巡查',
+                    implementPhotos: [govDemoPhoto('警戒线设置', '#c5221f'), govDemoPhoto('警示标识张贴', '#e37400')],
+                    completePhotos: [], isDone: false, status: '实施中',
+                    extras: { closureRange: '房屋周边5米拉设警戒线' },
+                    changes: [], effectEvaluation: '', riskControlled: false,
+                    reporter: persons[(i + 1) % persons.length], reportTime: '2026-08-15 09:10'
+                });
+            } else if (i % 6 === 1 && !r.manageRecords.some(m => m.status === '实施中' && m.planEndTime >= '2026-11-10' && m.planEndTime <= '2026-11-25')) {
+                r.manageRecords.push({
+                    id: 'GM-' + base + '-D2', measureType: '持续监控', implementPart: '东立面墙体',
+                    startTime: '2026-10-20', planEndTime: '2026-11-18', actualEndTime: '',
+                    requirement: '对裂缝发展情况加密监测，每日记录',
+                    dutyUnit: (r.street || '') + '房管办', dutyPerson: persons[(i + 2) % persons.length], phone: '13956781234',
+                    measureDesc: '持续监控：安装裂缝计，每日巡查记录',
+                    implementPhotos: [govDemoPhoto('裂缝计安装照', '#7b1fa2')],
+                    completePhotos: [], isDone: false, status: '实施中',
+                    extras: { monitorFreq: '每日1次', monitorDevice: '裂缝计2个' },
+                    changes: [], effectEvaluation: '', riskControlled: false,
+                    reporter: persons[(i + 3) % persons.length], reportTime: '2026-10-20 14:30'
+                });
+            }
+            syncGovernHouseStatus(r);
+        });
+    });
+    try { localStorage.setItem(FLAG, '1'); } catch (e) {}
+    return recs.length;
+}

@@ -990,6 +990,19 @@
             background: var(--primary-light);
             color: var(--primary);
         }
+        /* ===== 一房一档 · 档案概览 ===== */
+        .arch-overview { display: flex; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--border,#e8ecf3); background: #fbfcfe; }
+        .ov-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 380px; flex: none; }
+        .ov-card { border: 1px solid #e8ecf3; border-radius: 8px; padding: 10px 14px; background: #fff; }
+        .ov-card .ov-label { font-size: 12px; color: var(--text-secondary,#8a94a6); }
+        .ov-card .ov-value { font-size: 22px; font-weight: 700; color: var(--primary,#2b6de8); margin-top: 2px; }
+        .ov-card .ov-sub { font-size: 11px; color: var(--text-secondary,#8a94a6); margin-top: 2px; }
+        .ov-charts { display: flex; gap: 12px; flex: 1; min-width: 0; }
+        .ov-chart { flex: 1; min-width: 0; height: 118px; border: 1px solid #e8ecf3; border-radius: 8px; background: #fff; }
+        .completeness-cell { display: flex; align-items: center; gap: 6px; }
+        .completeness-bar { width: 56px; height: 6px; border-radius: 3px; background: #eef1f6; overflow: hidden; }
+        .completeness-bar > i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg,#52c41a,#2b6de8); }
+        .search-hint { font-size: 11px; color: var(--text-secondary,#8a94a6); margin-left: 4px; }
     </style>
 </head>
 <body>
@@ -999,10 +1012,24 @@
 <button class="category-tab active" data-category="农村自建房"><i class="fas fa-home"></i> 农村自建房 <span class="tab-count" id="countRural">0</span></button>
 <button class="category-tab" data-category="城镇自建房"><i class="fas fa-city"></i> 城镇自建房 <span class="tab-count" id="countUrban">0</span></button>
 </div>
+<!-- 一房一档 · 档案概览统计 -->
+<div class="arch-overview" id="archOverview">
+<div class="ov-cards">
+<div class="ov-card"><div class="ov-label">房屋档案总数</div><div class="ov-value" id="ovTotal">0</div><div class="ov-sub">一房一档全覆盖</div></div>
+<div class="ov-card"><div class="ov-label">农村自建房</div><div class="ov-value" id="ovRural">0</div><div class="ov-sub" id="ovRuralClosed">已销号 0</div></div>
+<div class="ov-card"><div class="ov-label">城镇自建房</div><div class="ov-value" id="ovUrban">0</div><div class="ov-sub" id="ovUrbanClosed">已销号 0</div></div>
+<div class="ov-card"><div class="ov-label">档案平均完整度</div><div class="ov-value" id="ovCompleteness">0%</div><div class="ov-sub">九类档案要素</div></div>
+</div>
+<div class="ov-charts">
+<div class="ov-chart" id="chartStructure"></div>
+<div class="ov-chart" id="chartYear"></div>
+</div>
+</div>
 <!-- Search toolbar -->
 <div class="search-toolbar">
 <div class="toolbar-group">
-<input class="search-input fulltext" id="fulltextSearch" placeholder="输入唯一标识/地址快速定位" type="text"/>
+<input class="search-input fulltext" id="fulltextSearch" placeholder="输入标识/地址/户主检索" type="text"/>
+<span class="search-hint">支持全文检索，可用 AND 组合、"字段=值"（如 裂缝 AND 等级=第三类）</span>
 <label class="group-label" for="townFilter">镇/街道</label>
 <select class="search-input" id="townFilter" style="max-width:140px;">
 <option value="">全部</option>
@@ -1028,6 +1055,8 @@
 <th class="col-village">社区/居委</th>
 <th class="col-address">地址</th>
 <th class="col-status">风险等级</th>
+<th class="col-completeness">档案完整度</th>
+<th class="col-updated">最近更新</th>
 <th class="col-view">操作</th>
 </tr>
 </thead>
@@ -1840,32 +1869,129 @@
 <div class="carousel-counter" id="carouselCounter"></div>
 </div>
 </div>
+<script src="echarts.min.js"></script>
 <script src="../js/house-arch-data.js"></script>
 <script>
         initHouseArchSeed();
+
+        // ===== 一房一档：档案要素提取与完整度计算 =====
+        function getStructureType(r) {
+            return (r.structure && (r.structure.type || r.structure.structureType)) || r.category || '';
+        }
+        function getBuiltYear(r) {
+            const y = (r.overview && r.overview.builtYear) || r.year || '';
+            const m = String(y).match(/\d{4}/);
+            return m ? m[0] : '';
+        }
+        function getUpdatedAt(r) {
+            if (r._syncedAt) return String(r._syncedAt).slice(0, 10);
+            const logs = r.changeLog || r.changeLogs || [];
+            if (logs.length) return String(logs[0].time || '').slice(0, 10);
+            return '';
+        }
+        // 九类档案要素：基础信息/结构特点/建筑材料/隐患排查/整治记录/维修记录/改造记录/消险记录/变更履历
+        function calcCompleteness(r) {
+            let filled = 0;
+            if (r.address && (r.owner || r.name)) filled++;
+            const sf = r.structureFeatures || {};
+            if (['basicForm', 'bearingSystem', 'floorForm', 'roofForm'].filter(k => sf[k]).length >= 3) filled++;
+            if ((r.buildMaterials || []).length > 0) filled++;
+            if ((r.hazards || []).length > 0 || r.riskLevel) filled++;
+            if ((r.measures || []).length > 0 || (r.manageRecords || []).length > 0 || (r.projectRecords || []).length > 0 || r.governStatus === '已治理' || r.governStatus === '已整治') filled++;
+            if ((r.maintenanceRecords || []).length > 0) filled++;
+            if ((r.renovationRecords || []).length > 0) filled++;
+            if (r.closeStatus === '已通过' || r.closeStatus === '已销号' || (r.eliminationInfo && r.eliminationInfo.applyTime)) filled++;
+            if ((r.changeLog || []).length > 0 || r._syncedAt) filled++;
+            return Math.round(filled / 9 * 100);
+        }
+        function buildSearchText(r) {
+            const parts = [r.no, r.name, r.owner, r.address, r.street, r.village, r.community, r.riskLevel, r.status, r.currentMeasure];
+            (r.hazards || []).forEach(h => parts.push(h.name, h.desc, h.description, h.level));
+            (r.measures || []).forEach(m => parts.push(m.name, m.type));
+            return parts.filter(Boolean).join(' ').toLowerCase();
+        }
+        function mapArchRecord(r, category) {
+            return {
+                no: r.no,
+                name: r.name,
+                owner: r.owner,
+                street: r.street,
+                village: r.village || r.community || '',
+                address: r.address,
+                category: category,
+                status: category === '农村自建房'
+                    ? ((typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status]) ? HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status] : (r.riskLevel || r.status))
+                    : (r.riskLevel || r.status),
+                governStatus: r.governStatus || '',
+                structureType: getStructureType(r),
+                builtYear: getBuiltYear(r),
+                closeStatus: r.closeStatus || '',
+                completeness: calcCompleteness(r),
+                updatedAt: getUpdatedAt(r),
+                searchText: buildSearchText(r)
+            };
+        }
         // 构建农村自建房数据（house-arch-data.js，三类口径：第一类/第二类/第三类）
         const ruralData = (() => {
             const recs = getAllHouseRecords();
             return recs
                 // house-arch-data.js 为农村数据源，仅保留农村自建房记录
                 .filter(r => (r.houseType || r.category) === '农村自建房')
-                .map(r => ({
-                    no: r.no,
-                    name: r.name,
-                    owner: r.owner,
-                    street: r.street,
-                    village: r.village || r.community || '',
-                    address: r.address,
-                    category: '农村自建房',
-                    status: (typeof HAZARD_TO_RISK_LEVEL !== 'undefined' && HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status])
-                        ? HAZARD_TO_RISK_LEVEL[r.riskLevel || r.status]
-                        : (r.riskLevel || r.status)
-                }));
+                .map(r => mapArchRecord(r, '农村自建房'));
         })();
+
+        // ===== 一房一档：概览统计条渲染 =====
+        function renderOverview() {
+            const total = baseData.length;
+            const rural = baseData.filter(i => i.category === '农村自建房');
+            const urban = baseData.filter(i => i.category === '城镇自建房');
+            const closed = arr => arr.filter(i => i.closeStatus === '已通过' || i.closeStatus === '已销号').length;
+            document.getElementById('ovTotal').textContent = total;
+            document.getElementById('ovRural').textContent = rural.length;
+            document.getElementById('ovUrban').textContent = urban.length;
+            document.getElementById('ovRuralClosed').textContent = '已销号 ' + closed(rural);
+            document.getElementById('ovUrbanClosed').textContent = '已销号 ' + closed(urban);
+            const avg = total ? Math.round(baseData.reduce((s, i) => s + i.completeness, 0) / total) : 0;
+            document.getElementById('ovCompleteness').textContent = avg + '%';
+            if (typeof echarts === 'undefined') return;
+            // 结构类型分布
+            const structMap = {};
+            baseData.forEach(i => { const k = i.structureType || '其他'; structMap[k] = (structMap[k] || 0) + 1; });
+            const chart1 = echarts.init(document.getElementById('chartStructure'));
+            chart1.setOption({
+                title: { text: '结构类型分布', left: 10, top: 6, textStyle: { fontSize: 12, fontWeight: 600 } },
+                tooltip: { trigger: 'item' },
+                series: [{ type: 'pie', radius: ['35%', '62%'], center: ['50%', '58%'],
+                    label: { fontSize: 10 }, itemStyle: { borderRadius: 4 },
+                    data: Object.keys(structMap).map(k => ({ name: k, value: structMap[k] })) }]
+            });
+            // 建筑年代分布
+            const yearGroups = { '1980年前': 0, '1980-1989': 0, '1990-1999': 0, '2000-2009': 0, '2010年后': 0, '未知': 0 };
+            baseData.forEach(i => {
+                const y = parseInt(i.builtYear, 10);
+                if (!y) yearGroups['未知']++;
+                else if (y < 1980) yearGroups['1980年前']++;
+                else if (y < 1990) yearGroups['1980-1989']++;
+                else if (y < 2000) yearGroups['1990-1999']++;
+                else if (y < 2010) yearGroups['2000-2009']++;
+                else yearGroups['2010年后']++;
+            });
+            const chart2 = echarts.init(document.getElementById('chartYear'));
+            chart2.setOption({
+                title: { text: '建筑年代分布', left: 10, top: 6, textStyle: { fontSize: 12, fontWeight: 600 } },
+                tooltip: { trigger: 'axis' },
+                grid: { left: 40, right: 12, top: 34, bottom: 22 },
+                xAxis: { type: 'category', data: Object.keys(yearGroups), axisLabel: { fontSize: 10 } },
+                yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+                series: [{ type: 'bar', data: Object.values(yearGroups), barWidth: 16,
+                    itemStyle: { color: '#2b6de8', borderRadius: [3, 3, 0, 0] } }]
+            });
+        }
 
         // 动态加载城镇自建房数据层（urban-house-arch-data.js，四级口径：疑似危房/疑似严重损坏房/疑似一般损坏房/完好房（基本完好房））
         // 用 fetch + new Function 在隔离作用域内执行，避免与 house-arch-data.js 的全局函数冲突
         let baseData = [...ruralData];
+        renderOverview();
         fetch('../js/urban-house-arch-data.js')
             .then(res => res.text())
             .then(code => {
@@ -1874,19 +2000,11 @@
                 const urbanAPI = factory();
                 urbanAPI.initHouseArchSeed();
                 const urbanRecs = urbanAPI.getAllHouseRecords();
-                const urbanData = urbanRecs.map(r => ({
-                    no: r.no,
-                    name: r.name,
-                    owner: r.owner,
-                    street: r.street,
-                    village: r.village || r.community || '',
-                    address: r.address,
-                    category: '城镇自建房',
-                    status: r.riskLevel || r.status
-                }));
+                const urbanData = urbanRecs.map(r => mapArchRecord(r, '城镇自建房'));
                 baseData = ruralData.concat(urbanData);
                 // 数据加载完成后刷新列表与计数
                 updateTabCounts();
+                renderOverview();
                 // 城镇数据到位后重建镇/街道 & 社区/居委下拉
                 buildTownOptions();
                 buildVillageOptions(townFilter ? townFilter.value : '');
@@ -2016,7 +2134,9 @@
                     <td>${item.village || '-'}</td>
                     <td>${item.address}</td>
                     <td><span class="status-tag ${getRiskBadgeClass(item.status)}">${getRiskDisplayText(item.status)}</span></td>
-                    <td class="col-view"><span class="view-btn" data-index="${start + index}">查看</span></td>
+                    <td><span class="completeness-cell"><span class="completeness-bar"><i style="width:${item.completeness}%;"></i></span><span style="font-size:12px;color:var(--text-secondary,#8a94a6);">${item.completeness}%</span></span></td>
+                    <td style="font-size:12px;color:var(--text-secondary,#8a94a6);">${item.updatedAt || '—'}</td>
+                    <td class="col-view"><span class="view-btn" data-index="${start + index}">查看档案</span></td>
                 </tr>
             `).join('');
 
@@ -2066,8 +2186,36 @@
             renderPagination();
         }
 
+        // ===== 全文检索：支持 AND 组合与"字段=值"语法 =====
+        const FULLTEXT_FIELD_MAP = {
+            '编号': 'no', '标识': 'no', '唯一标识': 'no',
+            '地址': 'address', '户主': 'owner', '产权人': 'owner', '姓名': 'name',
+            '镇': 'street', '街道': 'street', '村': 'village', '社区': 'village', '居委': 'village',
+            '等级': 'status', '风险等级': 'status', '状态': 'governStatus', '整治状态': 'governStatus',
+            '结构': 'structureType', '结构类型': 'structureType', '年代': 'builtYear', '建筑年代': 'builtYear'
+        };
+        function matchKeyword(item, rawKeyword) {
+            const keyword = (rawKeyword || '').trim();
+            if (!keyword) return true;
+            // 按 AND 拆分（兼容全角空格与中文"并且"）
+            const terms = keyword.split(/\s*AND\s*|\s+并且\s+/i).map(t => t.trim()).filter(Boolean);
+            const text = (item.searchText || '') + ' ' + [item.no, item.address, item.owner, item.name, item.status].filter(Boolean).join(' ').toLowerCase();
+            return terms.every(term => {
+                const m = term.match(/^([^=：:]+?)\s*[=：:]\s*(.+)$/);
+                if (m) {
+                    const field = FULLTEXT_FIELD_MAP[m[1].trim()];
+                    const val = m[2].trim().toLowerCase();
+                    if (field) {
+                        return String(item[field] || '').toLowerCase().includes(val);
+                    }
+                    // 未识别字段名：整体按普通关键词匹配
+                }
+                return text.includes(term.toLowerCase());
+            });
+        }
+
         function filterData() {
-            const keyword = fulltextSearch.value.trim().toLowerCase();
+            const keyword = fulltextSearch.value.trim();
             const town = townFilter.value.trim();
             const village = villageFilter.value.trim();
 
@@ -2075,9 +2223,7 @@
                 if (currentCategory && item.category !== currentCategory) return false;
                 if (town && item.street !== town) return false;
                 if (village && item.village !== village) return false;
-                if (!keyword) return true;
-                const fields = [item.no, item.address].join(' ').toLowerCase();
-                return fields.includes(keyword);
+                return matchKeyword(item, keyword);
             });
 
             currentPage = 1;

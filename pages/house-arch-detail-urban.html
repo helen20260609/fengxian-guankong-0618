@@ -1352,6 +1352,9 @@
             { key: 'control', icon: 'fa-shield-alt', title: '隐患动态', tag: '过程跟踪' },
             { key: 'accept', icon: 'fa-clipboard-check', title: '阶段性验收', tag: '过程验收' },
             { key: 'close', icon: 'fa-check-circle', title: '验收销项', tag: '闭环完成' },
+            { key: 'maintenance', icon: 'fa-wrench', title: '维修记录', tag: '全周期档案' },
+            { key: 'renovation', icon: 'fa-hammer', title: '改造记录', tag: '全周期档案' },
+            { key: 'elimination', icon: 'fa-check-double', title: '消险记录', tag: '闭环完成' },
             { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '预案演练', ruralOnly: true }
         ];
 
@@ -1361,6 +1364,8 @@
             { key: 'jsqk', title: '建设情况', icon: 'fa-hard-hat', count: 7 },
             { key: 'glqk', title: '管理情况', icon: 'fa-file-alt', count: 2 },
             { key: 'designConstruction', title: '设计施工信息', icon: 'fa-hard-hat', count: 11, ruralOnly: true },
+            { key: 'jgtd', title: '结构特点', icon: 'fa-building', count: 4 },
+            { key: 'jzcl', title: '建筑材料', icon: 'fa-cubes', count: 3 },
             { key: 'jgxx', title: '结构信息', icon: 'fa-building', count: 12, ruralOnly: true },
             { key: 'syxx', title: '使用信息', icon: 'fa-home', count: 13, ruralOnly: true }
         ];
@@ -2515,9 +2520,39 @@
                     '</div>' +
                 '</div>';
             }
+            let jgtdViewHtml = '';
+            if (currentSubTab === 'jgtd') {
+                const sf = (s.structureFeatures) || {};
+                jgtdViewHtml = '<div class="info-grid info-grid-2col">' +
+                    kv('基础形式', sf.basicForm) +
+                    kv('承重体系', sf.bearingSystem) +
+                    kv('楼盖形式', sf.floorForm) +
+                    kv('屋面形式', sf.roofForm) +
+                    '</div>' +
+                    '<div class="info-grid info-grid-2col" style="margin-top:8px;">' +
+                    kv('结构类型', s.structure && s.structure.structureType) +
+                    kv('楼层', s.structure && s.structure.floors) +
+                    kv('建筑面积', s.structure && s.structure.buildingArea) +
+                    kv('屋面类型', s.structure && s.structure.roofType) +
+                    '</div>';
+            }
+            let jzclViewHtml = '';
+            if (currentSubTab === 'jzcl') {
+                const mats = (s.buildMaterials) || [];
+                jzclViewHtml = '<div class="table-section-title"><i class="fas fa-cubes"></i> 主要建筑材料清单</div>' +
+                    (mats.length
+                        ? '<table class="arch-table"><thead><tr><th style="width:60px;">序号</th><th>材料类型</th><th>强度等级</th><th>生产厂家</th></tr></thead><tbody>' +
+                          mats.map((m, i) => '<tr><td>' + (i + 1) + '</td><td>' + (m.type || '—') + '</td><td>' + (m.strength || '—') + '</td><td>' + (m.manufacturer || '—') + '</td></tr>').join('') +
+                          '</tbody></table>'
+                        : '<div class="record-empty">暂无建筑材料记录</div>');
+            }
             const bodyHtml = currentSubTab === 'designConstruction'
                 ? designConstructionHtml
-                : (currentSubTab === 'aqzk' ? aqzkViewHtml : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>');
+                : (currentSubTab === 'jgtd'
+                    ? jgtdViewHtml
+                    : (currentSubTab === 'jzcl'
+                        ? jzclViewHtml
+                        : (currentSubTab === 'aqzk' ? aqzkViewHtml : '<div class="info-grid info-grid-2col">' + gridHtml + '</div>')));
 
             return '<div class="content-card">' +
                 '<div class="content-card-header">' +
@@ -3219,6 +3254,12 @@
                 html += renderArchiveTable(s);
             } else if (key === 'emergency') {
                 html += renderEmergencyContent(s);
+            } else if (key === 'maintenance') {
+                html += renderMaintenanceContent(s);
+            } else if (key === 'renovation') {
+                html += renderRenovationContent(s);
+            } else if (key === 'elimination') {
+                html += renderEliminationContent(s);
             } else if (key === 'risk') {
                 html += renderRiskContent(s);
             } else if (key === 'plan') {
@@ -3262,6 +3303,8 @@
                 html += '<button class="bottom-btn primary" onclick="openArchiveEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             } else if (key === 'emergency') {
                 html += '<button class="bottom-btn primary" onclick="openEmergencyEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
+            } else if (key === 'maintenance' || key === 'renovation' || key === 'elimination') {
+                // 维修/改造/消险记录：列表头部已含新增按钮（消险为只读档案），底栏不再重复
             } else if (key === 'accept') {
                 html += '<button class="bottom-btn primary" onclick="openAcceptEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             } else if (key === 'control') {
@@ -4379,6 +4422,102 @@
             return html;
         }
 
+        // ===== 维修记录（城镇一房一档 · 全周期档案）=====
+        function renderMaintenanceContent(s) {
+            const list = s.maintenanceRecords || [];
+            let html = '<div class="info-section-title"><i class="fas fa-info-circle"></i> 维修记录说明</div>' +
+                '<div class="info-grid info-grid-2col">' +
+                kv('记录说明', '记录房屋日常维修养护情况，含维修时间、内容、单位及费用，纳入一房一档全生命周期管理') +
+                kv('记录条数', String(list.length) + ' 条') +
+                '</div>';
+            if (!list.length) {
+                html += recordListWrapper('维修记录列表', '<div class="record-empty">暂无维修记录</div>', { icon: 'fa-wrench', showAdd: 'addCrudRecord(\'maintenance\')' });
+            } else {
+                const activeIndex = Math.min(recordViewState.maintenance || 0, list.length - 1);
+                const listHtml = recordListTable(
+                    ['维修时间', '维修内容', '维修单位', '维修费用', '备注'],
+                    list.map(m => [m.time || '—', m.content || '—', m.unit || '—', m.cost || '—', m.remark || '—']),
+                    'maintenance', activeIndex,
+                    { showCrud: { edit: 'openCrudModal(\'maintenance\'', delete: 'deleteCrudRecord(\'maintenance\'' }, records: list }
+                );
+                html += recordListWrapper('维修记录列表', listHtml, { icon: 'fa-wrench', showAdd: 'addCrudRecord(\'maintenance\')' });
+            }
+            return html;
+        }
+
+        // ===== 改造记录（城镇一房一档 · 全周期档案）=====
+        function renderRenovationContent(s) {
+            const list = s.renovationRecords || [];
+            let html = '<div class="info-section-title"><i class="fas fa-info-circle"></i> 改造记录说明</div>' +
+                '<div class="info-grid info-grid-2col">' +
+                kv('记录说明', '记录房屋改建、扩建、加固等改造情况，含改造时间、内容、单位及审批文件') +
+                kv('记录条数', String(list.length) + ' 条') +
+                '</div>';
+            if (!list.length) {
+                html += recordListWrapper('改造记录列表', '<div class="record-empty">暂无改造记录</div>', { icon: 'fa-hammer', showAdd: 'addCrudRecord(\'renovation\')' });
+            } else {
+                const activeIndex = Math.min(recordViewState.renovation || 0, list.length - 1);
+                const listHtml = recordListTable(
+                    ['改造时间', '改造内容', '改造单位', '审批文件', '备注'],
+                    list.map(r => [r.time || '—', r.content || '—', r.unit || '—', r.approvalFile || '—', r.remark || '—']),
+                    'renovation', activeIndex,
+                    { showCrud: { edit: 'openCrudModal(\'renovation\'', delete: 'deleteCrudRecord(\'renovation\'' }, records: list }
+                );
+                html += recordListWrapper('改造记录列表', listHtml, { icon: 'fa-hammer', showAdd: 'addCrudRecord(\'renovation\')' });
+            }
+            return html;
+        }
+
+        // ===== 消险记录（只读档案）=====
+        function renderEliminationContent(s) {
+            const e = s.eliminationInfo || {};
+            const status = s.closeStatus || '未申请';
+            const tagCls = status === '已通过' || status === '已销号' ? 'status-safe'
+                : (status === '审核中' || status === '待审核') ? 'status-major'
+                : (status === '未申请' ? 'status-general' : 'status-minor');
+            const tlItem = (title, desc, done) =>
+                '<div style="display:flex;gap:12px;align-items:flex-start;">' +
+                    '<div style="width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;background:' + (done ? 'var(--safe)' : '#cbd5e1') + ';"><i class="fas ' + (done ? 'fa-check' : 'fa-clock') + '"></i></div>' +
+                    '<div style="padding-bottom:16px;border-left:2px solid #e2e8f0;padding-left:16px;margin-left:-14px;padding-top:2px;">' +
+                        '<div style="font-weight:600;color:var(--text-primary);font-size:13px;">' + title + '</div>' +
+                        '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">' + desc + '</div>' +
+                    '</div>' +
+                '</div>';
+            let html = '<div style="padding:16px;border-radius:8px;background:linear-gradient(135deg,#f8fafc,#eff6ff);border:1px solid #dbeafe;display:flex;align-items:center;justify-content:space-between;">' +
+                '<div><div style="font-size:13px;color:var(--text-secondary);">当前销号状态</div>' +
+                '<div style="font-size:20px;font-weight:700;margin-top:4px;"><span class="status-tag ' + tagCls + '">' + status + '</span></div></div>' +
+                '<div style="font-size:12px;color:var(--text-secondary);text-align:right;">房屋全生命周期闭环的最后一环<br>本页为档案记录，业务操作请前往「验收销项」</div>' +
+                '</div>';
+            html += '<div class="info-section-title"><i class="fas fa-stream"></i> 隐患治理闭环</div>' +
+                '<div style="margin-left:14px;">' +
+                tlItem('隐患发现', (s.hazard && s.hazard.name ? s.hazard.name : '隐患排查记录') + '，原风险等级：' + (s.originalRisk || s.risk || '—'), true) +
+                tlItem('隐患整治', '整治状态：' + (s.governStatus || '—'), (s.governStatus === '已治理')) +
+                tlItem('隐患消险', status === '已通过' || status === '已销号' ? '销号完成，风险档案已归档' : '销号状态：' + status, status === '已通过' || status === '已销号') +
+                '</div>';
+            if (status === '已通过' || status === '已销号' || e.applyTime) {
+                html += '<div class="info-section-title"><i class="fas fa-archive"></i> 销号档案信息</div>' +
+                    '<div class="info-grid info-grid-2col">' +
+                    kv('原隐患等级', s.originalRisk || s.risk) +
+                    kv('申请时间', e.applyTime) +
+                    kv('审核时间', e.reviewTime) +
+                    kv('审核人', e.reviewer) +
+                    '</div>';
+                if (e.certFiles && e.certFiles.length) {
+                    html += '<div class="table-section-title"><i class="fas fa-paperclip"></i> 销号证明文件</div>' +
+                        '<div style="display:flex;flex-direction:column;gap:8px;">' +
+                        e.certFiles.map(f => '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;"><i class="fas fa-file-alt" style="color:var(--primary);"></i><span style="font-size:13px;">' + f + '</span><a href="javascript:void(0)" style="margin-left:auto;font-size:12px;color:var(--primary);">预览</a></div>').join('') +
+                        '</div>';
+                }
+                if (e.note) {
+                    html += '<div class="table-section-title"><i class="fas fa-sticky-note"></i> 备注</div>' +
+                        '<div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px;color:#92400e;">' + e.note + '</div>';
+                }
+            } else {
+                html += '<div class="record-empty" style="margin-top:16px;">尚未发起销号申请。整治完成后，可在「验收销项」节点提交销号申请，审核通过后本页自动归档销号记录。</div>';
+            }
+            return html;
+        }
+
         let editModalSubTab = 'jbxx';
         let surveyEditModalSubTab = 'survey1';
         let measureEditModalSubTab = 'manage';
@@ -4862,6 +5001,28 @@
                     { key: 'startDate', label: '开工日期', type: 'text' },
                     { key: 'endDate', label: '竣工日期', type: 'text' },
                     { key: 'remark', label: '备注', type: 'textarea' }
+                ]
+            },
+            maintenance: {
+                title: '维修记录',
+                dataPath: 'maintenanceRecords',
+                fields: [
+                    { key: 'time', label: '维修时间', type: 'text' },
+                    { key: 'content', label: '维修内容', type: 'textarea', full: true },
+                    { key: 'unit', label: '维修单位', type: 'text' },
+                    { key: 'cost', label: '维修费用', type: 'text' },
+                    { key: 'remark', label: '备注', type: 'textarea', full: true }
+                ]
+            },
+            renovation: {
+                title: '改造记录',
+                dataPath: 'renovationRecords',
+                fields: [
+                    { key: 'time', label: '改造时间', type: 'text' },
+                    { key: 'content', label: '改造内容', type: 'textarea', full: true },
+                    { key: 'unit', label: '改造单位', type: 'text' },
+                    { key: 'approvalFile', label: '审批文件', type: 'text' },
+                    { key: 'remark', label: '备注', type: 'textarea', full: true }
                 ]
             },
             measureManage: {
@@ -5376,7 +5537,63 @@
             renderAqzkEditForm();
         }
 
+        // 建筑材料编辑表单行操作：增删前先把未保存输入同步回记录
+        function syncBuildMaterialInputs() {
+            if (!Array.isArray(currentHouseArch.buildMaterials)) currentHouseArch.buildMaterials = [];
+            document.querySelectorAll('#editModalForm .form-input[data-midx]').forEach(function(input) {
+                const i = parseInt(input.dataset.midx, 10);
+                if (currentHouseArch.buildMaterials[i]) currentHouseArch.buildMaterials[i][input.dataset.mfield] = input.value;
+            });
+        }
+        function addBuildMaterialRow() {
+            syncBuildMaterialInputs();
+            currentHouseArch.buildMaterials.push({ type: '', strength: '', manufacturer: '' });
+            renderEditModalForm();
+        }
+        function removeBuildMaterialRow(i) {
+            if (!Array.isArray(currentHouseArch.buildMaterials)) return;
+            syncBuildMaterialInputs();
+            currentHouseArch.buildMaterials.splice(i, 1);
+            renderEditModalForm();
+        }
+
         function renderEditModalForm() {
+            // 结构特点
+            if (editModalSubTab === 'jgtd') {
+                const sf = currentHouseArch.structureFeatures || (currentHouseArch.structureFeatures = {});
+                const sfFields = [
+                    ['基础形式', 'basicForm', sf.basicForm],
+                    ['承重体系', 'bearingSystem', sf.bearingSystem],
+                    ['楼盖形式', 'floorForm', sf.floorForm],
+                    ['屋面形式', 'roofForm', sf.roofForm]
+                ];
+                document.getElementById('editModalForm').innerHTML =
+                    '<div class="form-grid form-grid-2col">' +
+                    sfFields.map(f =>
+                        '<div class="form-item"><label class="form-label">' + f[0] + '</label>' +
+                        '<input type="text" class="form-input" data-field="' + f[1] + '" value="' + (f[2] || '') + '" placeholder="请输入' + f[0] + '"></div>'
+                    ).join('') +
+                    '</div>';
+                return;
+            }
+            // 建筑材料
+            if (editModalSubTab === 'jzcl') {
+                const mats = currentHouseArch.buildMaterials || (currentHouseArch.buildMaterials = []);
+                const rows = mats.map((m, i) =>
+                    '<tr>' +
+                    '<td>' + (i + 1) + '</td>' +
+                    '<td><input type="text" class="form-input" data-midx="' + i + '" data-mfield="type" value="' + (m.type || '') + '" placeholder="如：烧结多孔砖"></td>' +
+                    '<td><input type="text" class="form-input" data-midx="' + i + '" data-mfield="strength" value="' + (m.strength || '') + '" placeholder="如：MU10"></td>' +
+                    '<td><input type="text" class="form-input" data-midx="' + i + '" data-mfield="manufacturer" value="' + (m.manufacturer || '') + '" placeholder="生产厂家"></td>' +
+                    '<td><button class="bottom-btn" style="padding:2px 10px;font-size:12px;" onclick="removeBuildMaterialRow(' + i + ')"><i class="fas fa-trash-alt"></i></button></td>' +
+                    '</tr>').join('');
+                document.getElementById('editModalForm').innerHTML =
+                    '<table class="arch-table"><thead><tr><th style="width:50px;">序号</th><th>材料类型</th><th>强度等级</th><th>生产厂家</th><th style="width:60px;">操作</th></tr></thead><tbody>' +
+                    (rows || '<tr><td colspan="5" style="text-align:center;color:var(--text-secondary);">暂无材料，点击下方按钮添加</td></tr>') +
+                    '</tbody></table>' +
+                    '<div style="margin-top:10px;"><button class="bottom-btn" onclick="addBuildMaterialRow()"><i class="fas fa-plus"></i> 添加材料</button></div>';
+                return;
+            }
             // 房屋安全状况：走独立渲染函数（与农房 safeStatus 一致）
             if (editModalSubTab === 'aqzk') { renderAqzkEditForm(); return; }
             if (editModalSubTab === 'designConstruction') {
@@ -6016,6 +6233,30 @@
         }
 
         function saveBasicEdit() {
+            if (editModalSubTab === 'jgtd') {
+                const sf = currentHouseArch.structureFeatures || (currentHouseArch.structureFeatures = {});
+                document.querySelectorAll('#editModalForm .form-input[data-field]').forEach(function(input) {
+                    sf[input.dataset.field] = input.value;
+                });
+                currentSubTab = editModalSubTab;
+                delete currentHouseArch._syncedAt;
+                saveCurrentHouseArch(currentHouseArch);
+                closeBasicEditModal();
+                renderSidebar();
+                renderContent();
+                return;
+            }
+            if (editModalSubTab === 'jzcl') {
+                syncBuildMaterialInputs();
+                currentHouseArch.buildMaterials = (currentHouseArch.buildMaterials || []).filter(m => (m.type || m.strength || m.manufacturer));
+                currentSubTab = editModalSubTab;
+                delete currentHouseArch._syncedAt;
+                saveCurrentHouseArch(currentHouseArch);
+                closeBasicEditModal();
+                renderSidebar();
+                renderContent();
+                return;
+            }
             if (editModalSubTab === 'designConstruction') {
                 const list = currentHouseArch.designConstructionRecords || [];
                 const idx = Math.min(recordViewState.designConstruction || 0, Math.max(list.length - 1, 0));

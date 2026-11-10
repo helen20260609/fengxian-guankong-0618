@@ -6,6 +6,7 @@
     <title>隐患销号申请与审核 - 房屋安全管理</title>
     <link rel="stylesheet" href="./all.min.css">
     <script src="../js/house-arch-data.js"></script>
+    <script src="./echarts.min.js"></script>
     <style>
         :root {
             --primary: #1a73e8;
@@ -162,6 +163,45 @@
         .preset-tag { font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; background: #fff; }
         .preset-tag:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
 
+        /* ===== 6.1.2.23.2 销号补齐 ===== */
+        .ahc-card { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+        .ahc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+        .ahc-no { font-weight: 600; font-size: 13px; color: var(--primary); }
+        .ahc-name { font-size: 13px; font-weight: 600; }
+        .ahc-sec { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+        .ahc-sec b { color: var(--text-primary); font-weight: 600; }
+        .ahc-sec .ahc-label { display: inline-block; min-width: 60px; color: var(--text-secondary); }
+        .flow-tag { display: inline-block; background: var(--primary-light); color: var(--primary); border-radius: 4px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+        .flow-tag.double { background: #fff3e0; color: var(--major); }
+        .mini-thumbs { display: inline-flex; gap: 6px; flex-wrap: wrap; vertical-align: middle; margin-left: 4px; }
+        .mini-thumbs img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; cursor: zoom-in; border: 1px solid var(--border); }
+        .mini-chip { display: inline-flex; align-items: center; gap: 4px; background: #f1f3f4; border-radius: 4px; padding: 3px 8px; font-size: 12px; }
+        .mini-chip i { color: var(--text-secondary); }
+        .cert-hint { color: var(--danger); font-size: 12px; margin-top: 4px; display: none; }
+        /* 销号过程时间轴 */
+        .cl-tl { position: relative; padding-left: 22px; }
+        .cl-tl-item { position: relative; padding-bottom: 16px; }
+        .cl-tl-item::before { content: ''; position: absolute; left: -17px; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+        .cl-tl-item::after { content: ''; position: absolute; left: -13px; top: 16px; bottom: 0; width: 2px; background: var(--border); }
+        .cl-tl-item:last-child::after { display: none; }
+        .cl-tl-item.tl-done::before { background: var(--safe); box-shadow: 0 0 0 3px #e6f4ea; }
+        .cl-tl-item.tl-reject::before { background: var(--danger); box-shadow: 0 0 0 3px #fce8e6; }
+        .cl-tl-item.tl-warn::before { background: var(--warning); box-shadow: 0 0 0 3px #fff8e1; }
+        .cl-tl-time { font-size: 12px; color: var(--text-secondary); }
+        .cl-tl-title { font-size: 13px; font-weight: 600; margin: 2px 0; }
+        .cl-tl-content { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+        /* 销号统计 */
+        .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 14px; }
+        .stat-mini { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px 10px; text-align: center; }
+        .stat-mini .v { font-size: 22px; font-weight: 700; color: var(--primary); }
+        .stat-mini .v.green { color: var(--safe); }
+        .stat-mini .v.red { color: var(--danger); }
+        .stat-mini .l { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .chart-row { display: flex; gap: 12px; }
+        .chart-col { flex: 1; min-width: 0; }
+        .chart-col .chart-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+        .chart-box { height: 260px; border: 1px solid var(--border); border-radius: 6px; }
+
         .toast {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-80px);
             background: #323232; color: #fff; padding: 10px 20px; border-radius: 4px; font-size: 13px;
@@ -250,6 +290,7 @@
             <div class="content-card-header">
                 <div class="content-card-title"><i class="fas fa-list"></i> 隐患销号列表</div>
                 <div class="topbar-actions">
+                    <button class="btn" onclick="openStatsModal()"><i class="fas fa-chart-pie"></i> 销号统计</button>
                     <button class="btn primary" onclick="openBatchApplyModal()"><i class="fas fa-paper-plane"></i> 批量申请销号</button>
                 </div>
             </div>
@@ -291,8 +332,8 @@
             </div>
             <div class="modal-body">
                 <div class="apply-preview">
-                    <div class="apply-preview-title"><i class="fas fa-home"></i> 已选房屋（<span id="applyCount">0</span> 栋）</div>
-                    <div class="apply-preview-list" id="applyPreviewList"></div>
+                    <div class="apply-preview-title"><i class="fas fa-home"></i> 已选房屋（<span id="applyCount">0</span> 栋）<span style="font-weight:400;font-size:12px;color:var(--text-secondary);margin-left:6px">已自动带出房屋信息、隐患信息、整治措施与完成时间</span></div>
+                    <div id="applyPreviewList"></div>
                 </div>
                 <div class="form-grid">
                     <div class="form-item">
@@ -315,6 +356,15 @@
                             <div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击上传整改后照片、验收报告、检测报告等</div>
                         </div>
                     </div>
+                    <div class="form-item full">
+                        <label class="form-label">检测报告 / 鉴定报告（资质机构出具）</label>
+                        <div class="file-upload-wrap" id="batchApplyCertWrap">
+                            <input class="form-input file-url-input" type="text" id="batchApplyCertFiles" placeholder="报告名称/URL 逗号分隔">
+                            <input class="file-upload-input" type="file" accept="image/*,application/pdf" multiple onchange="handleCertUpload(this)">
+                            <div class="file-upload-dropzone"><i class="fas fa-file-medical"></i> 点击上传检测报告或鉴定报告</div>
+                        </div>
+                        <div class="cert-hint" id="certRequiredHint"><i class="fas fa-exclamation-circle"></i> 已选房屋含重大隐患（第三类/危房），按规范销号必须上传经资质机构出具的检测报告或鉴定报告</div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -333,8 +383,8 @@
             </div>
             <div class="modal-body">
                 <div class="apply-preview">
-                    <div class="apply-preview-title"><i class="fas fa-home"></i> 待审核房屋（<span id="auditCount">0</span> 栋）</div>
-                    <div class="apply-preview-list" id="auditPreviewList"></div>
+                    <div class="apply-preview-title"><i class="fas fa-home"></i> 待审核房屋（<span id="auditCount">0</span> 栋）<span id="auditFlowHint" style="margin-left:6px"></span><span style="font-weight:400;font-size:12px;color:var(--text-secondary);margin-left:6px">可在线查看申请材料与整治过程记录</span></div>
+                    <div id="auditPreviewList"></div>
                 </div>
                 <div class="form-grid">
                     <div class="form-item">
@@ -342,6 +392,8 @@
                         <select class="form-select" id="auditConclusion" onchange="toggleRejectReason()">
                             <option value="通过">通过</option>
                             <option value="驳回">驳回</option>
+                            <option value="补充资料">要求补充资料</option>
+                            <option value="现场复核">安排现场复核</option>
                         </select>
                     </div>
                     <div class="form-item">
@@ -376,6 +428,40 @@
         <iframe class="detail-embed-frame" id="detailEmbedFrame" src=""></iframe>
     </div>
 
+    <!-- 销号进度时间轴弹窗 -->
+    <div class="modal-overlay" id="timelineModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-stream"></i> 销号过程记录</div>
+                <button class="modal-close" onclick="closeModal('timelineModal')">×</button>
+            </div>
+            <div class="modal-body" id="timelineBody"></div>
+        </div>
+    </div>
+
+    <!-- 销号统计弹窗 -->
+    <div class="modal-overlay" id="statsModal">
+        <div class="modal-box" style="max-width:980px;">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fas fa-chart-pie"></i> 销号统计分析</div>
+                <button class="modal-close" onclick="closeModal('statsModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="stats-grid" id="statsCards"></div>
+                <div class="chart-row">
+                    <div class="chart-col">
+                        <div class="chart-title"><i class="fas fa-chart-bar" style="color:var(--primary);"></i> 按区域销号情况</div>
+                        <div class="chart-box" id="chartRegion"></div>
+                    </div>
+                    <div class="chart-col">
+                        <div class="chart-title"><i class="fas fa-chart-pie" style="color:var(--warning);"></i> 按隐患等级销号情况</div>
+                        <div class="chart-box" id="chartLevel"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
 
     <script>
@@ -390,12 +476,18 @@
         // 城镇数据层接口（动态加载 urban-house-arch-data.js 后赋值）
         let urbanAPI = null;
 
+        let pendingApplyNo = new URLSearchParams(location.search).get('apply');
         function init() {
             document.getElementById('batchApplyTime').value = new Date().toISOString().split('T')[0];
+            document.querySelectorAll('.file-upload-dropzone').forEach(dz => dz.addEventListener('click', function() {
+                const inp = this.parentElement.querySelector('.file-upload-input');
+                if (inp) inp.click();
+            }));
             allData = loadAll();
             initCategoryTabs();
             updateCategoryCounts();
             renderTable();
+            tryOpenPendingApply();
             // 异步加载城镇自建房数据层（urban-house-arch-data.js，四级口径）
             fetch('../js/urban-house-arch-data.js')
                 .then(res => res.text())
@@ -407,6 +499,7 @@
                     allData = loadAll();
                     updateCategoryCounts();
                     renderTable();
+                    tryOpenPendingApply();
                 })
                 .catch(err => console.error('加载城镇自建房数据失败:', err));
         }
@@ -479,6 +572,13 @@
                         auditOpinion: a.auditOpinion || '',
                         rejectReason: a.rejectReason || '',
                         files: a.files || '',
+                        certFiles: a.certFiles || '',
+                        supplementNote: a.supplementNote || '',
+                        reviewNote: a.reviewNote || '',
+                        applyRiskLevel: a.applyRiskLevel || item.riskLevel || '—',
+                        auditFlow: a.auditFlow || (item.closeStatus === '审核中' ? 'double' : 'single'),
+                        auditLevel: a.auditLevel || (item.closeStatus === '审核中' ? 2 : 1),
+                        closeTimeline: Array.isArray(a.closeTimeline) ? a.closeTimeline : [],
                         isSelectable: (item.closeStatus === '待审核' || item.closeStatus === '审核中')
                     };
                 });
@@ -508,11 +608,20 @@
                         auditOpinion: a.auditOpinion || '',
                         rejectReason: a.rejectReason || '',
                         files: a.files || '',
+                        certFiles: a.certFiles || '',
+                        supplementNote: a.supplementNote || '',
+                        reviewNote: a.reviewNote || '',
+                        applyRiskLevel: a.applyRiskLevel || item.riskLevel || '—',
+                        auditFlow: a.auditFlow || (item.closeStatus === '审核中' ? 'double' : 'single'),
+                        auditLevel: a.auditLevel || (item.closeStatus === '审核中' ? 2 : 1),
+                        closeTimeline: Array.isArray(a.closeTimeline) ? a.closeTimeline : [],
                         isSelectable: (item.closeStatus === '待审核' || item.closeStatus === '审核中')
                     };
                 });
             }
-            return ruralList.concat(urbanList).filter(d => d.no);
+            const merged = ruralList.concat(urbanList).filter(d => d.no);
+            merged.forEach(d => seedCloseTimeline(d));
+            return merged;
         }
 
         function saveAll() {
@@ -538,6 +647,17 @@
                 targetArch[d.no].closeAuditOpinion = d.auditOpinion;
                 targetArch[d.no].closeRejectReason = d.rejectReason;
                 targetArch[d.no].isRemovedFromFocus = d.closeStatus === '已通过';
+                // 同步消险信息，供GIS落图（状态/信息卡片/销号趋势/时间筛选）使用
+                const elimFiles = (d.files || '').split(',').concat((d.certFiles || '').split(',')).map(s => s.trim()).filter(Boolean);
+                targetArch[d.no].eliminationInfo = {
+                    applyTime: d.applyTime || null,
+                    reviewTime: d.auditTime || null,
+                    reviewer: d.auditor || null,
+                    certFiles: elimFiles,
+                    note: d.closeStatus === '已通过' ? '已销号' :
+                        d.closeStatus === '已驳回' ? (d.rejectReason || '审核驳回') :
+                        (d.closeStatus === '待审核' || d.closeStatus === '审核中') ? '销号申请审核中' : '尚未提交销号申请'
+                };
                 if (d.closeStatus === '已通过') {
                     targetArch[d.no].governStatus = '已治理';
                     targetArch[d.no].risk = 'safe';
@@ -550,7 +670,10 @@
                 targetApplyMap[d.no] = {
                     id: d.id, no: d.no, name: d.name, street: d.street, riskLevel: d.riskLevel, governStatus: d.governStatus,
                     closeStatus: d.closeStatus, applicant: d.applicant, applyTime: d.applyTime, auditor: d.auditor,
-                    auditTime: d.auditTime, auditOpinion: d.auditOpinion, rejectReason: d.rejectReason, files: d.files
+                    auditTime: d.auditTime, auditOpinion: d.auditOpinion, rejectReason: d.rejectReason, files: d.files,
+                    certFiles: d.certFiles, supplementNote: d.supplementNote, reviewNote: d.reviewNote,
+                    applyRiskLevel: d.applyRiskLevel, auditFlow: d.auditFlow, auditLevel: d.auditLevel,
+                    closeTimeline: d.closeTimeline
                 };
             });
             setHouseArchStorage(arch);
@@ -642,6 +765,7 @@
 
         function renderActions(d) {
             let html = '<span class="action-link" onclick="openDetail(\'' + d.no + '\')">查看档案</span>';
+            if (d.applyTime) html += '<span class="action-link" onclick="openTimelineModal(\'' + d.no + '\')">进度</span>';
             if (d.closeStatus === '未申请' || d.closeStatus === '已驳回') {
                 html += '<span class="action-link" onclick="openSingleApply(\'' + d.no + '\')">申请</span>';
             }
@@ -696,10 +820,10 @@
         }
 
         function openBatchApplyModal(presetNos) {
-            // 只针对当前类别的房屋
-            const selectable = filterData().filter(d => d.governStatus === '已治理' && (d.closeStatus === '未申请' || d.closeStatus === '已驳回'));
+            // 只针对当前类别的房屋（治理完成口径：已治理/已整治）
+            const selectable = filterData().filter(d => (d.governStatus === '已治理' || d.governStatus === '已整治') && (d.closeStatus === '未申请' || d.closeStatus === '已驳回'));
             if (selectable.length === 0) {
-                showToast('当前类别暂无可申请销号的房屋，请确保整治状态为"已治理"');
+                showToast('当前类别暂无可申请销号的房屋，请确保整治状态为"已治理/已整治"');
                 return;
             }
             // 单条申请时只选中该房屋；批量申请时选中全部可申请
@@ -713,18 +837,27 @@
             renderApplyPreview();
             document.getElementById('batchApplyRemark').value = '';
             document.getElementById('batchApplyFiles').value = '';
+            document.getElementById('batchApplyCertFiles').value = '';
             const wrap = document.getElementById('batchApplyFilesWrap');
             const thumb = wrap.querySelector('.file-thumb-preview');
             if (thumb) thumb.innerHTML = '';
+            const certWrap = document.getElementById('batchApplyCertWrap');
+            const certThumb = certWrap ? certWrap.querySelector('.file-thumb-preview') : null;
+            if (certThumb) certThumb.innerHTML = '';
             openModal('batchApplyModal');
         }
 
         function renderApplyPreview() {
             const list = allData.filter(d => selectedIds.includes(d.no));
             document.getElementById('applyCount').textContent = list.length;
-            document.getElementById('applyPreviewList').innerHTML = list.map(d =>
-                '<span class="apply-preview-tag">' + d.no + '</span>'
-            ).join('');
+            let anyMajor = false;
+            document.getElementById('applyPreviewList').innerHTML = list.map(d => {
+                const rec = getArchRecord(d.no, d.houseType === '城镇自建房');
+                const major = isMajorHouse(d);
+                if (major) anyMajor = true;
+                return buildHouseCard(d, rec, { flowTag: major ? '重大隐患·两级审核' : '单级审核', major: major });
+            }).join('');
+            document.getElementById('certRequiredHint').style.display = anyMajor ? 'block' : 'none';
         }
 
         function handleBatchApplyUpload(input) {
@@ -759,12 +892,19 @@
             const time = document.getElementById('batchApplyTime').value || new Date().toISOString().split('T')[0];
             const remark = document.getElementById('batchApplyRemark').value.trim();
             const files = document.getElementById('batchApplyFiles').value.trim();
+            const certFiles = document.getElementById('batchApplyCertFiles').value.trim();
             if (selectedIds.length === 0) { showToast('请先选择房屋'); return; }
             if (!files) { showToast('请上传整改后照片、验收报告或检测报告'); return; }
             if (!remark) { showToast('请填写销号说明'); return; }
+            const majors = selectedIds.filter(no => {
+                const d = allData.find(x => x.no === no);
+                return d && isMajorHouse(d);
+            });
+            if (majors.length > 0 && !certFiles) { showToast('已选房屋含重大隐患（第三类/危房），必须上传资质机构出具的检测报告或鉴定报告'); return; }
             selectedIds.forEach(no => {
                 const d = allData.find(x => x.no === no);
                 if (!d) return;
+                const major = isMajorHouse(d);
                 d.closeStatus = '待审核';
                 d.applicant = applicant;
                 d.applyTime = time;
@@ -773,18 +913,26 @@
                 d.auditOpinion = '';
                 d.rejectReason = '';
                 d.files = files;
+                d.certFiles = certFiles;
+                d.supplementNote = '';
+                d.reviewNote = '';
+                d.auditFlow = major ? 'double' : 'single';
+                d.auditLevel = 1;
                 d.governStatus = '已治理';
                 // 销号申请提交时：按类别设置默认标签
                 const isUrbanApply = d.houseType === '城镇自建房';
                 const safeLabel = isUrbanApply ? '完好房（基本完好房）' : '第一类';
                 const labelMap = isUrbanApply ? { danger: '疑似危房', major: '疑似严重损坏房', warning: '疑似一般损坏房', safe: '完好房（基本完好房）' } : RISK_LABEL_MAP;
                 d.riskLevel = d.risk === 'safe' ? safeLabel : labelMap[d.risk] || d.riskLevel;
+                d.applyRiskLevel = d.riskLevel;
+                d.closeTimeline = [];
+                pushTimeline(d, '提交销号申请', applicant, remark + (certFiles ? '（附检测/鉴定报告）' : ''), '', time);
             });
             const applyCount = selectedIds.length;
             saveAll();
             selectedIds = [];
             closeModal('batchApplyModal');
-            showToast('批量销号申请已提交，共 ' + applyCount + ' 条');
+            showToast('批量销号申请已提交，共 ' + applyCount + ' 条' + (majors.length ? '（含重大隐患 ' + majors.length + ' 条，按两级审核流程办理）' : ''));
             renderTable();
         }
 
@@ -813,9 +961,19 @@
             toggleRejectReason();
             const list = allData.filter(d => nos.includes(d.no));
             document.getElementById('auditCount').textContent = list.length;
-            document.getElementById('auditPreviewList').innerHTML = list.map(d =>
-                '<span class="apply-preview-tag">' + d.no + '</span>'
-            ).join('');
+            document.getElementById('auditPreviewList').innerHTML = list.map(d => {
+                const rec = getArchRecord(d.no, d.houseType === '城镇自建房');
+                const major = isMajorHouse(d);
+                const isL2 = (d.auditLevel || 1) >= 2 || d.closeStatus === '审核中';
+                const flowTag = d.auditFlow === 'double' ? (isL2 ? '两级审核·复审' : '两级审核·初审') : '单级审核';
+                return buildHouseCard(d, rec, { showMaterials: true, flowTag: flowTag, major: major });
+            }).join('');
+            const hasDouble = list.some(d => d.auditFlow === 'double');
+            const hasL2 = list.some(d => d.auditFlow === 'double' && ((d.auditLevel || 1) >= 2 || d.closeStatus === '审核中'));
+            const hint = document.getElementById('auditFlowHint');
+            hint.innerHTML = hasDouble
+                ? '<span class="flow-tag double">' + (hasL2 ? '含重大隐患·复审环节' : '含重大隐患·初审环节') + '</span>'
+                : '<span class="flow-tag">单级审核</span>';
             openModal('auditModal');
         }
 
@@ -834,23 +992,45 @@
             if (!opinion) { showToast('请填写审核意见'); return; }
             if (conclusion === '驳回' && !rejectReason) { showToast('请填写驳回原因'); return; }
             const auditTime = new Date().toISOString().split('T')[0];
+            let firstPassCount = 0, finalPassCount = 0;
             auditTargetIds.forEach(no => {
                 const d = allData.find(x => x.no === no);
                 if (!d) return;
-                d.closeStatus = conclusion === '通过' ? '已通过' : '已驳回';
-                d.auditor = auditor;
-                d.auditTime = auditTime;
-                d.auditOpinion = opinion;
-                d.rejectReason = conclusion === '驳回' ? rejectReason : '';
                 const isUrbanAudit = d.houseType === '城镇自建房';
                 const safeLabelAudit = isUrbanAudit ? '完好房（基本完好房）' : '第一类';
                 const labelMapAudit = isUrbanAudit ? { danger: '疑似危房', major: '疑似严重损坏房', warning: '疑似一般损坏房', safe: '完好房（基本完好房）' } : RISK_LABEL_MAP;
+                d.auditor = auditor;
+                d.auditTime = auditTime;
+                d.auditOpinion = opinion;
                 if (conclusion === '通过') {
-                    d.governStatus = '已治理';
-                    d.riskLevel = safeLabelAudit;
-                    d.risk = 'safe';
-                } else {
+                    if (d.auditFlow === 'double' && (d.auditLevel || 1) < 2) {
+                        // 两级审核·初审通过：进入复审，不改变风险状态
+                        d.auditLevel = 2;
+                        d.closeStatus = '审核中';
+                        pushTimeline(d, '初审通过', auditor, opinion + '（待复审）');
+                        firstPassCount++;
+                    } else {
+                        d.closeStatus = '已通过';
+                        d.governStatus = '已治理';
+                        d.riskLevel = safeLabelAudit;
+                        d.risk = 'safe';
+                        d.rejectReason = '';
+                        pushTimeline(d, (d.auditFlow === 'double' ? '复审通过' : '审核通过') + '·销号完成', auditor, opinion, 'tl-done');
+                        finalPassCount++;
+                    }
+                } else if (conclusion === '驳回') {
+                    d.closeStatus = '已驳回';
+                    d.auditLevel = 1;
+                    d.rejectReason = rejectReason;
                     d.riskLevel = d.risk === 'safe' ? safeLabelAudit : labelMapAudit[d.risk] || d.riskLevel;
+                    pushTimeline(d, '审核驳回', auditor, rejectReason, 'tl-reject');
+                } else if (conclusion === '补充资料') {
+                    d.supplementNote = opinion;
+                    pushTimeline(d, '要求补充资料', auditor, opinion, 'tl-warn');
+                } else if (conclusion === '现场复核') {
+                    d.closeStatus = '审核中';
+                    d.reviewNote = opinion;
+                    pushTimeline(d, '安排现场复核', auditor, opinion, 'tl-warn');
                 }
             });
             const auditCount = auditTargetIds.length;
@@ -858,8 +1038,188 @@
             selectedIds = selectedIds.filter(id => !auditTargetIds.includes(id));
             auditTargetIds = [];
             closeModal('auditModal');
-            showToast('批量审核完成：' + conclusion + ' ' + auditCount + ' 条');
+            let msg = '审核完成：' + conclusion + ' ' + auditCount + ' 条';
+            if (conclusion === '通过' && firstPassCount > 0) msg = '初审通过 ' + firstPassCount + ' 条（待复审）' + (finalPassCount ? '，复审通过并销号 ' + finalPassCount + ' 条' : '');
+            else if (conclusion === '通过' && finalPassCount > 0) msg = '审核通过，已完成销号 ' + finalPassCount + ' 条';
+            showToast(msg);
             renderTable();
+        }
+
+        // ===== 6.1.2.23.2 销号补齐：辅助函数 =====
+        function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function nowStr() { const d = new Date(); const p = n => n < 10 ? '0' + n : n; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+        function viewPhoto(u) { if (u) window.open(u, '_blank'); }
+
+        function getArchRecord(no, isUrban) {
+            try {
+                if (isUrban) { const s = urbanAPI ? urbanAPI.getHouseArchStorage() : {}; return s[no] || null; }
+                if (typeof getHouseRecord === 'function') return getHouseRecord(no);
+                const s = getHouseArchStorage();
+                return s[no] || null;
+            } catch (e) { return null; }
+        }
+
+        function isMajorHouse(d) {
+            const level = (d.applyRiskLevel && d.applyRiskLevel !== '—') ? d.applyRiskLevel : d.riskLevel;
+            return d.risk === 'danger' || d.risk === 'major' || /第三类|危房|严重/.test(level || '');
+        }
+
+        function seedCloseTimeline(d) {
+            if (!Array.isArray(d.closeTimeline)) d.closeTimeline = [];
+            if (d.closeTimeline.length || !d.applyTime) return;
+            d.closeTimeline.push({ time: d.applyTime, title: '提交销号申请', operator: d.applicant || '—', content: '提交销号申请及证明材料', kind: '' });
+            if (d.closeStatus === '审核中') d.closeTimeline.push({ time: d.auditTime || d.applyTime, title: '初审通过', operator: d.auditor || '—', content: '初审通过，待复审', kind: '' });
+            if (d.closeStatus === '已通过') d.closeTimeline.push({ time: d.auditTime || '', title: '审核通过·销号完成', operator: d.auditor || '—', content: d.auditOpinion || '验收合格，同意销号', kind: 'tl-done' });
+            if (d.closeStatus === '已驳回') d.closeTimeline.push({ time: d.auditTime || '', title: '审核驳回', operator: d.auditor || '—', content: d.rejectReason || '', kind: 'tl-reject' });
+        }
+
+        function pushTimeline(d, title, operator, content, kind, time) {
+            if (!Array.isArray(d.closeTimeline)) d.closeTimeline = [];
+            d.closeTimeline.push({ time: time || nowStr(), title: title, operator: operator || '—', content: content || '', kind: kind || '' });
+        }
+
+        function buildProcessText(rec) {
+            if (!rec) return '—';
+            const parts = [];
+            (rec.manageRecords || []).forEach(m => { if (m.measureType) parts.push(m.measureType + (m.isDone ? '（已完成）' : '（进行中）')); });
+            (rec.projectRecords || []).forEach(p => {
+                const nodes = Array.isArray(p.nodes) ? p.nodes.filter(n => n.done).length : 0;
+                parts.push((p.engType || p.projectName || '工程措施') + (p.isDone ? '（已竣工）' : '（进行中·关键节点' + nodes + '个）'));
+                if (p.acceptReport && p.acceptReport.conclusion) parts.push('竣工验收：' + p.acceptReport.conclusion);
+            });
+            return parts.length ? parts.join('；') : '—';
+        }
+
+        function renderMiniFiles(files) {
+            const list = (files || '').split(',').map(s => s.trim()).filter(Boolean);
+            if (!list.length) return '—';
+            let html = '<span class="mini-thumbs">';
+            list.forEach(u => {
+                const isImg = /^data:image\//.test(u) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(u);
+                if (isImg) html += '<img src="' + u + '" onclick="viewPhoto(\'' + u.replace(/'/g, '') + '\')">';
+                else html += '<span class="mini-chip"><i class="fas fa-file-alt"></i>' + esc(u.length > 24 ? u.slice(0, 24) + '…' : u) + '</span>';
+            });
+            html += '</span>';
+            return html;
+        }
+
+        function buildHouseCard(d, rec, opts) {
+            opts = opts || {};
+            const hazards = rec && Array.isArray(rec.hazards) ? rec.hazards : [];
+            const hzText = hazards.length ? hazards.map(h => (h.part || '') + '·' + (h.type || '') + (h.level ? '(' + h.level + ')' : '')).join('；') : '—';
+            const manages = rec && Array.isArray(rec.manageRecords) ? rec.manageRecords : [];
+            const projects = rec && Array.isArray(rec.projectRecords) ? rec.projectRecords : [];
+            const mText = manages.map(m => '管理-' + (m.measureType || '')).concat(projects.map(p => '工程-' + (p.engType || p.projectName || ''))).join('；') || '—';
+            const doneTime = (rec && rec.completeDate) || '—';
+            let html = '<div class="ahc-card">';
+            html += '<div class="ahc-head"><span class="ahc-no">' + esc(d.no) + '</span><span class="ahc-name">' + esc(d.name) + '</span>';
+            html += '<span class="status-tag ' + getRiskBadgeClass(d.riskLevel) + '">' + esc(getRiskDisplayText(d.riskLevel)) + '</span>';
+            if (opts.flowTag) html += '<span class="flow-tag' + (opts.major ? ' double' : '') + '">' + esc(opts.flowTag) + '</span>';
+            html += '</div>';
+            html += '<div class="ahc-sec"><span class="ahc-label">房屋信息</span>' + esc(d.street) + (rec && rec.address ? ' · ' + esc(rec.address) : '') + '</div>';
+            html += '<div class="ahc-sec"><span class="ahc-label">隐患信息</span>' + esc(hzText) + '</div>';
+            html += '<div class="ahc-sec"><span class="ahc-label">整治措施</span>' + esc(mText) + '</div>';
+            html += '<div class="ahc-sec"><span class="ahc-label">完成时间</span>' + esc(doneTime) + '</div>';
+            if (opts.showMaterials) {
+                html += '<div class="ahc-sec"><span class="ahc-label">申请材料</span>' + renderMiniFiles(d.files) + '</div>';
+                if (d.certFiles) html += '<div class="ahc-sec"><span class="ahc-label">检测/鉴定</span>' + renderMiniFiles(d.certFiles) + '</div>';
+                html += '<div class="ahc-sec"><span class="ahc-label">整治过程</span>' + esc(buildProcessText(rec)) + '</div>';
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function handleCertUpload(input) {
+            const files = Array.from(input.files || []);
+            if (!files.length) return;
+            const urlInput = document.getElementById('batchApplyCertFiles');
+            const existing = urlInput.value.split(',').map(s => s.trim()).filter(Boolean);
+            urlInput.value = existing.concat(files.map(f => f.name)).join(',');
+            input.value = '';
+        }
+
+        function openTimelineModal(no) {
+            const d = allData.find(x => x.no === no);
+            if (!d) return;
+            const statusClass = { '未申请': 'info', '待审核': 'warning', '审核中': 'warning', '已通过': 'safe', '已驳回': 'danger' }[d.closeStatus] || 'info';
+            let html = '<div class="ahc-sec" style="margin-bottom:10px"><b>' + esc(d.no) + '</b> · ' + esc(d.name) + ' · 当前状态：<span class="status-badge ' + statusClass + '">' + esc(d.closeStatus) + '</span>';
+            if (d.auditFlow === 'double') html += ' <span class="flow-tag double">两级审核·' + ((d.auditLevel || 1) >= 2 ? '复审' : '初审') + '</span>';
+            html += '</div>';
+            const tl = (d.closeTimeline || []).slice();
+            if (!tl.length) {
+                html += '<div style="color:var(--text-secondary);font-size:13px;">暂无过程记录</div>';
+            } else {
+                html += '<div class="cl-tl">' + tl.map(t =>
+                    '<div class="cl-tl-item ' + (t.kind || '') + '">' +
+                    '<div class="cl-tl-time">' + esc(t.time || '') + '</div>' +
+                    '<div class="cl-tl-title">' + esc(t.title || '') + (t.operator ? ' <span style="font-weight:400;color:var(--text-secondary);font-size:12px">操作人：' + esc(t.operator) + '</span>' : '') + '</div>' +
+                    (t.content ? '<div class="cl-tl-content">' + esc(t.content) + '</div>' : '') +
+                    '</div>').join('') + '</div>';
+            }
+            document.getElementById('timelineBody').innerHTML = html;
+            openModal('timelineModal');
+        }
+
+        let chartRegion = null, chartLevel = null;
+        function statCard(v, l, cls) { return '<div class="stat-mini"><div class="v ' + (cls || '') + '">' + v + '</div><div class="l">' + l + '</div></div>'; }
+        function openStatsModal() {
+            const list = filterData();
+            const applied = list.filter(d => d.applyTime);
+            const passed = applied.filter(d => d.closeStatus === '已通过');
+            const rejected = applied.filter(d => d.closeStatus === '已驳回');
+            const firstPass = passed.filter(d => !(d.closeTimeline || []).some(t => t.title === '审核驳回')).length;
+            const fpRate = passed.length ? Math.round(firstPass / passed.length * 100) : 0;
+            const cycles = passed.map(d => (new Date(d.auditTime) - new Date(d.applyTime)) / 86400000).filter(v => isFinite(v) && v >= 0);
+            const cycleDays = cycles.length ? (cycles.reduce((a, b) => a + b, 0) / cycles.length).toFixed(1) : '0';
+            document.getElementById('statsCards').innerHTML =
+                statCard(applied.length, '累计申请（件）') + statCard(passed.length, '审核通过（件）', 'green') +
+                statCard(rejected.length, '审核驳回（件）', 'red') + statCard(fpRate + '%', '一次通过率', 'green') +
+                statCard(cycleDays + ' 天', '平均审核周期');
+            openModal('statsModal');
+            if (typeof echarts === 'undefined') return;
+            const regions = {};
+            applied.forEach(d => { const r = d.street || '未知区域'; if (!regions[r]) regions[r] = { apply: 0, pass: 0 }; regions[r].apply++; if (d.closeStatus === '已通过') regions[r].pass++; });
+            const rNames = Object.keys(regions);
+            const levels = {};
+            applied.forEach(d => { const l = d.applyRiskLevel && d.applyRiskLevel !== '—' ? d.applyRiskLevel : (d.riskLevel || '未知'); levels[l] = (levels[l] || 0) + 1; });
+            if (chartRegion) chartRegion.dispose();
+            chartRegion = echarts.init(document.getElementById('chartRegion'));
+            chartRegion.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['申请数', '通过数'], top: 4 },
+                grid: { left: 40, right: 16, top: 36, bottom: 28 },
+                xAxis: { type: 'category', data: rNames, axisLabel: { fontSize: 11 } },
+                yAxis: { type: 'value', minInterval: 1 },
+                series: [
+                    { name: '申请数', type: 'bar', barWidth: 16, data: rNames.map(r => regions[r].apply), itemStyle: { color: '#3b82f6', borderRadius: [3, 3, 0, 0] } },
+                    { name: '通过数', type: 'bar', barWidth: 16, data: rNames.map(r => regions[r].pass), itemStyle: { color: '#22c55e', borderRadius: [3, 3, 0, 0] } }
+                ]
+            });
+            if (chartLevel) chartLevel.dispose();
+            chartLevel = echarts.init(document.getElementById('chartLevel'));
+            chartLevel.setOption({
+                tooltip: { trigger: 'item' },
+                legend: { bottom: 0 },
+                color: ['#ef4444', '#f59e0b', '#3b82f6', '#22c55e', '#8b5cf6'],
+                series: [{ type: 'pie', radius: ['35%', '62%'], center: ['50%', '46%'], data: Object.keys(levels).map(k => ({ name: k, value: levels[k] })), label: { formatter: '{b}\n{c} 件', fontSize: 11 } }]
+            });
+        }
+
+        function tryOpenPendingApply() {
+            if (!pendingApplyNo) return;
+            const d = allData.find(x => x.no === pendingApplyNo);
+            if (!d) return;
+            const wantCat = d.houseType === '城镇自建房' ? '城镇自建房' : '农村自建房';
+            if (wantCat !== currentCategory) {
+                currentCategory = wantCat;
+                document.querySelectorAll('#categoryTabs .category-tab').forEach(t => t.classList.toggle('active', t.dataset.category === currentCategory));
+                selectedIds = [];
+                currentPage = 1;
+                renderTable();
+            }
+            const no = pendingApplyNo;
+            pendingApplyNo = null;
+            openBatchApplyModal([no]);
         }
 
         function openDetail(no) {

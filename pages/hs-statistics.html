@@ -574,6 +574,29 @@
         .tag-safe { background: rgba(26,115,232,0.12); color: #1a73e8; }
         .tag-info { background: rgba(0,180,216,0.12); color: var(--info); }
         .hidden { display: none !important; }
+
+        /* 报表子页签 */
+        .report-subtabs { display: flex; gap: 4px; margin-bottom: 8px; background: var(--bg-card); padding: 6px; border-radius: 8px; box-shadow: 0 1px 4px var(--shadow); }
+        .report-subtab { padding: 7px 16px; border: none; border-radius: 6px; background: transparent; font-size: 13px; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .report-subtab:hover { background: #f7f8fa; }
+        .report-subtab.active { background: var(--primary); color: #fff; }
+        .report-pane { display: none; flex: 1; flex-direction: column; min-height: 0; }
+        .report-pane.active { display: flex; }
+        .export-group { display: none; gap: 6px; }
+        .export-group .btn { padding: 5px 10px; font-size: 12px; }
+        .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; overflow: auto; padding: 2px; }
+        .tpl-card { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; transition: box-shadow .2s; }
+        .tpl-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+        .tpl-card-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .tpl-badge { font-size: 11px; padding: 1px 8px; border-radius: 8px; background: var(--primary-light); color: var(--primary); font-weight: 400; }
+        .tpl-card-meta { font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+        .tpl-card-actions { display: flex; gap: 8px; }
+        .status-pill { padding: 2px 10px; border-radius: 10px; font-size: 12px; }
+        .status-pill.on { background: rgba(30,142,62,.12); color: #1e8e3e; }
+        .status-pill.off { background: rgba(0,0,0,.08); color: var(--text-secondary); }
+        .hs-toast { position: fixed; top: 18px; right: 18px; z-index: 3000; background: #fff; border: 1px solid var(--border); border-left: 4px solid #1e8e3e; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.15); padding: 12px 18px; font-size: 13px; color: var(--text-primary); display: flex; align-items: center; gap: 10px; opacity: 0; transform: translateY(-8px); transition: all .25s; pointer-events: none; }
+        .hs-toast.show { opacity: 1; transform: translateY(0); }
+        .report-progress-box { background: #fff; padding: 30px 44px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18); text-align: center; }
     </style>
     
 </head>
@@ -952,6 +975,13 @@
         </div>
 
         <div id="reportView" style="display:none; flex-direction:column; flex:1; min-height:0;">
+            <div class="report-subtabs">
+                <button class="report-subtab active" data-pane="generate" onclick="switchReportPane('generate')"><i class="fas fa-chart-bar"></i> 报表生成</button>
+                <button class="report-subtab" data-pane="template" onclick="switchReportPane('template')"><i class="fas fa-layer-group"></i> 模板库</button>
+                <button class="report-subtab" data-pane="schedule" onclick="switchReportPane('schedule')"><i class="fas fa-clock"></i> 定时任务</button>
+                <button class="report-subtab" data-pane="history" onclick="switchReportPane('history')"><i class="fas fa-history"></i> 生成历史</button>
+            </div>
+            <div class="report-pane active" id="reportPaneGenerate">
             <div class="report-config-panel">
                 <div class="report-config-title"><i class="fas fa-cog"></i> 报表配置</div>
                 <div class="config-row">
@@ -1032,6 +1062,7 @@
                     </div>
                     <div class="report-actions">
                         <button class="btn" onclick="openReportHeaderConfig()"><i class="fas fa-th-list"></i> 自定义表头</button>
+                        <button class="btn" onclick="openTplSaveModal()"><i class="fas fa-save"></i> 存为模板</button>
                         <button class="btn btn-primary" onclick="generateReport()"><i class="fas fa-sync-alt"></i> 生成报表</button>
                     </div>
                 </div>
@@ -1040,13 +1071,57 @@
             <div class="report-preview-panel">
                 <div class="report-preview-title">
                     <div><i class="fas fa-file-alt"></i> 报表预览</div>
-                    <span id="reportPeriodLabel">--</span>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span id="reportPeriodLabel">--</span>
+                        <div class="export-group" id="reportExportGroup">
+                            <button class="btn" onclick="exportReportPDF()" title="打印 / 另存为PDF"><i class="fas fa-file-pdf" style="color:#d93025"></i> PDF</button>
+                            <button class="btn" onclick="exportReportExcel()"><i class="fas fa-file-excel" style="color:#1e8e3e"></i> Excel</button>
+                            <button class="btn" onclick="exportReportWord()"><i class="fas fa-file-word" style="color:#1a73e8"></i> Word</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="report-preview-body" id="reportPreviewBody">
                     <div style="text-align:center; color:var(--text-secondary); padding-top:60px;">
                         <i class="fas fa-chart-line" style="font-size:48px; margin-bottom:16px; display:block;"></i>
                         请配置报表参数并点击“生成报表”
                     </div>
+                </div>
+            </div>
+            </div><!-- /reportPaneGenerate -->
+
+            <div class="report-pane" id="reportPaneTemplate">
+                <div class="report-config-panel" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+                    <div class="report-config-title"><i class="fas fa-layer-group"></i> 报表模板库
+                        <span style="font-size:12px; color:var(--text-secondary); font-weight:400;">模板保存报表类型、周期、维度、指标、图表与排序配置，加载后一键生成</span>
+                    </div>
+                    <div class="tpl-grid" id="tplGrid"></div>
+                </div>
+            </div>
+
+            <div class="report-pane" id="reportPaneSchedule">
+                <div class="report-config-panel" style="flex:1; overflow:auto; min-height:0;">
+                    <div class="report-config-title" style="justify-content:space-between;">
+                        <span><i class="fas fa-clock"></i> 定时生成任务
+                            <span style="font-size:12px; color:var(--text-secondary); font-weight:400;">按周期自动生成周报/月报/季报/年报并存档，完成后消息通知</span>
+                        </span>
+                        <button class="btn btn-primary" onclick="openScheduleModal()"><i class="fas fa-plus"></i> 新增任务</button>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>任务名称</th><th>报表类型</th><th>统计维度</th><th>执行周期</th><th>上次执行</th><th>下次执行</th><th>状态</th><th style="width:210px;">操作</th></tr></thead>
+                        <tbody id="scheduleTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="report-pane" id="reportPaneHistory">
+                <div class="report-config-panel" style="flex:1; overflow:auto; min-height:0;">
+                    <div class="report-config-title"><i class="fas fa-history"></i> 生成历史
+                        <span style="font-size:12px; color:var(--text-secondary); font-weight:400;">手动生成与定时任务生成的报表自动存档，支持查看快照与再次导出</span>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>编号</th><th>报表名称</th><th>类型</th><th>统计周期</th><th>生成方式</th><th>生成时间</th><th style="width:220px;">操作</th></tr></thead>
+                        <tbody id="historyTbody"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1068,6 +1143,90 @@
             </div>
         </div>
     </div>
+
+    <div class="modal-overlay" id="tplSaveModal">
+        <div class="modal-box" style="width:440px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-save"></i> 保存为模板</h3>
+                <button class="modal-close" onclick="closeTplSaveModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="config-item" style="margin-bottom:12px;">
+                    <label>模板名称</label>
+                    <input type="text" id="tplNameInput" placeholder="例如：周报-按街镇排名">
+                </div>
+                <p style="font-size:12px; color:var(--text-secondary); line-height:1.7;" id="tplSaveSummary"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeTplSaveModal()">取消</button>
+                <button class="btn btn-primary" onclick="confirmSaveTemplate()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="scheduleModal">
+        <div class="modal-box" style="width:540px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-clock"></i> 定时生成任务</h3>
+                <button class="modal-close" onclick="closeScheduleModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="config-row">
+                    <div class="config-item" style="flex:1;">
+                        <label>任务名称</label>
+                        <input type="text" id="schName" placeholder="例如：农村自建房整治周报" style="width:100%;">
+                    </div>
+                </div>
+                <div class="config-row">
+                    <div class="config-item">
+                        <label>报表类型</label>
+                        <select id="schType">
+                            <option value="weekly">周报</option>
+                            <option value="monthly">月报</option>
+                            <option value="quarterly">季报</option>
+                            <option value="yearly">年报</option>
+                            <option value="comprehensive">综合统计报表</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label>执行周期</label>
+                        <select id="schCycle">
+                            <option value="weekly">每周一 08:00</option>
+                            <option value="monthly">每月1日 08:00</option>
+                            <option value="quarterly">每季首月1日 08:00</option>
+                            <option value="yearly">每年1月1日 08:00</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label>统计维度</label>
+                        <select id="schDimension">
+                            <option value="street">按街镇</option>
+                            <option value="community">按社区（村居）</option>
+                            <option value="houseType">按房屋类型</option>
+                            <option value="risk">按风险等级</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="config-row">
+                    <label class="config-checkbox"><input type="checkbox" id="schEnabled" checked> 启用该任务（到点自动生成并通知）</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeScheduleModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveSchedule()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="reportProgressOverlay" style="background:rgba(255,255,255,0.65);">
+        <div class="report-progress-box">
+            <i class="fas fa-circle-notch fa-spin" style="font-size:34px; color:var(--primary);"></i>
+            <div id="reportProgressText" style="margin-top:14px; font-size:14px; color:var(--text-primary);">数据汇聚中…</div>
+            <div style="margin-top:6px; font-size:12px; color:var(--text-secondary);">报表生成任务已提交后台队列</div>
+        </div>
+    </div>
+
+    <div class="hs-toast" id="hsToast"><i class="fas fa-check-circle" style="color:#1e8e3e; font-size:16px;"></i><span id="hsToastText"></span></div>
 
     
 <script>

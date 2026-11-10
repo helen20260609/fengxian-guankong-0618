@@ -2,7 +2,9 @@ initHouseArchSeed();
 // 农村自建房数据（house-arch-data.js，三类口径）
 const ruralRecs = getAllHouseRecords()
     .filter(r => (r.houseType || '') !== '城镇自建房')
-    .map(r => ({
+    .map(r => {
+        const gv = deriveGovernView(r);
+        return {
         no: r.no,
         name: r.name,
         street: r.street,
@@ -12,10 +14,10 @@ const ruralRecs = getAllHouseRecords()
         houseType: '农村自建房',
         year: r.year,
         risk: r.risk,
-        governance: r.governance,
-        elimination: r.eliminationInfo ?
-            (r.closeStatus === '已通过' ? 'done' : r.closeStatus === '审核中' ? 'review' : r.closeStatus === '已驳回' ? 'rejected' : 'pending') :
-            'pending',
+        governance: gv.governance || r.governance,
+        elimination: r.closeStatus === '已通过' ? 'done' :
+            (r.closeStatus === '待审核' || r.closeStatus === '审核中') ? 'review' :
+            r.closeStatus === '已驳回' ? 'rejected' : 'pending',
         owner: r.owner,
         lat: r.lat,
         lng: r.lng,
@@ -23,9 +25,10 @@ const ruralRecs = getAllHouseRecords()
         responsiblePerson: r.responsiblePerson,
         progress: r.progress,
         hazards: r.hazards || [],
-        measures: r.measures || [],
+        measures: gv.measures || r.measures || [],
+        currentNodes: gv.currentNodes,
         eliminationInfo: r.eliminationInfo || { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '尚未提交销号申请' }
-    }));
+    }; });
 
 // 先初始化 baseData 为农村数据，城镇数据异步加载后合并
 let baseData = [...ruralRecs];
@@ -39,7 +42,9 @@ fetch('../js/urban-house-arch-data.js')
         const urbanAPI = factory();
         urbanAPI.initHouseArchSeed();
         const urbanRecs = urbanAPI.getAllHouseRecords();
-        const urbanData = urbanRecs.map(r => ({
+        const urbanData = urbanRecs.map(r => {
+            const gv = deriveGovernView(r);
+            return {
             no: r.no,
             name: r.name,
             street: r.street,
@@ -49,10 +54,10 @@ fetch('../js/urban-house-arch-data.js')
             houseType: '城镇自建房',
             year: r.year,
             risk: r.risk,
-            governance: r.governance,
-            elimination: r.eliminationInfo ?
-                (r.closeStatus === '已通过' ? 'done' : r.closeStatus === '审核中' ? 'review' : r.closeStatus === '已驳回' ? 'rejected' : 'pending') :
-                'pending',
+            governance: gv.governance || r.governance,
+            elimination: r.closeStatus === '已通过' ? 'done' :
+                (r.closeStatus === '待审核' || r.closeStatus === '审核中') ? 'review' :
+                r.closeStatus === '已驳回' ? 'rejected' : 'pending',
             owner: r.owner,
             lat: r.lat,
             lng: r.lng,
@@ -60,9 +65,10 @@ fetch('../js/urban-house-arch-data.js')
             responsiblePerson: r.responsiblePerson,
             progress: r.progress,
             hazards: r.hazards || [],
-            measures: r.measures || [],
+            measures: gv.measures || r.measures || [],
+            currentNodes: gv.currentNodes,
             eliminationInfo: r.eliminationInfo || { applyTime: null, reviewTime: null, reviewer: null, certFiles: [], note: '尚未提交销号申请' }
-        }));
+        }; });
         baseData = ruralRecs.concat(urbanData);
         // 数据加载完成后刷新
         updateCategoryCounts();
@@ -75,6 +81,7 @@ let currentCategory = 'all';
 let activeFilter = 'all';
 let activeTimeFilter = 'all';
 let activeIndex = -1;
+let highlightKey = null; // 图表联动高亮的治理状态（pending/doing/done/overdue），null 表示不高亮
 let currentLayer = 'governance';
 let currentLevel = 'district';
 let currentStreet = null;
@@ -230,6 +237,32 @@ function getRiskConfig(risk, houseType) {
     return { color: base.color, class: base.class, shape: base.shape, label: label };
 }
 function getStatusConfig(governance) { return STATUS_CONFIG[governance] || STATUS_CONFIG.pending; }
+
+// 图表→地图高亮匹配（按治理状态）
+function matchHighlight(item) {
+    if (!highlightKey) return true;
+    const colorBy = getLayerConfig().colorBy;
+    const v = colorBy === 'risk' ? item.risk : (colorBy === 'governance' ? item.governance : item.elimination);
+    return v === highlightKey;
+}
+
+// 将治理页新数据（manageRecords/projectRecords）折算为地图展示所需的 measures / governance / 当前节点
+function deriveGovernView(r) {
+    const mg = Array.isArray(r.manageRecords) ? r.manageRecords : [];
+    const pj = Array.isArray(r.projectRecords) ? r.projectRecords : [];
+    const out = { measures: null, governance: null, currentNodes: [] };
+    if (!mg.length && !pj.length) return out;
+    const ms = [];
+    mg.forEach(m => ms.push({ type: 'management', name: m.measureDesc || m.measureType || '管理措施', status: (m.isDone || m.status === '已结束') ? 'done' : 'doing' }));
+    pj.forEach(p => ms.push({ type: 'engineering', name: p.projectName || p.engType || '工程措施', status: p.isDone ? 'done' : 'doing' }));
+    out.measures = ms;
+    out.currentNodes = ms.filter(m => m.status === 'doing');
+    const engDone = pj.some(p => p.isDone);
+    const mgAllDone = mg.length > 0 && mg.every(m => m.isDone || m.status === '已结束') && !pj.length;
+    if (engDone || mgAllDone) out.governance = 'done';
+    else if (out.currentNodes.length && r.governance !== 'overdue') out.governance = 'doing';
+    return out;
+}
 function getEliminationConfig(elimination) { return ELIMINATION_CONFIG[elimination] || ELIMINATION_CONFIG.pending; }
 function getLayerConfig() { return LAYER_MODES[currentLayer]; }
 function getHouseColor(item) {
@@ -365,6 +398,7 @@ function renderMap() {
     renderStats();
     renderDashboard();
     renderLeftChart();
+    renderHighlightBanner();
     if (markers.length && currentLayer !== 'eliminationHeatmap') { const group = L.featureGroup(markers); map.fitBounds(group.getBounds().pad(0.1)); }
 }
 function renderStreetClusters(data) {
@@ -373,6 +407,11 @@ function renderStreetClusters(data) {
     Object.keys(groups).forEach(street => {
         const items = groups[street], avgLat = items.reduce((s, i) => s + i.lat, 0) / items.length, avgLng = items.reduce((s, i) => s + i.lng, 0) / items.length;
         const marker = L.marker([avgLat, avgLng], { icon: createClusterIcon(items.length, getAggregateColor(items)) }).addTo(map);
+        if (highlightKey) {
+            const hits = items.filter(matchHighlight).length;
+            if (!hits) marker.setOpacity(0.2);
+            else marker.bindTooltip('高亮 ' + hits + ' 栋', { direction: 'top', offset: [0, -14] });
+        }
         marker.bindPopup(buildClusterPopup(street, items, 'street'));
         marker.on('click', () => drillToStreet(street));
         markers.push(marker);
@@ -385,6 +424,11 @@ function renderCommunityClusters(data) {
     Object.keys(groups).forEach(community => {
         const items = groups[community], avgLat = items.reduce((s, i) => s + i.lat, 0) / items.length, avgLng = items.reduce((s, i) => s + i.lng, 0) / items.length;
         const marker = L.marker([avgLat, avgLng], { icon: createClusterIcon(items.length, getAggregateColor(items)) }).addTo(map);
+        if (highlightKey) {
+            const hits = items.filter(matchHighlight).length;
+            if (!hits) marker.setOpacity(0.2);
+            else marker.bindTooltip('高亮 ' + hits + ' 栋', { direction: 'top', offset: [0, -14] });
+        }
         marker.bindPopup(buildClusterPopup(community, items, 'community'));
         marker.on('click', () => drillToCommunity(community));
         markers.push(marker);
@@ -395,6 +439,13 @@ function renderBuildingMarkers(data) {
     data.forEach((item, idx) => {
         renderHouseFootprint(item, idx);
         const marker = L.marker([item.lat, item.lng], { icon: createShapeIcon(getHouseShape(item), getHouseColor(item), 22) }).addTo(map);
+        if (highlightKey) {
+            if (matchHighlight(item)) {
+                markers.push(L.circleMarker([item.lat, item.lng], { radius: 15, color: '#1a73e8', weight: 2, fillColor: '#1a73e8', fillOpacity: 0.15, interactive: false }).addTo(map));
+            } else {
+                marker.setOpacity(0.2);
+            }
+        }
         marker.bindPopup(buildHousePopup(item, idx));
         marker.on('click', () => selectHouse(idx));
         markers.push(marker);
@@ -468,6 +519,7 @@ function buildHousePopup(item, idx) {
     const statusCfg = getStatusConfig(item.governance);
     const measureHtml = item.measures && item.measures.length ? '<ul>' + item.measures.map(m => '<li>' + (m.type === 'management' ? '管理' : '工程') + '措施：' + m.name + '（' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '）</li>').join('') + '</ul>' : '<p style="color:var(--text-secondary);font-size:12px;">暂无整治措施</p>';
     const hazardsHtml = item.hazards && item.hazards.length ? '<ul>' + item.hazards.map(h => '<li>' + h.part + '：' + h.type + '（' + h.level + '）</li>').join('') + '</ul>' : '<p style="color:var(--text-secondary);font-size:12px;">暂无隐患</p>';
+    const nodesHtml = item.currentNodes && item.currentNodes.length ? item.currentNodes.map(n => '<div class="kv"><span>当前节点</span><b>' + n.name + '（进行中）</b></div>').join('') : '';
     return '<div style="min-width:260px;max-width:320px;">' +
         '<div class="popup-section">' +
         '<span class="popup-status-tag" style="color:' + riskCfg.color + ';background:' + hexToRgba(riskCfg.color, 0.12) + '">' + getShapeHtml(riskCfg.shape, riskCfg.color, 10) + ' 风险等级：' + riskCfg.label + '</span>' +
@@ -477,10 +529,13 @@ function buildHousePopup(item, idx) {
         '<div class="kv"><span>唯一标识</span><b>' + item.no + '</b></div>' +
         '<div class="kv"><span>地址</span><b>' + item.address + '</b></div>' +
         '<div class="kv"><span>产权人</span><b>' + (item.owner || '-') + '</b></div>' +
+        '<div class="kv"><span>责任单位</span><b>' + (item.responsibleDept || '-') + '</b></div>' +
+        '<div class="kv"><span>责任人</span><b>' + (item.responsiblePerson || '-') + '</b></div>' +
         '</div>' +
         '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-exclamation-triangle"></i> 隐患信息</div>' + hazardsHtml + '</div>' +
         '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-tools"></i> 整治措施</div>' + measureHtml + '</div>' +
         '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-tasks"></i> 整治进度</div>' +
+        nodesHtml +
         '<div class="kv"><span>完成率</span><b>' + item.progress + '%</b></div>' +
         '<div class="progress-bar"><div class="fill" style="width:' + item.progress + '%"></div></div>' +
         '</div>' +
@@ -548,14 +603,38 @@ function renderDashboard() {
     const data = getVisibleData();
     const done = data.filter(i => i.governance === 'done').length;
     const total = data.length || 1;
-    document.getElementById('completionRate').textContent = Math.round(done / total * 100) + '%';
+    const isElim = getLayerConfig().colorBy === 'elimination';
+    // 消险核心指标：累计销号 / 本月销号 / 待审核申请 / 驳回待整改
+    const elimDone = data.filter(i => i.elimination === 'done').length;
+    const now = new Date();
+    const elimMonth = data.filter(i => {
+        if (i.elimination !== 'done' || !i.eliminationInfo || !i.eliminationInfo.reviewTime) return false;
+        const d = new Date(i.eliminationInfo.reviewTime);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).length;
+    document.getElementById('elimTotalCount').textContent = elimDone;
+    document.getElementById('elimMonthCount').textContent = elimMonth;
+    document.getElementById('elimReviewCount').textContent = data.filter(i => i.elimination === 'review').length;
+    document.getElementById('elimRejectedCount').textContent = data.filter(i => i.elimination === 'rejected').length;
+    const rateEl = document.getElementById('completionRate');
+    if (isElim) {
+        // 销号完成率 = 已销号 / 已整治（应销号基数）
+        rateEl.textContent = Math.round(elimDone / (done || 1) * 100) + '%';
+        if (rateEl.nextElementSibling) rateEl.nextElementSibling.textContent = '销号完成率';
+    } else {
+        rateEl.textContent = Math.round(done / total * 100) + '%';
+        if (rateEl.nextElementSibling) rateEl.nextElementSibling.textContent = '整治完成率';
+    }
     document.getElementById('overdueCount').textContent = data.filter(i => i.governance === 'overdue').length;
     renderStreetRankingChart();
     renderMeasurePieChart();
 }
 function renderStreetRankingChart() {
+    const isElim = getLayerConfig().colorBy === 'elimination';
+    const titleEl = document.getElementById('streetRankingChart') && document.getElementById('streetRankingChart').previousElementSibling;
+    if (titleEl) titleEl.innerHTML = '<i class="fas fa-trophy"></i> ' + (isElim ? '各街道销号排名' : '各街道整治排名');
     const streetMap = {};
-    baseData.forEach(item => { if (!streetMap[item.street]) streetMap[item.street] = { total: 0, done: 0 }; streetMap[item.street].total++; if (item.governance === 'done') streetMap[item.street].done++; });
+    baseData.forEach(item => { if (!streetMap[item.street]) streetMap[item.street] = { total: 0, done: 0 }; streetMap[item.street].total++; if (isElim ? item.elimination === 'done' : item.governance === 'done') streetMap[item.street].done++; });
     const arr = Object.keys(streetMap).map(k => ({ name: k, rate: Math.round(streetMap[k].done / streetMap[k].total * 100) })).sort((a, b) => b.rate - a.rate);
     if (!streetRankingChart) streetRankingChart = echarts.init(document.getElementById('streetRankingChart'));
     streetRankingChart.setOption({
@@ -592,6 +671,7 @@ function renderLeftChart() {
 }
 function renderLeftStatusChart() {
     const data = getVisibleData();
+    if (getLayerConfig().colorBy === 'elimination') { renderLeftEliminationChart(data); return; }
     const counts = { pending: 0, doing: 0, done: 0, overdue: 0 };
     data.forEach(i => { counts[i.governance] = (counts[i.governance] || 0) + 1; });
     leftChart.setOption({
@@ -603,9 +683,55 @@ function renderLeftStatusChart() {
     }, true);
     leftChart.off('click');
     leftChart.on('click', params => {
+        // 图表→地图联动：点击分类在地图上高亮对应房屋点位（再次点击取消高亮）
         const map = { '待整治': 'pending', '整治中': 'doing', '已治理': 'done', '逾期': 'overdue' };
-        activeFilter = map[params.name] || 'all'; updateFilterTags(); applyFilter();
+        const key = map[params.name];
+        highlightKey = (highlightKey === key) ? null : key;
+        renderHighlightBanner();
+        renderMap(); renderList();
     });
+}
+
+// 消险图层下的销号状态分布图（待申请/已申请待审核/已销号/驳回待整改），点击高亮地图对应点位
+function renderLeftEliminationChart(data) {
+    const keys = ['pending', 'review', 'done', 'rejected'];
+    const counts = { pending: 0, review: 0, done: 0, rejected: 0 };
+    data.forEach(i => { counts[i.elimination] = (counts[i.elimination] || 0) + 1; });
+    leftChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: '3%', right: '10%', bottom: '3%', top: '10%', containLabel: true },
+        xAxis: { type: 'category', data: keys.map(k => ELIMINATION_CONFIG[k].label), axisLabel: { fontSize: 11, interval: 0 } },
+        yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+        series: [{ type: 'bar', data: keys.map(k => ({ value: counts[k], itemStyle: { color: ELIMINATION_CONFIG[k].color } })), label: { show: true, position: 'top', fontSize: 10 } }]
+    }, true);
+    leftChart.off('click');
+    leftChart.on('click', params => {
+        const key = keys[params.dataIndex];
+        highlightKey = (highlightKey === key) ? null : key;
+        renderHighlightBanner();
+        renderMap(); renderList();
+    });
+}
+
+// 高亮状态提示条（显示当前高亮的治理状态，点击可取消）
+function renderHighlightBanner() {
+    let el = document.getElementById('hlBanner');
+    if (!highlightKey) { if (el) el.remove(); return; }
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'hlBanner';
+        el.style.cssText = 'position:absolute;top:10px;right:52px;z-index:1000;background:#fff;border:1px solid #1a73e8;border-radius:14px;padding:4px 12px;font-size:12px;color:#1a73e8;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.15);';
+        el.title = '点击取消高亮';
+        el.onclick = () => { highlightKey = null; renderHighlightBanner(); renderMap(); renderList(); };
+        const mapEl = document.getElementById('map');
+        if (getComputedStyle(mapEl).position === 'static') mapEl.style.position = 'relative';
+        mapEl.appendChild(el);
+    }
+    const colorBy = getLayerConfig().colorBy;
+    const cfgMap = colorBy === 'governance' ? STATUS_CONFIG : (colorBy === 'elimination' ? ELIMINATION_CONFIG : null);
+    const cfg = cfgMap ? cfgMap[highlightKey] : null;
+    const cnt = getVisibleData().filter(matchHighlight).length;
+    el.innerHTML = '<i class="fas fa-highlighter"></i> 高亮：' + (cfg ? cfg.label : highlightKey) + ' ' + cnt + ' 栋（点击取消）';
 }
 function renderLeftStreetChart() {
     const counts = {};
@@ -667,7 +793,7 @@ function updateFilterTags() {
 }
 function switchLayer(layer) {
     if (!LAYER_MODES[layer]) return;
-    currentLayer = layer; activeFilter = 'all'; activeTimeFilter = 'all';
+    currentLayer = layer; activeFilter = 'all'; activeTimeFilter = 'all'; highlightKey = null;
     document.querySelectorAll('.layer-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.layer === layer));
     const timeArea = document.getElementById('timeFilterArea');
     if (timeArea) timeArea.classList.toggle('visible', layer === 'elimination' || layer === 'eliminationHeatmap');

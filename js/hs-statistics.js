@@ -271,6 +271,8 @@
         }
 
         function formatDate(d) {
+            if (!d) return '';
+            if (typeof d === 'string') return d.slice(0, 10);
             return d.toISOString().slice(0, 10);
         }
 
@@ -1115,6 +1117,26 @@
         }
 
         function generateReport() {
+            const overlay = document.getElementById('reportProgressOverlay');
+            const text = document.getElementById('reportProgressText');
+            overlay.classList.add('open');
+            const steps = ['数据汇聚中…', '指标计算中…', '图表渲染中…'];
+            let i = 0;
+            text.textContent = steps[0];
+            const timer = setInterval(() => {
+                i++;
+                if (i < steps.length) {
+                    text.textContent = steps[i];
+                } else {
+                    clearInterval(timer);
+                    overlay.classList.remove('open');
+                    doGenerateReport('手动生成');
+                    showHsToast('报表生成完成，已存入生成历史');
+                }
+            }, 450);
+        }
+
+        function doGenerateReport(genBy) {
             const config = getReportConfig();
             currentReportConfig = config;
             let data = getFilteredData();
@@ -1124,6 +1146,8 @@
             currentReportData = rows;
             document.getElementById('reportPeriodLabel').textContent = `${formatDate(config.start)} 至 ${formatDate(config.end)} · ${rows.length} 条`;
             renderReport(rows, config);
+            document.getElementById('reportExportGroup').style.display = 'flex';
+            archiveReport(config, rows, genBy || '手动生成');
         }
 
         function renderReport(rows, config) {
@@ -1182,13 +1206,47 @@
             if (chartTypes.includes('line')) chartsHtml += `<div id="reportChartLine" class="report-chart-wrap"></div>`;
             chartsHtml += '</div>';
 
-            container.innerHTML = headerHtml + kpiHtml + tableHtml + chartsHtml;
+            let rankHtml = '';
+            if (config.metrics.includes('streetRank') && rows.length > 1) {
+                const ranked = rows.slice().sort((a, b) => b.completionRate - a.completionRate);
+                const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+                const rateColor = r => r >= 80 ? '#1e8e3e' : r >= 50 ? '#f9a825' : '#d93025';
+                rankHtml = `<div class="report-section"><div class="report-section-title"><i class="fas fa-trophy"></i> 街道整治排名（按完成率）</div>
+                    <table class="report-table"><thead><tr><th style="width:70px">名次</th><th>街道/维度</th><th>整治任务</th><th>已完成</th><th>完成率</th><th>逾期</th></tr></thead>
+                    <tbody>${ranked.map((r, i) => `<tr><td>${medal(i)}</td><td>${r.dimension}</td><td>${r.totalTask}</td><td>${r.doneTask}</td><td style="color:${rateColor(r.completionRate)};font-weight:600;">${r.completionRate}%</td><td>${r.overdueTask}</td></tr>`).join('')}</tbody></table>
+                    <div id="reportChartRank" class="report-chart-wrap"></div></div>`;
+            }
+
+            container.innerHTML = headerHtml + kpiHtml + rankHtml + tableHtml + chartsHtml;
 
             setTimeout(() => {
+                if (rankHtml) renderReportRank(rows);
                 if (chartTypes.includes('bar')) renderReportBar(rows, config);
                 if (chartTypes.includes('pie')) renderReportPie(rows, config);
                 if (chartTypes.includes('line')) renderReportLine(rows, config);
             }, 0);
+        }
+
+        function renderReportRank(rows) {
+            const dom = document.getElementById('reportChartRank');
+            if (!dom) return;
+            if (reportCharts.rank) reportCharts.rank.dispose();
+            reportCharts.rank = echarts.init(dom);
+            const ranked = rows.slice().sort((a, b) => a.completionRate - b.completionRate);
+            reportCharts.rank.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: '3%', right: '6%', bottom: '5%', top: '8%', containLabel: true },
+                xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+                yAxis: { type: 'category', data: ranked.map(r => r.dimension), axisLabel: { fontSize: 11 } },
+                series: [{
+                    name: '整治完成率', type: 'bar', barWidth: 16,
+                    data: ranked.map(r => ({
+                        value: r.completionRate,
+                        itemStyle: { color: r.completionRate >= 80 ? '#1e8e3e' : r.completionRate >= 50 ? '#f9a825' : '#d93025', borderRadius: [0, 4, 4, 0] }
+                    })),
+                    label: { show: true, position: 'right', formatter: '{c}%', fontSize: 11 }
+                }]
+            });
         }
 
         function renderReportBar(rows, config) {
@@ -1314,20 +1372,17 @@
         }
 
         // ============ 导出报表 ============
+        function reportFileName(ext) {
+            const t = (currentReportConfig && reportTypeLabels[currentReportConfig.type]) || '统计报表';
+            return `${t}_${formatDate(new Date())}.${ext}`;
+        }
+
         function exportReport() {
             if (!currentReportData.length) {
                 alert('请先生成报表');
                 return;
             }
-            const format = prompt('请选择导出格式：1-CSV 2-Excel 3-Word 4-PDF', '1');
-            if (!format) return;
-            switch (format.trim()) {
-                case '1': exportReportCSV(); break;
-                case '2': exportReportExcel(); break;
-                case '3': exportReportWord(); break;
-                case '4': exportReportPDF(); break;
-                default: alert('请输入 1-4 选择格式');
-            }
+            exportReportExcel();
         }
 
         function exportReportCSV() {
@@ -1339,7 +1394,7 @@
             }));
             const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
             const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-            downloadBlob(blob, '统计报表.csv');
+            downloadBlob(blob, reportFileName('csv'));
         }
 
         function exportReportExcel() {
@@ -1351,7 +1406,7 @@
             }));
             const xml = buildExcelXml(headers, rows);
             const blob = new Blob(['\ufeff' + xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-            downloadBlob(blob, '统计报表.xls');
+            downloadBlob(blob, reportFileName('xls'));
         }
 
         function buildExcelXml(headers, rows) {
@@ -1378,33 +1433,45 @@ ${bodyRows}
             const trs = rows.map(row => `<tr>${row.map(c => `<td>${c}</td>`).join('')}</tr>`).join('');
             const html = `<html><body><h2>统计报表</h2><table border="1" cellspacing="0" cellpadding="6"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></body></html>`;
             const blob = new Blob(['\ufeff' + html], { type: 'application/msword;charset=utf-8;' });
-            downloadBlob(blob, '统计报表.doc');
+            downloadBlob(blob, reportFileName('doc'));
         }
 
         function exportReportPDF() {
-            const visible = reportHeaders.filter(h => h.visible);
-            const headers = visible.map(h => h.label);
-            const rows = currentReportData.map(r => visible.map(h => {
-                if (h.key === 'completionRate' || h.key === 'fundUsageRate') return (r[h.key] || 0) + '%';
-                return r[h.key] !== undefined ? r[h.key] : '';
-            }));
-            const jsPDF = window.jspdf && window.jspdf.jsPDF;
-            if (typeof jsPDF === 'undefined') {
-                alert('PDF 导出需要引入 jsPDF 库，当前以 CSV 方式导出。');
-                exportReportCSV();
+            if (!currentReportData.length) {
+                alert('请先生成报表');
                 return;
             }
-            const pdf = new jsPDF('l', 'pt', 'a4');
-            pdf.text('统计报表', 14, 20);
-            if (pdf.autoTable) {
-                pdf.autoTable({ head: [headers], body: rows, startY: 30, styles: { fontSize: 9 } });
-            } else {
-                let y = 40;
-                headers.forEach((h, i) => { pdf.text(h, 14 + i * 80, y); });
-                y += 15;
-                rows.forEach(row => { row.forEach((c, i) => { pdf.text(String(c), 14 + i * 80, y); }); y += 12; });
-            }
-            pdf.save('统计报表.pdf');
+            const t = (currentReportConfig && reportTypeLabels[currentReportConfig.type]) || '统计报表';
+            const body = document.getElementById('reportPreviewBody').cloneNode(true);
+            body.querySelectorAll('.report-chart-wrap').forEach(el => el.remove());
+            const iframe = document.createElement('iframe');
+            iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+            document.body.appendChild(iframe);
+            const doc = iframe.contentWindow.document;
+            doc.open();
+            doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t}</title>
+                <style>
+                    body { font-family: "Microsoft YaHei", sans-serif; padding: 24px; color: #202124; }
+                    .report-title { text-align: center; font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+                    .report-subtitle { text-align: center; font-size: 12px; color: #5f6368; margin-bottom: 18px; }
+                    .report-section { margin-bottom: 18px; }
+                    .report-section-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; padding-left: 8px; border-left: 3px solid #1a73e8; }
+                    .report-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+                    .report-kpi { border: 1px solid #e8eaed; border-radius: 6px; padding: 12px; text-align: center; }
+                    .report-kpi-value { font-size: 20px; font-weight: 700; color: #1a73e8; }
+                    .report-kpi-label { font-size: 12px; color: #5f6368; margin-top: 4px; }
+                    .report-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    .report-table th, .report-table td { border: 1px solid #e8eaed; padding: 6px 8px; text-align: center; }
+                    .report-table th { background: #f7f8fa; }
+                </style></head><body>${body.innerHTML}</body></html>`);
+            doc.close();
+            setTimeout(() => {
+                if (!iframe.contentWindow) return;
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                setTimeout(() => iframe.remove(), 60000);
+            }, 300);
+            showHsToast('已打开打印视图，可在打印对话框中选择“另存为 PDF”');
         }
 
         function downloadBlob(blob, filename) {
@@ -1413,6 +1480,331 @@ ${bodyRows}
             link.download = filename;
             link.click();
             URL.revokeObjectURL(link.href);
+        }
+
+        // ============ 报表子页签 / 提示 ============
+        function switchReportPane(pane) {
+            document.querySelectorAll('.report-subtab').forEach(t => t.classList.toggle('active', t.dataset.pane === pane));
+            document.querySelectorAll('.report-pane').forEach(p => p.classList.remove('active'));
+            const target = document.getElementById('reportPane' + pane.charAt(0).toUpperCase() + pane.slice(1));
+            if (target) target.classList.add('active');
+            if (pane === 'template') renderTemplateList();
+            if (pane === 'schedule') renderScheduleList();
+            if (pane === 'history') renderHistoryList();
+        }
+
+        let hsToastTimer = null;
+        function showHsToast(msg) {
+            const el = document.getElementById('hsToast');
+            document.getElementById('hsToastText').textContent = msg;
+            el.classList.add('show');
+            if (hsToastTimer) clearTimeout(hsToastTimer);
+            hsToastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+        }
+
+        function lsRead(key, def) {
+            try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch (e) { return def; }
+        }
+        function lsWrite(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+        function nowStr() {
+            const d = new Date();
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+        }
+        const hsDimLabels = { all: '全部', street: '按街镇', community: '按社区（村居）', houseType: '按房屋类型', risk: '按风险等级' };
+        const hsMetricLabels = { totalTask: '任务总量', doneTask: '已完成', completionRate: '完成率', overdueTask: '逾期数', manageMeasure: '管理措施', projectMeasure: '工程措施', riskDistribution: '等级分布', streetRank: '街道排名', fundUsage: '资金使用' };
+        const hsChartLabels = { bar: '柱状图', pie: '饼图', line: '折线图', table: '明细表格' };
+        function periodDatesFor(period, startStr, endStr) {
+            const today = new Date();
+            const endOfDay = new Date(today); endOfDay.setHours(23, 59, 59, 999);
+            if (period === 'week') { const day = today.getDay() || 7; const s = new Date(today); s.setDate(today.getDate() - day + 1); s.setHours(0, 0, 0, 0); return { start: s, end: endOfDay }; }
+            if (period === 'month') return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: endOfDay };
+            if (period === 'quarter') { const q = Math.floor(today.getMonth() / 3); return { start: new Date(today.getFullYear(), q * 3, 1), end: endOfDay }; }
+            if (period === 'year') return { start: new Date(today.getFullYear(), 0, 1), end: endOfDay };
+            const s = parseDate(startStr) || new Date('2025-01-01');
+            const e = parseDate(endStr) || endOfDay; e.setHours(23, 59, 59, 999);
+            return { start: s, end: e };
+        }
+        function computeRowsForConfig(cfg) {
+            let data = getFilteredData();
+            const pd = periodDatesFor(cfg.period, cfg.start, cfg.end);
+            data = filterByDate(data, pd.start, pd.end);
+            let rows = computeDimensionData(data, cfg.dimension);
+            return sortReportData(rows, cfg.sort || 'default');
+        }
+        function applyReportConfig(cfg) {
+            document.getElementById('reportType').value = cfg.type || 'comprehensive';
+            document.getElementById('reportPeriod').value = cfg.period || 'year';
+            document.getElementById('reportDimension').value = cfg.dimension || 'street';
+            document.getElementById('reportSort').value = cfg.sort || 'default';
+            document.querySelectorAll('#reportMetrics input').forEach(i => { i.checked = (cfg.metrics || []).includes(i.value); });
+            document.querySelectorAll('#reportCharts input').forEach(i => { i.checked = (cfg.chartTypes || []).includes(i.value); });
+            if (cfg.period === 'custom') {
+                document.getElementById('reportStartDate').value = (cfg.start || '').slice(0, 10);
+                document.getElementById('reportEndDate').value = (cfg.end || '').slice(0, 10);
+            }
+            toggleCustomDate();
+        }
+        function reviveConfig(cfg) {
+            const c = Object.assign({}, cfg);
+            if (typeof c.start === 'string') c.start = c.start.slice(0, 10);
+            if (typeof c.end === 'string') c.end = c.end.slice(0, 10);
+            return c;
+        }
+
+        // ============ 模板库 ============
+        const HS_TPL_KEY = 'hs_report_templates';
+        const hsPresetTemplates = [
+            { id: 'TPL-P1', name: '周报 · 按街镇', preset: true, cfg: { type: 'weekly', period: 'week', dimension: 'street', sort: 'completionRateDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask'], chartTypes: ['bar', 'table'] } },
+            { id: 'TPL-P2', name: '月报 · 综合指标', preset: true, cfg: { type: 'monthly', period: 'month', dimension: 'street', sort: 'totalTaskDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask', 'manageMeasure', 'projectMeasure', 'riskDistribution', 'streetRank', 'fundUsage'], chartTypes: ['bar', 'pie', 'line', 'table'] } },
+            { id: 'TPL-P3', name: '年度总结 · 按房屋类型', preset: true, cfg: { type: 'yearly', period: 'year', dimension: 'houseType', sort: 'totalTaskDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'manageMeasure', 'projectMeasure', 'fundUsage'], chartTypes: ['bar', 'pie', 'table'] } }
+        ];
+        function getAllTemplates() { return hsPresetTemplates.concat(lsRead(HS_TPL_KEY, [])); }
+        function renderTemplateList() {
+            const grid = document.getElementById('tplGrid');
+            const list = getAllTemplates();
+            grid.innerHTML = list.map(t => {
+                const c = t.cfg;
+                const meta = `类型：${reportTypeLabels[c.type] || c.type} ｜ 维度：${hsDimLabels[c.dimension] || c.dimension}<br>` +
+                    `指标：${(c.metrics || []).map(m => hsMetricLabels[m] || m).join('、') || '默认'}<br>` +
+                    `图表：${(c.chartTypes || []).map(x => hsChartLabels[x] || x).join('、') || '默认'}`;
+                return `<div class="tpl-card">
+                    <div class="tpl-card-name"><i class="fas fa-file-invoice" style="color:var(--primary);"></i> ${t.name} ${t.preset ? '<span class="tpl-badge">预置</span>' : ''}</div>
+                    <div class="tpl-card-meta">${meta}</div>
+                    <div class="tpl-card-actions">
+                        <button class="btn btn-primary" onclick="loadTemplate('${t.id}')"><i class="fas fa-bolt"></i> 加载并生成</button>
+                        ${t.preset ? '' : `<button class="btn" onclick="deleteTemplate('${t.id}')"><i class="fas fa-trash"></i> 删除</button>`}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        function openTplSaveModal() {
+            const cfg = getReportConfig();
+            document.getElementById('tplSaveSummary').innerHTML =
+                `将保存：${reportTypeLabels[cfg.type]} ｜ ${hsDimLabels[cfg.dimension]} ｜ 指标 ${cfg.metrics.length} 项 ｜ 图表 ${cfg.chartTypes.length} 项 ｜ 排序：${document.getElementById('reportSort').selectedOptions[0].text}`;
+            document.getElementById('tplNameInput').value = '';
+            document.getElementById('tplSaveModal').classList.add('open');
+        }
+        function closeTplSaveModal() { document.getElementById('tplSaveModal').classList.remove('open'); }
+        function confirmSaveTemplate() {
+            const name = document.getElementById('tplNameInput').value.trim();
+            if (!name) { alert('请输入模板名称'); return; }
+            const cfg = getReportConfig();
+            const list = lsRead(HS_TPL_KEY, []);
+            list.push({ id: 'TPL-' + Date.now(), name, preset: false, cfg: { type: cfg.type, period: cfg.period, dimension: cfg.dimension, sort: cfg.sort, metrics: cfg.metrics, chartTypes: cfg.chartTypes } });
+            lsWrite(HS_TPL_KEY, list);
+            closeTplSaveModal();
+            showHsToast('模板已保存到模板库');
+            renderTemplateList();
+        }
+        function loadTemplate(id) {
+            const t = getAllTemplates().find(x => x.id === id);
+            if (!t) return;
+            applyReportConfig(reviveConfig(t.cfg));
+            switchReportPane('generate');
+            generateReport();
+        }
+        function deleteTemplate(id) {
+            if (!confirm('确认删除该模板？')) return;
+            lsWrite(HS_TPL_KEY, lsRead(HS_TPL_KEY, []).filter(t => t.id !== id));
+            renderTemplateList();
+            showHsToast('模板已删除');
+        }
+
+        // ============ 定时生成任务 ============
+        const HS_SCH_KEY = 'hs_report_schedules';
+        function computeNextRun(cycle, from) {
+            const base = from ? new Date(from) : new Date();
+            const d = new Date(base); d.setHours(8, 0, 0, 0);
+            if (d <= base) d.setDate(d.getDate() + 1);
+            if (cycle === 'weekly') { while (d.getDay() !== 1) d.setDate(d.getDate() + 1); }
+            else if (cycle === 'monthly') { while (d.getDate() !== 1) d.setDate(d.getDate() + 1); }
+            else if (cycle === 'quarterly') { while (!(d.getDate() === 1 && d.getMonth() % 3 === 0)) d.setDate(d.getDate() + 1); }
+            else if (cycle === 'yearly') { while (!(d.getDate() === 1 && d.getMonth() === 0)) d.setDate(d.getDate() + 1); }
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} 08:00`;
+        }
+        function seedSchedules() {
+            if (localStorage.getItem(HS_SCH_KEY)) return;
+            lsWrite(HS_SCH_KEY, [
+                { id: 'SCH-001', name: '农村自建房整治周报', type: 'weekly', cycle: 'weekly', dimension: 'street', enabled: true, lastRun: '2025-06-09 08:00', nextRun: computeNextRun('weekly') },
+                { id: 'SCH-002', name: '房屋安全整治月报', type: 'monthly', cycle: 'monthly', dimension: 'street', enabled: true, lastRun: '2025-06-01 08:00', nextRun: computeNextRun('monthly') }
+            ]);
+        }
+        function getSchedules() { return lsRead(HS_SCH_KEY, []); }
+        const hsCycleLabels = { weekly: '每周一 08:00', monthly: '每月1日 08:00', quarterly: '每季首月1日 08:00', yearly: '每年1月1日 08:00' };
+        function renderScheduleList() {
+            const tbody = document.getElementById('scheduleTbody');
+            const list = getSchedules();
+            if (!list.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:24px;">暂无定时任务，点击右上角“新增任务”创建</td></tr>'; return; }
+            tbody.innerHTML = list.map(s => `<tr>
+                <td>${s.name}</td>
+                <td>${reportTypeLabels[s.type] || s.type}</td>
+                <td>${hsDimLabels[s.dimension] || s.dimension}</td>
+                <td>${hsCycleLabels[s.cycle] || s.cycle}</td>
+                <td>${s.lastRun || '--'}</td>
+                <td>${s.enabled ? (s.nextRun || '--') : '已停用'}</td>
+                <td><span class="status-pill ${s.enabled ? 'on' : 'off'}">${s.enabled ? '启用中' : '已停用'}</span></td>
+                <td>
+                    <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="runScheduleNow('${s.id}')" title="立即生成一次"><i class="fas fa-play"></i> 立即执行</button>
+                    <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="toggleSchedule('${s.id}')">${s.enabled ? '停用' : '启用'}</button>
+                    <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="deleteSchedule('${s.id}')">删除</button>
+                </td>
+            </tr>`).join('');
+        }
+        let editingScheduleId = null;
+        function openScheduleModal(id) {
+            editingScheduleId = id || null;
+            const s = id ? getSchedules().find(x => x.id === id) : null;
+            document.getElementById('schName').value = s ? s.name : '';
+            document.getElementById('schType').value = s ? s.type : 'weekly';
+            document.getElementById('schCycle').value = s ? s.cycle : 'weekly';
+            document.getElementById('schDimension').value = s ? s.dimension : 'street';
+            document.getElementById('schEnabled').checked = s ? !!s.enabled : true;
+            document.getElementById('scheduleModal').classList.add('open');
+        }
+        function closeScheduleModal() { document.getElementById('scheduleModal').classList.remove('open'); editingScheduleId = null; }
+        function saveSchedule() {
+            const name = document.getElementById('schName').value.trim();
+            if (!name) { alert('请输入任务名称'); return; }
+            const list = getSchedules();
+            const data = {
+                name,
+                type: document.getElementById('schType').value,
+                cycle: document.getElementById('schCycle').value,
+                dimension: document.getElementById('schDimension').value,
+                enabled: document.getElementById('schEnabled').checked
+            };
+            if (editingScheduleId) {
+                const s = list.find(x => x.id === editingScheduleId);
+                if (s) Object.assign(s, data, { nextRun: computeNextRun(data.cycle) });
+            } else {
+                list.push(Object.assign({ id: 'SCH-' + Date.now(), lastRun: null, nextRun: computeNextRun(data.cycle) }, data));
+            }
+            lsWrite(HS_SCH_KEY, list);
+            closeScheduleModal();
+            renderScheduleList();
+            showHsToast('定时任务已保存');
+        }
+        function toggleSchedule(id) {
+            const list = getSchedules();
+            const s = list.find(x => x.id === id);
+            if (!s) return;
+            s.enabled = !s.enabled;
+            if (s.enabled) s.nextRun = computeNextRun(s.cycle);
+            lsWrite(HS_SCH_KEY, list);
+            renderScheduleList();
+        }
+        function deleteSchedule(id) {
+            if (!confirm('确认删除该定时任务？')) return;
+            lsWrite(HS_SCH_KEY, getSchedules().filter(s => s.id !== id));
+            renderScheduleList();
+            showHsToast('定时任务已删除');
+        }
+        function runScheduleNow(id) {
+            const list = getSchedules();
+            const s = list.find(x => x.id === id);
+            if (!s) return;
+            const periodMap = { weekly: 'week', monthly: 'month', quarterly: 'quarter', yearly: 'year', comprehensive: 'year' };
+            const cfg = { type: s.type, period: periodMap[s.type] || 'year', dimension: s.dimension, sort: 'default', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask', 'manageMeasure', 'projectMeasure', 'riskDistribution', 'fundUsage'], chartTypes: ['bar', 'pie', 'table'] };
+            const rows = computeRowsForConfig(cfg);
+            archiveReport(cfg, rows, '定时任务', s.name);
+            s.lastRun = nowStr();
+            s.nextRun = computeNextRun(s.cycle);
+            lsWrite(HS_SCH_KEY, list);
+            renderScheduleList();
+            showHsToast(`任务「${s.name}」执行完成，报表已存档并通知相关责任人`);
+        }
+
+        // ============ 生成历史 ============
+        const HS_HIS_KEY = 'hs_report_history';
+        function getReportHistory() { return lsRead(HS_HIS_KEY, []); }
+        function archiveReport(cfg, rows, genBy, schName) {
+            const list = getReportHistory();
+            const serialCfg = reviveConfig(cfg);
+            if (cfg.start instanceof Date) serialCfg.start = formatDate(cfg.start);
+            else if (!cfg.start) serialCfg.start = formatDate(periodDatesFor(cfg.period).start);
+            if (cfg.end instanceof Date) serialCfg.end = formatDate(cfg.end);
+            else if (!cfg.end) serialCfg.end = formatDate(periodDatesFor(cfg.period).end);
+            const done = rows.reduce((s2, r) => s2 + r.doneTask, 0);
+            const total = rows.reduce((s2, r) => s2 + r.totalTask, 0);
+            list.unshift({
+                id: 'RPT-' + Date.now(),
+                name: (schName ? schName + ' · ' : '') + (reportTypeLabels[cfg.type] || '统计报表'),
+                type: cfg.type, genBy: genBy || '手动生成', genTime: nowStr(),
+                periodText: `${serialCfg.start} 至 ${serialCfg.end}`,
+                summary: `共 ${rows.length} 个维度分组，任务 ${total} 项，完成 ${done} 项`,
+                cfg: serialCfg, rows
+            });
+            if (list.length > 50) list.length = 50;
+            lsWrite(HS_HIS_KEY, list);
+        }
+        function seedReportHistory() {
+            if (localStorage.getItem(HS_HIS_KEY)) return;
+            const mk = (type, period, dimension, genBy, genTime, schName) => {
+                const cfg = { type, period, dimension, sort: 'default', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask'], chartTypes: ['bar', 'table'] };
+                const pd = periodDatesFor(period);
+                const rows = computeRowsForConfig(cfg);
+                const done = rows.reduce((s2, r) => s2 + r.doneTask, 0);
+                const total = rows.reduce((s2, r) => s2 + r.totalTask, 0);
+                return { id: 'RPT-SEED-' + genTime.replace(/\D/g, ''), name: (schName ? schName + ' · ' : '') + reportTypeLabels[type], type, genBy, genTime, periodText: `${formatDate(pd.start)} 至 ${formatDate(pd.end)}`, summary: `共 ${rows.length} 个维度分组，任务 ${total} 项，完成 ${done} 项`, cfg: { type, period, dimension, sort: 'default', metrics: cfg.metrics, chartTypes: cfg.chartTypes, start: formatDate(pd.start), end: formatDate(pd.end) }, rows };
+            };
+            lsWrite(HS_HIS_KEY, [
+                mk('weekly', 'week', 'street', '定时任务', '2025-06-09 08:00', '农村自建房整治周报'),
+                mk('monthly', 'month', 'street', '定时任务', '2025-06-01 08:00', '房屋安全整治月报'),
+                mk('quarterly', 'quarter', 'houseType', '手动生成', '2025-05-28 15:42'),
+                mk('yearly', 'year', 'risk', '手动生成', '2025-05-20 10:18')
+            ]);
+        }
+        function seedReportDemoData() { seedSchedules(); seedReportHistory(); }
+        function renderHistoryList() {
+            const tbody = document.getElementById('historyTbody');
+            const list = getReportHistory();
+            if (!list.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:24px;">暂无生成历史</td></tr>'; return; }
+            tbody.innerHTML = list.map(r => `<tr>
+                <td>${r.id}</td>
+                <td>${r.name}</td>
+                <td>${reportTypeLabels[r.type] || r.type}</td>
+                <td>${r.periodText}</td>
+                <td><span class="tag tag-info">${r.genBy}</span></td>
+                <td>${r.genTime}</td>
+                <td>
+                    <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="viewHistory('${r.id}')"><i class="fas fa-eye"></i> 查看</button>
+                    <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="downloadHistoryRec('${r.id}')"><i class="fas fa-file-excel"></i> 导出</button>
+                    <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="deleteHistory('${r.id}')">删除</button>
+                </td>
+            </tr>`).join('');
+        }
+        function viewHistory(id) {
+            const r = getReportHistory().find(x => x.id === id);
+            if (!r) return;
+            const cfg = reviveConfig(r.cfg);
+            applyReportConfig(cfg);
+            currentReportConfig = cfg;
+            currentReportData = r.rows;
+            document.getElementById('reportPeriodLabel').textContent = `${r.periodText} · ${r.rows.length} 条（历史快照 ${r.genTime}）`;
+            renderReport(r.rows, cfg);
+            document.getElementById('reportExportGroup').style.display = 'flex';
+            switchReportPane('generate');
+        }
+        function downloadHistoryRec(id) {
+            const r = getReportHistory().find(x => x.id === id);
+            if (!r) return;
+            const visible = reportHeaders.filter(h => h.visible);
+            const headers = visible.map(h => h.label);
+            const rows = r.rows.map(row => visible.map(h => {
+                if (h.key === 'completionRate' || h.key === 'fundUsageRate') return (row[h.key] || 0) + '%';
+                return row[h.key] !== undefined ? row[h.key] : '';
+            }));
+            const xml = buildExcelXml(headers, rows);
+            const blob = new Blob(['\ufeff' + xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+            downloadBlob(blob, `${r.name}_${r.genTime.slice(0, 10)}.xls`);
+            showHsToast('历史报表已导出');
+        }
+        function deleteHistory(id) {
+            if (!confirm('确认删除该生成记录？')) return;
+            lsWrite(HS_HIS_KEY, getReportHistory().filter(r => r.id !== id));
+            renderHistoryList();
         }
 
         function init() {
@@ -1451,6 +1843,7 @@ ${bodyRows}
             updateCategoryCounts();
             updateRiskFilterLabels();
             updateStats();
+            seedReportDemoData();
             window.addEventListener('resize', () => {
                 Object.values(charts).forEach(c => c.resize());
                 Object.values(reportCharts).forEach(c => c && c.resize());
