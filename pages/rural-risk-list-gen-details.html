@@ -467,6 +467,17 @@
             color: var(--text-secondary);
         }
         .empty-state i { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+        /* 等级研判 */
+        .level-cell { cursor: pointer; }
+        .level-cell:hover .risk-tag { box-shadow: 0 0 0 2px rgba(26, 115, 232, .25); }
+        .override-badge { display: inline-block; margin-left: 4px; padding: 1px 6px; font-size: 11px; border-radius: 8px; background: #e6f4ea; color: #137333; border: 1px solid #ceead6; vertical-align: middle; white-space: nowrap; }
+        .basis-tip { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+        .level-radio-group { display: flex; gap: 18px; margin: 10px 0 12px; }
+        .level-radio-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+        .rules-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .rules-table th, .rules-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+        .rules-table input[type=number] { width: 64px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; }
+
         @media (max-width: 768px) {
             .config-grid { grid-template-columns: 1fr; }
             .toolbar { flex-direction: column; align-items: stretch; }
@@ -536,6 +547,30 @@
                             <option value="重点区域">重点区域</option>
                             <option value="隐患点周边">隐患点周边</option>
                         </select>
+                    </div>
+                    <div class="config-item">
+                        <label>建筑年代</label>
+                        <select class="form-control" id="buildYear" style="width: 100%;">
+                            <option value="">全部</option>
+                            <option value="20年以下">20年以下</option>
+                            <option value="20-40年">20-40年</option>
+                            <option value="40年以上">40年以上</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label>历史问题</label>
+                        <select class="form-control" id="historyIssue" style="width: 100%;">
+                            <option value="">全部</option>
+                            <option value="无">无</option>
+                            <option value="有改扩建记录">有改扩建记录</option>
+                            <option value="有既往隐患记录">有既往隐患记录</option>
+                        </select>
+                    </div>
+                    <div class="config-item">
+                        <label>等级研判</label>
+                        <button class="btn btn-secondary" onclick="openRulesModal()" style="width: 100%;" title="配置风险等级综合研判规则">
+                            <i class="fa-solid fa-sliders"></i> 研判规则配置
+                        </button>
                     </div>
                 </div>
             </div>
@@ -736,6 +771,46 @@
         </div>
     </div>
 
+    <!-- 等级研判调整模态框 -->
+    <div class="modal-overlay" id="levelModal">
+        <div class="modal" style="max-width: 560px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-scale-balanced" style="color: var(--primary);"></i> 风险等级研判调整</h3>
+                <button class="modal-close" onclick="closeModal('levelModal')"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="levelModalBody">
+                <!-- 动态填充 -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="restoreSuggest()">恢复建议等级</button>
+                <button class="btn btn-secondary" onclick="closeModal('levelModal')">取消</button>
+                <button class="btn btn-primary" onclick="saveLevelAdjust()">
+                    <i class="fa-solid fa-check"></i> 保存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 研判规则配置模态框 -->
+    <div class="modal-overlay" id="rulesModal">
+        <div class="modal" style="max-width: 640px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-sliders" style="color: var(--primary);"></i> 等级研判规则配置</h3>
+                <button class="modal-close" onclick="closeModal('rulesModal')"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="rulesModalBody">
+                <!-- 动态填充 -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="resetRules()">恢复默认</button>
+                <button class="btn btn-secondary" onclick="closeModal('rulesModal')">取消</button>
+                <button class="btn btn-primary" onclick="saveRules()">
+                    <i class="fa-solid fa-check"></i> 保存并重算
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="./rural-risk-data.js"></script>
     <script>
         let currentData = [...riskData];
@@ -750,6 +825,37 @@
         }
 
         function riskNo(id) { return 'FX-ZJF-' + String(id).padStart(3, '0'); }
+
+        // ===== 等级综合研判 =====
+        const OVERRIDES_KEY = 'ruralRiskListOverrides_v1';
+        let levelOverrides = {};
+        try { levelOverrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY)) || {}; } catch (e) { levelOverrides = {}; }
+        function saveOverrides() { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(levelOverrides)); }
+
+        function getFactorValues() {
+            const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+            return {
+                houseType: val('houseType'),
+                structureType: val('structureType'),
+                buildYear: val('buildYear'),
+                region: val('region'),
+                history: val('historyIssue')
+            };
+        }
+
+        // 按当前配置因素与规则重算建议等级；最终等级 = 手动调整值 || 建议等级
+        function applySuggestions() {
+            const factors = getFactorValues();
+            const rules = getRuralLevelRules();
+            riskData.forEach(item => {
+                const s = suggestRuralLevel(item, factors, rules);
+                item.suggestLevel = s.level;
+                item.suggestBasis = s.basis;
+                const ov = levelOverrides[item.id];
+                item.effLevel = ov ? ov.level : s.level;
+            });
+        }
+        applySuggestions();
 
         function getRiskTag(level) {
             const map = {
@@ -775,7 +881,7 @@
             // 对每个分项内的数据按风险等级排序：重大→较大→一般→低
             for (const main in mainGroups) {
                 for (const sub in mainGroups[main]) {
-                    mainGroups[main][sub].sort((a, b) => levelOrder[a.level] - levelOrder[b.level]);
+                    mainGroups[main][sub].sort((a, b) => levelOrder[a.effLevel || a.level] - levelOrder[b.effLevel || b.level]);
                 }
             }
             return mainGroups;
@@ -897,7 +1003,9 @@
                             <div>${item.content}</div>
                             <div>${item.risk}</div>
                             <div>${item.accident}</div>
-                            <div>${getRiskTag(item.level)}</div>
+                            <div class="level-cell" title="${(item.suggestBasis || []).join('&#10;')}" onclick="event.stopPropagation(); openLevelModal(${item.id})">
+                                ${getRiskTag(item.effLevel || item.level)}${levelOverrides[item.id] ? '<span class="override-badge">已调整</span>' : ''}
+                            </div>
                             <div style="text-align:center;">
                                 <i class="fa-solid fa-star key-star ${keyRiskIds.has(item.id) ? 'marked' : ''}" title="重点风险源标注" onclick="event.stopPropagation(); toggleKeyRisk(${item.id})"></i>
                             </div>
@@ -978,7 +1086,8 @@
 
             previewData = currentData.filter(item => {
                 if (keyword && !(item.main.includes(keyword) || item.sub.includes(keyword) || item.content.includes(keyword))) return false;
-                if (level && item.level !== level) return false;
+                const lv = item.effLevel || item.level;
+                if (level && lv !== level) return false;
                 return true;
             });
             renderTable();
@@ -992,8 +1101,122 @@
         }
 
         function generateList() {
+            applySuggestions();
             applyFilter();
-            showToast('清单预览已更新');
+            showToast('清单预览已更新，风险等级建议已按当前因素综合研判');
+        }
+
+        // ===== 等级研判调整 / 规则配置 =====
+        let adjustingId = null;
+        const LEVEL_CHOICES = [
+            { key: 'red', text: '第三类', color: '#d93025' },
+            { key: 'yellow', text: '第二类', color: '#f9ab00' },
+            { key: 'blue', text: '第一类', color: '#1a73e8' }
+        ];
+
+        function openLevelModal(id) {
+            const item = riskData.find(r => r.id === id);
+            if (!item) return;
+            adjustingId = id;
+            const ov = levelOverrides[id];
+            const cur = item.effLevel || item.level;
+            const radios = LEVEL_CHOICES.map(c => `
+                <label><input type="radio" name="effLevel" value="${c.key}" ${cur === c.key ? 'checked' : ''}>
+                <span style="color: ${c.color}; font-weight: 600;">${c.text}</span></label>
+            `).join('');
+            document.getElementById('levelModalBody').innerHTML = `
+                <div class="detail-grid">
+                    <div class="detail-label">风险编号</div>
+                    <div class="detail-value">${riskNo(item.id)}</div>
+                    <div class="detail-label">风险分项</div>
+                    <div class="detail-value">${item.main} / ${item.sub}</div>
+                    <div class="detail-label">原始等级</div>
+                    <div class="detail-value">${getRiskTag(item.level)}</div>
+                    <div class="detail-label">建议等级</div>
+                    <div class="detail-value">${getRiskTag(item.suggestLevel || item.level)}</div>
+                    <div class="detail-label">研判依据</div>
+                    <div class="detail-value basis-tip">${(item.suggestBasis || []).join('<br>')}</div>
+                </div>
+                <div style="margin-top: 14px; font-weight: 600;">最终等级（可手动调整）</div>
+                <div class="level-radio-group">${radios}</div>
+                <textarea class="form-control" id="adjustReason" rows="2" placeholder="调整说明（手动调整等级时建议填写）" style="width: 100%;">${ov ? (ov.reason || '') : ''}</textarea>
+            `;
+            openModal('levelModal');
+        }
+
+        function saveLevelAdjust() {
+            const sel = document.querySelector('#levelModal input[name="effLevel"]:checked');
+            if (!sel || adjustingId == null) return;
+            const item = riskData.find(r => r.id === adjustingId);
+            const newLevel = sel.value;
+            const reason = document.getElementById('adjustReason').value.trim();
+            if (newLevel === (item.suggestLevel || item.level)) {
+                delete levelOverrides[adjustingId];
+            } else {
+                levelOverrides[adjustingId] = {
+                    level: newLevel,
+                    reason: reason,
+                    time: new Date().toLocaleString('zh-CN', { hour12: false })
+                };
+            }
+            saveOverrides();
+            applySuggestions();
+            renderTable();
+            closeModal('levelModal');
+            showToast('风险等级已更新');
+        }
+
+        function restoreSuggest() {
+            if (adjustingId == null) return;
+            delete levelOverrides[adjustingId];
+            saveOverrides();
+            applySuggestions();
+            renderTable();
+            closeModal('levelModal');
+            showToast('已恢复为建议等级');
+        }
+
+        function openRulesModal() {
+            const rules = getRuralLevelRules();
+            let html = '<p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;">'
+                + '在条目原始等级（第一类=0 / 第二类=1 / 第三类=2）基础上，按清单对象特征累加上调分值（0~2 分）；'
+                + '房屋类型、结构类型仅对适用该取值的条目生效，其余因素对全清单生效。总分 0→第一类，1→第二类，≥2→第三类。</p>';
+            html += '<table class="rules-table"><thead><tr><th style="width: 90px;">因素</th><th>取值</th><th style="width: 100px;">上调分值</th></tr></thead><tbody>';
+            Object.keys(rules).forEach(fk => {
+                const f = rules[fk];
+                const opts = Object.keys(f.weights);
+                opts.forEach((opt, i) => {
+                    html += '<tr>'
+                        + (i === 0 ? '<td rowspan="' + opts.length + '" style="font-weight: 600;">' + f.label + '</td>' : '')
+                        + '<td>' + opt + '</td>'
+                        + '<td><input type="number" min="0" max="2" step="1" data-factor="' + fk + '" data-option="' + opt + '" value="' + f.weights[opt] + '"></td>'
+                        + '</tr>';
+                });
+            });
+            html += '</tbody></table>';
+            document.getElementById('rulesModalBody').innerHTML = html;
+            openModal('rulesModal');
+        }
+
+        function saveRules() {
+            const rules = getRuralLevelRules();
+            document.querySelectorAll('#rulesModalBody input[type=number]').forEach(inp => {
+                const v = Math.max(0, Math.min(2, parseInt(inp.value || '0', 10) || 0));
+                rules[inp.dataset.factor].weights[inp.dataset.option] = v;
+            });
+            saveRuralLevelRules(rules);
+            applySuggestions();
+            renderTable();
+            closeModal('rulesModal');
+            showToast('研判规则已保存，建议等级已重新计算');
+        }
+
+        function resetRules() {
+            resetRuralLevelRules();
+            applySuggestions();
+            renderTable();
+            openRulesModal();
+            showToast('已恢复默认规则');
         }
 
         function openPreviewModal() {
@@ -1011,7 +1234,7 @@
                     const bFirstId = riskData.filter(i => i.main === b.main && i.sub === b.sub)[0]?.id || 0;
                     return aFirstId - bFirstId;
                 }
-                return levelOrder[a.level] - levelOrder[b.level];
+                return levelOrder[a.effLevel || a.level] - levelOrder[b.effLevel || b.level];
             });
             if (!selectedItems.length) {
                 showToast('请先勾选要生成的风险条目');
@@ -1035,10 +1258,10 @@
                     + '<i class="fa-solid fa-folder-open" style="color: var(--primary);"></i>' + main
                     + '<span style="font-weight: 400; color: var(--text-secondary); font-size: 12px;">共 ' + items.length + ' 项</span></div>';
                 items.forEach(item => {
-                    html += '<div style="border: 1px solid var(--border); border-left: 3px solid ' + (riskBarColor[item.level] || '#1a73e8') + '; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--bg-card);">';
+                    html += '<div style="border: 1px solid var(--border); border-left: 3px solid ' + (riskBarColor[item.effLevel || item.level] || '#1a73e8') + '; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--bg-card);">';
                     html += '<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">'
                         + '<span style="font-weight: 600; font-size: 13px; color: var(--text-primary);">' + riskNo(item.id) + '</span>'
-                        + getRiskTag(item.level)
+                        + getRiskTag(item.effLevel || item.level)
                         + (keyRiskIds.has(item.id) ? '<span class="key-badge"><i class="fa-solid fa-star"></i>重点</span>' : '')
                         + '<span style="margin-left: auto; color: var(--text-secondary); font-size: 12px;">' + item.sub + ' · ' + item.content + '</span></div>';
                     html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border);">'
@@ -1076,7 +1299,14 @@
                     <div class="detail-label">可能导致事故</div>
                     <div class="detail-value">${item.accident}</div>
                     <div class="detail-label">风险等级</div>
-                    <div class="detail-value">${getRiskTag(item.level)}</div>
+                    <div class="detail-value">${getRiskTag(item.effLevel || item.level)}${levelOverrides[item.id] ? ' <span class="override-badge">已调整</span>' : ''}</div>
+                    <div class="detail-label">建议等级</div>
+                    <div class="detail-value">${getRiskTag(item.suggestLevel || item.level)}</div>
+                    <div class="detail-label">研判依据</div>
+                    <div class="detail-value basis-tip">${(item.suggestBasis || []).join('<br>')}</div>
+                    ${levelOverrides[item.id] ? `
+                    <div class="detail-label">调整说明</div>
+                    <div class="detail-value">${levelOverrides[item.id].reason || '—'}<br><span style="color: var(--text-secondary); font-size: 12px;">${levelOverrides[item.id].time || ''}</span></div>` : ''}
                     <div class="detail-label">适用房屋类型</div>
                     <div class="detail-value">${getApplicability(item, 'houseType') || '—'}</div>
                     <div class="detail-label">适用结构类型</div>
@@ -1158,16 +1388,20 @@
                     const bFirstId = riskData.filter(i => i.main === b.main && i.sub === b.sub)[0]?.id || 0;
                     return aFirstId - bFirstId;
                 }
-                return levelOrder[a.level] - levelOrder[b.level];
+                return levelOrder[a.effLevel || a.level] - levelOrder[b.effLevel || b.level];
             });
-            
+
             const levelMap = { red: '第三类', orange: '第三类', yellow: '第二类', blue: '第一类' };
             const name = document.getElementById('listName').value || '农村自建房风险清单';
             const dateStr = new Date().toISOString().slice(0,10);
-            const headers = ['序号', '风险编号', '风险主项', '分项（部位）', '分项内容', '风险识别', '可能导致事故', '风险等级', '重点风险源', '主要防护措施', '排查要点', '鉴定要求', '工作依据'];
+            const headers = ['序号', '风险编号', '风险主项', '分项（部位）', '分项内容', '风险识别', '可能导致事故', '风险等级', '建议等级', '研判依据', '调整说明', '重点风险源', '主要防护措施', '排查要点', '鉴定要求', '工作依据'];
             const rows = items.map((item, index) => [
                 index + 1, riskNo(item.id), item.main, item.sub, item.content, item.risk, item.accident,
-                levelMap[item.level] || item.level, keyRiskIds.has(item.id) ? '是' : '否',
+                levelMap[item.effLevel || item.level] || (item.effLevel || item.level),
+                levelMap[item.suggestLevel || item.level] || (item.suggestLevel || item.level),
+                (item.suggestBasis || []).join('；'),
+                levelOverrides[item.id] ? ((levelOverrides[item.id].reason || '手动调整') + ' ' + (levelOverrides[item.id].time || '')).trim() : '',
+                keyRiskIds.has(item.id) ? '是' : '否',
                 item.measure, item.requirement || '', item.standard || '', item.basis || ''
             ]);
 
@@ -1181,7 +1415,11 @@
                     items: items.map((item, index) => ({
                         seq: index + 1, riskNo: riskNo(item.id), main: item.main, sub: item.sub,
                         content: item.content, risk: item.risk, accident: item.accident,
-                        level: levelMap[item.level] || item.level, keyRisk: keyRiskIds.has(item.id),
+                        level: levelMap[item.effLevel || item.level] || (item.effLevel || item.level),
+                        suggestLevel: levelMap[item.suggestLevel || item.level] || (item.suggestLevel || item.level),
+                        levelBasis: (item.suggestBasis || []).join('；'),
+                        adjustNote: levelOverrides[item.id] ? (levelOverrides[item.id].reason || '') : '',
+                        keyRisk: keyRiskIds.has(item.id),
                         measure: item.measure, requirement: item.requirement || '', standard: item.standard || '', basis: item.basis || ''
                     }))
                 };

@@ -892,3 +892,54 @@ function formatBasisText(basis) {
       return clauseNo ? `${label} 第${clauseNo}条` : label;
   }).join('；');
 }
+
+// ===== 风险等级综合研判规则（可配置，存 localStorage） =====
+// 分值语义：条目原始等级（第一类=0 / 第二类=1 / 第三类=2）+ 各因素上调分值，总分 0→第一类，1→第二类，≥2→第三类
+const RURAL_LEVEL_CLASS = { 0: 'blue', 1: 'yellow', 2: 'red' };
+const RURAL_LEVEL_CLASS_TEXT = { blue: '第一类', yellow: '第二类', orange: '第三类', red: '第三类' };
+const RURAL_LEVEL_BASE_SCORE = { blue: 0, yellow: 1, orange: 2, red: 2 };
+const RURAL_LEVEL_RULES_KEY = 'ruralLevelRules_v1';
+const RURAL_LEVEL_RULES_DEFAULT = {
+    houseType:     { label: '房屋类型', scope: 'item',   weights: { '独立住宅': 0, '集合住宅': 1, '非住宅': 1, '辅助用房': 0 } },
+    structureType: { label: '结构类型', scope: 'item',   weights: { '砌体结构': 1, '木（竹）结构': 2, '土木/石木结构': 2, '混杂结构': 1, '窑洞': 1, '钢筋混凝土结构': 0, '钢结构': 0, '其他': 0 } },
+    buildYear:     { label: '建筑年代', scope: 'global', weights: { '20年以下': 0, '20-40年': 1, '40年以上': 2 } },
+    region:        { label: '地理区域', scope: 'global', weights: { '重点区域': 1, '隐患点周边': 1 } },
+    history:       { label: '历史问题', scope: 'global', weights: { '无': 0, '有改扩建记录': 1, '有既往隐患记录': 1 } }
+};
+
+function getRuralLevelRules() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(RURAL_LEVEL_RULES_KEY));
+        if (saved && saved.houseType && saved.houseType.weights) return saved;
+    } catch (e) { /* 忽略损坏数据，回退默认 */ }
+    return JSON.parse(JSON.stringify(RURAL_LEVEL_RULES_DEFAULT));
+}
+function saveRuralLevelRules(rules) { localStorage.setItem(RURAL_LEVEL_RULES_KEY, JSON.stringify(rules)); }
+function resetRuralLevelRules() { localStorage.removeItem(RURAL_LEVEL_RULES_KEY); }
+
+// 条目是否适用某因素取值（依据适用范围字段，"不限"视为全部适用）
+function ruralFactorApplies(item, factorKey, value) {
+    const text = String(item[factorKey] || '');
+    if (!text || text === '不限') return true;
+    return text.split('、').some(v => v.trim() === value);
+}
+
+// 综合研判：返回 { level, score, basis[] }
+function suggestRuralLevel(item, factors, rules) {
+    const baseScore = RURAL_LEVEL_BASE_SCORE[item.level] != null ? RURAL_LEVEL_BASE_SCORE[item.level] : 0;
+    let score = baseScore;
+    const basis = ['基准等级：' + (RURAL_LEVEL_CLASS_TEXT[item.level] || '第一类') + '（分值 ' + baseScore + '）'];
+    Object.keys(rules).forEach(fk => {
+        const val = factors[fk];
+        if (!val || val === '无') return;
+        const rule = rules[fk];
+        const w = rule.weights[val];
+        if (!w) return;
+        if (rule.scope === 'item' && !ruralFactorApplies(item, fk, val)) return;
+        score += w;
+        basis.push(rule.label + '「' + val + '」 +' + w + (rule.scope === 'item' ? '（条目适用）' : ''));
+    });
+    const finalScore = Math.max(0, Math.min(2, score));
+    basis.push('综合分值 ' + finalScore + ' → 建议 ' + RURAL_LEVEL_CLASS_TEXT[RURAL_LEVEL_CLASS[finalScore]]);
+    return { level: RURAL_LEVEL_CLASS[finalScore], score: finalScore, basis: basis };
+}
