@@ -523,6 +523,28 @@
         .record-list .actions { width: 1%; text-align: center; white-space: nowrap; vertical-align: middle; padding: 0; font-size: 12px; }
         .record-list .actions .view-link { display: inline-block; color: var(--primary); cursor: pointer; font-size: 12px; line-height: 40px; height: 40px; padding: 0 6px; text-decoration: none; }
         .record-list .actions .view-link:hover { text-decoration: underline; }
+        /* 留痕记录时间轴（横向，2026-11-11 简化版） */
+        .cl-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:16px; }
+        .cl-stat { background:var(--bg-card, #fff); border:1px solid var(--border); border-radius:6px; padding:12px 16px; text-align:center; }
+        .cl-stat-num { font-size:22px; font-weight:700; color:var(--primary); }
+        .cl-stat-label { font-size:12px; color:var(--text-secondary); margin-top:4px; }
+        .cl-timeline { position:relative; display:flex; gap:14px; overflow-x:auto; padding:16px 4px 8px; }
+        .cl-timeline::before { content:''; position:absolute; left:12px; right:12px; top:22px; height:2px; background:var(--border); }
+        .cl-node { position:relative; flex:0 0 210px; padding-top:20px; }
+        .cl-dot { position:absolute; left:14px; top:0; width:14px; height:14px; border-radius:50%; background:var(--primary); border:2px solid #fff; box-shadow:0 0 0 2px var(--primary); z-index:1; }
+        .cl-node.cl-latest .cl-dot { background:#15803d; box-shadow:0 0 0 2px #15803d; }
+        .cl-card { background:var(--bg-card, #fff); border:1px solid var(--border); border-radius:6px; padding:10px 14px; cursor:pointer; transition:border-color .15s, box-shadow .15s; height:100%; }
+        .cl-card:hover { border-color:var(--primary); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+        .cl-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+        .cl-version { font-weight:700; color:var(--primary); font-size:14px; }
+        .cl-time { font-size:12px; color:var(--text-primary); }
+        .cl-by { font-size:12px; color:var(--text-secondary); }
+        .cl-count { font-size:12px; color:var(--text-secondary); margin:2px 0 4px; }
+        .cl-fields { font-size:12px; color:var(--text-primary); line-height:1.6; word-break:break-all; }
+        .cl-goto { font-size:12px; color:var(--primary); margin-top:6px; }
+        .cl-table td.cl-old { color:#b91c1c; max-width:260px; word-break:break-all; }
+        .cl-table td.cl-new { color:#15803d; max-width:260px; word-break:break-all; }
+        .cl-table td.cl-arrow { text-align:center; color:var(--text-secondary); }
         .record-empty { color: var(--text-secondary); font-size: 13px; padding: 12px 0; }
         .record-section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
         .record-section-title span { font-size: 14px; font-weight: 600; }
@@ -1355,6 +1377,7 @@
             { key: 'maintenance', icon: 'fa-wrench', title: '维修记录', tag: '全周期档案' },
             { key: 'renovation', icon: 'fa-hammer', title: '改造记录', tag: '全周期档案' },
             { key: 'elimination', icon: 'fa-check-double', title: '消险记录', tag: '闭环完成' },
+            { key: 'changeLog', icon: 'fa-history', title: '留痕记录', tag: '修改留痕' },
             { key: 'emergency', icon: 'fa-first-aid', title: '应急处置', tag: '预案演练', ruralOnly: true }
         ];
 
@@ -1363,7 +1386,7 @@
             { key: 'zjd', title: '宅基地信息', icon: 'fa-map', count: 3, ruralOnly: true },
             { key: 'jsqk', title: '建设情况', icon: 'fa-hard-hat', count: 7 },
             { key: 'glqk', title: '管理情况', icon: 'fa-file-alt', count: 2 },
-            { key: 'designConstruction', title: '设计施工信息', icon: 'fa-hard-hat', count: 11, ruralOnly: true },
+            { key: 'designConstruction', title: '设计施工信息', icon: 'fa-hard-hat', count: 11 },
             { key: 'jgtd', title: '结构特点', icon: 'fa-building', count: 4 },
             { key: 'jzcl', title: '建筑材料', icon: 'fa-cubes', count: 3 },
             { key: 'jgxx', title: '结构信息', icon: 'fa-building', count: 12, ruralOnly: true },
@@ -2055,7 +2078,7 @@
             }
         });
         // 设计施工记录兜底初始化（农村自建房）
-        if (currentHouseArch && !isUrbanHouse() && !Array.isArray(currentHouseArch.designConstructionRecords)) {
+        if (currentHouseArch && !Array.isArray(currentHouseArch.designConstructionRecords)) {
             currentHouseArch.designConstructionRecords = (currentHouseArch.designConstruction
                 ? [currentHouseArch.designConstruction]
                 : [{
@@ -2422,10 +2445,19 @@
                 const dcRecords = currentHouseArch.designConstructionRecords || [];
                 const activeIndex = Math.min(recordViewState.designConstruction || 0, Math.max(dcRecords.length - 1, 0));
                 recordViewState.designConstruction = activeIndex;
+                const isUrbanDc = isUrbanHouse();
+                const dcBoolText = function(v) { return (v === true || v === '是') ? '是' : '否'; };
                 const listHtml = recordListTable(
-                    ['设计日期', '施工单位', '是否正规设计', '是否正规施工', '填报人'],
+                    isUrbanDc ? ['设计单位', '施工单位', '竣工时间', '是否专业设计', '资质施工队伍']
+                        : ['设计日期', '施工单位', '是否正规设计', '是否正规施工', '填报人'],
                     dcRecords.map(function(r) {
-                        return [
+                        return isUrbanDc ? [
+                            r.designUnit || '—',
+                            r.constructionUnit || '—',
+                            r.completionDate || '—',
+                            dcBoolText(r.hasProfessionalDesign),
+                            dcBoolText(r.hasQualificationTeam)
+                        ] : [
                             r.designDate || '—',
                             r.constructionUnit || '—',
                             r.hasProfessionalDesign ? '是' : '否',
@@ -2438,7 +2470,18 @@
                     { showCrud: { edit: 'openCrudModal(\'designConstruction\'', delete: 'deleteCrudRecord(\'designConstruction\'' } }
                 );
                 const r = dcRecords[activeIndex] || {};
-                const grid = [
+                const grid = (isUrbanDc ? [
+                    kv('设计单位', r.designUnit, '—', true),
+                    kv('设计日期', r.designDate, '—', true),
+                    kv('施工单位', r.constructionUnit, '—', true),
+                    kv('施工资质', r.constructionQual, '—', true),
+                    kv('监理单位', r.supervisionUnit, '—', true),
+                    kv('竣工时间', r.completionDate, '—', true),
+                    kv('设计方式', r.designMode, '—', true),
+                    kv('建造方式', r.buildMode, '—', true),
+                    kv('改建扩建记录', r.expansionRecord, '—', true),
+                    kv('备注', r.remark, '—', true, true)
+                ] : [
                     kv('设计日期', r.designDate, '—', true),
                     kv('施工单位', r.constructionUnit, '—', true),
                     kv('是否正规设计', r.hasProfessionalDesign ? '是' : '否', '—', true),
@@ -2450,14 +2493,23 @@
                     kv('设计方式', r.designMode, '—', true),
                     kv('建造方式', r.buildMode, '—', true),
                     kv('备注', r.remark, '—', true, true)
-                ].join('');
+                ]).join('');
+                const dcDrawingArr = parsePhotoUrls(r.designDrawings);
+                const dcDrawings = isUrbanDc
+                    ? '<div class="info-section-title"><i class="fas fa-drafting-compass"></i> 设计图纸</div>' +
+                        (dcDrawingArr.length
+                            ? '<div class="info-value photo-value photo-grid">' + dcDrawingArr.map(function(u) {
+                                return '<img src="' + u + '" alt="设计图纸" onclick="viewPhotoOnline(\'' + u + '\')" style="width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">';
+                            }).join('') + '</div>'
+                            : '<div style="color:#bfbfbf;font-size:13px;padding:24px 0;text-align:center;border:1px dashed #d9d9d9;border-radius:6px;background:#fafafa;">暂未上传设计图纸</div>')
+                    : '';
                 designConstructionHtml =
                     recordListWrapper('设计施工记录列表', listHtml, { icon: 'fa-hard-hat', showAdd: 'addCrudRecord(\'designConstruction\')' }) +
                     '<div class="record-detail-header">' +
                         '<div class="title">设计施工详情（' + (dcRecords.length ? (activeIndex + 1) + ' / ' + dcRecords.length : '0 / 0') + '）</div>' +
-                        '<div class="meta">设计日期：' + (r.designDate || '—') + ' | 填报人：' + (r.reporter || '—') + '</div>' +
+                        '<div class="meta">设计日期：' + (r.designDate || '—') + (isUrbanDc ? ' | 竣工时间：' + (r.completionDate || '—') : ' | 填报人：' + (r.reporter || '—')) + '</div>' +
                     '</div>' +
-                    '<div class="info-grid info-grid-2col">' + grid + '</div>';
+                    '<div class="info-grid info-grid-2col">' + grid + '</div>' + dcDrawings;
             }
 
             const basicData = getBasicData();
@@ -2528,12 +2580,6 @@
                     kv('承重体系', sf.bearingSystem) +
                     kv('楼盖形式', sf.floorForm) +
                     kv('屋面形式', sf.roofForm) +
-                    '</div>' +
-                    '<div class="info-grid info-grid-2col" style="margin-top:8px;">' +
-                    kv('结构类型', s.structure && s.structure.structureType) +
-                    kv('楼层', s.structure && s.structure.floors) +
-                    kv('建筑面积', s.structure && s.structure.buildingArea) +
-                    kv('屋面类型', s.structure && s.structure.roofType) +
                     '</div>';
             }
             let jzclViewHtml = '';
@@ -2981,6 +3027,21 @@
         }
 
         // 内嵌表单照片/附件上传（与 handleMeasurePhotoUpload 逻辑一致，适配 data-*-field 输入框）
+        // 解析逗号分隔的图片/附件地址：dataURL 自身含一个逗号，需把 "data:..." 前缀与载荷重新拼合
+        function parsePhotoUrls(v) {
+            if (Array.isArray(v)) return v.length ? parsePhotoUrls(v.join(',')) : [];
+            const parts = String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+            const out = [];
+            for (let i = 0; i < parts.length; i++) {
+                if (/^data:[^,]*$/.test(parts[i]) && i + 1 < parts.length) {
+                    out.push(parts[i] + ',' + parts[++i]);
+                } else {
+                    out.push(parts[i]);
+                }
+            }
+            return out;
+        }
+
         function handleMeasureFormUpload(input) {
             const wrap = input.parentElement;
             const files = Array.from(input.files || []);
@@ -2991,7 +3052,7 @@
                 const invalid = files.find(f => !f.type.startsWith('image/'));
                 if (invalid) { alert('请上传图片文件'); return; }
             }
-            const existing = (urlInput.value || '').split(',').map(s => s.trim()).filter(Boolean);
+            const existing = parsePhotoUrls(urlInput.value);
             const readers = files.map(file => new Promise(resolve => {
                 const reader = new FileReader();
                 reader.onload = e => resolve(e.target.result);
@@ -3233,6 +3294,298 @@
             }).join('');
         }
 
+        // ===== 档案变更留痕：统一入口 + 时间轴展示 + 版本回溯（2026-11-11，对标 6.1.2.23.3 审计日志） =====
+        function esc(str) {
+            if (str == null) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        var __archEditSnapshot = null;
+
+        // 打开编辑弹窗时拍快照（基本 TAB 数据 + 档案对象）
+        function snapshotArchForEdit() {
+            try {
+                __archEditSnapshot = JSON.stringify({
+                    basic: (typeof getBasicData === 'function') ? getBasicData() : {},
+                    arch: currentHouseArch || {}
+                });
+            } catch (e) { __archEditSnapshot = null; }
+        }
+
+        function __normLogVal(v) {
+            if (v === true) return '是';
+            if (v === false) return '否';
+            if (v === undefined || v === null) return '';
+            return String(v);
+        }
+
+        function __getBasicTabLabel(key) {
+            const tabs = (typeof basicSubTabs_URBAN !== 'undefined') ? basicSubTabs_URBAN : [];
+            const t = tabs.find(function(x){ return x.key === key; });
+            return t ? t.title : key;
+        }
+
+        // 基本 TAB 行数据 diff（[label, value] 数组，按索引对齐）
+        function __diffBasicTabRows(s, subTab, tabLabel, oldRows, newRows, operator) {
+            const len = Math.max((oldRows || []).length, (newRows || []).length);
+            let cnt = 0;
+            for (let i = 0; i < len; i++) {
+                const o = (oldRows || [])[i], n = (newRows || [])[i];
+                const label = (n && n[0]) || (o && o[0]) || ('字段' + (i + 1));
+                const ov = o ? String(o[1] == null ? '' : o[1]) : '';
+                const nv = n ? String(n[1] == null ? '' : n[1]) : '';
+                if (ov !== nv) {
+                    addChangeLog(s, 'basic.' + subTab + '.' + i, tabLabel + '-' + label, ov, nv, 'manual', '', operator);
+                    cnt++;
+                }
+            }
+            return cnt;
+        }
+
+        // 通用对象 diff：标量字段记改前/改后；数组/对象（照片等）只标记"已更新"
+        function __diffPlainObjects(s, pathPrefix, labelPrefix, oldObj, newObj, labelMap, operator) {
+            if (!oldObj && !newObj) return 0;
+            const keys = {};
+            Object.keys(oldObj || {}).forEach(function(k){ keys[k] = true; });
+            Object.keys(newObj || {}).forEach(function(k){ keys[k] = true; });
+            let cnt = 0;
+            Object.keys(keys).forEach(function(k) {
+                const ov = (oldObj || {})[k], nv = (newObj || {})[k];
+                const label = (labelMap && labelMap[k]) || k;
+                const path = pathPrefix + '.' + k;
+                if (typeof ov === 'object' || typeof nv === 'object') {
+                    const os = ov === undefined || ov === null ? '' : JSON.stringify(ov);
+                    const ns = nv === undefined || nv === null ? '' : JSON.stringify(nv);
+                    if (os !== ns) {
+                        addChangeLog(s, path, labelPrefix + '-' + label, '', '（内容已更新）', 'manual', '', operator);
+                        cnt++;
+                    }
+                    return;
+                }
+                const osv = __normLogVal(ov), nsv = __normLogVal(nv);
+                if (osv !== nsv) {
+                    addChangeLog(s, path, labelPrefix + '-' + label, osv, nsv, 'manual', '', operator);
+                    cnt++;
+                }
+            });
+            return cnt;
+        }
+
+        // 记录数组（按索引）diff，labels 取自 crudConfigs.fields
+        function __diffRecordArray(s, dataPath, labelPrefix, oldArr, newArr, fields, operator) {
+            const len = Math.max((oldArr || []).length, (newArr || []).length);
+            const labelMap = {};
+            (fields || []).forEach(function(f){ labelMap[f.key] = f.label; });
+            let cnt = 0;
+            for (let i = 0; i < len; i++) {
+                const o = (oldArr || [])[i], n = (newArr || [])[i];
+                if (o && !n) {
+                    addChangeLog(s, dataPath + '.' + i, labelPrefix, '（记录已删除）', '', 'manual', '', operator);
+                    cnt++;
+                    continue;
+                }
+                if (!o && n) {
+                    addChangeLog(s, dataPath + '.' + i, labelPrefix, '', '（新增记录）', 'manual', '', operator);
+                    cnt++;
+                    continue;
+                }
+                cnt += __diffPlainObjects(s, dataPath + '.' + i, labelPrefix + '-第' + (i + 1) + '条', o, n, labelMap, operator);
+            }
+            return cnt;
+        }
+
+        // saveBasicEdit 保存时统一调用：快照 → 留痕
+        function applyBasicEditChangeLog() {
+            if (!__archEditSnapshot || !currentHouseArch) return;
+            let snap;
+            try { snap = JSON.parse(__archEditSnapshot); } catch (e) { __archEditSnapshot = null; return; }
+            __archEditSnapshot = null;
+            const s = currentHouseArch;
+            const operator = '当前用户';
+            // 1) 静态四区块（房屋概况/宅基地/结构/使用，数据层 CHANGE_LOG_SECTIONS）
+            if (typeof diffStaticFields === 'function') diffStaticFields(snap.arch, s, 'manual', '', operator);
+            // 2) 基本 TAB 行数据（[label, value] 数组的 TAB）
+            const oldBasic = snap.basic || {};
+            const newBasic = (typeof getBasicData === 'function') ? getBasicData() : {};
+            Object.keys(newBasic).forEach(function(subTab) {
+                if (Array.isArray(newBasic[subTab])) {
+                    __diffBasicTabRows(s, subTab, __getBasicTabLabel(subTab), oldBasic[subTab], newBasic[subTab], operator);
+                }
+            });
+            // 3) 结构特点
+            __diffPlainObjects(s, 'structureFeatures', '结构特点', snap.arch.structureFeatures, s.structureFeatures, null, operator);
+            // 4) 建筑材料
+            __diffRecordArray(s, 'buildMaterials', '建筑材料', snap.arch.buildMaterials, s.buildMaterials, [
+                { key: 'type', label: '材料类型' }, { key: 'strength', label: '强度等级' }, { key: 'manufacturer', label: '生产厂家' }
+            ], operator);
+            // 5) 设计施工记录（labels 复用 crudConfigs）
+            const dcCfg = (typeof crudConfigs !== 'undefined') ? crudConfigs.designConstruction : null;
+            const dcDiffFields = dcCfg ? getCrudFields(dcCfg).concat(isUrbanHouse() ? [
+                { key: 'hasProfessionalDesign', label: '是否专业设计' },
+                { key: 'hasQualificationTeam', label: '资质施工队伍' }
+            ] : []) : null;
+            __diffRecordArray(s, 'designConstructionRecords', '设计施工信息', snap.arch.designConstructionRecords, s.designConstructionRecords, dcDiffFields, operator);
+        }
+
+        // CRUD 记录编辑留痕（saveCrudEdit 调用）
+        function logCrudRecordChange(moduleKey, idx, oldRec, newRec) {
+            const cfg = crudConfigs[moduleKey];
+            if (!cfg || !oldRec || !newRec || !currentHouseArch) return;
+            const operator = '当前用户';
+            (getCrudFields(cfg) || []).forEach(function(f) {
+                const ov = oldRec[f.key], nv = newRec[f.key];
+                const path = cfg.dataPath + '.' + idx + '.' + f.key;
+                if (f.type === 'photo') {
+                    const os = Array.isArray(ov) ? ov.join(',') : (ov || '');
+                    const ns = Array.isArray(nv) ? nv.join(',') : (nv || '');
+                    if (os !== ns) addChangeLog(currentHouseArch, path, cfg.title + '-' + f.label, '', '（照片已更新）', 'manual', '', operator);
+                    return;
+                }
+                const osv = __normLogVal(ov), nsv = __normLogVal(nv);
+                if (osv !== nsv) addChangeLog(currentHouseArch, path, cfg.title + '-' + f.label, osv, nsv, 'manual', '', operator);
+            });
+        }
+
+        // 留痕按批次分组（同时间+操作人+来源为一批）；返回倒序（最新在前），version 正序编号
+        function groupChangeLogBatches(logs) {
+            const sorted = logs.slice().sort(function(a, b){ return (a.changedAt || '').localeCompare(b.changedAt || ''); });
+            const batches = [];
+            sorted.forEach(function(log) {
+                const key = (log.changedAt || '') + '|' + (log.changedBy || '') + '|' + (log.source || '');
+                const last = batches[batches.length - 1];
+                if (last && last.key === key) { last.logs.push(log); }
+                else { batches.push({ key: key, time: log.changedAt || '', by: log.changedBy || '', source: log.source || 'manual', logs: [log] }); }
+            });
+            batches.forEach(function(b, i){ b.version = i + 1; });
+            return batches.reverse();
+        }
+
+        // 版本回溯：克隆当前档案，把比目标版本新的批次逐条撤销（写回改前值）
+        function applyLogReverse(clone, log) {
+            const p = log.fieldPath || '';
+            let m = p.match(/^basic\.([^.]+)\.(\d+)$/);
+            if (m) { const rows = clone.basic[m[1]]; if (rows && rows[+m[2]]) rows[+m[2]][1] = log.oldValue; return; }
+            m = p.match(/^info\.(.+)$/);
+            if (m) { if (clone.arch.riskInfo) clone.arch.riskInfo[m[1]] = log.oldValue; return; }
+            m = p.match(/^cls\.(.+)$/);
+            if (m) { if (clone.arch.riskClassification) clone.arch.riskClassification[m[1]] = log.oldValue; return; }
+            m = p.match(/^record\.(.+)$/);
+            if (m) { const arr = clone.arch.riskIdentification || []; if (arr[0]) arr[0][m[1]] = log.oldValue; return; }
+            setNestedValue(clone.arch, p, log.oldValue);
+        }
+
+        function viewHistoryVersion(version) {
+            const s = currentHouseArch;
+            const batches = groupChangeLogBatches(s.changeLog || []);
+            const idx = batches.findIndex(function(b){ return b.version === version; });
+            if (idx === -1) return;
+            const target = batches[idx];
+            const clone = { arch: JSON.parse(JSON.stringify(s)), basic: JSON.parse(JSON.stringify(getBasicData())) };
+            for (let i = 0; i < idx; i++) {
+                batches[i].logs.forEach(function(log){ applyLogReverse(clone, log); });
+            }
+            renderHistoryVersionModal(target, clone, batches, idx);
+        }
+
+        // 回溯取值：与 applyLogReverse 的路径规则镜像（basic./info./cls./record./普通路径）
+        function __hvReadVal(holder, p) {
+            let m = p.match(/^basic\.([^.]+)\.(\d+)$/);
+            if (m) { const rows = holder.basic[m[1]]; return (rows && rows[+m[2]]) ? rows[+m[2]][1] : ''; }
+            m = p.match(/^info\.(.+)$/);
+            if (m) return (holder.arch.riskInfo || {})[m[1]];
+            m = p.match(/^cls\.(.+)$/);
+            if (m) return (holder.arch.riskClassification || {})[m[1]];
+            m = p.match(/^record\.(.+)$/);
+            if (m) { const a = holder.arch.riskIdentification || []; return a[0] ? a[0][m[1]] : ''; }
+            return getNestedValue(holder.arch, p);
+        }
+
+        // 简化版回溯：仅列出发生过变更的字段，对比「该版本时点值 vs 当前值」（2026-11-11 简化）
+        function renderHistoryVersionModal(batch, clone, batches, idx) {
+            const cur = { arch: currentHouseArch, basic: getBasicData() };
+            const seen = {};
+            const rows = [];
+            for (let i = 0; i <= idx; i++) {
+                batches[i].logs.forEach(function(log) {
+                    const p = log.fieldPath || '';
+                    if (seen[p]) return;
+                    seen[p] = true;
+                    const thenV = __normLogVal(__hvReadVal(clone, p));
+                    const nowV = __normLogVal(__hvReadVal(cur, p));
+                    rows.push({ label: log.fieldLabel || p, thenV: thenV, nowV: nowV, diff: thenV !== nowV });
+                });
+            }
+            const diffCnt = rows.filter(function(r){ return r.diff; }).length;
+            const tip = (idx === 0)
+                ? 'V' + batch.version + ' 即当前最新版本，下表为该次变更涉及的字段取值（只读）。'
+                : '对比 V' + batch.version + '（' + esc(batch.time) + '）时点与当前值，仅列出发生过变更的字段；其中 ' + diffCnt + ' 项此后又被修改（只读）。';
+            const bodyHtml =
+                '<div style="padding:10px 14px;margin-bottom:12px;background:var(--bg-hover,#f5f7fa);border:1px solid var(--border);border-radius:4px;font-size:12px;color:var(--text-secondary,#909399);">' +
+                    '<i class="fas fa-info-circle" style="color:var(--primary);"></i> ' + tip +
+                '</div>' +
+                '<div class="table-wrap"><table class="arch-table cl-table">' +
+                    '<thead><tr><th>修改字段</th><th>V' + batch.version + ' 时点值</th><th style="width:40px;"></th><th>当前值</th></tr></thead>' +
+                    '<tbody>' + rows.map(function(r) {
+                        return '<tr>' +
+                            '<td>' + esc(r.label) + '</td>' +
+                            '<td class="' + (r.diff ? 'cl-old' : '') + '">' + esc(r.thenV || '(空)') + '</td>' +
+                            '<td class="cl-arrow"><i class="fas fa-long-arrow-alt-right"></i></td>' +
+                            '<td class="' + (r.diff ? 'cl-new' : '') + '">' + esc(r.nowV || '(空)') + (r.diff ? '' : ' <span style="font-size:12px;color:#909399;">（一致）</span>') + '</td>' +
+                        '</tr>';
+                    }).join('') + '</tbody></table></div>';
+            document.getElementById('versionViewTitle').innerHTML = '<i class="fas fa-rotate-left"></i> 历史版本回溯 · V' + batch.version + '（' + esc(batch.time) + '）';
+            document.getElementById('versionViewBody').innerHTML = bodyHtml;
+            document.getElementById('versionViewModal').classList.add('open');
+        }
+        function closeVersionViewModal() {
+            document.getElementById('versionViewModal').classList.remove('open');
+        }
+
+        // ===== 留痕记录（changeLog 时间轴展示，2026-11-11 重做：时间轴 + 版本回溯） =====
+        function renderChangeLogContent(s) {
+            const logs = s.changeLog || [];
+            if (!logs.length) {
+                return '<div class="record-empty" style="padding:60px 20px;text-align:center;">' +
+                    '<i class="fas fa-history" style="font-size:28px;color:#c0c4cc;display:block;margin-bottom:14px;"></i>' +
+                    '暂无留痕记录<br><span style="font-size:12px;color:#909399;">编辑档案（基本信息/宅基地/结构/使用/设计施工等）后，每次变更将自动记录时间、操作人、改前值与改后值</span>' +
+                '</div>';
+            }
+            const batches = groupChangeLogBatches(logs);
+            const srcMap = { manual: '手动编辑', import: '批量导入', task: '任务同步' };
+            const fieldCnt = {};
+            logs.forEach(function(l){ fieldCnt[l.fieldLabel || l.fieldPath] = true; });
+            const statsHtml =
+                '<div class="cl-stats">' +
+                    '<div class="cl-stat"><div class="cl-stat-num">' + batches.length + '</div><div class="cl-stat-label">版本数</div></div>' +
+                    '<div class="cl-stat"><div class="cl-stat-num">' + logs.length + '</div><div class="cl-stat-label">累计变更项</div></div>' +
+                    '<div class="cl-stat"><div class="cl-stat-num">' + Object.keys(fieldCnt).length + '</div><div class="cl-stat-label">涉及字段</div></div>' +
+                    '<div class="cl-stat"><div class="cl-stat-num">' + esc(batches[0].time || '—') + '</div><div class="cl-stat-label">最近变更</div></div>' +
+                '</div>';
+            const asc = batches.slice().reverse();
+            const nodes = asc.map(function(b, i) {
+                const labels = [];
+                b.logs.forEach(function(log){ const t = log.fieldLabel || log.fieldPath; if (labels.indexOf(t) < 0) labels.push(t); });
+                const fieldText = labels.slice(0, 2).map(esc).join('、') + (labels.length > 2 ? ' 等' : '');
+                return '<div class="cl-node' + (i === asc.length - 1 ? ' cl-latest' : '') + '">' +
+                    '<div class="cl-dot"></div>' +
+                    '<div class="cl-card" onclick="viewHistoryVersion(' + b.version + ')" title="点击回溯查看该版本">' +
+                        '<div class="cl-head">' +
+                            '<span class="cl-version">V' + b.version + '</span>' +
+                            '<span class="tag">' + esc(srcMap[b.source] || b.source) + '</span>' +
+                            (i === asc.length - 1 ? '<span class="tag" style="background:#dcfce7;color:#15803d;">最新</span>' : '') +
+                        '</div>' +
+                        '<div class="cl-time"><i class="far fa-clock"></i> ' + esc(b.time) + '</div>' +
+                        '<div class="cl-by"><i class="fas fa-user"></i> ' + esc(b.by || '—') + '</div>' +
+                        '<div class="cl-count">变更 ' + b.logs.length + ' 项</div>' +
+                        '<div class="cl-fields">' + fieldText + '</div>' +
+                        '<div class="cl-goto">回溯查看 <i class="fas fa-angle-right"></i></div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+            return statsHtml + '<div class="cl-timeline">' + nodes + '</div>';
+        }
+
+
         function renderTableContent(key) {
             const item = getSidebarItems().find(i => i.key === key);
             const s = currentHouseArch;
@@ -3264,6 +3617,8 @@
                 html += renderRiskContent(s);
             } else if (key === 'plan') {
                 html += renderPlanContent(s);
+            } else if (key === 'changeLog') {
+                html += renderChangeLogContent(s);
             } else {
                 const data = getTableData()[key];
                 let columns = data.columns;
@@ -3312,6 +3667,8 @@
                 if (currentControlSubTab === 'situation' || currentControlSubTab === 'dynamic') {
                     html += '<button class="bottom-btn primary" onclick="openControlEditModal()"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
                 }
+            } else if (key === 'changeLog') {
+                // 留痕记录：只读时间轴，不提供编辑入口
             } else if (key !== 'archive') {
                 html += '<button class="bottom-btn primary" onclick="openCommonEditModal(\'' + key + '\')"><i class="fas fa-edit"></i> 编辑' + item.title + '</button>';
             }
@@ -4499,7 +4856,7 @@
                     '<div class="info-grid info-grid-2col">' +
                     kv('原隐患等级', s.originalRisk || s.risk) +
                     kv('申请时间', e.applyTime) +
-                    kv('审核时间', e.reviewTime) +
+                    kv('销号时间', e.reviewTime) +
                     kv('审核人', e.reviewer) +
                     '</div>';
                 if (e.certFiles && e.certFiles.length) {
@@ -4509,7 +4866,7 @@
                         '</div>';
                 }
                 if (e.note) {
-                    html += '<div class="table-section-title"><i class="fas fa-sticky-note"></i> 备注</div>' +
+                    html += '<div class="table-section-title"><i class="fas fa-sticky-note"></i> 销号依据</div>' +
                         '<div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px;color:#92400e;">' + e.note + '</div>';
                 }
             } else {
@@ -5001,6 +5358,19 @@
                     { key: 'startDate', label: '开工日期', type: 'text' },
                     { key: 'endDate', label: '竣工日期', type: 'text' },
                     { key: 'remark', label: '备注', type: 'textarea' }
+                ],
+                urbanFields: [
+                    { key: 'designUnit', label: '设计单位', type: 'text' },
+                    { key: 'designDate', label: '设计日期', type: 'text' },
+                    { key: 'constructionUnit', label: '施工单位', type: 'text' },
+                    { key: 'constructionQual', label: '施工资质', type: 'text' },
+                    { key: 'supervisionUnit', label: '监理单位', type: 'text' },
+                    { key: 'designMode', label: '设计方式', type: 'select', options: ['有专业设计', '无专业设计'] },
+                    { key: 'buildMode', label: '建造方式', type: 'select', options: ['有资质施工队伍', '无资质施工队伍'] },
+                    { key: 'completionDate', label: '竣工时间', type: 'text' },
+                    { key: 'expansionRecord', label: '改建扩建记录', type: 'textarea' },
+                    { key: 'designDrawings', label: '设计图纸', type: 'photo' },
+                    { key: 'remark', label: '备注', type: 'textarea' }
                 ]
             },
             maintenance: {
@@ -5116,6 +5486,11 @@
         let editingCrudIndex = -1;
         let editingCrudModule = '';
 
+        // 城房记录使用 urbanFields（若配置提供），其余沿用 fields
+        function getCrudFields(cfg) {
+            return (isUrbanHouse() && cfg.urbanFields) ? cfg.urbanFields : cfg.fields;
+        }
+
         function getNestedValue(obj, path) {
             return path.split('.').reduce((o, p) => o && o[p], obj);
         }
@@ -5147,7 +5522,7 @@
                 } else if (f.type === 'textarea') {
                     inputHtml = '<textarea class="form-input" data-crud-key="' + f.key + '" rows="2">' + (val || '') + '</textarea>';
                 } else if (f.type === 'photo') {
-                    const arr = Array.isArray(val) ? val : (val ? String(val).split(',').map(s => s.trim()).filter(Boolean) : []);
+                    const arr = parsePhotoUrls(val);
                     const thumbHtml = arr.length ? '<div class="file-thumb-preview">' + arr.map(u => '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">').join('') + '</div>' : '';
                     inputHtml = '<div class="file-upload-wrap" data-crud-photo-key="' + f.key + '">' +
                         '<input class="form-input file-url-input" type="text" data-crud-key="' + f.key + '" data-crud-type="photo" value="' + arr.join(',').replace(/"/g, '&quot;') + '" placeholder="图片 URL，逗号分隔 或 点击下方上传">' +
@@ -5166,7 +5541,7 @@
                 return '<div class="form-item' + ((f.type === 'textarea' || f.type === 'photo') ? ' form-item-full' : '') + '">' + greenLabel(f.label) + inputHtml + '</div>';
             };
             document.getElementById('crudEditForm').innerHTML = '<div class="form-grid">' +
-                cfg.fields.map(f => textField(f, rec[f.key])).join('') + '</div>';
+                getCrudFields(cfg).map(f => textField(f, rec[f.key])).join('') + '</div>';
             document.getElementById('crudEditModal').classList.add('open');
         }
 
@@ -5182,15 +5557,21 @@
             const s = currentHouseArch;
             const list = (getNestedValue(s, cfg.dataPath) || []).slice();
             const rec = list[editingCrudIndex] || {};
+            const __crudOldRec = JSON.parse(JSON.stringify(rec)); // 留痕快照
             document.querySelectorAll('#crudEditForm [data-crud-key]').forEach(el => {
                 if (el.dataset.crudType === 'photo') {
-                    rec[el.dataset.crudKey] = el.value.split(',').map(t => t.trim()).filter(Boolean);
+                    rec[el.dataset.crudKey] = parsePhotoUrls(el.value);
                 } else {
                     rec[el.dataset.crudKey] = el.value;
                 }
             });
+            if (editingCrudModule === 'designConstruction' && isUrbanHouse()) {
+                if (rec.designMode) rec.hasProfessionalDesign = (rec.designMode === '有专业设计');
+                if (rec.buildMode) rec.hasQualificationTeam = (rec.buildMode === '有资质施工队伍');
+            }
             list[editingCrudIndex] = rec;
             setNestedValue(s, cfg.dataPath, list);
+            logCrudRecordChange(editingCrudModule, editingCrudIndex, __crudOldRec, rec);
             saveCurrentHouseArch(s);
             closeCrudModal();
             renderContent();
@@ -5204,6 +5585,7 @@
             const list = (getNestedValue(s, cfg.dataPath) || []).slice();
             list.splice(idx, 1);
             setNestedValue(s, cfg.dataPath, list);
+            addChangeLog(s, cfg.dataPath + '.' + idx, cfg.title, '（记录已删除）', '', 'manual', '', '当前用户');
             saveCurrentHouseArch(s);
             renderContent();
         }
@@ -5217,7 +5599,7 @@
             const pad = n => String(n).padStart(2, '0');
             const ts = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
             const newRec = {};
-            cfg.fields.forEach(f => {
+            getCrudFields(cfg).forEach(f => {
                 if (f.key === 'startTime' || f.key === 'patrolDate' || f.key === 'inspectDate' || f.key === 'identifyDate' || f.key === 'drillDate' || f.key === 'startDate') {
                     newRec[f.key] = ts;
                 } else if (f.type === 'select') {
@@ -5401,6 +5783,7 @@
         }
 
         function openBasicEditModal() {
+            snapshotArchForEdit();
             editModalSubTab = currentSubTab;
             renderEditModalTabs();
             renderEditModalForm();
@@ -5601,7 +5984,18 @@
                 const idx = Math.min(recordViewState.designConstruction || 0, Math.max(list.length - 1, 0));
                 const rec = list[idx] || {};
                 const dcBool = function(v) { return v === true ? '是' : (v === false ? '否' : ''); };
-                const dcFields = [
+                const dcFields = isUrbanHouse() ? [
+                    ['设计单位', 'designUnit', rec.designUnit],
+                    ['设计日期', 'designDate', rec.designDate],
+                    ['施工单位', 'constructionUnit', rec.constructionUnit],
+                    ['施工资质', 'constructionQual', rec.constructionQual],
+                    ['监理单位', 'supervisionUnit', rec.supervisionUnit],
+                    ['竣工时间', 'completionDate', rec.completionDate],
+                    ['设计方式', 'designMode', rec.designMode],
+                    ['建造方式', 'buildMode', rec.buildMode],
+                    ['改建扩建记录', 'expansionRecord', rec.expansionRecord],
+                    ['备注', 'remark', rec.remark]
+                ] : [
                     ['设计日期', 'designDate', rec.designDate],
                     ['施工单位', 'constructionUnit', rec.constructionUnit],
                     ['是否正规设计', 'hasProfessionalDesign', dcBool(rec.hasProfessionalDesign)],
@@ -5621,7 +6015,21 @@
                         '<input class="form-input" type="text" data-field="' + f[1] + '" value="' + ((f[2] || '') + '').replace(/"/g, '&quot;') + '">' +
                         '</div>';
                 }).join('');
-                document.getElementById('editModalForm').innerHTML = '<div class="form-grid">' + dcHtml + '</div>';
+                const dcDrawingsArr = parsePhotoUrls(rec.designDrawings);
+                const dcDrawingsVal = dcDrawingsArr.join(',').replace(/"/g, '&quot;');
+                const dcThumbHtml = dcDrawingsArr.length
+                    ? '<div class="file-thumb-preview">' + dcDrawingsArr.map(function(u) { return '<img src="' + u + '" alt="预览" onclick="viewPhotoOnline(\'' + u + '\')">'; }).join('') + '</div>'
+                    : '';
+                const dcPhotoHtml = '<div class="form-item form-item-full">' +
+                    '<label class="form-label">设计图纸</label>' +
+                    '<div class="file-upload-wrap">' +
+                        '<input class="form-input file-url-input" type="hidden" data-field="designDrawings" data-photo-type="image" value="' + dcDrawingsVal + '">' +
+                        '<input class="file-upload-input" type="file" accept="image/*" multiple onchange="handleMeasureFormUpload(this)">' +
+                        '<div class="file-upload-dropzone"><i class="fas fa-cloud-upload-alt"></i> 点击或拖拽上传图片</div>' +
+                        dcThumbHtml +
+                    '</div></div>';
+                document.getElementById('editModalForm').innerHTML = '<div class="form-grid">' + dcHtml + dcPhotoHtml + '</div>';
+                bindBasicEditDropzones();
                 return;
             }
             // 城镇自建房基本信息：按当前房屋性质动态组合 common + residential/commercial
@@ -6240,6 +6648,7 @@
                 });
                 currentSubTab = editModalSubTab;
                 delete currentHouseArch._syncedAt;
+                applyBasicEditChangeLog();
                 saveCurrentHouseArch(currentHouseArch);
                 closeBasicEditModal();
                 renderSidebar();
@@ -6251,6 +6660,7 @@
                 currentHouseArch.buildMaterials = (currentHouseArch.buildMaterials || []).filter(m => (m.type || m.strength || m.manufacturer));
                 currentSubTab = editModalSubTab;
                 delete currentHouseArch._syncedAt;
+                applyBasicEditChangeLog();
                 saveCurrentHouseArch(currentHouseArch);
                 closeBasicEditModal();
                 renderSidebar();
@@ -6267,13 +6677,20 @@
                         const v = input.value;
                         if (field === 'hasProfessionalDesign' || field === 'hasQualificationTeam') {
                             rec[field] = (v === '是' || v === 'true' || v === true);
+                        } else if (field === 'designDrawings') {
+                            rec.designDrawings = parsePhotoUrls(v);
                         } else {
                             rec[field] = v;
                         }
                     });
+                    if (isUrbanHouse()) {
+                        if (rec.designMode) rec.hasProfessionalDesign = (rec.designMode === '有专业设计');
+                        if (rec.buildMode) rec.hasQualificationTeam = (rec.buildMode === '有资质施工队伍');
+                    }
                 }
                 currentSubTab = editModalSubTab;
                 delete currentHouseArch._syncedAt;
+                applyBasicEditChangeLog();
                 saveCurrentHouseArch(currentHouseArch);
                 closeBasicEditModal();
                 renderSidebar();
@@ -6365,6 +6782,7 @@
                 if (_natureRow) currentHouseArch.houseNature = _natureRow[1] || '住宅';
             }
             delete currentHouseArch._syncedAt; // 编辑后标记为未同步
+            applyBasicEditChangeLog();
             saveCurrentHouseArch(currentHouseArch);
             closeBasicEditModal();
             renderSidebar();
@@ -6529,6 +6947,35 @@
                     if (files.length > 0) {
                         input.files = files;
                         handleSurveyPhotoUpload(input);
+                    }
+                });
+            });
+        }
+
+        function bindBasicEditDropzones() {
+            document.querySelectorAll('#editModalForm .file-upload-wrap').forEach(wrap => {
+                const input = wrap.querySelector('.file-upload-input');
+                const dropzone = wrap.querySelector('.file-upload-dropzone');
+                if (!input || !dropzone || dropzone.dataset.bound === '1') return;
+                dropzone.dataset.bound = '1';
+                dropzone.addEventListener('click', () => input.click());
+                ['dragenter', 'dragover'].forEach(event => {
+                    dropzone.addEventListener(event, (e) => {
+                        e.preventDefault();
+                        dropzone.classList.add('dragover');
+                    });
+                });
+                ['dragleave', 'drop'].forEach(event => {
+                    dropzone.addEventListener(event, (e) => {
+                        e.preventDefault();
+                        dropzone.classList.remove('dragover');
+                    });
+                });
+                dropzone.addEventListener('drop', (e) => {
+                    const files = e.dataTransfer && e.dataTransfer.files;
+                    if (files && files.length > 0) {
+                        try { input.files = files; } catch (err) { /* 部分浏览器不允许 */ }
+                        handleMeasureFormUpload(input);
                     }
                 });
             });
@@ -6832,7 +7279,7 @@
             const invalid = files.find(f => !f.type.startsWith('image/'));
             if (invalid) { alert('请上传图片文件'); return; }
             const urlInput = wrap.querySelector('.file-url-input');
-            const existing = urlInput.value.split(',').map(s => s.trim()).filter(Boolean);
+            const existing = parsePhotoUrls(urlInput.value);
             const readers = files.map(file => new Promise(resolve => {
                 const reader = new FileReader();
                 reader.onload = e => resolve(e.target.result);
@@ -8084,6 +8531,8 @@
             const idx = Math.min(recordViewState.risk || 0, Math.max(s.riskIdentification.length - 1, 0));
             if (!s.riskIdentification[idx]) s.riskIdentification[idx] = {};
             const rec = s.riskIdentification[idx];
+            // 保存前快照，用于操作日志对比
+            const oldInfo = Object.assign({}, s.riskInfo), oldCls = Object.assign({}, s.riskClassification), oldRec = Object.assign({}, rec);
             document.querySelectorAll('#riskEditForm .risk-edit-input').forEach(function(input) {
                 const field = input.dataset.field;
                 const val = input.value;
@@ -8094,6 +8543,28 @@
                 } else {
                     rec[field] = val;
                 }
+            });
+            // 操作日志：逐字段记录旧值→新值（可追溯留痕）
+            const LOG_LABELS = {
+                info: { riskName:'风险名称', riskType:'风险类型', riskLevel:'风险等级', discoveryTime:'发现时间', discoveryMethod:'发现方式', discoverer:'发现人', riskStatus:'风险状态', riskPart:'风险部位', spatialLocation:'空间位置', riskDesc:'风险描述', relatedHouse:'关联房屋', relatedOwner:'关联户主', relatedUser:'关联使用人', relatedInspectionId:'关联排查记录', relatedAppraisalId:'关联鉴定报告', relatedPatrolId:'关联巡查记录', relatedTaskId:'关联整治任务' },
+                cls: { basis:'评定依据', assessTime:'评定时间', assessor:'评定人' },
+                record: { identifyDate:'辨识日期', hazardType:'隐患类型', hazardPart:'隐患部位', identifyPerson:'填报人/辨识人', hazardDesc:'隐患描述', possibleConsequence:'可能后果', controlSuggestion:'管控建议', photos:'现场照片' }
+            };
+            const operator = s.riskClassification.assessor || s.riskInfo.discoverer || '当前用户';
+            ['info', 'cls', 'record'].forEach(function(scope) {
+                const target = scope === 'info' ? s.riskInfo : (scope === 'cls' ? s.riskClassification : rec);
+                const old = scope === 'info' ? oldInfo : (scope === 'cls' ? oldCls : oldRec);
+                const labels = LOG_LABELS[scope];
+                Object.keys(labels).forEach(function(f) {
+                    const ov = old[f] !== undefined && old[f] !== null ? String(old[f]) : '';
+                    const nv = target[f] !== undefined && target[f] !== null ? String(target[f]) : '';
+                    if (ov === nv) return;
+                    if (f === 'photos') { // 照片不记 dataURL，避免日志膨胀
+                        addChangeLog(s, scope + '.' + f, labels[f], '', '（照片已更新）', 'manual', '', operator);
+                    } else {
+                        addChangeLog(s, scope + '.' + f, labels[f], ov, nv, 'manual', '', operator);
+                    }
+                });
             });
             delete s._syncedAt; // 编辑后标记为未同步
             saveCurrentHouseArch(s);
@@ -9193,5 +9664,18 @@
             bootstrapRender();
         }
     </script>
+<div class="modal-overlay" id="versionViewModal">
+        <div class="modal-box" style="max-width:880px;">
+            <div class="modal-header">
+                <div class="modal-title" id="versionViewTitle"><i class="fas fa-rotate-left"></i> 历史版本回溯</div>
+                <button class="modal-close" onclick="closeVersionViewModal()">×</button>
+            </div>
+            <div class="modal-body" id="versionViewBody" style="max-height:70vh;overflow:auto;"></div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="closeVersionViewModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

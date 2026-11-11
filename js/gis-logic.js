@@ -90,7 +90,7 @@ let map, markers = [];
 let footprintPolygons = [];
 let leftChart, streetRankingChart, measurePieChart;
 
-// 风险等级颜色配置（内部代码 danger/major/warning/safe → 颜色/形状）
+// 隐患等级颜色配置（内部代码 danger/major/warning/safe → 颜色/形状）
 // 颜色全局统一：danger=红, major=橙, warning=黄, safe=蓝
 const RISK_CONFIG = {
     danger: { color: '#d93025', class: 'danger', shape: 'circle' },
@@ -115,7 +115,7 @@ const RISK_LABEL_URBAN = {
     safe: '完好房（基本完好房）'
 };
 
-// 根据房屋类型获取风险等级标签
+// 根据房屋类型获取隐患等级标签
 function getRiskLabel(risk, houseType) {
     const code = RISK_LABEL_MAP_INV && RISK_LABEL_MAP_INV[risk] ? RISK_LABEL_MAP_INV[risk] : risk;
     const map = (houseType === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
@@ -127,6 +127,13 @@ const STATUS_CONFIG = {
     doing: { label: '整治中', color: '#f9ab00', class: 'treat-doing' },
     done: { label: '已治理', color: '#1e8e3e', class: 'treat-done' },
     overdue: { label: '逾期未整治', color: '#d93025', class: 'treat-overdue' }
+};
+
+// 措施实施状态配置（管理/工程措施图层共用）
+const MEASURE_STATUS_CONFIG = {
+    pending: { label: '待开展', color: '#9aa0a6', class: 'treat-pending' },
+    doing: { label: '进行中', color: '#f9ab00', class: 'treat-doing' },
+    done: { label: '已完成', color: '#1e8e3e', class: 'treat-done' }
 };
 
 const ELIMINATION_CONFIG = {
@@ -191,19 +198,17 @@ const LAYER_MODES = {
         ]
     },
     management: {
-        name: '管理措施', colorBy: 'governance', shapeBy: 'risk', statusMap: STATUS_CONFIG, measureType: 'management',
+        name: '管理措施', colorBy: 'measure', shapeBy: 'risk', statusMap: MEASURE_STATUS_CONFIG, measureType: 'management',
         filters: [
-            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'pending', label: '待整治', icon: 'fa-clock' },
-            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已治理', icon: 'fa-check' },
-            { key: 'overdue', label: '逾期未整治', icon: 'fa-exclamation-triangle' }
+            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'pending', label: '待开展', icon: 'fa-clock' },
+            { key: 'doing', label: '进行中', icon: 'fa-spinner' }, { key: 'done', label: '已完成', icon: 'fa-check' }
         ]
     },
     engineering: {
-        name: '工程措施', colorBy: 'governance', shapeBy: 'risk', statusMap: STATUS_CONFIG, measureType: 'engineering',
+        name: '工程措施', colorBy: 'measure', shapeBy: 'risk', statusMap: MEASURE_STATUS_CONFIG, measureType: 'engineering',
         filters: [
-            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'pending', label: '待整治', icon: 'fa-clock' },
-            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已治理', icon: 'fa-check' },
-            { key: 'overdue', label: '逾期未整治', icon: 'fa-exclamation-triangle' }
+            { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'pending', label: '待开展', icon: 'fa-clock' },
+            { key: 'doing', label: '进行中', icon: 'fa-spinner' }, { key: 'done', label: '已完成', icon: 'fa-check' }
         ]
     },
     elimination: {
@@ -237,12 +242,21 @@ function getRiskConfig(risk, houseType) {
     return { color: base.color, class: base.class, shape: base.shape, label: label };
 }
 function getStatusConfig(governance) { return STATUS_CONFIG[governance] || STATUS_CONFIG.pending; }
+// 汇总某类措施（management/engineering）的实施状态：全部已完成→done；全部待开展→pending；其余→doing；无该类措施→null
+function getMeasureStatus(item, type) {
+    if (!item.measures || !item.measures.length) return null;
+    const ms = item.measures.filter(m => m.type === type);
+    if (!ms.length) return null;
+    if (ms.every(m => m.status === 'done')) return 'done';
+    if (ms.every(m => m.status === 'pending')) return 'pending';
+    return 'doing';
+}
 
 // 图表→地图高亮匹配（按治理状态）
 function matchHighlight(item) {
     if (!highlightKey) return true;
     const colorBy = getLayerConfig().colorBy;
-    const v = colorBy === 'risk' ? item.risk : (colorBy === 'governance' ? item.governance : item.elimination);
+    const v = colorBy === 'risk' ? item.risk : (colorBy === 'governance' ? item.governance : (colorBy === 'measure' ? getMeasureStatus(item, getLayerConfig().measureType) : item.elimination));
     return v === highlightKey;
 }
 
@@ -269,6 +283,7 @@ function getHouseColor(item) {
     const mode = getLayerConfig();
     if (mode.colorBy === 'risk') return getRiskConfig(item.risk, item.houseType).color;
     if (mode.colorBy === 'governance') return getStatusConfig(item.governance).color;
+    if (mode.colorBy === 'measure') { const st = getMeasureStatus(item, mode.measureType); return st ? MEASURE_STATUS_CONFIG[st].color : '#9aa0a6'; }
     if (mode.colorBy === 'elimination') return getEliminationConfig(item.elimination).color;
     return '#999';
 }
@@ -367,9 +382,11 @@ function renderHouseFootprint(item, idx) {
 
 function initMap() {
     map = L.map('map').setView([30.920, 121.500], 11);
-    L.tileLayer('https://map.geoq.cn/arcgis/rest/services/ChinaOnlineStreetPurplishBlue/MapServer/tile/{z}/{y}/{x}', {
-        attribution: '© GeoQ',
-        maxZoom: 18
+    // 底图：高德矢量瓦片（与 第三方服务机构-机构总览-服务范围分析 一致）
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+        attribution: '&copy; 高德地图',
+        maxZoom: 19,
+        subdomains: '1234'
     }).addTo(map);
     const boundaryPolygon = L.polygon(fengxianBoundary, { color: '#1a73e8', weight: 2, fillColor: '#1a73e8', fillOpacity: 0.08, dashArray: '5, 5' }).addTo(map).bindPopup('上海奉贤区范围');
     map.fitBounds(boundaryPolygon.getBounds().pad(0.05));
@@ -486,7 +503,13 @@ function renderHeatmap(data) {
 }
 function getAggregateColor(items) {
     const mode = getLayerConfig();
-    if (currentLayer === 'governance' || currentLayer === 'management' || currentLayer === 'engineering') {
+    if (currentLayer === 'management' || currentLayer === 'engineering') {
+        const type = getLayerConfig().measureType;
+        const sts = items.map(i => getMeasureStatus(i, type)).filter(Boolean);
+        if (!sts.length || sts.some(s => s === 'pending')) return MEASURE_STATUS_CONFIG.pending.color;
+        if (sts.some(s => s === 'doing')) return MEASURE_STATUS_CONFIG.doing.color;
+        return MEASURE_STATUS_CONFIG.done.color;
+    } else if (currentLayer === 'governance') {
         if (items.some(i => i.governance === 'overdue')) return STATUS_CONFIG.overdue.color;
         if (items.some(i => i.governance === 'doing')) return STATUS_CONFIG.doing.color;
         if (items.some(i => i.governance === 'pending')) return STATUS_CONFIG.pending.color;
@@ -522,7 +545,7 @@ function buildHousePopup(item, idx) {
     const nodesHtml = item.currentNodes && item.currentNodes.length ? item.currentNodes.map(n => '<div class="kv"><span>当前节点</span><b>' + n.name + '（进行中）</b></div>').join('') : '';
     return '<div style="min-width:260px;max-width:320px;">' +
         '<div class="popup-section">' +
-        '<span class="popup-status-tag" style="color:' + riskCfg.color + ';background:' + hexToRgba(riskCfg.color, 0.12) + '">' + getShapeHtml(riskCfg.shape, riskCfg.color, 10) + ' 风险等级：' + riskCfg.label + '</span>' +
+        '<span class="popup-status-tag" style="color:' + riskCfg.color + ';background:' + hexToRgba(riskCfg.color, 0.12) + '">' + getShapeHtml(riskCfg.shape, riskCfg.color, 10) + ' 隐患等级：' + riskCfg.label + '</span>' +
         '<span class="popup-status-tag" style="color:' + statusCfg.color + ';background:' + hexToRgba(statusCfg.color, 0.12) + '">整治状态：' + statusCfg.label + '</span>' +
         '</div>' +
         '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-home"></i> 基本信息</div>' +
@@ -573,7 +596,7 @@ function renderLegend() {
     } else {
         html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">颜色：状态</div>';
         Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
-        html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：风险等级</div>';
+        html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：隐患等级</div>';
         // 风险图例按当前 category 显示对应口径（城镇四级 / 农村三类）
         const legendLabelMap = (currentCategory === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
         const legendKeys = (currentCategory === '城镇自建房') ? ['danger', 'major', 'warning', 'safe'] : ['danger', 'warning', 'safe'];
@@ -593,7 +616,7 @@ function renderStats() {
     if (!container) return;
     const data = getVisibleData();
     const counts = {};
-    data.forEach(item => { const v = mode.colorBy === 'risk' ? item.risk : (mode.colorBy === 'governance' ? item.governance : item.elimination); counts[v] = (counts[v] || 0) + 1; });
+    data.forEach(item => { const v = mode.colorBy === 'risk' ? item.risk : (mode.colorBy === 'governance' ? item.governance : (mode.colorBy === 'measure' ? getMeasureStatus(item, mode.measureType) : item.elimination)); counts[v] = (counts[v] || 0) + 1; });
     const timeLabel = activeTimeFilter !== 'all' ? ' · ' + TIME_FILTER_CONFIG[activeTimeFilter].label : '';
     let html = '<div class="stats-row"><div class="stats-label">房屋总数' + timeLabel + '</div><div class="stats-value">' + data.length + '</div></div>';
     Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="stats-row"><div class="stats-label" style="color:' + cfg.color + '">' + cfg.label + '</div><div class="stats-value" style="color:' + cfg.color + '">' + (counts[key] || 0) + '</div></div>'; });
@@ -798,7 +821,7 @@ function switchLayer(layer) {
     const timeArea = document.getElementById('timeFilterArea');
     if (timeArea) timeArea.classList.toggle('visible', layer === 'elimination' || layer === 'eliminationHeatmap');
     updateFilterTags(); renderTimeFilterTags();
-    renderMap(); renderList();
+    applyFilter();
 }
 function renderList() {
     const list = document.getElementById('houseList');
@@ -847,9 +870,10 @@ function applyFilter() {
         if (activeFilter !== 'all') {
             if (mode.colorBy === 'risk') matchFilter = item.risk === activeFilter;
             else if (mode.colorBy === 'governance') matchFilter = item.governance === activeFilter;
+            else if (mode.colorBy === 'measure') matchFilter = getMeasureStatus(item, mode.measureType) === activeFilter;
             else if (mode.colorBy === 'elimination') matchFilter = item.elimination === activeFilter;
         }
-        if (mode.measureType && item.measures) { if (!item.measures.some(m => m.type === mode.measureType)) matchFilter = false; }
+        if (mode.measureType && !getMeasureStatus(item, mode.measureType)) matchFilter = false;
         return matchKeyword && matchFilter && matchTimeFilter(item, activeTimeFilter);
     });
     activeIndex = -1;
@@ -877,7 +901,7 @@ function switchTab(tab) {
     if (tab === 'basic') {
         body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">唯一标识</div><div class="arch-value">' + item.no + '</div></div><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
     } else if (tab === 'hazard') {
-        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">风险等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level, item.houseType).class + '">' + getRiskConfig(h.level, item.houseType).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
+        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">隐患等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level, item.houseType).class + '">' + getRiskConfig(h.level, item.houseType).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
     } else if (tab === 'measure') {
         body.innerHTML = '<div class="arch-section">' + (item.measures && item.measures.length ? item.measures.map(m => '<div class="arch-row"><div class="arch-label">' + (m.type === 'management' ? '管理' : '工程') + '措施</div><div class="arch-value">' + m.name + '</div></div><div class="arch-row"><div class="arch-label">当前状态</div><div class="arch-value"><span class="risk-tag ' + (m.status === 'done' ? 'safe' : m.status === 'doing' ? 'doing' : 'pending') + '">' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无整治措施</div></div>') + '</div>';
     } else if (tab === 'progress') {

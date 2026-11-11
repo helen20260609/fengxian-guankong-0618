@@ -380,6 +380,7 @@ const DEFAULT_HOUSE_STATUS = {
         designUnit: '', designUnitCode: '', designDate: '',
         constructionUnit: '', constructionUnitCode: '', constructionQual: '',
         supervisionUnit: '', supervisionUnitCode: '',
+        completionDate: '', designDrawings: [],
         designMode: '', buildMode: '',
         hasProfessionalDesign: false, hasQualificationTeam: false
     },
@@ -2419,7 +2420,6 @@ function generateHouseSeed() {
         '郝霖祥','孔娜昊','白琴','崔禧','康倩嘉','毛骥瑞','邱崇云','秦铭珍','江文宸','史熠',
         '顾骏','侯瑞烁','邵顺','孟祥华','龙洋顺','肖泽宇','钱文昊','严志强','温婷婷','安志远'
     ];
-    const categories = ['农村自建房', '城镇自建房'];
     const structTypes = ['砖混', '砖木', '框架'];
 
     // 真实的农村自建房风险分布：安全/轻微瑕疵占多数，危房占少数
@@ -2453,7 +2453,8 @@ function generateHouseSeed() {
         const townVillages = (mappedVillages && mappedVillages.length) ? mappedVillages : ['海湾社区'];
         const community = townVillages[(i - 1) % townVillages.length];
         const address = '上海市奉贤区' + street + community + (i * 3) + '号';
-        const category = categories[i % 2];
+        // 农房仓只生成农村自建房；城镇自建房由 urban-house-arch-data.js 独立仓生成（CF- 编号、四级口径）
+        const category = '农村自建房';
         const struct = structTypes[i % 3];
         const year = 1970 + (i % 45);
         const owner = owners[i - 1] || '未知';
@@ -2594,6 +2595,8 @@ function generateHouseSeed() {
             constructionQual: i % 3 === 0 ? '建筑工程施工总承包一级' : (i % 3 === 1 ? '建筑工程施工总承包二级' : '房屋建筑工程施工总承包三级'),
             supervisionUnit: SUPERVISION_UNITS[i % SUPERVISION_UNITS.length],
             supervisionUnitCode: '91310120MA1K' + pad5(i),
+            completionDate: year + '-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28)),
+            designDrawings: [],
             designMode: designMode,
             buildMode: buildMode,
             hasProfessionalDesign: designMode === '有专业设计',
@@ -2735,6 +2738,21 @@ function initHouseArchSeed() {
         }
         // 规范化已存在的数据，确保各页面读取一致
         Object.keys(all).forEach(no => normalizeHouseRecord(all[no]));
+        // 一次性清洗：农房仓只保留农村自建房
+        // - 剔除城镇自建房种子记录（已迁移至城镇仓 urbanHouseArchData，CF- 编号）
+        // - 剔除 CF- 城镇编号误入记录、houseType 截断损坏记录、非标准编号前缀的历史脏数据
+        const beforeCount = Object.keys(all).length;
+        Object.keys(all).forEach(no => {
+            const r = all[no] || {};
+            const t = r.houseType || '';
+            const validPrefix = /^NF-/.test(no) || /^FX-NC-ZF-/.test(no);
+            if (t === '城镇自建房' || /^CF-/.test(no) || !validPrefix || (t && t !== '农村自建房')) {
+                delete all[no];
+            }
+        });
+        if (Object.keys(all).length !== beforeCount) {
+            try { console.info('[house-arch] 清洗农房仓脏数据：' + beforeCount + ' → ' + Object.keys(all).length); } catch (e) {}
+        }
         setHouseArchStorage(all);
         // 若 closeApplyData 为空则根据现有房屋数据同步生成
         if (getCloseApplyStorage().length === 0) {

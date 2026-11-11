@@ -203,6 +203,20 @@ function initUrbanHouseArchFromServer(done) {
     __pullFromServer('urban-house-arch-draft', URBAN_HOUSE_ARCH_DRAFT_KEY, fin);
 }
 
+// 将本地缓存完整写回服务端并返回 Promise。
+// 供「保存后立即跳转/刷新」的场景等待落盘，避免 fire-and-forget 的 POST
+// 被页面卸载取消、随后被服务端旧数据整条覆盖导致新处置数据丢失（与农房仓同名函数对齐）。
+function flushHouseArchToServer() {
+    if (typeof fetch !== 'function') return Promise.resolve(false);
+    try {
+        return fetch('/api/urban-house-arch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(__getHouseArchStorage())
+        }).then(function (r) { return !!(r && r.ok); }).catch(function () { return false; });
+    } catch (e) { return Promise.resolve(false); }
+}
+
 // ---------------- 草稿区（风险档案工作区） ----------------
 // 业务模型：风险档案（农村/城镇各自仓库）→ 编辑写入草稿区 → 点同步 → 覆盖到发布区（房屋建筑档案）
 const URBAN_HOUSE_ARCH_DRAFT_KEY = 'urbanHouseArchDraft';
@@ -487,6 +501,18 @@ function normalizeHouseRecord(record) {
     if (!rec.overview) rec.overview = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.overview));
     if (!rec.homestead) rec.homestead = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.homestead));
     if (!rec.designConstruction) rec.designConstruction = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.designConstruction));
+    // 历史缓存记录缺竣工时间时按编号确定性补生成
+    if (rec.designConstruction && !rec.designConstruction.completionDate) {
+        const dcSeed = parseInt(String(rec.no || '').replace(/\D/g, '') || '0', 10);
+        const dcYear = parseInt(rec.year, 10) || 2000;
+        if (dcSeed > 0) rec.designConstruction.completionDate = dcYear + '-' + pad2(1 + (dcSeed % 12)) + '-' + pad2(1 + (dcSeed % 28));
+    }
+    // 已持久化的设计施工记录数组同步补齐竣工时间
+    if (Array.isArray(rec.designConstructionRecords) && rec.designConstruction) {
+        rec.designConstructionRecords.forEach(function (dc) {
+            if (dc && !dc.completionDate) dc.completionDate = rec.designConstruction.completionDate || '';
+        });
+    }
     if (!rec.structure) rec.structure = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.structure));
     if (!rec.usage) rec.usage = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.usage));
     if (!rec.photos) rec.photos = JSON.parse(JSON.stringify(DEFAULT_HOUSE_STATUS.photos));
@@ -1401,6 +1427,7 @@ function generateHouseSeed() {
             designUnit: DESIGN_UNITS[i % DESIGN_UNITS.length],
             designUnitCode: '91310120MA1H' + pad5(i),
             designDate: (year - 1) + '-' + pad2(1 + (i % 12)) + '-' + pad2(1 + (i % 28)),
+            completionDate: year + '-' + pad2(1 + ((i + 5) % 12)) + '-' + pad2(1 + ((i * 7) % 28)),
             constructionUnit: ENGINEERING_COMPANIES[i % ENGINEERING_COMPANIES.length],
             constructionUnitCode: '91310120MA1J' + pad5(i),
             constructionQual: i % 3 === 0 ? '建筑工程施工总承包一级' : (i % 3 === 1 ? '建筑工程施工总承包二级' : '房屋建筑工程施工总承包三级'),
@@ -2217,3 +2244,91 @@ function seedGovernDemoData(force) {
     try { localStorage.setItem(FLAG, '1'); } catch (e) {}
     return recs.length;
 }
+
+// 留痕的静态区块及其字段标签映射
+var CHANGE_LOG_SECTIONS = {
+    overview: {
+        label: '房屋概况',
+        fields: {
+            floors: '房屋层数', area: '建筑面积', buildYear: '建造年份',
+            usage: '使用用途', structure: '结构类型', address: '房屋地址',
+            owner: '产权人', belongTo: '所属街镇村居'
+        }
+    },
+    homestead: {
+        label: '宅基地信息',
+        fields: {
+            area: '宅基地面积', certNo: '宅基地证号', approveDate: '批准日期',
+            usage: '宅基地用途', ownership: '权属情况'
+        }
+    },
+    structure: {
+        label: '结构信息',
+        fields: {
+            type: '结构类型', floors: '结构层数', height: '房屋高度',
+            span: '跨度', foundation: '基础形式'
+        }
+    },
+    usage: {
+        label: '使用情况',
+        fields: {
+            usageType: '使用类型', specificUsage: '具体用途', occupants: '居住人数',
+            isRented: '是否出租', rentArea: '出租面积'
+        }
+    }
+};
+
+// 生成留痕记录 ID
+function generateChangeLogId(rec) {
+    var seq = (rec.changeLog || []).length + 1;
+    return 'CHG-' + (rec.no || 'UNK') + '-' + String(seq).padStart(3, '0');
+}
+
+// 添加一条留痕记录
+function addChangeLog(rec, fieldPath, fieldLabel, oldValue, newValue, source, sourceId, operator) {
+    if (!rec) return;
+    if (!Array.isArray(rec.changeLog)) rec.changeLog = [];
+    rec.changeLog.push({
+        id: generateChangeLogId(rec),
+        fieldPath: fieldPath,
+        fieldLabel: fieldLabel || fieldPath,
+        oldValue: oldValue !== undefined ? String(oldValue) : '',
+        newValue: newValue !== undefined ? String(newValue) : '',
+        changedAt: new Date().toLocaleString('sv-SE').slice(0, 16),
+        changedBy: operator || '',
+        source: source || 'manual',
+        sourceId: sourceId || ''
+    });
+}
+
+// 对比静态区块差异，自动生成留痕记录
+// oldRec / newRec：完整房屋记录；返回追加的留痕条数
+function diffStaticFields(oldRec, newRec, source, sourceId, operator) {
+    if (!oldRec || !newRec) return 0;
+    var count = 0;
+    Object.keys(CHANGE_LOG_SECTIONS).forEach(function(sectionKey) {
+        var sectionConf = CHANGE_LOG_SECTIONS[sectionKey];
+        var oldSec = oldRec[sectionKey] || {};
+        var newSec = newRec[sectionKey] || {};
+        // 收集所有出现过的字段
+        var allFields = {};
+        Object.keys(oldSec).forEach(function(k){ allFields[k] = true; });
+        Object.keys(newSec).forEach(function(k){ allFields[k] = true; });
+        Object.keys(allFields).forEach(function(fieldKey) {
+            var oldVal = oldSec[fieldKey];
+            var newVal = newSec[fieldKey];
+            // 跳过数组/对象（如 photos），只做标量对比
+            if (typeof oldVal === 'object' || typeof newVal === 'object') return;
+            var oldStr = (oldVal !== undefined && oldVal !== null) ? String(oldVal) : '';
+            var newStr = (newVal !== undefined && newVal !== null) ? String(newVal) : '';
+            if (oldStr !== newStr) {
+                var fieldLabel = (sectionConf.fields && sectionConf.fields[fieldKey]) || fieldKey;
+                addChangeLog(newRec, sectionKey + '.' + fieldKey, sectionConf.label + '-' + fieldLabel,
+                    oldStr, newStr, source, sourceId, operator);
+                count++;
+            }
+        });
+    });
+    return count;
+}
+
