@@ -24,7 +24,13 @@ function createDefaultData() {
         { orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', orgCode: '91310000987654321B', legalPerson: '刘燃气', phone: '021-98765432', region: '上海市奉贤区柘林镇', field: '燃气', orgType: '服务机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 91.2, established: '2011-06-18' },
         { orgId: 'ORG-20260006', orgName: '上海城市安全研究院', orgCode: '91310000678901234C', legalPerson: '赵城安', phone: '021-67890123', region: '上海市奉贤区奉浦街道', field: '高空坠物', orgType: '研究院', qual: '甲级', status: '正常', creditLevel: 'AA', score: 87.4, established: '2013-09-05' },
         { orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', orgCode: '91310000456789012D', legalPerson: '孙房鉴', phone: '021-45678901', region: '上海市奉贤区青村镇', field: '城镇自建房', orgType: '鉴定机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 93.5, established: '2008-04-12' },
-        { orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', orgCode: '91310000234567890E', legalPerson: '周村镇', phone: '021-23456789', region: '上海市奉贤区庄行镇', field: '农村自建房', orgType: '评估机构', qual: '乙级', status: '正常', creditLevel: 'A', score: 76.8, established: '2019-01-30' }
+        { orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', orgCode: '91310000234567890E', legalPerson: '周村镇', phone: '021-23456789', region: '上海市奉贤区庄行镇', field: '农村自建房', orgType: '评估机构', qual: '乙级', status: '正常', creditLevel: 'A', score: 76.8, established: '2019-01-30' },
+        { orgId: 'ORG-20260009', orgName: '奉贤城建建筑工程有限公司', orgCode: '91310120MA1H000009', legalPerson: '陈建国', phone: '021-57410001', region: '上海市奉贤区南桥镇', field: '房屋建筑工程施工', orgType: '施工机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 92, established: '2009-03-18', qualifications: [{ name: '建筑工程施工总承包二级', certNo: 'D231000009', issuer: '上海市住房和城乡建设管理委员会', start: '2024-01-01', end: '2029-12-31' }] },
+        { orgId: 'ORG-20260010', orgName: '上海南桥建设发展有限公司', orgCode: '91310120MA1H000010', legalPerson: '陆南桥', phone: '021-57410002', region: '上海市奉贤区南桥镇', field: '房屋建筑工程施工', orgType: '施工机构', qual: '甲级', status: '正常', creditLevel: 'AA', score: 88, established: '2011-07-06', qualifications: [{ name: '建筑工程施工总承包二级', certNo: 'D231000010', issuer: '上海市住房和城乡建设管理委员会', start: '2024-01-01', end: '2029-12-31' }] },
+        { orgId: 'ORG-20260011', orgName: '华建乡村建设工程队', orgCode: '91310120MA1H000011', legalPerson: '周华建', phone: '021-57410003', region: '上海市奉贤区奉城镇', field: '房屋局部改造与修缮', orgType: '施工机构', qual: '乙级', status: '正常', creditLevel: 'AA', score: 85, established: '2015-04-22', qualifications: [{ name: '建筑装修装饰工程专业承包三级', certNo: 'D331000011', issuer: '上海市住房和城乡建设管理委员会', start: '2024-01-01', end: '2029-12-31' }] },
+        { orgId: 'ORG-20260012', orgName: '东方古建修缮工程公司', orgCode: '91310120MA1H000012', legalPerson: '沈东方', phone: '021-57410004', region: '上海市奉贤区青村镇', field: '房屋结构补强与修缮', orgType: '施工机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 90, established: '2010-10-12', qualifications: [{ name: '特种工程（结构补强）专业承包', certNo: 'D231000012', issuer: '上海市住房和城乡建设管理委员会', start: '2024-01-01', end: '2029-12-31' }] },
+        { orgId: 'ORG-20260013', orgName: '金汇镇建筑工匠合作社', orgCode: '93310120MA1H000013', legalPerson: '金汇贤', phone: '021-57410005', region: '上海市奉贤区金汇镇', field: '村镇房屋维修与改造', orgType: '施工机构', qual: '乙级', status: '正常', creditLevel: 'A', score: 82, established: '2018-05-09', qualifications: [{ name: '村镇建筑工匠备案（A级）', certNo: 'FXGJ-2024-013', issuer: '上海市奉贤区建设和管理委员会', start: '2024-01-01', end: '2028-12-31' }] },
+        { orgId: 'ORG-20260014', orgName: '临港新片区建设工程公司', orgCode: '91310120MA1H000014', legalPerson: '王临港', phone: '021-57410006', region: '上海市奉贤区海湾镇', field: '房屋拆除重建与加固', orgType: '施工机构', qual: '甲级', status: '正常', creditLevel: 'AAA', score: 95, established: '2007-01-16', qualifications: [{ name: '建筑工程施工总承包一级', certNo: 'D131000014', issuer: '中华人民共和国住房和城乡建设部', start: '2024-01-01', end: '2029-12-31' }] }
     ];
 
     const contracts = [
@@ -46,7 +52,13 @@ function createDefaultData() {
         { id: 'PERF-005', orgId: 'ORG-20260005', orgName: '上海燃气安全技术服务中心', projectName: '上海市燃气管道安全风险评估', domain: '燃气', serviceType: '安全评估', client: '上海市燃气集团', serviceTime: '2026-06-01 ~ 2026-09-30', amount: 16.8, conclusion: '优秀', auditStatus: '已通过' },
         { id: 'PERF-006', orgId: 'ORG-20260006', orgName: '上海城市安全研究院', projectName: '上海市高空坠物风险排查评估', domain: '高空坠物', serviceType: '风险排查', client: '上海市应急管理局', serviceTime: '2026-02-20 ~ 2026-05-20', amount: 13.2, conclusion: '良好', auditStatus: '已通过' },
         { id: 'PERF-007', orgId: 'ORG-20260007', orgName: '上海房屋安全鉴定中心', projectName: '上海市城镇自建房安全鉴定', domain: '城镇自建房', serviceType: '安全鉴定', client: '上海市房管局', serviceTime: '2026-05-10 ~ 2026-08-10', amount: 24.5, conclusion: '优秀', auditStatus: '已通过' },
-        { id: 'PERF-008', orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', projectName: '上海市农村自建房安全评估', domain: '农村自建房', serviceType: '安全评估', client: '上海市农业农村委', serviceTime: '2026-03-01 ~ 2026-06-01', amount: 8.8, conclusion: '良好', auditStatus: '已通过' }
+        { id: 'PERF-008', orgId: 'ORG-20260008', orgName: '上海村镇建设安全评估有限公司', projectName: '上海市农村自建房安全评估', domain: '农村自建房', serviceType: '安全评估', client: '上海市农业农村委', serviceTime: '2026-03-01 ~ 2026-06-01', amount: 8.8, conclusion: '良好', auditStatus: '已通过' },
+        { id: 'PERF-009', orgId: 'ORG-20260009', orgName: '奉贤城建建筑工程有限公司', projectName: '奉贤区农房加固修缮工程', domain: '农村自建房', serviceType: '维修加固', client: '奉贤区建设和管理委员会', serviceTime: '2025-03-01 ~ 2025-12-20', amount: 86.0, conclusion: '优秀', auditStatus: '已通过' },
+        { id: 'PERF-010', orgId: 'ORG-20260010', orgName: '上海南桥建设发展有限公司', projectName: '南桥镇危旧房改造工程', domain: '城镇自建房', serviceType: '拆除重建', client: '南桥镇人民政府', serviceTime: '2025-01-10 ~ 2025-11-30', amount: 62.0, conclusion: '良好', auditStatus: '已通过' },
+        { id: 'PERF-011', orgId: 'ORG-20260011', orgName: '华建乡村建设工程队', projectName: '奉城镇农房局部改造工程', domain: '农村自建房', serviceType: '局部改造', client: '奉城镇人民政府', serviceTime: '2025-04-01 ~ 2025-09-30', amount: 28.0, conclusion: '良好', auditStatus: '已通过' },
+        { id: 'PERF-012', orgId: 'ORG-20260012', orgName: '东方古建修缮工程公司', projectName: '青村镇砖木结构房屋加固工程', domain: '农村自建房', serviceType: '结构补强', client: '青村镇人民政府', serviceTime: '2025-02-15 ~ 2025-10-20', amount: 45.0, conclusion: '优秀', auditStatus: '已通过' },
+        { id: 'PERF-013', orgId: 'ORG-20260013', orgName: '金汇镇建筑工匠合作社', projectName: '金汇镇农房维修加固项目', domain: '农村自建房', serviceType: '维修加固', client: '金汇镇人民政府', serviceTime: '2025-03-01 ~ 2025-12-01', amount: 20.0, conclusion: '良好', auditStatus: '已通过' },
+        { id: 'PERF-014', orgId: 'ORG-20260014', orgName: '临港新片区建设工程公司', projectName: '奉贤区危险房屋拆除重建项目', domain: '城镇自建房', serviceType: '拆除重建', client: '奉贤区住房保障和房屋管理局', serviceTime: '2024-06-01 ~ 2025-12-31', amount: 138.0, conclusion: '优秀', auditStatus: '已通过' }
     ];
 
     const experts = [
@@ -148,7 +160,7 @@ function createDefaultData() {
 
     const auditFlow = {};  // key: orgId, value: { currentLevel, history, status } 审核流程状态
 
-    return { orgs, contracts, performances, experts, credit, auditConfig, auditFlow, version: 8, creditRules: getDefaultCreditRules().slice(), creditRuleVersion: 1, creditRuleHistory: [{ version: 1, time: nowStr(), summary: '初始规则版本', rules: getDefaultCreditRules().map(r => Object.assign({}, r)) }], creditLastCalcTime: '', orgApplications: [], expertApplications: [], orgChangeRequests: [], notifications: [], reminderRule: null };
+    return { orgs, contracts, performances, experts, credit, auditConfig, auditFlow, version: 9, creditRules: getDefaultCreditRules().slice(), creditRuleVersion: 1, creditRuleHistory: [{ version: 1, time: nowStr(), summary: '初始规则版本', rules: getDefaultCreditRules().map(r => Object.assign({}, r)) }], creditLastCalcTime: '', orgApplications: [], expertApplications: [], orgChangeRequests: [], notifications: [], reminderRule: null };
 }
 
 function getDefaultExperts() {
@@ -281,6 +293,29 @@ function migrateTPData(data) {
         });
         if (data.experts.length !== beforeExpertCount) { data.version = 8; saveTPData(data); }
     }
+    // v9：补充房屋治理施工机构及其资质、信用和历史业绩，存量数据只增不改
+    if ((data.version || 0) < 9) {
+        var constructionDefaults = createDefaultData();
+        constructionDefaults.orgs.filter(function(o) { return o.orgType === '施工机构'; }).forEach(function(seedOrg) {
+            var exists = data.orgs.some(function(o) { return o.orgId === seedOrg.orgId || (o.orgCode && o.orgCode === seedOrg.orgCode); });
+            if (!exists) data.orgs.push(seedOrg);
+            if (!data.credit[seedOrg.orgId]) data.credit[seedOrg.orgId] = constructionDefaults.credit[seedOrg.orgId];
+            constructionDefaults.performances.filter(function(p) { return p.orgId === seedOrg.orgId; }).forEach(function(perf) {
+                if (!data.performances.some(function(p) { return p.id === perf.id; })) data.performances.push(perf);
+            });
+        });
+        data.orgs.forEach(function(org) {
+            if (Array.isArray(org.qualifications) && org.qualifications.length) return;
+            var app = data.orgApplications.find(function(a) {
+                var basic = a.basic || a.form && a.form.basic || {};
+                var appId = a.appId || a.id;
+                return (basic.enterpriseName || a.orgName) === org.orgName && appId && data.auditFlow[appId] && data.auditFlow[appId].status === 'approved';
+            });
+            if (app && Array.isArray(app.qualifications) && app.qualifications.length) org.qualifications = JSON.parse(JSON.stringify(app.qualifications));
+        });
+        data.version = 9;
+        saveTPData(data);
+    }
     return data;
 }
 
@@ -332,6 +367,39 @@ function getAllOrgs() { return getTPData().orgs; }
 function getOrgById(orgId) { return getAllOrgs().find(o => o.orgId === orgId); }
 function getOrgByName(orgName) { return getAllOrgs().find(o => o.orgName === orgName); }
 function getOrgByCode(orgCode) { return getAllOrgs().find(o => o.orgCode === orgCode); }
+
+// 房屋治理施工机构核验：机构状态、工程类型与资质证书有效期统一在此判断
+const TP_CONSTRUCTION_QUAL_KEYWORDS = {
+    '拆除重建': ['建筑工程施工总承包'],
+    '维修加固': ['特种工程', '结构补强', '建筑工程施工总承包', '村镇建筑工匠'],
+    '局部改造': ['建筑装修装饰', '建筑工程施工总承包', '村镇建筑工匠'],
+    '防护设施增设': ['建筑工程施工总承包', '特种工程', '建筑装修装饰', '村镇建筑工匠']
+};
+function validateConstructionOrg(orgId, engType) {
+    var org = getOrgById(orgId);
+    if (!org) return { ok: false, reason: '未找到该机构，请重新从机构库选择' };
+    if (org.orgType !== '施工机构') return { ok: false, reason: '该机构不是施工机构', org: org };
+    if ((org.status || '正常') !== '正常') return { ok: false, reason: '该机构当前状态为“' + org.status + '”，不可选择', org: org };
+    var keywords = TP_CONSTRUCTION_QUAL_KEYWORDS[engType] || [];
+    var qualifications = Array.isArray(org.qualifications) ? org.qualifications : [];
+    var applicable = qualifications.filter(function(q) {
+        var name = (q && q.name) || '';
+        return keywords.some(function(keyword) { return name.indexOf(keyword) !== -1; });
+    });
+    if (!applicable.length) return { ok: false, reason: '未取得适用于“' + (engType || '当前工程') + '”的施工资质', org: org };
+    var today = todayStr();
+    var qualification = applicable.find(function(q) {
+        return (!q.start || q.start <= today) && (!q.end || q.end >= today);
+    });
+    if (!qualification) {
+        var expired = applicable.every(function(q) { return q.end && q.end < today; });
+        return { ok: false, reason: expired ? '适用于当前工程的施工资质已过期' : '适用于当前工程的施工资质尚未生效', org: org };
+    }
+    return { ok: true, org: org, qualification: qualification };
+}
+function getEligibleConstructionOrgs(engType) {
+    return getAllOrgs().filter(function(org) { return validateConstructionOrg(org.orgId, engType).ok; });
+}
 
 // 获取机构入库时间：优先 admitDate，老数据用 changeHistory 首条新增记录时间兜底
 function getOrgAdmitDate(org) {
@@ -556,6 +624,7 @@ function promoteApplicationToOrg(app) {
         field: basic.field || basic.businessScope || app.serviceScope || '',
         orgType: basic.orgType || '服务机构',
         qual: (app.qualifications && app.qualifications[0] && app.qualifications[0].level) || '乙级',
+        qualifications: Array.isArray(app.qualifications) ? JSON.parse(JSON.stringify(app.qualifications)) : [],
         status: '正常',
         creditLevel: INITIAL_CREDIT_LEVEL,
         score: INITIAL_CREDIT_SCORE,

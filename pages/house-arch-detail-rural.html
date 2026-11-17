@@ -3892,8 +3892,11 @@
             if (!panel) return;
             // 整治状态：有隐患台账时按真实隐患状态派生（不再信任遗留 governStatus 字段）
             // 第一类（未发现安全隐患）：不入治理流程，整治状态显示"—"；旧值由 normalizeGovernStatus 归一
+            // 例外：已有管理/工程措施记录或治理已完成的房屋，优先显示真实治理状态（不被第一类判定压成"—"）
+            const __hasMeasureRecs = ((s.manageRecords || []).length + (s.projectRecords || []).length) > 0;
+            const __govDone = s.governance === 'done' || s.governStatus === '已整治' || s.governStatus === '已治理' || s.closeStatus === '已通过';
             const derivedGovern = deriveGovernStatusFromHazards(s);
-            const governText = (typeof isCurrentlyFirstClass === 'function' && isCurrentlyFirstClass(s))
+            const governText = (!__hasMeasureRecs && !__govDone && typeof isCurrentlyFirstClass === 'function' && isCurrentlyFirstClass(s))
                 ? '—'
                 : (normalizeGovernStatus(derivedGovern || s.governStatus) || '—');
             const riskClass = riskBadgeClass[s.riskLevel] || 'danger';
@@ -4844,8 +4847,9 @@
                 return '<div class="info-item' + (fullWidth ? ' full-width' : '') + '"><div class="info-label">' + label + '</div><div class="info-value ' + (green ? 'rural-only' : (v === '—' ? 'empty' : '')) + '">' + v + '</div></div>';
             };
             const photoRowM = (label, value) => {
-                const raw = (value || '').trim();
-                const urls = raw ? raw.split(',').map(x => x.trim()).filter(u => u && u !== '—' && u !== '-') : [];
+                // 兼容两种存储：治理详情页写入数组；档案页旧数据为逗号分隔字符串
+                const urls = (Array.isArray(value) ? value : String(value || '').split(','))
+                    .map(x => String(x || '').trim()).filter(u => u && u !== '—' && u !== '-');
                 const photoHtml = urls.length
                     ? '<div class="info-value photo-value" style="display:flex;flex-wrap:wrap;gap:12px;">' + urls.map(u => '<img src="' + escapeHtml(u) + '" alt="照片" onclick="viewPhotoOnline(\'' + escapeJsStr(u) + '\')" style="width:320px;height:240px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;">').join('') + '</div>'
                     : '<div class="info-value empty">—</div>';
@@ -5181,14 +5185,16 @@
             const __s = currentHouseArch;
             ensureGovernanceEvents(__s);
             const __evs = __s.governanceEvents || [];
+            // 已有管理/工程措施记录（治理详情页录入，自动关联回档案）：跳过第一类/治理链门禁，直接展示
+            const __hasMeasureRecs = ((__s.manageRecords || []).length + (__s.projectRecords || []).length) > 0;
             // 第一类（未发现安全隐患）：入口保留但显示"无需治理"提示
-            if (isCurrentlyFirstClass(__s)) {
+            if (!__hasMeasureRecs && isCurrentlyFirstClass(__s)) {
                 return '<div class="content-card">' +
                     '<div class="content-card-header"><div class="content-card-title"><i class="fas fa-tools"></i> 整治措施</div></div>' +
                     '<div class="content-body">' + firstClassHintHTML('整治措施') + '</div>' +
                 '</div>';
             }
-            if (!__evs.length) {
+            if (!__hasMeasureRecs && !__evs.length) {
                 return '<div class="content-card">' +
                     '<div class="content-card-header"><div class="content-card-title"><i class="fas fa-tools"></i> 整治措施</div></div>' +
                     '<div class="content-body"><div class="record-empty" style="padding:60px 20px;text-align:center;">' +

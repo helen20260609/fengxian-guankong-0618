@@ -17,7 +17,12 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
 .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--primary);text-decoration:none;font-size:13px;margin-bottom:12px}
 .back-link:hover{text-decoration:underline}
 /* 概要条 */
-.summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:0;padding:6px 0}
+.summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;padding:6px 0}
+/* 左右两栏布局：左侧主内容，右侧时间轴（窄） */
+.layout-wrap{display:flex;gap:16px;align-items:flex-start}
+.layout-main{flex:1;min-width:0}
+.layout-side{width:340px;flex-shrink:0;position:sticky;top:20px;max-height:calc(100vh - 40px);overflow-y:auto}
+@media(max-width:1100px){.layout-wrap{flex-direction:column}.layout-side{width:100%;position:static;max-height:none}}
 .sum-item{padding:10px 16px;border-right:1px dashed var(--border)}
 .sum-item:last-child{border-right:none}
 .sum-label{font-size:12px;color:var(--text-secondary);margin-bottom:4px}
@@ -51,6 +56,9 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
 .photo-thumbs{display:flex;gap:6px;flex-wrap:wrap}
 .photo-thumbs img{width:52px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer}
 .change-log{margin-top:8px;border-top:1px dashed var(--border);padding-top:8px}
+.remind-item{display:flex;align-items:center;gap:8px;padding:10px 14px;margin-bottom:10px;border:1px solid #f59e0b55;background:#f59e0b14;border-radius:8px;font-size:13px}
+.remind-item .fa-bell{color:#f59e0b;flex-shrink:0}
+.remind-item .remind-ops{margin-left:auto;display:flex;gap:6px;flex-shrink:0}
 .change-item{font-size:12px;padding:5px 0;color:var(--text-secondary);line-height:1.7}
 /* 工程卡片 */
 .eng-card{border:1px solid var(--border);border-radius:8px;margin-bottom:14px;overflow:hidden}
@@ -109,6 +117,9 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
 
 <a class="back-link" href="hs-govern-urban.html"><i class="fas fa-arrow-left"></i> 返回治理台账</a>
 
+<div class="layout-wrap">
+<div class="layout-main">
+
 <!-- 房屋概要 -->
 <div class="page-card">
   <div class="card-header">
@@ -131,6 +142,7 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
     <button class="btn btn-primary" onclick="openManageAdd()"><i class="fas fa-plus"></i> 新增管理措施</button>
   </div>
   <div class="block-body" style="overflow-x:auto">
+    <div id="manageRemindBox"></div>
     <table class="data-table">
       <thead><tr><th>措施类型</th><th>实施部位</th><th>开始时间</th><th>计划结束</th><th>责任单位 / 责任人</th><th>状态</th><th style="width:220px">操作</th></tr></thead>
       <tbody id="manageTbody"></tbody>
@@ -147,10 +159,45 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
   <div class="block-body" id="engList"></div>
 </div>
 
+</div><!-- /layout-main -->
+<div class="layout-side">
+
 <!-- 块4 治理过程时间轴 -->
 <div class="page-card">
-  <div class="card-header"><div class="card-title"><i class="fas fa-stream"></i> 治理过程时间轴</div></div>
+  <div class="card-header">
+    <div class="card-title"><i class="fas fa-stream"></i> 治理过程时间轴 <span class="sub">业务事件自动生成，支持手动多次补充</span></div>
+    <button class="btn btn-primary" onclick="openLogAdd()"><i class="fas fa-plus"></i> 补充过程记录</button>
+  </div>
   <div class="block-body"><div class="timeline" id="govTimeline"></div></div>
+</div>
+
+</div><!-- /layout-side -->
+</div><!-- /layout-wrap -->
+
+<!-- 补充过程记录弹窗 -->
+<div class="modal-mask" id="logAddModal">
+  <div class="modal">
+    <div class="modal-header"><span>补充过程记录</span><i class="fas fa-times modal-close" onclick="closeModal('logAddModal')"></i></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-item"><label>记录内容 <span class="req">*</span></label><textarea id="lgContent" rows="3" placeholder="如：现场巡查情况、阶段性进展、与产权人沟通情况、风险变化情况等"></textarea></div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>记录人</label><input id="lgRecorder" placeholder="默认为当前用户"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>现场照片</label>
+          <div class="upload-box"><input type="file" accept="image/*" multiple onchange="onPhotosChange(this,'lgPhotoList')"/></div>
+          <div class="photo-thumbs" id="lgPhotoList"></div>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:4px">提交后将作为新的时间轴节点，可多次补充。</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('logAddModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveLogAdd()"><i class="fas fa-paper-plane"></i> 提交记录</button>
+    </div>
+  </div>
 </div>
 
 <!-- 新增管理措施弹窗 -->
@@ -159,12 +206,25 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
     <div class="modal-header"><span>新增管理措施</span><i class="fas fa-times modal-close" onclick="closeModal('manageAddModal')"></i></div>
     <div class="modal-body">
       <div class="form-row">
+        <div class="form-item" style="grid-column:1/-1"><label>措施库模板 <span style="font-weight:400;color:var(--text-secondary)">（城镇风险措施库，按隐患类型动态筛选，可选）</span></label>
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px">
+            <select id="maHazardFilter" onchange="renderMaTemplates()"></select>
+            <select id="maTemplate" onchange="applyMaTemplate()"></select>
+          </div>
+          <div class="hint" id="maTemplateHint" style="margin-top:5px"></div>
+        </div>
+      </div>
+      <div class="form-row">
         <div class="form-item"><label>措施类型 <span class="req">*</span></label><select id="maType" onchange="renderMaExtras()"></select></div>
         <div class="form-item"><label>实施部位</label><input id="maPart" placeholder="如：整栋房屋 / 一层东间"/></div>
       </div>
       <div class="form-row">
         <div class="form-item"><label>开始时间 <span class="req">*</span></label><input type="date" id="maStart"/></div>
         <div class="form-item"><label>计划结束时间 <span class="req">*</span></label><input type="date" id="maEnd"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>到期提醒</label><label style="font-size:13px;color:var(--text-primary);display:flex;align-items:center;gap:6px;height:34px"><input type="checkbox" id="maRemind" checked/> 到期前自动通知责任人续期或转为工程整治</label></div>
+        <div class="form-item"><label>提前提醒天数</label><input type="number" id="maRemindDays" value="15" min="1" max="90" placeholder="默认 15 天"/></div>
       </div>
       <div class="form-row" id="maExtras" style="display:none"></div>
       <div class="form-row">
@@ -176,7 +236,7 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
         <div class="form-item"><label>联系电话</label><input id="maPhone" placeholder="手机"/></div>
       </div>
       <div class="form-row">
-        <div class="form-item"><label>落实照片（警戒线 / 警示标识 / 撤离确认等）</label>
+        <div class="form-item"><label>措施落实照片（如警戒线设置照片、警示标识张贴照片、人员撤离确认记录等）</label>
           <div class="upload-box"><input type="file" id="maPhotos" accept="image/*" multiple onchange="onPhotosChange(this,'maPhotoList')"/></div>
           <div class="photo-thumbs" id="maPhotoList"></div>
         </div>
@@ -238,13 +298,47 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
   </div>
 </div>
 
+<!-- 办理续期弹窗 -->
+<div class="modal-mask" id="manageRenewModal">
+  <div class="modal">
+    <div class="modal-header"><span>办理续期</span><i class="fas fa-times modal-close" onclick="closeModal('manageRenewModal')"></i></div>
+    <div class="modal-body">
+      <input type="hidden" id="mrId"/>
+      <div class="form-row">
+        <div class="form-item"><label>措施</label><input id="mrInfo" disabled/></div>
+        <div class="form-item"><label>原到期时间</label><input id="mrOldEnd" disabled/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>续期至 <span class="req">*</span></label><input type="date" id="mrNewEnd"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>续期理由 <span class="req">*</span></label><textarea id="mrReason" rows="3" placeholder="如：风险尚未消除，需继续保持管控措施"></textarea></div>
+      </div>
+      <div class="hint">提交后进入「待审批」，审批通过后计划结束时间自动更新，到期提醒将按新日期重新计时。</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('manageRenewModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveManageRenew()"><i class="fas fa-paper-plane"></i> 提交续期申请</button>
+    </div>
+  </div>
+</div>
+
 <!-- 新增工程措施弹窗 -->
 <div class="modal-mask" id="engAddModal">
   <div class="modal">
     <div class="modal-header"><span>新增工程措施</span><i class="fas fa-times modal-close" onclick="closeModal('engAddModal')"></i></div>
     <div class="modal-body">
       <div class="form-row">
-        <div class="form-item"><label>措施类型 <span class="req">*</span></label><select id="eaType"></select></div>
+        <div class="form-item" style="grid-column:1/-1"><label>措施库模板 <span style="font-weight:400;color:var(--text-secondary)">（城镇风险措施库，按隐患类型动态筛选，可选）</span></label>
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px">
+            <select id="eaHazardFilter" onchange="renderEaTemplates()"></select>
+            <select id="eaTemplate" onchange="applyEaTemplate()"></select>
+          </div>
+          <div class="hint" id="eaTemplateHint" style="margin-top:5px"></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>措施类型 <span class="req">*</span></label><select id="eaType" onchange="renderEaContractorOptions()"></select></div>
         <div class="form-item"><label>实施范围</label><input id="eaScope" placeholder="如：整栋 / 东立面墙体 / 屋面"/></div>
       </div>
       <div class="form-row">
@@ -252,7 +346,10 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
         <div class="form-item"><label>计划竣工时间</label><input type="date" id="eaEnd"/></div>
       </div>
       <div class="form-row">
-        <div class="form-item"><label>施工单位（从机构库选择）<span class="req">*</span></label><select id="eaCompany" onchange="renderEaContractor()"></select>
+        <div class="form-item" style="grid-column:1/-1"><label>施工单位（第三方机构库）<span class="req">*</span></label>
+          <input id="eaCompanyKeyword" placeholder="搜索机构名称或统一社会信用代码" oninput="renderEaContractorOptions()" style="margin-bottom:6px"/>
+          <select id="eaCompany" onchange="renderEaContractor()"></select>
+          <div class="hint" id="eaContractorHint" style="margin-top:5px"></div>
           <div class="contractor-info" id="eaContractorInfo" style="display:none"></div>
         </div>
       </div>
@@ -266,16 +363,37 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
       </div>
       <div class="form-row">
         <div class="form-item"><label>设计图纸</label>
-          <div class="upload-box"><input type="file" id="eaFileDesign" multiple onchange="onFilesChange(this,'eaDesignChips')"/></div>
+          <div class="upload-box"><input type="file" id="eaFileDesign" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.dwg" multiple onchange="onFilesChange(this,'eaDesignChips')"/></div>
           <div class="file-chips" id="eaDesignChips"></div>
         </div>
         <div class="form-item"><label>施工组织设计</label>
-          <div class="upload-box"><input type="file" id="eaFileOrg" multiple onchange="onFilesChange(this,'eaOrgChips')"/></div>
+          <div class="upload-box"><input type="file" id="eaFileOrg" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" multiple onchange="onFilesChange(this,'eaOrgChips')"/></div>
           <div class="file-chips" id="eaOrgChips"></div>
         </div>
         <div class="form-item"><label>安全专项方案</label>
-          <div class="upload-box"><input type="file" id="eaFileSafety" multiple onchange="onFilesChange(this,'eaSafetyChips')"/></div>
+          <div class="upload-box"><input type="file" id="eaFileSafety" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" multiple onchange="onFilesChange(this,'eaSafetyChips')"/></div>
           <div class="file-chips" id="eaSafetyChips"></div>
+        </div>
+      </div>
+      <div class="hint" style="margin:-2px 0 8px">支持 pdf / doc / docx / jpg / png（设计图纸另支持 dwg），单个文件不超过 20MB，不合规文件将自动剔除</div>
+      <div class="form-row">
+        <div class="form-item" style="grid-column:1/-1">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="eaMajor" onchange="toggleEaMajor()" style="width:auto;height:auto"/> 重大工程（方案需关联专家评审意见）</label>
+        </div>
+      </div>
+      <div id="eaExpertArea" style="display:none;border:1px dashed var(--border);border-radius:6px;padding:10px;margin-bottom:10px">
+        <div class="form-row">
+          <div class="form-item"><label>专家评审结论 <span class="req">*</span></label>
+            <select id="eaExpertConclusion"><option value="">请选择</option><option>通过</option><option>修改后通过</option><option>不通过</option></select>
+          </div>
+          <div class="form-item"><label>评审日期</label><input type="date" id="eaExpertDate"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-item"><label>评审专家</label><input id="eaExpertNames" placeholder="如：专家组（3人）/ 专家姓名"/></div>
+          <div class="form-item"><label>专家评审意见</label>
+            <div class="upload-box"><input type="file" id="eaFileExpert" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" multiple onchange="onFilesChange(this,'eaExpertChips')"/></div>
+            <div class="file-chips" id="eaExpertChips"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -313,6 +431,55 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
   </div>
 </div>
 
+<!-- 治理方案审核弹窗 -->
+<div class="modal-mask" id="engAuditModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header"><span id="audTitle">治理方案审核</span><i class="fas fa-times modal-close" onclick="closeModal('engAuditModal')"></i></div>
+    <div class="modal-body">
+      <input type="hidden" id="audEngId"/><input type="hidden" id="audPass"/>
+      <div class="form-row">
+        <div class="form-item"><label>审核人</label><input id="audAuditor" placeholder="如：镇建设管理部门 李华"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>审核意见</label><textarea id="audOpinion" rows="3" placeholder="通过可留空；驳回请说明原因"></textarea></div>
+      </div>
+      <div class="hint" id="audHint"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('engAuditModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveEngAudit()"><i class="fas fa-check"></i> 提交审核</button>
+    </div>
+  </div>
+</div>
+
+<!-- 实施进度填报弹窗 -->
+<div class="modal-mask" id="progressModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-header"><span>实施进度填报</span><i class="fas fa-times modal-close" onclick="closeModal('progressModal')"></i></div>
+    <div class="modal-body">
+      <input type="hidden" id="pgEngId"/>
+      <div class="form-row">
+        <div class="form-item"><label>当前进度（%） <span class="req">*</span></label><input type="number" id="pgValue" min="0" max="100" placeholder="只增不减"/></div>
+        <div class="form-item"><label>填报人</label><input id="pgReporter" placeholder="如：现场施工员 张三"/></div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>进度说明</label><textarea id="pgNote" rows="3" placeholder="关键进展、存在问题等"></textarea></div>
+      </div>
+      <div class="form-row">
+        <div class="form-item"><label>现场照片</label>
+          <div class="upload-box"><input type="file" accept="image/*" multiple onchange="onPhotosChange(this,'pgPhotoList')"/></div>
+          <div class="photo-thumbs" id="pgPhotoList"></div>
+        </div>
+      </div>
+      <div class="hint">进度填报只增不减；竣工验收通过后自动为 100%。历史填报记录见治理过程时间轴。</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('progressModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveProgress()"><i class="fas fa-check"></i> 提交进度</button>
+    </div>
+  </div>
+</div>
+
 <!-- 竣工验收报告弹窗 -->
 <div class="modal-mask" id="acceptModal">
   <div class="modal" style="width:560px">
@@ -342,14 +509,24 @@ body{font-family:'Microsoft YaHei','PingFang SC',-apple-system,sans-serif;backgr
   </div>
 </div>
 
+<script src="../js/third-party-data.js"></script>
 <script src="../js/urban-house-arch-data.js"></script>
+<script src="./urban-risk-data.js"></script>
 <script>
 initHouseArchSeed();
 seedGovernDemoData(); // 一次性充实演示数据（幂等）
 const NO = new URLSearchParams(location.search).get('no') || 'NF-2025-00001';
 let REC = null;
-let tmpPhotos = { maPhotoList: [], mfPhotoList: [], ndPhotoList: [], acPhotoList: [] };
-let tmpFiles = { eaDesignChips: [], eaOrgChips: [], eaSafetyChips: [] };
+let tmpPhotos = { maPhotoList: [], mfPhotoList: [], ndPhotoList: [], acPhotoList: [], lgPhotoList: [], pgPhotoList: [] };
+let tmpFiles = { eaDesignChips: [], eaOrgChips: [], eaSafetyChips: [], eaExpertChips: [] };
+// 方案资料上传规则：按资料类型限定格式，单个文件不超过 20MB
+const ENG_FILE_MAX_MB = 20;
+const ENG_FILE_RULES = {
+    eaDesignChips: { exts: ['pdf','doc','docx','jpg','jpeg','png','dwg'] },
+    eaOrgChips: { exts: ['pdf','doc','docx','jpg','jpeg','png'] },
+    eaSafetyChips: { exts: ['pdf','doc','docx','jpg','jpeg','png'] },
+    eaExpertChips: { exts: ['pdf','doc','docx','jpg','jpeg','png'] }
+};
 
 function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 // 灯箱查看照片（dataURL 用 window.open 会被浏览器拦截）
@@ -379,9 +556,17 @@ function renderThumbs(key){
         '<img src="' + u + '" onclick="viewPhoto(tmpPhotos[\'' + key + '\'][' + i + '])" title="点击查看"/>').join('');
 }
 function onFilesChange(input, key){
-    Array.from(input.files).forEach(f => tmpFiles[key].push(f.name));
+    const rule = ENG_FILE_RULES[key];
+    const rejected = [];
+    Array.from(input.files).forEach(f => {
+        const ext = (f.name.split('.').pop() || '').toLowerCase();
+        if (rule && rule.exts.indexOf(ext) === -1) { rejected.push(f.name + '（格式不支持，仅允许 ' + rule.exts.join(' / ') + '）'); return; }
+        if (f.size > ENG_FILE_MAX_MB * 1024 * 1024) { rejected.push(f.name + '（超过 ' + ENG_FILE_MAX_MB + 'MB 大小限制）'); return; }
+        tmpFiles[key].push(f.name);
+    });
     input.value = '';
     renderFileChips(key);
+    if (rejected.length) alert('以下文件未通过格式校验，已自动剔除：\n' + rejected.join('\n'));
 }
 function renderFileChips(key){
     document.getElementById(key).innerHTML = tmpFiles[key].map((n,i) =>
@@ -434,7 +619,8 @@ function renderSummary(){
         const riskTag = r.risk === 'danger' ? '<span class="tag tag-danger">疑似危房</span>'
         : r.risk === 'major' ? '<span class="tag tag-orange">疑似严重损坏房</span>'
         : r.risk === 'warning' ? '<span class="tag tag-warning">疑似一般损坏房</span>' : '<span class="tag tag-success">完好房</span>';
-    const taskTag = r.governTask ? '<span class="tag tag-info">' + esc(r.governTask.taskType) + ' ' + esc(r.governTask.dispatchTime).slice(0,10) + '</span>' : '<span class="tag tag-grey">排查任务未下发</span>';
+    const pt = urbanPatrolTaskOfHouse(r.no);
+    const taskTag = pt ? '<span class="tag tag-info">' + esc(pt.typeLabel || '巡查任务') + ' ' + esc(pt.startDate || '') + '</span>' : '<span class="tag tag-grey">排查任务未下发</span>';
     document.getElementById('hTags').innerHTML = riskTag + ' <span class="tag ' + g[0] + '">' + g[1] + '</span> ' + taskTag;
     const cells = [
         ['产权人', r.owner], ['街镇 / 社区', (r.street||'') + ' / ' + (r.community || r.village || '')], ['详细地址', r.address || ov.address],
@@ -451,13 +637,33 @@ function renderHazards(){
         const lv = (h.level === '疑似危房') ? 'lv-danger' : '';
         return '<div class="hazard-card ' + lv + '"><div class="hazard-head"><span>' + esc(h.part) + ' · ' + esc(h.type) + '</span>' +
             '<span class="tag ' + (lv ? 'tag-danger' : 'tag-warning') + '">' + esc(h.level || '疑似一般损坏房') + '</span></div>' +
-            '<div class="hazard-desc">' + esc(h.desc) + '</div></div>';
+            '<div class="hazard-desc">' + esc(h.desc) + '</div>' + thumbsHtml(h.photos) + '</div>';
     }).join('') : '<div class="hint" style="padding:6px">该房屋暂无隐患记录</div>';
 }
 
 // ---- 管理措施 ----
+// 到期提醒横幅：临近到期/已超期且开启提醒的实施中措施，提供续期与转工程整治快捷入口
+function renderRemindBanner(list){
+    const box = document.getElementById('manageRemindBox');
+    if (!box) return;
+    const items = (list || []).filter(m => {
+        if (m.isDone || m.status === '已结束' || m.remind === false || !m.planEndTime) return false;
+        const days = (m.remindDays > 0) ? m.remindDays : 15;
+        return Math.ceil((new Date(m.planEndTime) - new Date()) / 86400000) <= days;
+    });
+    if (!items.length) { box.innerHTML = ''; return; }
+    box.innerHTML = items.map(m => {
+        const dl = getDeadlineStatus(m.planEndTime);
+        const state = dl.overdue ? '<span class="tag tag-danger">已超期 ' + (-dl.days) + ' 天</span>' : '<span class="tag tag-orange">临近到期（剩 ' + dl.days + ' 天）</span>';
+        return '<div class="remind-item"><i class="fas fa-bell"></i><span>管理措施「<b>' + esc(m.measureType) + '</b>」（' + esc(m.implementPart || '整栋房屋') + '）' + state +
+            '　责任人：' + esc(m.dutyPerson || '—') + (m.phone ? ' ' + esc(m.phone) : '') + '，请及时续期或转为工程整治</span>' +
+            '<span class="remind-ops"><button class="btn btn-primary btn-xs" onclick="openManageRenew(\'' + m.id + '\')">办理续期</button>' +
+            '<button class="btn btn-outline btn-xs" onclick="openEngAdd()">转为工程整治</button></span></div>';
+    }).join('');
+}
 function renderManage(){
     const list = REC.manageRecords || [];
+    renderRemindBanner(list);
     const tb = document.getElementById('manageTbody');
     if (!list.length) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);padding:24px">暂无管理措施，点击右上角「新增管理措施」</td></tr>'; return; }
     const today = todayStr();
@@ -490,9 +696,11 @@ function manageDetailHtml(m){
     const extraFields = GOV_MANAGE_EXTRA_FIELDS[m.measureType] || [];
     let html = '<div class="detail-grid">';
     html += kv('实施要求', m.requirement || m.measureDesc, true);
+    if (m.templateName) html += kv('来源模板', '城镇风险措施库 · ' + m.templateName);
     extraFields.forEach(f => { html += kv(f.label, ex[f.key] || '—'); });
-    html += kv('落实照片', thumbsHtml(m.implementPhotos));
-    html += kv('完成照片', thumbsHtml(m.completePhotos));
+    html += kvRaw('落实照片', thumbsHtml(m.implementPhotos));
+    html += kvRaw('完成照片', thumbsHtml(m.completePhotos));
+    html += kv('到期提醒', m.remind === false ? '未开启' : '到期前 ' + (m.remindDays || 15) + ' 天通知责任人');
     if (m.effectEvaluation) html += kv('效果评估', m.effectEvaluation + (m.riskControlled ? '（风险已有效控制）' : ''));
     html += kv('填报', (m.reporter || '—') + ' ' + (m.reportTime || ''));
     html += '</div>';
@@ -500,7 +708,7 @@ function manageDetailHtml(m){
         html += '<div class="change-log"><div style="font-size:12px;font-weight:600;margin-bottom:4px">变更 / 延长履历</div>' +
             m.changes.map(c => {
                 const stTag = c.status === '待审批' ? '<span class="tag tag-orange">待审批</span>' : c.status === '已审批' ? '<span class="tag tag-success">已审批</span>' : '<span class="tag tag-danger">已驳回</span>';
-                let line = '<div class="change-item">' + stTag + ' ' + esc(c.time) + ' ' + esc(c.applicant) + '：' + esc(c.reason) +
+                let line = '<div class="change-item">' + stTag + ' ' + (c.type === '续期' ? '<span class="tag tag-info">续期</span> ' : '') + esc(c.time) + ' ' + esc(c.applicant) + '：' + esc(c.reason) +
                     '（' + esc(c.oldEnd || '—') + ' → ' + esc(c.newEnd || '—') + '）';
                 if (c.status === '待审批') {
                     line += ' <button class="btn btn-primary btn-xs" onclick="auditChange(\'' + m.id + '\',\'' + c.id + '\',true)">批准</button>' +
@@ -513,13 +721,116 @@ function manageDetailHtml(m){
     }
     return html;
     function kv(k, v, full){ return '<div class="kv' + (full ? ' full' : '') + '"><span class="k">' + k + '：</span><span class="v">' + (typeof v === 'string' ? esc(v) : v) + '</span></div>'; }
+    function kvRaw(k, html){ return '<div class="kv"><span class="k">' + k + '：</span><span class="v">' + html + '</span></div>'; }
+}
+
+// ===== 措施库模板联动（城镇风险措施库 urbanMeasureLibData）====
+// 管理弹窗 ← 管理/监测/宣教类模板；工程弹窗 ← 工程类模板；按隐患部位·类型关键词 ↔ 模板 tags/name/desc 动态筛选
+let maTplSel = null, eaTplSel = null;
+const MA_LIB_TYPES = ['管理措施', '监测措施', '宣教措施'];
+const EA_LIB_TYPES = ['工程措施'];
+const HAZARD_KW_GROUPS = [
+    ['地基', '基础', '沉降'],
+    ['墙体', '墙面', '砌体', '裂缝', '风化'],
+    ['屋面', '屋顶', '渗漏', '积水', '防水', '瓦'],
+    ['梁', '柱', '楼板', '抗震', '圈梁', '构造柱', '结构'],
+    ['木', '檩', '防腐', '虫蛀', '糟朽'],
+    ['外墙', '饰面', '附着物', '防坠', '脱落', '挑檐'],
+    ['边坡', '切坡', '地质', '挡土', '截排水', '滑坡'],
+    ['燃气', '用电', '电气', '电线', '消防', '液化'],
+    ['经营', '鉴定', '自建房'],
+    ['加层', '改扩建', '拆改', '违规', '审批'],
+    ['危房', '腾空', '撤离', '转移', '应急', '预警'],
+    ['巡查', '监测', '倾斜', '物联网', '制度'],
+    ['宣传', '告知', '培训', '工匠', '演练']
+];
+function measureLib(){ return (typeof urbanMeasureLibData !== 'undefined') ? urbanMeasureLibData : []; }
+function hazardKeywords(h){
+    const text = ((h && h.part) || '') + ' ' + ((h && h.type) || '') + ' ' + ((h && h.desc) || '');
+    const kws = [];
+    HAZARD_KW_GROUPS.forEach(g => { if (g.some(k => text.indexOf(k) !== -1)) g.forEach(k => kws.push(k)); });
+    return kws;
+}
+function matchTemplates(types, hazard){
+    const all = measureLib().filter(m => types.indexOf(m.type) !== -1);
+    if (!hazard) return { list: all, narrowed: false };
+    const kws = hazardKeywords(hazard);
+    if (!kws.length) return { list: all, narrowed: false };
+    const hit = all.filter(m => {
+        const text = m.name + ' ' + (m.desc || '') + ' ' + (m.tags || []).join(' ');
+        return kws.some(k => text.indexOf(k) !== -1);
+    });
+    return hit.length ? { list: hit, narrowed: true } : { list: all, narrowed: false, fallback: true };
+}
+function houseRiskLevelText(){
+    if (REC.riskLevel) return REC.riskLevel;
+    const map = { danger: '第三类', major: '第三类', warning: '第二类', safe: '第一类' };
+    return map[REC.risk] || '第一类';
+}
+function gradeAdvice(t){
+    const lv = houseRiskLevelText();
+    return (t.grades || []).filter(g => g.dim === '危险等级' && g.cond === lv).map(g => g.action);
+}
+function hazardOptionsHtml(){
+    const hs = REC.hazards || [];
+    return '<option value="">全部隐患类型</option>' + hs.map((h, i) =>
+        '<option value="' + i + '">' + esc(h.part || '') + ' · ' + esc(h.type || '') + '（' + esc(h.level || '') + '）</option>').join('');
+}
+function renderTplOptions(filterId, selId, hintId, types){
+    const hi = parseInt(document.getElementById(filterId).value, 10);
+    const hazard = isNaN(hi) ? null : (REC.hazards || [])[hi];
+    const r = matchTemplates(types, hazard);
+    document.getElementById(selId).innerHTML = '<option value="">请选择措施模板（' + r.list.length + ' 个可选）</option>' +
+        r.list.map(m => '<option value="' + m.id + '">' + esc(m.name) + '（' + esc(m.type) + '）</option>').join('');
+    document.getElementById(hintId).textContent = r.fallback ? '该隐患类型暂无精确匹配模板，已显示全部模板' :
+        (hazard && r.narrowed ? '已按隐患「' + (hazard.part || '') + ' · ' + (hazard.type || '') + '」筛选出 ' + r.list.length + ' 个匹配模板' : '');
+}
+function renderMaTemplates(){ maTplSel = null; renderTplOptions('maHazardFilter', 'maTemplate', 'maTemplateHint', MA_LIB_TYPES); }
+function renderEaTemplates(){ eaTplSel = null; renderTplOptions('eaHazardFilter', 'eaTemplate', 'eaTemplateHint', EA_LIB_TYPES); }
+function applyMaTemplate(){
+    const t = measureLib().find(m => String(m.id) === document.getElementById('maTemplate').value);
+    maTplSel = t || null;
+    const hintBox = document.getElementById('maTemplateHint');
+    if (!t) { hintBox.textContent = ''; return; }
+    document.getElementById('maReq').value = t.requirement || '';
+    const unit = document.getElementById('maUnit');
+    if (!unit.value.trim()) unit.value = t.owner || '';
+    const advice = gradeAdvice(t);
+    hintBox.innerHTML = '已回填实施要求与责任单位建议　周期建议：' + esc(t.cycle || '—') + '　验收标准：' + esc(t.standard || '—') +
+        (advice.length ? '<br/><span style="color:var(--danger)">分级处置建议（' + esc(houseRiskLevelText()) + '）：' + esc(advice.join('；')) + '</span>' : '');
+}
+function guessEngType(t){
+    const text = t.name + ' ' + (t.desc || '') + ' ' + (t.tags || []).join(' ');
+    if (/重建|翻建|拆除/.test(text)) return '拆除重建';
+    if (/防护|防坠|挡土|截排水|锚杆|护坡/.test(text)) return '防护设施增设';
+    if (/加固|修缮|裂缝|抗震|构造柱|圈梁|防腐|灌浆/.test(text)) return '维修加固';
+    if (/改造|维修|渗漏|防水|瓦|翻新/.test(text)) return '局部改造';
+    return '';
+}
+function applyEaTemplate(){
+    const t = measureLib().find(m => String(m.id) === document.getElementById('eaTemplate').value);
+    eaTplSel = t || null;
+    const hintBox = document.getElementById('eaTemplateHint');
+    if (!t) { hintBox.textContent = ''; return; }
+    const guess = guessEngType(t);
+    if (guess && guess !== document.getElementById('eaType').value) {
+        document.getElementById('eaType').value = guess;
+        renderEaContractorOptions();
+    }
+    const advice = gradeAdvice(t);
+    hintBox.innerHTML = '实施要求：' + esc(t.requirement || '—') + '<br/>周期建议：' + esc(t.cycle || '—') + '　验收标准：' + esc(t.standard || '—') +
+        (advice.length ? '<br/><span style="color:var(--danger)">分级处置建议（' + esc(houseRiskLevelText()) + '）：' + esc(advice.join('；')) + '</span>' : '');
 }
 
 function openManageAdd(){
-    document.getElementById('maType').innerHTML = GOV_MANAGE_TYPES.map(t => '<option>' + t + '</option>').join('');
+    document.getElementById('maType').innerHTML = GOV_MANAGE_TYPES.map(t => '<option value="' + t + '">' + t + '（' + (GOV_MANAGE_TYPE_DESC[t] || '') + '）</option>').join('');
     document.getElementById('maStart').value = todayStr();
     ['maPart','maEnd','maReq','maUnit','maPerson','maPhone'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('maRemind').checked = true;
+    document.getElementById('maRemindDays').value = 15;
     tmpPhotos.maPhotoList = []; renderThumbs('maPhotoList');
+    document.getElementById('maHazardFilter').innerHTML = hazardOptionsHtml();
+    renderMaTemplates();
     renderMaExtras();
     openModal('manageAddModal');
 }
@@ -548,9 +859,13 @@ function saveManageAdd(){
         dutyPerson: document.getElementById('maPerson').value.trim(),
         phone: document.getElementById('maPhone').value.trim(),
         implementPhotos: photosVal('maPhotoList'),
-        extras: extras
+        extras: extras,
+        remind: document.getElementById('maRemind').checked,
+        remindDays: parseInt(document.getElementById('maRemindDays').value, 10) || 15,
+        templateId: maTplSel ? maTplSel.id : null,
+        templateName: maTplSel ? maTplSel.name : ''
     };
-    patch(rec => addGovernManage(rec, payload));
+    patch(rec => { addGovernManage(rec, payload); checkGovernMeasureRemind(rec); });
     closeModal('manageAddModal');
 }
 function openManageFinish(id){
@@ -591,6 +906,23 @@ function saveManageChange(){
     patch(rec => addGovernChange(rec, id, { newEnd: newEnd, reason: reason }));
     closeModal('manageChangeModal');
 }
+function openManageRenew(id){
+    const m = (REC.manageRecords || []).find(x => x.id === id);
+    document.getElementById('mrId').value = id;
+    document.getElementById('mrInfo').value = m ? (m.measureType + '（' + (m.implementPart || '整栋房屋') + '）') : '';
+    document.getElementById('mrOldEnd').value = (m && m.planEndTime) || '';
+    document.getElementById('mrNewEnd').value = '';
+    document.getElementById('mrReason').value = '';
+    openModal('manageRenewModal');
+}
+function saveManageRenew(){
+    const id = document.getElementById('mrId').value;
+    const newEnd = document.getElementById('mrNewEnd').value;
+    const reason = document.getElementById('mrReason').value.trim();
+    if (!newEnd || !reason) { alert('请填写续期日期与续期理由'); return; }
+    patch(rec => addGovernChange(rec, id, { newEnd: newEnd, reason: reason, type: '续期' }));
+    closeModal('manageRenewModal');
+}
 function auditChange(mid, cid, pass){
     patch(rec => auditGovernChange(rec, mid, cid, pass, '街道房管办'));
 }
@@ -604,9 +936,18 @@ function renderEng(){
     box.innerHTML = list.map(p => {
         const ct = contractorOf(p.companyId);
         const stTag = p.isDone ? '<span class="tag tag-success">已完成</span>' : '<span class="tag tag-warning">' + esc(p.status || '进行中') + '</span>';
+        const planTag = p.planStatus === '待审核' ? '<span class="tag tag-orange">方案待审核</span>'
+            : p.planStatus === '已驳回' ? '<span class="tag tag-danger">方案已驳回</span>' : '';
+        const majorTag = p.isMajor ? '<span class="tag tag-danger">重大工程</span>' : '';
         const ops = p.isDone
             ? ''
-            : '<button class="btn btn-primary btn-xs" onclick="openAccept(\'' + p.id + '\')"><i class="fas fa-flag-checkered"></i> 竣工验收</button>';
+            : (p.planStatus === '待审核'
+                ? '<button class="btn btn-primary btn-xs" onclick="openEngAudit(\'' + p.id + '\',true)"><i class="fas fa-check"></i> 审核通过</button>' +
+                  '<button class="btn btn-danger-o btn-xs" onclick="openEngAudit(\'' + p.id + '\',false)"><i class="fas fa-times"></i> 驳回</button>'
+                : (p.planStatus === '已驳回'
+                    ? '<button class="btn btn-outline btn-xs" onclick="resubmitPlan(\'' + p.id + '\')"><i class="fas fa-redo"></i> 重新报审</button>'
+                    : '<button class="btn btn-outline btn-xs" onclick="openProgress(\'' + p.id + '\')"><i class="fas fa-tasks"></i> 进度填报</button>' +
+                      '<button class="btn btn-primary btn-xs" onclick="openAccept(\'' + p.id + '\')"><i class="fas fa-flag-checkered"></i> 竣工验收</button>'));
         const planChips = ['design','org','safety'].map(k => {
             const label = { design: '设计图纸', org: '施工组织设计', safety: '安全专项方案' }[k];
             const files = (p.planFiles && p.planFiles[k]) || [];
@@ -618,64 +959,149 @@ function renderEng(){
             const done = n.status === '已验收';
             const inner = done
                 ? '<div class="node-meta">' + esc(n.time) + '<br/>' + esc(n.conclusion) + ' · ' + esc(n.recorder || '') + thumbsHtml(n.photos) + '</div>'
-                : (p.isDone ? '' : '<div class="node-meta"><button class="btn btn-outline btn-xs" onclick="openNode(\'' + p.id + '\',\'' + esc(n.name) + '\')">验收</button></div>');
+                : (p.isDone || p.planStatus !== '已通过' ? '' : '<div class="node-meta"><button class="btn btn-outline btn-xs" onclick="openNode(\'' + p.id + '\',\'' + esc(n.name) + '\')">验收</button></div>');
             return '<div class="node-item' + (done ? ' done' : '') + '"><div class="node-dot"></div><div class="node-name">' + esc(n.name) + '</div>' + inner + '</div>';
         }).join('');
+        const expertHtml = p.expertReview
+            ? '<div class="contractor-info" style="background:#f8f0ff"><b>专家评审：' + esc(p.expertReview.conclusion) + '</b>' +
+              '　评审专家：' + esc(p.expertReview.experts || '—') + '　评审日期：' + esc(p.expertReview.date || '—') +
+              ((p.expertReview.files || []).length
+                  ? '<br/>评审意见：' + p.expertReview.files.map(f => '<span class="file-chip"><i class="fas fa-file-alt"></i>' + esc(f) + '</span>').join('')
+                  : '<br/><span style="color:var(--danger)">未上传评审意见文件</span>') + '</div>'
+            : '';
+        const planAuditHtml = p.planAudit
+            ? '<div class="contractor-info" style="background:' + (p.planStatus === '已驳回' ? '#fdecea' : '#eef4ff') + '"><b>方案审核：' + esc(p.planStatus) + '</b>' +
+              (p.planAudit.opinion ? '　意见：' + esc(p.planAudit.opinion) : '') +
+              '　审核人：' + esc(p.planAudit.auditor || '—') + '　' + esc(p.planAudit.time || '') + '</div>'
+            : '';
+        const lastLog = (p.progressLogs && p.progressLogs.length) ? p.progressLogs[p.progressLogs.length - 1] : null;
         const acceptHtml = p.acceptReport
             ? '<div class="contractor-info" style="background:#e6f4ea"><b>竣工验收报告</b>：' + esc(p.acceptReport.conclusion) +
               '　日期：' + esc(p.acceptReport.date) + '　人员：' + esc(p.acceptReport.staff || '—') + '　单位：' + esc(p.acceptReport.unit || '—') +
               '<br/>整改后照片：' + thumbsHtml(p.acceptReport.photos) + '</div>'
             : '';
-        const ctInfo = ct
-            ? '<div class="contractor-info"><i class="fas fa-building"></i> <b>' + esc(ct.name) + '</b>　资质：' + esc(ct.qualification) +
-              '　信用评分：<b style="color:' + (ct.credit >= 90 ? 'var(--success)' : 'var(--warning)') + '">' + ct.credit + '</b><br/>历史业绩：' + esc(ct.history) + '</div>'
-            : (p.company ? '<div class="contractor-info">' + esc(p.company) + '</div>' : '');
+        const snapshot = p.contractorSnapshot;
+        const snapQual = snapshot && snapshot.qualification || {};
+        const ctInfo = snapshot
+            ? '<div class="contractor-info"><i class="fas fa-building"></i> <b>' + esc(snapshot.orgName || p.company) + '</b>　<span class="tag tag-success">机构库已核验</span>' +
+              '<br/>统一社会信用代码：' + esc(snapshot.orgCode || p.companyCode || '—') +
+              '<br/>资质快照：' + esc(snapQual.name || '—') + '　证书编号：' + esc(snapQual.certNo || '—') +
+              '　有效期：' + esc((snapQual.start || '不限') + ' 至 ' + (snapQual.end || '长期')) +
+              '<br/>信用评分：<b>' + esc(snapshot.creditScore == null ? '—' : snapshot.creditScore) + '</b>　信用等级：' + esc(snapshot.creditLevel || '—') +
+              '<br/>历史业绩：' + esc(snapshot.performance || '暂无') + '</div>'
+            : (ct
+                ? '<div class="contractor-info"><i class="fas fa-building"></i> <b>' + esc(ct.name) + '</b>　资质：' + esc(ct.qualification) +
+                  '　信用评分：<b style="color:' + (ct.credit >= 90 ? 'var(--success)' : 'var(--warning)') + '">' + ct.credit + '</b><br/>历史业绩：' + esc(ct.history) + '</div>'
+                : (p.company ? '<div class="contractor-info">' + esc(p.company) + (p.companyCode ? '<br/>统一社会信用代码：' + esc(p.companyCode) : '') + '</div>' : ''));
         return '<div class="eng-card">' +
-            '<div class="eng-head"><span class="t">' + esc(p.engType || p.projectName) + '</span>' + stTag +
+            '<div class="eng-head"><span class="t">' + esc(p.engType || p.projectName) + '</span>' + stTag + planTag + majorTag +
             '<div class="progress-bar"><div class="progress-fill" style="width:' + (p.progress || 0) + '%"></div></div><span class="hint">' + (p.progress || 0) + '%</span>' +
             '<div class="ops">' + ops + '</div></div>' +
             '<div class="eng-body"><div class="detail-grid">' +
             kv2('实施范围', p.scope) + kv2('开工时间', p.startDate) + kv2((p.isDone ? '竣工时间' : '计划竣工'), p.endDate) +
+            (p.templateName ? kv2('来源模板', '城镇风险措施库 · ' + p.templateName) : '') +
             kv2('施工负责人', (p.leader || '') + ' ' + (p.phone || '')) + kv2('工程概算', (p.budget ? p.budget + ' 万元' : '—')) + kv2('资金来源', p.fundSource) +
-            planChips + '</div>' + ctInfo +
+            (lastLog ? kv2('最新进度', lastLog.progress + '%（' + lastLog.reporter + '）' + (lastLog.note ? '：' + lastLog.note : '')) : '') +
+            planChips + '</div>' + ctInfo + expertHtml + planAuditHtml +
             '<div class="node-flow">' + nodes + '</div>' + acceptHtml + '</div></div>';
     }).join('');
     function kv2(k, v){ return '<div class="kv"><span class="k">' + k + '：</span><span class="v">' + esc(v || '—') + '</span></div>'; }
 }
+function toggleEaMajor(){
+    document.getElementById('eaExpertArea').style.display = document.getElementById('eaMajor').checked ? '' : 'none';
+}
 function openEngAdd(){
     document.getElementById('eaType').innerHTML = GOV_ENG_TYPES.map(t => '<option>' + t + '</option>').join('');
-    document.getElementById('eaCompany').innerHTML = '<option value="">请选择施工单位</option>' +
-        getContractorLibrary().map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('');
+    document.getElementById('eaCompanyKeyword').value = '';
+    document.getElementById('eaCompany').value = '';
     document.getElementById('eaStart').value = todayStr();
-    ['eaScope','eaEnd','eaLeader','eaPhone','eaBudget'].forEach(id => document.getElementById(id).value = '');
+    ['eaScope','eaEnd','eaLeader','eaPhone','eaBudget','eaExpertNames'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('eaExpertConclusion').value = '';
+    document.getElementById('eaExpertDate').value = '';
+    document.getElementById('eaMajor').checked = false;
+    toggleEaMajor();
     document.getElementById('eaFund').value = '城镇房屋安全专项整治资金 + 业主自筹';
     Object.keys(tmpFiles).forEach(k => { tmpFiles[k] = []; renderFileChips(k); });
-    renderEaContractor();
+    document.getElementById('eaHazardFilter').innerHTML = hazardOptionsHtml();
+    renderEaTemplates();
+    renderEaContractorOptions();
     openModal('engAddModal');
 }
+function renderEaContractorOptions(){
+    const engType = document.getElementById('eaType').value;
+    const select = document.getElementById('eaCompany');
+    const keyword = document.getElementById('eaCompanyKeyword').value.trim().toLowerCase();
+    const previous = select.value;
+    const orgs = getEligibleConstructionOrgs(engType).filter(function(org) {
+        return !keyword || (org.orgName || '').toLowerCase().indexOf(keyword) !== -1 || (org.orgCode || '').toLowerCase().indexOf(keyword) !== -1;
+    });
+    select.innerHTML = '<option value="">' + (orgs.length ? '请选择施工单位' : '暂无符合条件的施工机构') + '</option>' +
+        orgs.map(org => '<option value="' + esc(org.orgId) + '">' + esc(org.orgName) + '</option>').join('');
+    if (orgs.some(org => org.orgId === previous)) select.value = previous;
+    document.getElementById('eaContractorHint').textContent = '已按“' + engType + '”筛选出 ' + orgs.length + ' 家状态正常、资质匹配且在有效期内的机构';
+    renderEaContractor();
+}
 function renderEaContractor(){
-    const ct = contractorOf(document.getElementById('eaCompany').value);
+    const verification = validateConstructionOrg(document.getElementById('eaCompany').value, document.getElementById('eaType').value);
     const box = document.getElementById('eaContractorInfo');
-    if (!ct) { box.style.display = 'none'; return; }
+    if (!verification.ok) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    const org = verification.org;
+    const qual = verification.qualification;
+    const credit = getCreditByOrg(org.orgId) || { score: org.score, creditLevel: org.creditLevel };
+    const performances = getPerformancesByOrg(org.orgId);
     box.style.display = '';
-    box.innerHTML = '资质等级：<b>' + esc(ct.qualification) + '</b>　信用评分：<b style="color:' + (ct.credit >= 90 ? 'var(--success)' : 'var(--warning)') + '">' + ct.credit + '</b>　电话：' + esc(ct.phone) +
-        '<br/>历史业绩：' + esc(ct.history);
+    box.innerHTML = '<i class="fas fa-shield-alt" style="color:var(--success)"></i> <b>资质核验通过</b>：匹配当前工程类型，证书在有效期内' +
+        '<br/>机构名称：<b>' + esc(org.orgName) + '</b>　统一社会信用代码：' + esc(org.orgCode) +
+        '<br/>匹配资质：' + esc(qual.name) + '　证书编号：' + esc(qual.certNo || '—') +
+        '<br/>证书有效期：' + esc((qual.start || '不限') + ' 至 ' + (qual.end || '长期')) +
+        '　信用评分：<b style="color:' + ((credit.score || 0) >= 90 ? 'var(--success)' : 'var(--warning)') + '">' + esc(credit.score == null ? '—' : credit.score) + '</b>（' + esc(credit.creditLevel || '—') + '）' +
+        '<br/>历史业绩：' + (performances.length ? performances.map(p => esc(p.projectName + '（' + (p.conclusion || '—') + '）')).join('；') : '暂无');
 }
 function saveEngAdd(){
-    const ct = contractorOf(document.getElementById('eaCompany').value);
+    const engType = document.getElementById('eaType').value;
     const start = document.getElementById('eaStart').value;
-    if (!document.getElementById('eaType').value || !start || !ct) { alert('请填写措施类型、开工时间并选择施工单位'); return; }
+    const orgId = document.getElementById('eaCompany').value;
+    if (!engType || !start || !orgId) { alert('请填写措施类型、开工时间并选择施工单位'); return; }
+    const isMajor = document.getElementById('eaMajor').checked;
+    let expertReview = null;
+    if (isMajor) {
+        const conclusion = document.getElementById('eaExpertConclusion').value;
+        if (!conclusion) { alert('重大工程需选择专家评审结论'); return; }
+        if (!tmpFiles.eaExpertChips.length && !confirm('重大工程尚未上传专家评审意见文件，确定继续保存吗？')) return;
+        expertReview = {
+            conclusion: conclusion,
+            experts: document.getElementById('eaExpertNames').value.trim(),
+            date: document.getElementById('eaExpertDate').value || todayStr(),
+            files: tmpFiles.eaExpertChips.slice()
+        };
+    }
+    const verification = validateConstructionOrg(orgId, engType);
+    if (!verification.ok) { alert('施工单位核验未通过：' + verification.reason); renderEaContractorOptions(); return; }
+    const org = verification.org;
+    const qualification = verification.qualification;
+    const credit = getCreditByOrg(org.orgId) || { score: org.score, creditLevel: org.creditLevel };
+    const performances = getPerformancesByOrg(org.orgId);
     patch(rec => addGovernEng(rec, {
-        engType: document.getElementById('eaType').value,
+        engType: engType,
         scope: document.getElementById('eaScope').value.trim(),
         startDate: start,
         endDate: document.getElementById('eaEnd').value,
-        companyId: ct.id, company: ct.name,
+        companyId: org.orgId, companyCode: org.orgCode, company: org.orgName, contractorSource: 'thirdParty',
+        contractorSnapshot: {
+            orgId: org.orgId, orgName: org.orgName, orgCode: org.orgCode, verifiedAt: todayStr(),
+            qualification: { name: qualification.name, level: qualification.level || '', certNo: qualification.certNo || qualification.code || '', issuer: qualification.issuer || '', start: qualification.start || '', end: qualification.end || '' },
+            creditScore: credit.score == null ? null : credit.score, creditLevel: credit.creditLevel || '',
+            performance: performances.map(p => p.projectName + '（' + (p.conclusion || '—') + '）').join('；')
+        },
         leader: document.getElementById('eaLeader').value.trim(),
-        phone: document.getElementById('eaPhone').value.trim() || ct.phone,
+        phone: document.getElementById('eaPhone').value.trim() || org.phone,
         budget: parseFloat(document.getElementById('eaBudget').value) || 0,
         fundSource: document.getElementById('eaFund').value.trim(),
-        planFiles: { design: tmpFiles.eaDesignChips.slice(), org: tmpFiles.eaOrgChips.slice(), safety: tmpFiles.eaSafetyChips.slice() }
+        planFiles: { design: tmpFiles.eaDesignChips.slice(), org: tmpFiles.eaOrgChips.slice(), safety: tmpFiles.eaSafetyChips.slice() },
+        isMajor: isMajor,
+        expertReview: expertReview,
+        templateId: eaTplSel ? eaTplSel.id : null,
+        templateName: eaTplSel ? eaTplSel.name : ''
     }));
     closeModal('engAddModal');
 }
@@ -700,6 +1126,62 @@ function saveNode(){
     }));
     closeModal('nodeModal');
 }
+// ---- 治理方案审核 ----
+function openEngAudit(engId, pass){
+    document.getElementById('audEngId').value = engId;
+    document.getElementById('audPass').value = pass ? '1' : '0';
+    document.getElementById('audTitle').textContent = pass ? '治理方案审核 · 通过' : '治理方案审核 · 驳回';
+    document.getElementById('audAuditor').value = '';
+    document.getElementById('audOpinion').value = '';
+    document.getElementById('audHint').textContent = pass ? '审核通过后进入实施阶段，可填报进度并开展节点验收。' : '驳回后施工单位可修改方案资料并重新报审。';
+    openModal('engAuditModal');
+}
+function saveEngAudit(){
+    const pass = document.getElementById('audPass').value === '1';
+    const engId = document.getElementById('audEngId').value;
+    const opinion = document.getElementById('audOpinion').value.trim();
+    if (!pass && !opinion) { alert('驳回时请填写审核意见'); return; }
+    let msg = '';
+    patch(rec => {
+        const r = auditGovernEngPlan(rec, engId, { pass: pass, opinion: opinion, auditor: document.getElementById('audAuditor').value.trim() || '当前用户' });
+        if (!r.ok) msg = r.msg;
+    });
+    if (msg) { alert(msg); return; }
+    closeModal('engAuditModal');
+}
+function resubmitPlan(engId){
+    let msg = '';
+    patch(rec => { const r = resubmitGovernEngPlan(rec, engId); if (!r.ok) msg = r.msg; });
+    if (msg) alert(msg);
+}
+
+// ---- 实施进度填报 ----
+function openProgress(engId){
+    const p = (REC.projectRecords || []).find(x => x.id === engId);
+    if (!p) return;
+    document.getElementById('pgEngId').value = engId;
+    document.getElementById('pgValue').value = Math.min(100, (p.progress || 0) + 10);
+    document.getElementById('pgReporter').value = '';
+    document.getElementById('pgNote').value = '';
+    tmpPhotos.pgPhotoList = []; renderThumbs('pgPhotoList');
+    openModal('progressModal');
+}
+function saveProgress(){
+    const engId = document.getElementById('pgEngId').value;
+    let msg = '';
+    patch(rec => {
+        const r = reportGovernEngProgress(rec, engId, {
+            progress: document.getElementById('pgValue').value,
+            note: document.getElementById('pgNote').value.trim(),
+            reporter: document.getElementById('pgReporter').value.trim() || '当前用户',
+            photos: photosVal('pgPhotoList')
+        });
+        if (!r.ok) msg = r.msg;
+    });
+    if (msg) { alert(msg); return; }
+    closeModal('progressModal');
+}
+
 function openAccept(engId){
     document.getElementById('acEngId').value = engId;
     document.getElementById('acDate').value = todayStr();
@@ -727,20 +1209,42 @@ function saveAccept(){
     closeModal('acceptModal');
 }
 
+// ---- 补充过程记录 ----
+function openLogAdd(){
+    document.getElementById('lgContent').value = '';
+    document.getElementById('lgRecorder').value = '';
+    tmpPhotos.lgPhotoList = [];
+    renderThumbs('lgPhotoList');
+    openModal('logAddModal');
+}
+function saveLogAdd(){
+    const content = document.getElementById('lgContent').value.trim();
+    if (!content) { alert('请填写记录内容'); return; }
+    const recorder = document.getElementById('lgRecorder').value.trim();
+    const photos = photosVal('lgPhotoList');
+    patch(rec => { addGovernLog(rec, { content: content, recorder: recorder, photos: photos }); });
+    closeModal('logAddModal');
+}
+
 // ---- 治理过程时间轴 ----
 function renderTimeline(){
     const evs = [];
     (REC.manageRecords || []).forEach(m => {
-        evs.push({ t: m.reportTime || m.startTime, c: '', html: '新增管理措施 <b>' + esc(m.measureType) + '</b>（' + esc(m.implementPart || '整栋房屋') + '），填报：' + esc(m.reporter || '—') });
-        (m.changes || []).forEach(ch => evs.push({ t: ch.time, c: 'c-warn', html: '管理措施「' + esc(m.measureType) + '」变更申请：' + esc(ch.reason) + ' <span class="tag ' + (ch.status === '待审批' ? 'tag-orange' : ch.status === '已审批' ? 'tag-success' : 'tag-danger') + '">' + ch.status + '</span>' }));
+        evs.push({ t: m.reportTime || m.startTime, c: '', html: '新增管理措施 <b>' + esc(m.measureType) + '</b>（' + esc(m.implementPart || '整栋房屋') + '），填报：' + esc(m.reporter || '—') + (m.templateName ? '　<span class="tag tag-info">模板：' + esc(m.templateName) + '</span>' : '') });
+        (m.remindLogs || []).forEach(g => evs.push({ t: g.time, c: 'c-warn', html: esc(g.text) }));
+        (m.changes || []).forEach(ch => evs.push({ t: ch.time, c: 'c-warn', html: '管理措施「' + esc(m.measureType) + '」' + (ch.type === '续期' ? '续期申请' : '变更申请') + '：' + esc(ch.reason) + ' <span class="tag ' + (ch.status === '待审批' ? 'tag-orange' : ch.status === '已审批' ? 'tag-success' : 'tag-danger') + '">' + ch.status + '</span>' }));
         if (m.isDone) evs.push({ t: (m.actualEndTime || '') + ' 23:59', c: 'c-done', html: '管理措施「' + esc(m.measureType) + '」结束：' + esc(m.effectEvaluation || '') });
     });
     (REC.projectRecords || []).forEach(p => {
-        evs.push({ t: p.reportTime || p.startDate, c: '', html: '新增工程措施 <b>' + esc(p.engType || p.projectName) + '</b>，施工单位：' + esc(p.company || '—') });
-        (p.nodes || []).forEach(n => { if (n.status === '已验收') evs.push({ t: n.time + ' 12:00', c: '', html: '节点验收「' + esc(n.name) + '」：' + esc(n.conclusion) + '（' + esc(n.recorder || '') + '）' }); });
+        evs.push({ t: p.reportTime || p.startDate, c: '', html: '新增工程措施 <b>' + esc(p.engType || p.projectName) + '</b>，施工单位：' + esc(p.company || '—') + (p.isMajor ? '　<span class="tag tag-danger">重大工程</span>' + (p.expertReview ? '　专家评审：' + esc(p.expertReview.conclusion) : '') : '') + (p.templateName ? '　<span class="tag tag-info">模板：' + esc(p.templateName) + '</span>' : '') });
+        if (p.planAudit) evs.push({ t: p.planAudit.time, c: p.planAudit.result === '已驳回' ? 'c-warn' : '', html: '工程方案审核「' + esc(p.engType || p.projectName) + '」：<span class="tag ' + (p.planAudit.result === '已通过' ? 'tag-success' : 'tag-danger') + '">' + esc(p.planAudit.result) + '</span>' + (p.planAudit.opinion ? '　意见：' + esc(p.planAudit.opinion) : '') });
+        (p.progressLogs || []).forEach(g => evs.push({ t: g.time, c: '', html: '工程措施「' + esc(p.engType || p.projectName) + '」进度填报 <b>' + g.progress + '%</b>' + (g.note ? '：' + esc(g.note) : '') + '（' + esc(g.reporter || '—') + '）' + (g.photos && g.photos.length ? '<div style="margin-top:6px">' + thumbsHtml(g.photos) + '</div>' : '') }));
+        (p.nodes || []).forEach(n => { if (n.status === '已验收') evs.push({ t: n.time + ' 12:00', c: '', html: '节点验收「' + esc(n.name) + '」：' + esc(n.conclusion) + '（' + esc(n.recorder || '') + '）' + (n.photos && n.photos.length ? '<div style="margin-top:6px">' + thumbsHtml(n.photos) + '</div>' : '') }); });
         if (p.acceptReport) evs.push({ t: p.acceptReport.date + ' 18:00', c: 'c-done', html: '工程措施「' + esc(p.engType || p.projectName) + '」竣工验收：' + esc(p.acceptReport.conclusion) });
     });
-    if (REC.governTask) evs.push({ t: REC.governTask.dispatchTime, c: '', html: '排查任务' + esc(REC.governTask.taskType) + '，期限 ' + esc(REC.governTask.deadline || '—') + '，下发人：' + esc(REC.governTask.dispatcher) });
+    (REC.governLogs || []).forEach(g => evs.push({ t: g.time, c: '', html: '<span class="tag tag-info">过程记录</span> ' + esc(g.content) + '（记录人：' + esc(g.recorder || '—') + '）' + (g.photos && g.photos.length ? '<div style="margin-top:6px">' + thumbsHtml(g.photos) + '</div>' : '') }));
+    const _pt = urbanPatrolTaskOfHouse(REC.no);
+    if (_pt) evs.push({ t: _pt.startDate || '', c: '', html: '排查任务' + esc(_pt.typeLabel || '巡查任务') + '（<a class="link" href="urban-risk-task-detail.html?id=' + encodeURIComponent(_pt.id) + '">' + esc(_pt.no) + '</a>），期限 ' + esc(_pt.endDate || '—') + '，创建人：' + esc(_pt.createBy || '—') });
     evs.sort((a, b) => String(b.t).localeCompare(String(a.t)));
     document.getElementById('govTimeline').innerHTML = evs.length
         ? evs.map(e => '<div class="tl-item ' + e.c + '"><div class="tl-time">' + esc(String(e.t || '').slice(0, 16)) + '</div><div class="tl-content">' + e.html + '</div></div>').join('')
@@ -748,7 +1252,7 @@ function renderTimeline(){
 }
 
 loadRec();
-renderAll();
+patch(rec => checkGovernMeasureRemind(rec));
 </script>
 </body>
 </html>

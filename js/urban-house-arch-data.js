@@ -1091,7 +1091,8 @@ function generateHazards(risk, i) {
             part: part,
             type: type,
             desc: part + '存在' + type + '，需进行安全整治',
-            level: RISK_LABEL_MAP[risk]
+            level: RISK_LABEL_MAP[risk],
+            photos: [govDemoPhoto(part + '·' + type + '现场照', '#b3261e')]
         });
     }
     return hazards;
@@ -1762,15 +1763,33 @@ function getDeadlineStatus(deadlineStr) {
 
 /* ================= 6.1.2.23.1 房屋安全风险治理（城镇自建房口径，函数与农房一致、字段适配） ================= */
 const GOV_MANAGE_TYPES = ['停止使用', '停止经营', '封控警示', '人员撤离', '持续监控'];
+// 措施类型说明（新增弹窗按所选类型展示提示）
+const GOV_MANAGE_TYPE_DESC = {
+    '停止使用': '房屋整体或部分停止使用',
+    '停止经营': '停止经营性活动',
+    '封控警示': '设置警戒线、张贴警示标识',
+    '人员撤离': '组织住户临时搬离',
+    '持续监控': '加密巡查、安装监测设备'
+};
 // 按措施类型的动态扩展字段（标书：如「人员撤离」需填写撤离人数、安置方式、撤离确认人）
 const GOV_MANAGE_EXTRA_FIELDS = {
+    '停止使用': [
+        { key: 'stopScope', label: '停用范围', placeholder: '如：整栋 / 一层东间' },
+        { key: 'stopMode', label: '停用方式', placeholder: '如：封锁出入口、切断水电' }
+    ],
+    '停止经营': [
+        { key: 'bizType', label: '经营业态', placeholder: '如：民宿 / 餐饮 / 小卖部' },
+        { key: 'bizScope', label: '停业范围', placeholder: '如：整栋 / 沿街铺面' },
+        { key: 'licenseDeal', label: '证照处置', placeholder: '如：营业执照已注销 / 已暂扣' }
+    ],
     '人员撤离': [
         { key: 'evacueeCount', label: '撤离人数', placeholder: '如：5人' },
         { key: 'settleMode', label: '安置方式', placeholder: '如：投靠亲友 / 村临时安置点' },
         { key: 'evacConfirm', label: '撤离确认人', placeholder: '如：村干部张三' }
     ],
     '封控警示': [
-        { key: 'closureRange', label: '封控范围', placeholder: '如：房屋周边5米拉设警戒线' }
+        { key: 'closureRange', label: '封控范围', placeholder: '如：房屋周边5米拉设警戒线' },
+        { key: 'warnSign', label: '警示标识', placeholder: '如：张贴警示牌2处、设置围挡' }
     ],
     '持续监控': [
         { key: 'monitorFreq', label: '巡查/监测频次', placeholder: '如：每日1次' },
@@ -1828,6 +1847,12 @@ function ensureGovernData(rec) {
         if (!m.extras || typeof m.extras !== 'object') m.extras = {};
         if (!Array.isArray(m.changes)) m.changes = [];
     });
+    rec.hazards = Array.isArray(rec.hazards) ? rec.hazards : [];
+    rec.hazards.forEach(h => {
+        if (!Array.isArray(h.photos) || !h.photos.length) {
+            h.photos = [govDemoPhoto((h.part || '隐患部位') + '·' + (h.type || '') + '现场照', '#b3261e')];
+        }
+    });
     rec.projectRecords.forEach((p, i) => {
         if (!p.id) p.id = 'GE-' + (rec.no || 'X') + '-' + String(i + 1).padStart(3, '0');
         if (!p.engType) p.engType = GOV_ENG_TYPE_MAP[p.projectName] || '维修加固';
@@ -1841,6 +1866,8 @@ function ensureGovernData(rec) {
         if (!p.planFiles || typeof p.planFiles !== 'object' || Array.isArray(p.planFiles)) {
             p.planFiles = { design: [], org: [], safety: [] };
         }
+        if (p.planStatus === undefined) p.planStatus = '已通过';
+        if (!Array.isArray(p.progressLogs)) p.progressLogs = [];
         if (!Array.isArray(p.nodes) || !p.nodes.length) {
             const done = !!p.isDone;
             p.nodes = GOV_ENG_NODES.map(name => ({
@@ -1873,6 +1900,8 @@ function addGovernManage(rec, payload) {
         id: 'GM-' + (rec.no || 'X') + '-' + String(seq).padStart(3, '0') + '-' + Date.now() % 1000,
         measureType: payload.measureType || '',
         implementPart: payload.implementPart || '',
+        templateId: payload.templateId || null,
+        templateName: payload.templateName || '',
         startTime: payload.startTime || __govToday(),
         planEndTime: payload.planEndTime || '',
         actualEndTime: '',
@@ -1886,6 +1915,10 @@ function addGovernManage(rec, payload) {
         isDone: false,
         status: '实施中',
         extras: payload.extras || {},
+        remind: payload.remind !== false,
+        remindDays: (parseInt(payload.remindDays, 10) > 0) ? parseInt(payload.remindDays, 10) : 15,
+        remindLogs: [],
+        lastRemindedEnd: '',
         changes: [],
         effectEvaluation: '',
         riskControlled: false,
@@ -1895,6 +1928,30 @@ function addGovernManage(rec, payload) {
     rec.manageRecords.unshift(item);
     if (rec.governance === 'pending') { rec.governance = 'doing'; rec.governStatus = '整治中'; }
     return item;
+}
+// 到期提醒：实施中且开启提醒的措施，距计划结束 ≤ 提醒天数（含已超期）时生成提醒记录并通知责任人；
+// 同一计划结束时间只提醒一次（续期审批通过、计划结束更新后可再次触发）
+function checkGovernMeasureRemind(rec) {
+    ensureGovernData(rec);
+    const hits = [];
+    (rec.manageRecords || []).forEach(m => {
+        if (m.isDone || m.status === '已结束' || m.remind === false || !m.planEndTime) return;
+        const days = (m.remindDays > 0) ? m.remindDays : 15;
+        const diff = Math.ceil((new Date(m.planEndTime) - new Date()) / 86400000);
+        if (diff > days) return;
+        if (m.lastRemindedEnd === m.planEndTime) return;
+        m.lastRemindedEnd = m.planEndTime;
+        const log = {
+            time: __govNow(),
+            days: diff,
+            text: '到期提醒：管理措施「' + m.measureType + '」（' + (m.implementPart || '整栋房屋') + '）' +
+                (diff < 0 ? '已超期 ' + (-diff) + ' 天' : '将于 ' + m.planEndTime + ' 到期（剩 ' + diff + ' 天）') +
+                '，已通知责任人 ' + (m.dutyPerson || '—') + (m.phone ? ' ' + m.phone : '') + '，请及时办理续期或转为工程整治'
+        };
+        (m.remindLogs = m.remindLogs || []).push(log);
+        hits.push({ id: m.id, days: diff });
+    });
+    return hits;
 }
 function finishGovernManage(rec, id, payload) {
     ensureGovernData(rec);
@@ -1916,6 +1973,7 @@ function addGovernChange(rec, id, payload) {
     if (!m) return { ok: false, msg: '未找到措施记录' };
     m.changes.push({
         id: 'CHG-' + id + '-' + (m.changes.length + 1),
+        type: (payload && payload.type) || '变更/延长',
         time: __govNow(),
         applicant: (payload && payload.applicant) || '当前用户',
         reason: (payload && payload.reason) || '',
@@ -1942,6 +2000,20 @@ function auditGovernChange(rec, id, changeId, pass, auditor, opinion) {
     return { ok: true };
 }
 
+// 治理过程记录：支持多次手动补充，每次形成时间轴节点
+function addGovernLog(rec, payload) {
+    ensureGovernData(rec);
+    if (!Array.isArray(rec.governLogs)) rec.governLogs = [];
+    rec.governLogs.push({
+        id: 'GL-' + (rec.no || 'X') + '-' + (rec.governLogs.length + 1),
+        time: __govNow(),
+        content: (payload && payload.content) || '',
+        recorder: (payload && payload.recorder) || '当前用户',
+        photos: (payload && payload.photos) || []
+    });
+    return { ok: true };
+}
+
 // ---- 工程措施 ----
 function addGovernEng(rec, payload) {
     ensureGovernData(rec);
@@ -1949,12 +2021,17 @@ function addGovernEng(rec, payload) {
     const item = {
         id: 'GE-' + (rec.no || 'X') + '-' + String(seq).padStart(3, '0') + '-' + Date.now() % 1000,
         engType: payload.engType || '维修加固',
+        templateId: payload.templateId || null,
+        templateName: payload.templateName || '',
         projectName: payload.engType || '维修加固',
         scope: payload.scope || '',
         startDate: payload.startDate || __govToday(),
         endDate: payload.endDate || '',
         companyId: payload.companyId || '',
+        companyCode: payload.companyCode || '',
         company: payload.company || '',
+        contractorSource: payload.contractorSource || (payload.companyId && payload.companyId.indexOf('ORG-') === 0 ? 'thirdParty' : 'legacy'),
+        contractorSnapshot: payload.contractorSnapshot ? JSON.parse(JSON.stringify(payload.contractorSnapshot)) : null,
         leader: payload.leader || '',
         manager: payload.leader || '',
         phone: payload.phone || '',
@@ -1962,8 +2039,13 @@ function addGovernEng(rec, payload) {
         fund: payload.budget || 0,
         fundSource: payload.fundSource || '',
         planFiles: payload.planFiles || { design: [], org: [], safety: [] },
+        isMajor: !!payload.isMajor,
+        expertReview: payload.expertReview ? JSON.parse(JSON.stringify(payload.expertReview)) : null,
         nodes: GOV_ENG_NODES.map(name => ({ name: name, status: '待验收', time: '', conclusion: '', recorder: '', photos: [] })),
         acceptReport: null,
+        planStatus: '待审核',
+        planAudit: null,
+        progressLogs: [],
         status: '进行中',
         isDone: false,
         progress: 0,
@@ -1975,11 +2057,53 @@ function addGovernEng(rec, payload) {
     if (rec.governance === 'pending') { rec.governance = 'doing'; rec.governStatus = '整治中'; }
     return item;
 }
+// 治理方案审核（通过 / 驳回）
+function auditGovernEngPlan(rec, id, payload) {
+    ensureGovernData(rec);
+    const p = rec.projectRecords.find(x => x.id === id);
+    if (!p) return { ok: false, msg: '未找到工程措施' };
+    if (p.planStatus !== '待审核') return { ok: false, msg: '该方案不在待审核状态' };
+    const pass = !payload || payload.pass !== false;
+    p.planStatus = pass ? '已通过' : '已驳回';
+    p.planAudit = {
+        result: p.planStatus,
+        opinion: (payload && payload.opinion) || '',
+        auditor: (payload && payload.auditor) || '当前用户',
+        time: (payload && payload.time) || __govNow()
+    };
+    if (pass) p.status = '进行中';
+    return { ok: true };
+}
+// 方案驳回后重新报审
+function resubmitGovernEngPlan(rec, id) {
+    ensureGovernData(rec);
+    const p = rec.projectRecords.find(x => x.id === id);
+    if (!p) return { ok: false, msg: '未找到工程措施' };
+    if (p.planStatus !== '已驳回') return { ok: false, msg: '仅驳回状态可重新报审' };
+    p.planStatus = '待审核';
+    return { ok: true };
+}
+// 实施进度填报（只增不减，竣工验收后自动 100%）
+function reportGovernEngProgress(rec, id, payload) {
+    ensureGovernData(rec);
+    const p = rec.projectRecords.find(x => x.id === id);
+    if (!p) return { ok: false, msg: '未找到工程措施' };
+    if (p.planStatus !== '已通过') return { ok: false, msg: '方案审核通过后才能填报进度' };
+    if (p.isDone) return { ok: false, msg: '工程已竣工，无需填报进度' };
+    const v = payload && parseInt(payload.progress, 10);
+    if (isNaN(v) || v < 0 || v > 100) return { ok: false, msg: '进度需在 0~100 之间' };
+    if (v < (p.progress || 0)) return { ok: false, msg: '进度不能低于当前值（' + (p.progress || 0) + '%）' };
+    p.progress = v;
+    if (!Array.isArray(p.progressLogs)) p.progressLogs = [];
+    p.progressLogs.push({ progress: v, note: (payload && payload.note) || '', reporter: (payload && payload.reporter) || '当前用户', time: __govNow(), photos: (payload && payload.photos) || [] });
+    return { ok: true };
+}
 // 关键节点验收（基础验收 / 材料进场验收 / 主体验收）
 function saveGovernEngNode(rec, id, nodeName, payload) {
     ensureGovernData(rec);
     const p = rec.projectRecords.find(x => x.id === id);
     if (!p) return { ok: false, msg: '未找到工程措施' };
+    if (p.planStatus !== '已通过') return { ok: false, msg: '方案审核通过后才能节点验收' };
     const node = (p.nodes || []).find(n => n.name === nodeName);
     if (!node) return { ok: false, msg: '未找到节点' };
     node.status = '已验收';
@@ -1988,7 +2112,7 @@ function saveGovernEngNode(rec, id, nodeName, payload) {
     node.recorder = (payload && payload.recorder) || '当前用户';
     node.photos = (payload && payload.photos) || [];
     const doneCnt = p.nodes.filter(n => n.status === '已验收').length;
-    p.progress = Math.round(doneCnt / p.nodes.length * 90);
+    p.progress = Math.max(p.progress || 0, Math.round(doneCnt / p.nodes.length * 90));
     return { ok: true };
 }
 // 竣工验收报告 → 工程措施完成 → 联动更新房屋治理状态
@@ -1996,6 +2120,7 @@ function finishGovernEng(rec, id, report) {
     ensureGovernData(rec);
     const p = rec.projectRecords.find(x => x.id === id);
     if (!p) return { ok: false, msg: '未找到工程措施' };
+    if (p.planStatus !== '已通过') return { ok: false, msg: '方案审核通过后才能竣工验收' };
     if (!report || !report.conclusion || !report.date) return { ok: false, msg: '请填写验收结论与验收日期' };
     p.acceptReport = {
         conclusion: report.conclusion,
@@ -2032,6 +2157,21 @@ function syncGovernHouseStatus(rec) {
         rec.governance = 'doing';
         rec.governStatus = '整治中';
     }
+}
+
+// ---- 巡查任务反查（台账数据来源于「巡查任务管理」，按房屋唯一标识关联） ----
+function getUrbanPatrolTasks() {
+    let tasks = [];
+    try { const raw = localStorage.getItem('urbanPatrolTasks'); tasks = raw ? JSON.parse(raw) : []; } catch (e) { tasks = []; }
+    return Array.isArray(tasks) ? tasks : [];
+}
+function urbanPatrolTaskOfHouse(no) {
+    let hit = null;
+    getUrbanPatrolTasks().forEach(t => {
+        if (!t || !Array.isArray(t.houseNos) || t.houseNos.indexOf(no) < 0) return;
+        if (!hit || (Number(t.id) || 0) > (Number(hit.id) || 0)) hit = t;
+    });
+    return hit;
 }
 
 // ---- 排查任务下发（批量 / 定向指派） ----
@@ -2071,8 +2211,30 @@ function govStatsOf(rec) {
 function govListStats(records) {
     const s = {
         total: 0, doing: 0, done: 0, pending: 0, overdue: 0,
-        byTown: {}, byManageType: {}, byEngType: {}
+        byTown: {}, byManageType: {}, byEngType: {},
+        // 治理房屋按区域 × 完成情况
+        byTownGov: {},
+        // 管理措施多维分析：使用频率（条数）+ 效果（完成率 / 风险管控率）
+        manage: { total: 0, done: 0, controlled: 0, byType: {}, byTown: {}, byPerson: {} },
+        // 工程措施多维分析：实施数量 + 完成率 + 资金规模
+        eng: { total: 0, done: 0, fundSum: 0, byType: {}, byCompany: {}, byFund: [] }
     };
+    const FUND_BUCKETS = [
+        { label: '未填概算', min: -1, max: 0 },
+        { label: '1万以下', min: 0, max: 10000 },
+        { label: '1-3万', min: 10000, max: 30000 },
+        { label: '3-5万', min: 30000, max: 50000 },
+        { label: '5-10万', min: 50000, max: 100000 },
+        { label: '10万以上', min: 100000, max: Infinity }
+    ];
+    s.eng.byFund = FUND_BUCKETS.map(b => ({ label: b.label, min: b.min, max: b.max, cnt: 0, fund: 0 }));
+    function bump(obj, key, done, fund) {
+        const k = key || '未知';
+        if (!obj[k]) obj[k] = { cnt: 0, done: 0, fund: 0 };
+        obj[k].cnt++;
+        if (done) obj[k].done++;
+        obj[k].fund += fund || 0;
+    }
     (records || []).forEach(rec => {
         if (rec.risk === 'safe') return;
         s.total++;
@@ -2083,13 +2245,33 @@ function govListStats(records) {
         else s.pending++;
         const town = rec.street || '未知';
         s.byTown[town] = (s.byTown[town] || 0) + 1;
+        if (!s.byTownGov[town]) s.byTownGov[town] = { total: 0, done: 0, doing: 0, overdue: 0, pending: 0 };
+        s.byTownGov[town].total++;
+        s.byTownGov[town][g === 'done' ? 'done' : (g === 'doing' ? 'doing' : (g === 'overdue' ? 'overdue' : 'pending'))]++;
         (rec.manageRecords || []).forEach(m => {
             const t = m.measureType || '其他';
             s.byManageType[t] = (s.byManageType[t] || 0) + 1;
+            const done = !!(m.isDone || m.status === '已结束');
+            s.manage.total++;
+            if (done) s.manage.done++;
+            if (m.riskControlled) s.manage.controlled++;
+            bump(s.manage.byType, t, done, 0);
+            bump(s.manage.byTown, town, done, 0);
+            bump(s.manage.byPerson, m.dutyPerson || '未指定', done, 0);
         });
         (rec.projectRecords || []).forEach(p => {
             const t = p.engType || GOV_ENG_TYPE_MAP[p.projectName] || '其他';
             s.byEngType[t] = (s.byEngType[t] || 0) + 1;
+            const done = !!p.isDone;
+            const fund = Number(p.budget || p.fund || 0) || 0;
+            s.eng.total++;
+            if (done) s.eng.done++;
+            s.eng.fundSum += fund;
+            bump(s.eng.byType, t, done, fund);
+            bump(s.eng.byCompany, p.company || '未定单位', done, fund);
+            const b = s.eng.byFund.find(x => fund > x.min && (x.max === Infinity ? fund >= x.min : fund <= x.max))
+                || s.eng.byFund[s.eng.byFund.length - 1];
+            b.cnt++; b.fund += fund;
         });
     });
     return s;

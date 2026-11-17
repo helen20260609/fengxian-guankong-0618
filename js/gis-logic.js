@@ -1,4 +1,4 @@
-initHouseArchSeed();
+﻿initHouseArchSeed();
 // 农村自建房数据（house-arch-data.js，三类口径）
 const ruralRecs = getAllHouseRecords()
     .filter(r => (r.houseType || '') !== '城镇自建房')
@@ -125,7 +125,7 @@ function getRiskLabel(risk, houseType) {
 const STATUS_CONFIG = {
     pending: { label: '待整治', color: '#9aa0a6', class: 'treat-pending' },
     doing: { label: '整治中', color: '#f9ab00', class: 'treat-doing' },
-    done: { label: '已治理', color: '#1e8e3e', class: 'treat-done' },
+    done: { label: '已整治', color: '#1e8e3e', class: 'treat-done' },
     overdue: { label: '逾期未整治', color: '#d93025', class: 'treat-overdue' }
 };
 
@@ -171,29 +171,36 @@ const LAYER_MODES = {
         // statusMap 动态生成：按当前 category 返回农村/城镇口径标签
         get statusMap() {
             const labelMap = (currentCategory === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
-            return {
-                danger: { label: labelMap.danger, color: RISK_CONFIG.danger.color, class: 'danger', shape: 'circle' },
-                major: { label: labelMap.major, color: RISK_CONFIG.major.color, class: 'major', shape: 'circle' },
-                warning: { label: labelMap.warning, color: RISK_CONFIG.warning.color, class: 'warning', shape: 'circle' },
-                safe: { label: labelMap.safe, color: RISK_CONFIG.safe.color, class: 'safe', shape: 'circle' }
+            const map = {
+                danger: { label: labelMap.danger, color: RISK_CONFIG.danger.color, class: 'danger', shape: 'circle' }
             };
+            // 城镇四级口径才保留 major；农村三类口径下 major 已并入 danger
+            if (currentCategory === '城镇自建房') {
+                map.major = { label: labelMap.major, color: RISK_CONFIG.major.color, class: 'major', shape: 'circle' };
+            }
+            map.warning = { label: labelMap.warning, color: RISK_CONFIG.warning.color, class: 'warning', shape: 'circle' };
+            map.safe = { label: labelMap.safe, color: RISK_CONFIG.safe.color, class: 'safe', shape: 'circle' };
+            return map;
         },
         get filters() {
             const labelMap = (currentCategory === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
-            return [
+            const arr = [
                 { key: 'all', label: '全部', icon: 'fa-home' },
                 { key: 'danger', label: labelMap.danger, icon: 'fa-exclamation-triangle' },
-                { key: 'major', label: labelMap.major, icon: 'fa-exclamation-circle' },
                 { key: 'warning', label: labelMap.warning, icon: 'fa-exclamation' },
                 { key: 'safe', label: labelMap.safe, icon: 'fa-check-circle' }
             ];
+            if (currentCategory === '城镇自建房') {
+                arr.splice(2, 0, { key: 'major', label: labelMap.major, icon: 'fa-exclamation-circle' });
+            }
+            return arr;
         }
     },
     governance: {
         name: '治理状态', colorBy: 'governance', shapeBy: 'risk', statusMap: STATUS_CONFIG,
         filters: [
             { key: 'all', label: '全部', icon: 'fa-home' }, { key: 'pending', label: '待整治', icon: 'fa-clock' },
-            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已治理', icon: 'fa-check' },
+            { key: 'doing', label: '整治中', icon: 'fa-spinner' }, { key: 'done', label: '已整治', icon: 'fa-check' },
             { key: 'overdue', label: '逾期未整治', icon: 'fa-exclamation-triangle' }
         ]
     },
@@ -375,8 +382,7 @@ function renderHouseFootprint(item, idx) {
         opacity: 0.8,
         className: 'house-footprint'
     }).addTo(map);
-    polygon.bindPopup(buildHousePopup(item, idx));
-    polygon.on('click', function() { selectHouse(idx); });
+    polygon.on('click', function() { selectHouse(idx); openArchive(idx); });
     footprintPolygons.push(polygon);
 }
 
@@ -463,8 +469,7 @@ function renderBuildingMarkers(data) {
                 marker.setOpacity(0.2);
             }
         }
-        marker.bindPopup(buildHousePopup(item, idx));
-        marker.on('click', () => selectHouse(idx));
+        marker.on('click', () => { selectHouse(idx); openArchive(idx); });
         markers.push(marker);
     });
 }
@@ -491,8 +496,7 @@ function renderHeatmap(data) {
                 opacity: 0.6,
                 fillOpacity: 0.45
             }).addTo(map);
-            marker.bindPopup(buildHousePopup(item, data.indexOf(item)));
-            marker.on('click', () => selectHouse(data.indexOf(item)));
+            marker.on('click', () => { const i = data.indexOf(item); selectHouse(i); openArchive(i); });
             markers.push(marker);
         }
     });
@@ -537,34 +541,6 @@ function buildClusterPopup(name, items, level) {
 }
 function drillFromPopup(level, name) { if (level === 'street') drillToStreet(name); else drillToCommunity(name); }
 
-function buildHousePopup(item, idx) {
-    const riskCfg = getRiskConfig(item.risk, item.houseType);
-    const statusCfg = getStatusConfig(item.governance);
-    const measureHtml = item.measures && item.measures.length ? '<ul>' + item.measures.map(m => '<li>' + (m.type === 'management' ? '管理' : '工程') + '措施：' + m.name + '（' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '）</li>').join('') + '</ul>' : '<p style="color:var(--text-secondary);font-size:12px;">暂无整治措施</p>';
-    const hazardsHtml = item.hazards && item.hazards.length ? '<ul>' + item.hazards.map(h => '<li>' + h.part + '：' + h.type + '（' + h.level + '）</li>').join('') + '</ul>' : '<p style="color:var(--text-secondary);font-size:12px;">暂无隐患</p>';
-    const nodesHtml = item.currentNodes && item.currentNodes.length ? item.currentNodes.map(n => '<div class="kv"><span>当前节点</span><b>' + n.name + '（进行中）</b></div>').join('') : '';
-    return '<div style="min-width:260px;max-width:320px;">' +
-        '<div class="popup-section">' +
-        '<span class="popup-status-tag" style="color:' + riskCfg.color + ';background:' + hexToRgba(riskCfg.color, 0.12) + '">' + getShapeHtml(riskCfg.shape, riskCfg.color, 10) + ' 隐患等级：' + riskCfg.label + '</span>' +
-        '<span class="popup-status-tag" style="color:' + statusCfg.color + ';background:' + hexToRgba(statusCfg.color, 0.12) + '">整治状态：' + statusCfg.label + '</span>' +
-        '</div>' +
-        '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-home"></i> 基本信息</div>' +
-        '<div class="kv"><span>唯一标识</span><b>' + item.no + '</b></div>' +
-        '<div class="kv"><span>地址</span><b>' + item.address + '</b></div>' +
-        '<div class="kv"><span>产权人</span><b>' + (item.owner || '-') + '</b></div>' +
-        '<div class="kv"><span>责任单位</span><b>' + (item.responsibleDept || '-') + '</b></div>' +
-        '<div class="kv"><span>责任人</span><b>' + (item.responsiblePerson || '-') + '</b></div>' +
-        '</div>' +
-        '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-exclamation-triangle"></i> 隐患信息</div>' + hazardsHtml + '</div>' +
-        '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-tools"></i> 整治措施</div>' + measureHtml + '</div>' +
-        '<div class="popup-section"><div class="popup-section-title"><i class="fas fa-tasks"></i> 整治进度</div>' +
-        nodesHtml +
-        '<div class="kv"><span>完成率</span><b>' + item.progress + '%</b></div>' +
-        '<div class="progress-bar"><div class="fill" style="width:' + item.progress + '%"></div></div>' +
-        '</div>' +
-        '<button class="archive-btn" onclick="openArchive(' + idx + ')"><i class="fas fa-arrow-right"></i> 查看详情</button>' +
-        '</div>';
-}
 function drillToStreet(street) { currentLevel = 'street'; currentStreet = street; currentCommunity = null; updateBreadcrumb(); renderMap(); renderList(); }
 function drillToCommunity(community) { currentLevel = 'community'; currentCommunity = community; updateBreadcrumb(); renderMap(); renderList(); }
 function drillToBuilding() { currentLevel = 'building'; updateBreadcrumb(); renderMap(); renderList(); }
@@ -594,17 +570,19 @@ function renderLegend() {
             '<div class="legend-row"><span class="legend-color" style="background:#1a73e8"></span> 已申请待审核</div>' +
             '<div class="legend-row"><span class="legend-shape">●</span> 半径越大表示销号/申请越密集</div>';
     } else {
-        html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">颜色：状态</div>';
-        Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
-        html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">形状：隐患等级</div>';
-        // 风险图例按当前 category 显示对应口径（城镇四级 / 农村三类）
         const legendLabelMap = (currentCategory === '城镇自建房') ? RISK_LABEL_URBAN : RISK_LABEL_RURAL;
         const legendKeys = (currentCategory === '城镇自建房') ? ['danger', 'major', 'warning', 'safe'] : ['danger', 'warning', 'safe'];
-        legendKeys.forEach(key => {
-            const cfg = RISK_CONFIG[key];
-            const label = legendLabelMap[key];
-            html += '<div class="legend-item"><span class="legend-symbol" style="color:' + cfg.color + '">' + getShapeHtml(cfg.shape, cfg.color, 12) + '</span><span>' + label + '</span></div>';
-        });
+        if (mode.colorBy === 'risk') {
+            // 房屋底图：颜色和形状都按隐患等级，合并为一段避免重复
+            html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">隐患等级</div>';
+            legendKeys.forEach(key => {
+                const cfg = RISK_CONFIG[key];
+                html += '<div class="legend-item"><span class="legend-symbol" style="color:' + cfg.color + '">' + getShapeHtml(cfg.shape, cfg.color, 12) + '</span><span>' + legendLabelMap[key] + '</span></div>';
+            });
+        } else {
+            html += '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">颜色：状态</div>';
+            Object.keys(mode.statusMap).forEach(key => { const cfg = mode.statusMap[key]; html += '<div class="legend-item"><span class="legend-dot" style="background:' + cfg.color + ';"></span><span>' + cfg.label + '</span></div>'; });
+        }
         html += '<div style="font-size:11px;color:var(--text-secondary);margin:8px 0 6px;">图斑：房屋占地轮廓</div>';
         html += '<div class="legend-item"><span class="legend-dot" style="background:#1a73e8;"></span><span>颜色随状态变化</span></div>';
     }
@@ -678,7 +656,7 @@ function renderMeasurePieChart() {
     measurePieChart.setOption({
         tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
         legend: { bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 10 } },
-        series: [{ type: 'pie', radius: ['40%', '65%'], center: ['50%', '45%'], data: [{ value: mCount, name: '管理措施', itemStyle: { color: '#1a73e8' } }, { value: eCount, name: '工程措施', itemStyle: { color: '#1e8e3e' } }], label: { fontSize: 10 } }]
+        series: [{ type: 'pie', radius: ['40%', '65%'], center: ['50%', '45%'], data: [{ value: mCount, name: '管理措施', itemStyle: { color: '#1a73e8' } }, { value: eCount, name: '工程措施', itemStyle: { color: '#1e8e3e' } }], label: { show: false } }]
     });
     measurePieChart.off('click');
     measurePieChart.on('click', params => switchLayer(params.name === '管理措施' ? 'management' : 'engineering'));
@@ -700,14 +678,14 @@ function renderLeftStatusChart() {
     leftChart.setOption({
         tooltip: { trigger: 'axis' },
         grid: { left: '3%', right: '10%', bottom: '3%', top: '10%', containLabel: true },
-        xAxis: { type: 'category', data: ['待整治', '整治中', '已治理', '逾期'], axisLabel: { fontSize: 11 } },
+        xAxis: { type: 'category', data: ['待整治', '整治中', '已整治', '逾期'], axisLabel: { fontSize: 11 } },
         yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
         series: [{ type: 'bar', data: [{ value: counts.pending, itemStyle: { color: STATUS_CONFIG.pending.color } }, { value: counts.doing, itemStyle: { color: STATUS_CONFIG.doing.color } }, { value: counts.done, itemStyle: { color: STATUS_CONFIG.done.color } }, { value: counts.overdue, itemStyle: { color: STATUS_CONFIG.overdue.color } }], label: { show: true, position: 'top', fontSize: 10 } }]
     }, true);
     leftChart.off('click');
     leftChart.on('click', params => {
         // 图表→地图联动：点击分类在地图上高亮对应房屋点位（再次点击取消高亮）
-        const map = { '待整治': 'pending', '整治中': 'doing', '已治理': 'done', '逾期': 'overdue' };
+        const map = { '待整治': 'pending', '整治中': 'doing', '已整治': 'done', '逾期': 'overdue' };
         const key = map[params.name];
         highlightKey = (highlightKey === key) ? null : key;
         renderHighlightBanner();
@@ -856,7 +834,6 @@ function selectHouse(idx) {
     if (currentLevel !== 'building') { currentLevel = 'building'; updateBreadcrumb(); }
     map.setView([item.lat, item.lng], 17, { animate: true });
     renderMap();
-    setTimeout(() => markers.forEach(m => { const ll = m.getLatLng(); if (Math.abs(ll.lat - item.lat) < 0.0001 && Math.abs(ll.lng - item.lng) < 0.0001) m.openPopup(); }), 300);
 }
 function applyFilter() {
     const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
@@ -886,10 +863,27 @@ function openArchive(idx) {
     const modal = document.getElementById('archiveModal');
     modal.dataset.index = idx;
     document.getElementById('archTitle').textContent = item.no;
+    const rc = getRiskConfig(item.risk, item.houseType);
+    document.getElementById('archRisk').innerHTML = '<span class="risk-tag ' + rc.class + '" style="font-size:12px;vertical-align:2px;">隐患等级：' + rc.label + '</span>';
+    const sc = getStatusConfig(item.governance);
+    document.getElementById('archStatus').innerHTML = '<span class="risk-tag ' + sc.class + '" style="font-size:12px;vertical-align:2px;">整治状态：' + sc.label + '</span>';
     switchTab('basic');
     modal.classList.add('active');
 }
 function closeArchive() { document.getElementById('archiveModal').classList.remove('active'); }
+
+// 证明文件在线下载（演示：生成文本文件）
+function downloadCertFile(name) {
+    const content = '房屋安全整治销号证明文件\r\n文件名称：' + name + '\r\n导出时间：' + new Date().toLocaleString('zh-CN') + '\r\n（演示环境生成）';
+    const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name.replace(/\.(pdf|jpg|jpeg|png|doc|docx)$/i, '') + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
 
 function switchTab(tab) {
     const modal = document.getElementById('archiveModal');
@@ -899,19 +893,20 @@ function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     const body = document.getElementById('archiveBody');
     if (tab === 'basic') {
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">唯一标识</div><div class="arch-value">' + item.no + '</div></div><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">所属街道</div><div class="arch-value">' + (item.street || '-') + '</div></div><div class="arch-row"><div class="arch-label">所属社区</div><div class="arch-value">' + (item.community || '-') + '</div></div><div class="arch-row"><div class="arch-label">详细地址</div><div class="arch-value">' + item.address + '</div></div><div class="arch-row"><div class="arch-label">产权人</div><div class="arch-value">' + (item.owner || '-') + '</div></div></div>';
     } else if (tab === 'hazard') {
-        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">隐患等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level, item.houseType).class + '">' + getRiskConfig(h.level, item.houseType).label + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
+        body.innerHTML = '<div class="arch-section">' + (item.hazards && item.hazards.length ? item.hazards.map(h => '<div class="arch-row"><div class="arch-label">隐患部位</div><div class="arch-value">' + h.part + '</div></div><div class="arch-row"><div class="arch-label">隐患类型</div><div class="arch-value">' + h.type + '</div></div><div class="arch-row"><div class="arch-label">隐患等级</div><div class="arch-value"><span class="risk-tag ' + getRiskConfig(h.level, item.houseType).class + '">' + getRiskConfig(h.level, item.houseType).label + '</span></div></div>').join('<hr style="border:0;border-top:1px solid #eee;margin:8px 0;">') : '<div class="arch-row"><div class="arch-value">暂无隐患记录</div></div>') + '</div>';
     } else if (tab === 'measure') {
-        body.innerHTML = '<div class="arch-section">' + (item.measures && item.measures.length ? item.measures.map(m => '<div class="arch-row"><div class="arch-label">' + (m.type === 'management' ? '管理' : '工程') + '措施</div><div class="arch-value">' + m.name + '</div></div><div class="arch-row"><div class="arch-label">当前状态</div><div class="arch-value"><span class="risk-tag ' + (m.status === 'done' ? 'safe' : m.status === 'doing' ? 'doing' : 'pending') + '">' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '</span></div></div><hr style="border:0;border-top:1px solid #eee;margin:8px 0;">').join('') : '<div class="arch-row"><div class="arch-value">暂无整治措施</div></div>') + '</div>';
+        body.innerHTML = '<div class="arch-section">' + (item.measures && item.measures.length ? item.measures.map(m => '<div class="arch-row"><div class="arch-label">' + (m.type === 'management' ? '管理' : '工程') + '措施</div><div class="arch-value">' + m.name + '</div></div><div class="arch-row"><div class="arch-label">当前状态</div><div class="arch-value"><span class="risk-tag ' + (m.status === 'done' ? 'safe' : m.status === 'doing' ? 'doing' : 'pending') + '">' + (m.status === 'done' ? '已完成' : m.status === 'doing' ? '进行中' : '待开展') + '</span></div></div>').join('<hr style="border:0;border-top:1px solid #eee;margin:8px 0;">') : '<div class="arch-row"><div class="arch-value">暂无整治措施</div></div>') + '</div>';
     } else if (tab === 'progress') {
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">完成率</div><div class="arch-value"><b>' + item.progress + '%</b></div></div><div class="progress-bar" style="margin:8px 0;"><div class="fill" style="width:' + item.progress + '%"></div></div><div class="arch-row"><div class="arch-label">整治状态</div><div class="arch-value"><span class="risk-tag ' + getStatusConfig(item.governance).class + '">' + getStatusConfig(item.governance).label + '</span></div></div><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + (item.elimination === 'done' ? 'safe' : 'pending') + '">' + (item.elimination === 'done' ? '已销号' : '未销号') + '</span></div></div></div>';
+        const nodesHtml = item.currentNodes && item.currentNodes.length ? item.currentNodes.map(n => '<div class="arch-row"><div class="arch-label">当前节点</div><div class="arch-value">' + n.name + '（进行中）</div></div>').join('') : '';
+        body.innerHTML = '<div class="arch-section">' + nodesHtml + '<div class="arch-row"><div class="arch-label">整治状态</div><div class="arch-value"><span class="risk-tag ' + getStatusConfig(item.governance).class + '">' + getStatusConfig(item.governance).label + '</span></div></div><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + (item.elimination === 'done' ? 'safe' : 'pending') + '">' + (item.elimination === 'done' ? '已销号' : '未销号') + '</span></div></div></div>';
     } else if (tab === 'responsible') {
         body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">责任单位</div><div class="arch-value">' + (item.responsibleDept || '-') + '</div></div><div class="arch-row"><div class="arch-label">责任人</div><div class="arch-value">' + (item.responsiblePerson || '-') + '</div></div><div class="arch-row"><div class="arch-label">联系电话</div><div class="arch-value">021-5710' + (1000 + (parseInt(String(item.no || '').replace(/\D/g, '') || '0', 10) % 8999)) + '</div></div></div>';
     } else if (tab === 'elimination') {
         const info = item.eliminationInfo || {};
         const cfg = ELIMINATION_CONFIG[item.elimination] || ELIMINATION_CONFIG.pending;
-        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + cfg.class + '">' + cfg.label + '</span></div></div><div class="arch-row"><div class="arch-label">申请时间</div><div class="arch-value">' + (info.applyTime || '未申请') + '</div></div><div class="arch-row"><div class="arch-label">审核时间</div><div class="arch-value">' + (info.reviewTime || '待审核') + '</div></div><div class="arch-row"><div class="arch-label">审核人</div><div class="arch-value">' + (info.reviewer || '-') + '</div></div><div class="arch-row"><div class="arch-label">备注</div><div class="arch-value">' + (info.note || '-') + '</div></div><div class="arch-row"><div class="arch-label">证明文件</div><div class="arch-value">' + (info.certFiles && info.certFiles.length ? info.certFiles.map(f => '<span class="file-tag"><i class="fas fa-file-alt"></i> ' + f + '</span>').join(' ') : '暂无') + '</div></div></div>';
+        body.innerHTML = '<div class="arch-section"><div class="arch-row"><div class="arch-label">销号状态</div><div class="arch-value"><span class="risk-tag ' + cfg.class + '">' + cfg.label + '</span></div></div><div class="arch-row"><div class="arch-label">申请时间</div><div class="arch-value">' + (info.applyTime || '未申请') + '</div></div><div class="arch-row"><div class="arch-label">审核时间</div><div class="arch-value">' + (info.reviewTime || '待审核') + '</div></div><div class="arch-row"><div class="arch-label">审核人</div><div class="arch-value">' + (info.reviewer || '-') + '</div></div><div class="arch-row"><div class="arch-label">备注</div><div class="arch-value">' + (info.note || '-') + '</div></div><div class="arch-row"><div class="arch-label">证明文件</div><div class="arch-value">' + (info.certFiles && info.certFiles.length ? info.certFiles.map(f => '<a class="file-tag" style="cursor:pointer;text-decoration:none;" title="点击下载" onclick="downloadCertFile(\'' + f + '\')"><i class="fas fa-file-alt"></i> ' + f + ' <i class="fas fa-download" style="font-size:11px;color:var(--primary);"></i></a>').join(' ') : '暂无') + '</div></div></div>';
     }
 }
 function togglePanel(id, collapsedClass, toggleIconSelector, openIcon, closeIcon) {
@@ -978,7 +973,6 @@ function bindEvents() {
         timeFilterContainer.addEventListener('click', e => { const tag = e.target.closest('.time-filter-tag'); if (!tag) return; activeTimeFilter = tag.dataset.timeFilter; renderTimeFilterTags(); applyFilter(); });
     }
     document.getElementById('archClose').addEventListener('click', closeArchive);
-    document.getElementById('archCloseBtn').addEventListener('click', closeArchive);
     document.getElementById('resetZoom').addEventListener('click', () => { currentLevel = 'district'; currentStreet = null; currentCommunity = null; updateBreadcrumb(); map.setView([30.92, 121.47], 12); renderMap(); renderList(); });
     window.addEventListener('resize', () => { if (leftChart) leftChart.resize(); if (streetRankingChart) streetRankingChart.resize(); if (measurePieChart) measurePieChart.resize(); });
 }

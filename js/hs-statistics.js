@@ -276,10 +276,10 @@
             return d.toISOString().slice(0, 10);
         }
 
-        function getFilteredData() {
+        function getFilteredData(catOverride) {
             const street = document.getElementById('streetFilter').value;
             const risk = document.getElementById('riskFilter').value;
-            const cat = window.hsStatsCategory || '农村自建房';
+            const cat = catOverride || window.hsStatsCategory || '农村自建房';
             return baseData.filter(item => {
                 const isUrban = item.houseType === '城镇自建房';
                 if (cat === '城镇自建房' && !isUrban) return false;
@@ -289,6 +289,13 @@
                 if (risk) return item.risk === risk;
                 return true;
             });
+        }
+        // 报表数据源 → 房屋分类过滤（follow 时跟随页面分类，all 不过滤）
+        function catForDataSource(source) {
+            if (source === 'all') return 'all';
+            if (source === 'rural') return '农村自建房';
+            if (source === 'urban') return '城镇自建房';
+            return undefined;
         }
 
         function updateSummary(data) {
@@ -997,7 +1004,7 @@
             }
             if (view === 'measure') {
                 const records = generateMeasureRecords();
-                const headers = ['变更编号', '唯一标识', '街镇', '风险等级', '措施类型', '责任人', '责任单位', '是否完成', '是否有效控制', '效果评估', '变更次数'];
+                const headers = ['变更编号', '唯一标识', '街镇', '隐患等级', '措施类型', '责任人', '责任单位', '是否完成', '是否有效控制', '效果评估', '变更次数'];
                 const rows = records.map(r => [r.id, r.houseNo, r.street, getRiskLabel(r.risk, r.houseType), r.measureType, r.responsiblePerson, r.responsibleDept, r.done ? '是' : '否', r.controlled ? '是' : '否', r.effectEvaluation, r.changeCount]);
                 const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
                 const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1021,7 +1028,7 @@
                 return;
             }
             const data = getFilteredData();
-            const headers = ['编号', '街镇', '地址', '结构类型', '建成年代', '风险等级', '产权人'];
+            const headers = ['编号', '街镇', '地址', '结构类型', '建成年代', '隐患等级', '产权人'];
             const rows = data.map(i => [i.no, i.street, i.address, categoryMap[i.category], i.year, getRiskLabel(i.risk, i.houseType), i.owner]);
             const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
             const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1045,8 +1052,10 @@
             const sort = document.getElementById('reportSort').value;
             const metrics = Array.from(document.querySelectorAll('#reportMetrics input:checked')).map(i => i.value);
             const chartTypes = Array.from(document.querySelectorAll('#reportCharts input:checked')).map(i => i.value);
+            const dataSource = document.getElementById('reportDataSource').value;
+            const layout = document.getElementById('reportLayout').value;
             const { start, end } = getReportPeriodDates();
-            return { type, period, dimension, sort, metrics, chartTypes, start, end };
+            return { type, period, dimension, sort, metrics, chartTypes, dataSource, layout, start, end };
         }
 
         function filterByDate(data, start, end) {
@@ -1139,7 +1148,7 @@
         function doGenerateReport(genBy) {
             const config = getReportConfig();
             currentReportConfig = config;
-            let data = getFilteredData();
+            let data = getFilteredData(catForDataSource(config.dataSource));
             data = filterByDate(data, config.start, config.end);
             let rows = computeDimensionData(data, config.dimension);
             rows = sortReportData(rows, config.sort);
@@ -1156,7 +1165,7 @@
             const title = reportTypeLabels[config.type] || '统计报表';
             const dimensionLabel = document.getElementById('reportDimension').options[document.getElementById('reportDimension').selectedIndex].text;
 
-            const headerHtml = `<div class="report-title">${title}</div><div class="report-subtitle">统计维度：${dimensionLabel} | 周期：${formatDate(config.start)} 至 ${formatDate(config.end)}</div>`;
+            const headerHtml = `<div class="report-title">${title}</div><div class="report-subtitle">数据源：${hsSourceLabels[config.dataSource] || hsSourceLabels.follow} ｜ 统计维度：${dimensionLabel} ｜ 周期：${formatDate(config.start)} 至 ${formatDate(config.end)}</div>`;
 
             const totalRow = {
                 dimension: '合计',
@@ -1201,9 +1210,12 @@
 
             let chartsHtml = '<div class="report-section"><div class="report-section-title"><i class="fas fa-chart-pie"></i> 可视化图表</div>';
             const chartTypes = config.chartTypes;
+            const isGrid = config.layout === 'grid';
+            if (isGrid) chartsHtml += '<div class="report-charts-grid">';
             if (chartTypes.includes('bar')) chartsHtml += `<div id="reportChartBar" class="report-chart-wrap"></div>`;
             if (chartTypes.includes('pie')) chartsHtml += `<div id="reportChartPie" class="report-chart-wrap"></div>`;
             if (chartTypes.includes('line')) chartsHtml += `<div id="reportChartLine" class="report-chart-wrap"></div>`;
+            if (isGrid) chartsHtml += '</div>';
             chartsHtml += '</div>';
 
             let rankHtml = '';
@@ -1511,7 +1523,9 @@ ${bodyRows}
             const p = n => String(n).padStart(2, '0');
             return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
         }
-        const hsDimLabels = { all: '全部', street: '按街镇', community: '按社区（村居）', houseType: '按房屋类型', risk: '按风险等级' };
+        const hsDimLabels = { all: '全部', street: '按街镇', community: '按社区（村居）', houseType: '按房屋类型', risk: '按隐患等级' };
+        const hsSourceLabels = { follow: '跟随当前页面分类', all: '全部房屋', rural: '农村房屋', urban: '城镇房屋' };
+        const hsLayoutLabels = { single: '纵向单列', grid: '双列网格' };
         const hsMetricLabels = { totalTask: '任务总量', doneTask: '已完成', completionRate: '完成率', overdueTask: '逾期数', manageMeasure: '管理措施', projectMeasure: '工程措施', riskDistribution: '等级分布', streetRank: '街道排名', fundUsage: '资金使用' };
         const hsChartLabels = { bar: '柱状图', pie: '饼图', line: '折线图', table: '明细表格' };
         function periodDatesFor(period, startStr, endStr) {
@@ -1526,7 +1540,7 @@ ${bodyRows}
             return { start: s, end: e };
         }
         function computeRowsForConfig(cfg) {
-            let data = getFilteredData();
+            let data = getFilteredData(catForDataSource(cfg.dataSource));
             const pd = periodDatesFor(cfg.period, cfg.start, cfg.end);
             data = filterByDate(data, pd.start, pd.end);
             let rows = computeDimensionData(data, cfg.dimension);
@@ -1537,6 +1551,8 @@ ${bodyRows}
             document.getElementById('reportPeriod').value = cfg.period || 'year';
             document.getElementById('reportDimension').value = cfg.dimension || 'street';
             document.getElementById('reportSort').value = cfg.sort || 'default';
+            document.getElementById('reportDataSource').value = cfg.dataSource || 'follow';
+            document.getElementById('reportLayout').value = cfg.layout || 'single';
             document.querySelectorAll('#reportMetrics input').forEach(i => { i.checked = (cfg.metrics || []).includes(i.value); });
             document.querySelectorAll('#reportCharts input').forEach(i => { i.checked = (cfg.chartTypes || []).includes(i.value); });
             if (cfg.period === 'custom') {
@@ -1555,9 +1571,9 @@ ${bodyRows}
         // ============ 模板库 ============
         const HS_TPL_KEY = 'hs_report_templates';
         const hsPresetTemplates = [
-            { id: 'TPL-P1', name: '周报 · 按街镇', preset: true, cfg: { type: 'weekly', period: 'week', dimension: 'street', sort: 'completionRateDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask'], chartTypes: ['bar', 'table'] } },
-            { id: 'TPL-P2', name: '月报 · 综合指标', preset: true, cfg: { type: 'monthly', period: 'month', dimension: 'street', sort: 'totalTaskDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask', 'manageMeasure', 'projectMeasure', 'riskDistribution', 'streetRank', 'fundUsage'], chartTypes: ['bar', 'pie', 'line', 'table'] } },
-            { id: 'TPL-P3', name: '年度总结 · 按房屋类型', preset: true, cfg: { type: 'yearly', period: 'year', dimension: 'houseType', sort: 'totalTaskDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'manageMeasure', 'projectMeasure', 'fundUsage'], chartTypes: ['bar', 'pie', 'table'] } }
+            { id: 'TPL-P1', name: '周报 · 按街镇', preset: true, cfg: { type: 'weekly', period: 'week', dimension: 'street', dataSource: 'follow', layout: 'single', sort: 'completionRateDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask'], chartTypes: ['bar', 'table'] } },
+            { id: 'TPL-P2', name: '月报 · 综合指标', preset: true, cfg: { type: 'monthly', period: 'month', dimension: 'street', dataSource: 'all', layout: 'grid', sort: 'totalTaskDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask', 'manageMeasure', 'projectMeasure', 'riskDistribution', 'streetRank', 'fundUsage'], chartTypes: ['bar', 'pie', 'line', 'table'] } },
+            { id: 'TPL-P3', name: '年度总结 · 按房屋类型', preset: true, cfg: { type: 'yearly', period: 'year', dimension: 'houseType', dataSource: 'all', layout: 'grid', sort: 'totalTaskDesc', metrics: ['totalTask', 'doneTask', 'completionRate', 'manageMeasure', 'projectMeasure', 'fundUsage'], chartTypes: ['bar', 'pie', 'table'] } }
         ];
         function getAllTemplates() { return hsPresetTemplates.concat(lsRead(HS_TPL_KEY, [])); }
         function renderTemplateList() {
@@ -1565,7 +1581,7 @@ ${bodyRows}
             const list = getAllTemplates();
             grid.innerHTML = list.map(t => {
                 const c = t.cfg;
-                const meta = `类型：${reportTypeLabels[c.type] || c.type} ｜ 维度：${hsDimLabels[c.dimension] || c.dimension}<br>` +
+                const meta = `类型：${reportTypeLabels[c.type] || c.type} ｜ 维度：${hsDimLabels[c.dimension] || c.dimension} ｜ 数据源：${hsSourceLabels[c.dataSource] || hsSourceLabels.follow} ｜ 布局：${hsLayoutLabels[c.layout] || hsLayoutLabels.single}<br>` +
                     `指标：${(c.metrics || []).map(m => hsMetricLabels[m] || m).join('、') || '默认'}<br>` +
                     `图表：${(c.chartTypes || []).map(x => hsChartLabels[x] || x).join('、') || '默认'}`;
                 return `<div class="tpl-card">
@@ -1581,7 +1597,7 @@ ${bodyRows}
         function openTplSaveModal() {
             const cfg = getReportConfig();
             document.getElementById('tplSaveSummary').innerHTML =
-                `将保存：${reportTypeLabels[cfg.type]} ｜ ${hsDimLabels[cfg.dimension]} ｜ 指标 ${cfg.metrics.length} 项 ｜ 图表 ${cfg.chartTypes.length} 项 ｜ 排序：${document.getElementById('reportSort').selectedOptions[0].text}`;
+                `将保存：${reportTypeLabels[cfg.type]} ｜ ${hsDimLabels[cfg.dimension]} ｜ 数据源：${hsSourceLabels[cfg.dataSource] || hsSourceLabels.follow} ｜ 布局：${hsLayoutLabels[cfg.layout] || hsLayoutLabels.single} ｜ 指标 ${cfg.metrics.length} 项 ｜ 图表 ${cfg.chartTypes.length} 项 ｜ 排序：${document.getElementById('reportSort').selectedOptions[0].text}`;
             document.getElementById('tplNameInput').value = '';
             document.getElementById('tplSaveModal').classList.add('open');
         }
@@ -1591,7 +1607,7 @@ ${bodyRows}
             if (!name) { alert('请输入模板名称'); return; }
             const cfg = getReportConfig();
             const list = lsRead(HS_TPL_KEY, []);
-            list.push({ id: 'TPL-' + Date.now(), name, preset: false, cfg: { type: cfg.type, period: cfg.period, dimension: cfg.dimension, sort: cfg.sort, metrics: cfg.metrics, chartTypes: cfg.chartTypes } });
+            list.push({ id: 'TPL-' + Date.now(), name, preset: false, cfg: { type: cfg.type, period: cfg.period, dimension: cfg.dimension, dataSource: cfg.dataSource, layout: cfg.layout, sort: cfg.sort, metrics: cfg.metrics, chartTypes: cfg.chartTypes } });
             lsWrite(HS_TPL_KEY, list);
             closeTplSaveModal();
             showHsToast('模板已保存到模板库');
@@ -1611,28 +1627,109 @@ ${bodyRows}
             showHsToast('模板已删除');
         }
 
-        // ============ 定时生成任务 ============
+        // ============ 定时生成任务（分钟/小时/天/周/月粒度，模拟分布式调度框架执行） ============
         const HS_SCH_KEY = 'hs_report_schedules';
-        function computeNextRun(cycle, from) {
+        const HS_SCH_TICK_MS = 30000;
+        const SCH_WEEK_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        const SCH_CRON_DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        function __schPad(n) { return String(n).padStart(2, '0'); }
+        function __schFmt(d) { return `${d.getFullYear()}-${__schPad(d.getMonth() + 1)}-${__schPad(d.getDate())} ${__schPad(d.getHours())}:${__schPad(d.getMinutes())}`; }
+        function migrateSchedule(s) {
+            if (s.cycleUnit) return s;
+            const map = {
+                weekly: { cycleUnit: 'week', cycleInterval: 1, cycleWeekdays: [1], cycleTime: '08:00' },
+                monthly: { cycleUnit: 'month', cycleInterval: 1, cycleDayOfMonth: 1, cycleTime: '08:00' },
+                quarterly: { cycleUnit: 'month', cycleInterval: 3, cycleDayOfMonth: 1, cycleTime: '08:00' },
+                yearly: { cycleUnit: 'month', cycleInterval: 12, cycleDayOfMonth: 1, cycleTime: '08:00' }
+            };
+            return Object.assign({}, s, map[s.cycle] || map.weekly);
+        }
+        // 下次执行时间：minute 每N分钟；hour 每N小时第M分；day 每N天 HH:MM；week 每N周指定星期 HH:MM；month 每N个月指定日 HH:MM
+        function computeNextRun(cfg, from) {
             const base = from ? new Date(from) : new Date();
-            const d = new Date(base); d.setHours(8, 0, 0, 0);
-            if (d <= base) d.setDate(d.getDate() + 1);
-            if (cycle === 'weekly') { while (d.getDay() !== 1) d.setDate(d.getDate() + 1); }
-            else if (cycle === 'monthly') { while (d.getDate() !== 1) d.setDate(d.getDate() + 1); }
-            else if (cycle === 'quarterly') { while (!(d.getDate() === 1 && d.getMonth() % 3 === 0)) d.setDate(d.getDate() + 1); }
-            else if (cycle === 'yearly') { while (!(d.getDate() === 1 && d.getMonth() === 0)) d.setDate(d.getDate() + 1); }
-            const p = n => String(n).padStart(2, '0');
-            return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} 08:00`;
+            const unit = cfg.cycleUnit || 'week';
+            const interval = Math.max(1, parseInt(cfg.cycleInterval, 10) || 1);
+            if (unit === 'minute') {
+                const d = new Date(base.getTime() + interval * 60000);
+                d.setSeconds(0, 0);
+                return __schFmt(d);
+            }
+            const tp = (cfg.cycleTime || '08:00').split(':');
+            const hh = parseInt(tp[0], 10) || 0, mm = parseInt(tp[1], 10) || 0;
+            if (unit === 'hour') {
+                const m = Math.min(59, Math.max(0, parseInt(cfg.cycleMinute, 10) || 0));
+                const d = new Date(base);
+                d.setMinutes(m, 0, 0);
+                while (d <= base) d.setTime(d.getTime() + interval * 3600000);
+                return __schFmt(d);
+            }
+            if (unit === 'day') {
+                const d = new Date(base);
+                d.setHours(hh, mm, 0, 0);
+                while (d <= base) d.setDate(d.getDate() + interval);
+                return __schFmt(d);
+            }
+            if (unit === 'week') {
+                const days = (cfg.cycleWeekdays && cfg.cycleWeekdays.length ? cfg.cycleWeekdays : [1]);
+                const epoch = new Date(2024, 0, 1); // 周一，作为“每N周”的相位基准
+                const d = new Date(base);
+                d.setHours(hh, mm, 0, 0);
+                for (let i = 0; i < 370 * interval; i++) {
+                    const wd = d.getDay() === 0 ? 7 : d.getDay();
+                    const weekIdx = Math.floor((d - epoch) / (7 * 86400000));
+                    if (d > base && days.indexOf(wd) !== -1 && weekIdx % interval === 0) return __schFmt(d);
+                    d.setDate(d.getDate() + 1);
+                }
+                return __schFmt(d);
+            }
+            const dom = Math.min(31, Math.max(1, parseInt(cfg.cycleDayOfMonth, 10) || 1));
+            const d = new Date(base);
+            d.setHours(hh, mm, 0, 0);
+            for (let i = 0; i < 128 * interval + 40; i++) {
+                const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+                const monthIdx = d.getFullYear() * 12 + d.getMonth();
+                if (d > base && d.getDate() === Math.min(dom, dim) && monthIdx % interval === 0) return __schFmt(d);
+                d.setDate(d.getDate() + 1);
+            }
+            return __schFmt(d);
+        }
+        function schCycleText(s) {
+            const n = Math.max(1, parseInt(s.cycleInterval, 10) || 1);
+            const t = s.cycleTime || '08:00';
+            if (s.cycleUnit === 'minute') return n === 1 ? '每分钟' : `每 ${n} 分钟`;
+            if (s.cycleUnit === 'hour') return (n === 1 ? '每小时' : `每 ${n} 小时`) + `（第 ${parseInt(s.cycleMinute, 10) || 0} 分）`;
+            if (s.cycleUnit === 'day') return (n === 1 ? '每天' : `每 ${n} 天`) + ` ${t}`;
+            if (s.cycleUnit === 'week') {
+                const names = (s.cycleWeekdays && s.cycleWeekdays.length ? s.cycleWeekdays : [1]).slice().sort((a, b) => a - b).map(d => SCH_WEEK_NAMES[d % 7]).join('、');
+                return (n === 1 ? '每周' : `每 ${n} 周`) + ` ${names} ${t}`;
+            }
+            return (n === 1 ? '每月' : `每 ${n} 个月`) + ` ${parseInt(s.cycleDayOfMonth, 10) || 1} 日 ${t}`;
+        }
+        // Quartz 风格调度表达式（秒 分 时 日 月 星期）
+        function schCronExpr(s) {
+            const n = Math.max(1, parseInt(s.cycleInterval, 10) || 1);
+            const tp = (s.cycleTime || '08:00').split(':');
+            const hh = parseInt(tp[0], 10) || 0, mm = parseInt(tp[1], 10) || 0;
+            if (s.cycleUnit === 'minute') return `0 0/${n} * * * ?`;
+            if (s.cycleUnit === 'hour') return `0 ${parseInt(s.cycleMinute, 10) || 0} 0/${n} * * ?`;
+            if (s.cycleUnit === 'day') return `0 ${mm} ${hh} 1/${n} * ?`;
+            if (s.cycleUnit === 'week') {
+                const dows = (s.cycleWeekdays && s.cycleWeekdays.length ? s.cycleWeekdays : [1]).slice().sort((a, b) => a - b).map(d => SCH_CRON_DOW[d % 7]).join(',');
+                return `0 ${mm} ${hh} ? * ${dows}` + (n > 1 ? `（每 ${n} 周）` : '');
+            }
+            return `0 ${mm} ${hh} ${parseInt(s.cycleDayOfMonth, 10) || 1} 1/${n} ?`;
         }
         function seedSchedules() {
             if (localStorage.getItem(HS_SCH_KEY)) return;
-            lsWrite(HS_SCH_KEY, [
-                { id: 'SCH-001', name: '农村自建房整治周报', type: 'weekly', cycle: 'weekly', dimension: 'street', enabled: true, lastRun: '2025-06-09 08:00', nextRun: computeNextRun('weekly') },
-                { id: 'SCH-002', name: '房屋安全整治月报', type: 'monthly', cycle: 'monthly', dimension: 'street', enabled: true, lastRun: '2025-06-01 08:00', nextRun: computeNextRun('monthly') }
-            ]);
+            const seeds = [
+                { id: 'SCH-001', name: '农村自建房整治周报', type: 'weekly', dimension: 'street', enabled: true, cycleUnit: 'week', cycleInterval: 1, cycleWeekdays: [1], cycleTime: '08:00', lastRun: '2025-06-09 08:00' },
+                { id: 'SCH-002', name: '房屋安全整治月报', type: 'monthly', dimension: 'street', enabled: true, cycleUnit: 'month', cycleInterval: 1, cycleDayOfMonth: 1, cycleTime: '08:00', lastRun: '2025-06-01 08:00' },
+                { id: 'SCH-003', name: '重点危房综合日报', type: 'comprehensive', dimension: 'risk', enabled: false, cycleUnit: 'day', cycleInterval: 1, cycleTime: '08:00', lastRun: null }
+            ];
+            seeds.forEach(s => { s.nextRun = computeNextRun(s); });
+            lsWrite(HS_SCH_KEY, seeds);
         }
-        function getSchedules() { return lsRead(HS_SCH_KEY, []); }
-        const hsCycleLabels = { weekly: '每周一 08:00', monthly: '每月1日 08:00', quarterly: '每季首月1日 08:00', yearly: '每年1月1日 08:00' };
+        function getSchedules() { return lsRead(HS_SCH_KEY, []).map(migrateSchedule); }
         function renderScheduleList() {
             const tbody = document.getElementById('scheduleTbody');
             const list = getSchedules();
@@ -1641,25 +1738,75 @@ ${bodyRows}
                 <td>${s.name}</td>
                 <td>${reportTypeLabels[s.type] || s.type}</td>
                 <td>${hsDimLabels[s.dimension] || s.dimension}</td>
-                <td>${hsCycleLabels[s.cycle] || s.cycle}</td>
+                <td>${schCycleText(s)}</td>
                 <td>${s.lastRun || '--'}</td>
                 <td>${s.enabled ? (s.nextRun || '--') : '已停用'}</td>
                 <td><span class="status-pill ${s.enabled ? 'on' : 'off'}">${s.enabled ? '启用中' : '已停用'}</span></td>
-                <td>
+                <td style="white-space:nowrap;">
+                    <span style="display:inline-flex;gap:6px;">
                     <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="runScheduleNow('${s.id}')" title="立即生成一次"><i class="fas fa-play"></i> 立即执行</button>
                     <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="toggleSchedule('${s.id}')">${s.enabled ? '停用' : '启用'}</button>
                     <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="deleteSchedule('${s.id}')">删除</button>
+                    </span>
                 </td>
             </tr>`).join('');
         }
         let editingScheduleId = null;
+        function renderSchCycleFields() {
+            const unit = document.getElementById('schCycleUnit').value;
+            const box = document.getElementById('schCycleExtra');
+            if (unit === 'minute') {
+                box.innerHTML = '<span style="font-size:13px; color:var(--text-secondary);">按上方间隔，每 N 分钟触发一次（间隔填 1 即每分钟）</span>';
+            } else if (unit === 'hour') {
+                box.innerHTML = '<span style="font-size:13px;">每小时第</span> <input type="number" id="schCycleMinute" min="0" max="59" value="0" style="width:64px;"> <span style="font-size:13px;">分</span>';
+            } else if (unit === 'day') {
+                box.innerHTML = '<input type="time" id="schCycleTime" value="08:00">';
+            } else if (unit === 'week') {
+                const names = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+                box.innerHTML = names.map((n, i) => `<label style="margin-right:8px; font-size:13px; display:inline-flex; align-items:center; gap:2px;"><input type="checkbox" class="schWday" value="${i + 1}"${i === 0 ? ' checked' : ''}>${n}</label>`).join('') + '<input type="time" id="schCycleTime" value="08:00">';
+            } else {
+                box.innerHTML = '<span style="font-size:13px;">第</span> <input type="number" id="schCycleDay" min="1" max="31" value="1" style="width:64px;"> <span style="font-size:13px;">日</span> <input type="time" id="schCycleTime" value="08:00">';
+            }
+            box.querySelectorAll('input').forEach(el => el.addEventListener('change', updateSchCronPreview));
+            updateSchCronPreview();
+        }
+        function readSchCycleForm() {
+            const unit = document.getElementById('schCycleUnit').value;
+            const cfg = { cycleUnit: unit, cycleInterval: Math.max(1, parseInt(document.getElementById('schCycleInterval').value, 10) || 1) };
+            const minuteEl = document.getElementById('schCycleMinute');
+            const timeEl = document.getElementById('schCycleTime');
+            const dayEl = document.getElementById('schCycleDay');
+            if (unit === 'hour') cfg.cycleMinute = Math.min(59, Math.max(0, parseInt(minuteEl && minuteEl.value, 10) || 0));
+            if (unit === 'day' || unit === 'week' || unit === 'month') cfg.cycleTime = (timeEl && timeEl.value) || '08:00';
+            if (unit === 'week') {
+                const days = Array.from(document.querySelectorAll('.schWday:checked')).map(c => parseInt(c.value, 10));
+                cfg.cycleWeekdays = days.length ? days : [1];
+            }
+            if (unit === 'month') cfg.cycleDayOfMonth = Math.min(31, Math.max(1, parseInt(dayEl && dayEl.value, 10) || 1));
+            return cfg;
+        }
+        function updateSchCronPreview() {
+            const preview = document.getElementById('schCronPreview');
+            if (!preview) return;
+            const cfg = readSchCycleForm();
+            preview.value = schCronExpr(cfg) + '　（' + schCycleText(cfg) + '）';
+        }
         function openScheduleModal(id) {
             editingScheduleId = id || null;
             const s = id ? getSchedules().find(x => x.id === id) : null;
             document.getElementById('schName').value = s ? s.name : '';
             document.getElementById('schType').value = s ? s.type : 'weekly';
-            document.getElementById('schCycle').value = s ? s.cycle : 'weekly';
             document.getElementById('schDimension').value = s ? s.dimension : 'street';
+            document.getElementById('schCycleUnit').value = s ? s.cycleUnit : 'week';
+            document.getElementById('schCycleInterval').value = s ? (s.cycleInterval || 1) : 1;
+            renderSchCycleFields();
+            if (s) {
+                if (s.cycleUnit === 'hour') document.getElementById('schCycleMinute').value = s.cycleMinute || 0;
+                if (s.cycleTime && document.getElementById('schCycleTime')) document.getElementById('schCycleTime').value = s.cycleTime;
+                if (s.cycleUnit === 'week') document.querySelectorAll('.schWday').forEach(c => { c.checked = (s.cycleWeekdays || [1]).indexOf(parseInt(c.value, 10)) !== -1; });
+                if (s.cycleUnit === 'month') document.getElementById('schCycleDay').value = s.cycleDayOfMonth || 1;
+            }
+            updateSchCronPreview();
             document.getElementById('schEnabled').checked = s ? !!s.enabled : true;
             document.getElementById('scheduleModal').classList.add('open');
         }
@@ -1668,18 +1815,17 @@ ${bodyRows}
             const name = document.getElementById('schName').value.trim();
             if (!name) { alert('请输入任务名称'); return; }
             const list = getSchedules();
-            const data = {
+            const data = Object.assign({
                 name,
                 type: document.getElementById('schType').value,
-                cycle: document.getElementById('schCycle').value,
                 dimension: document.getElementById('schDimension').value,
                 enabled: document.getElementById('schEnabled').checked
-            };
+            }, readSchCycleForm());
             if (editingScheduleId) {
                 const s = list.find(x => x.id === editingScheduleId);
-                if (s) Object.assign(s, data, { nextRun: computeNextRun(data.cycle) });
+                if (s) Object.assign(s, data, { nextRun: computeNextRun(data) });
             } else {
-                list.push(Object.assign({ id: 'SCH-' + Date.now(), lastRun: null, nextRun: computeNextRun(data.cycle) }, data));
+                list.push(Object.assign({ id: 'SCH-' + Date.now(), lastRun: null, nextRun: computeNextRun(data) }, data));
             }
             lsWrite(HS_SCH_KEY, list);
             closeScheduleModal();
@@ -1691,7 +1837,7 @@ ${bodyRows}
             const s = list.find(x => x.id === id);
             if (!s) return;
             s.enabled = !s.enabled;
-            if (s.enabled) s.nextRun = computeNextRun(s.cycle);
+            if (s.enabled) s.nextRun = computeNextRun(s);
             lsWrite(HS_SCH_KEY, list);
             renderScheduleList();
         }
@@ -1701,19 +1847,44 @@ ${bodyRows}
             renderScheduleList();
             showHsToast('定时任务已删除');
         }
-        function runScheduleNow(id) {
-            const list = getSchedules();
-            const s = list.find(x => x.id === id);
-            if (!s) return;
+        function executeScheduleTask(s) {
             const periodMap = { weekly: 'week', monthly: 'month', quarterly: 'quarter', yearly: 'year', comprehensive: 'year' };
             const cfg = { type: s.type, period: periodMap[s.type] || 'year', dimension: s.dimension, sort: 'default', metrics: ['totalTask', 'doneTask', 'completionRate', 'overdueTask', 'manageMeasure', 'projectMeasure', 'riskDistribution', 'fundUsage'], chartTypes: ['bar', 'pie', 'table'] };
             const rows = computeRowsForConfig(cfg);
             archiveReport(cfg, rows, '定时任务', s.name);
             s.lastRun = nowStr();
-            s.nextRun = computeNextRun(s.cycle);
+            s.nextRun = computeNextRun(s);
+        }
+        function runScheduleNow(id) {
+            const list = getSchedules();
+            const s = list.find(x => x.id === id);
+            if (!s) return;
+            executeScheduleTask(s);
             lsWrite(HS_SCH_KEY, list);
             renderScheduleList();
             showHsToast(`任务「${s.name}」执行完成，报表已存档并通知相关责任人`);
+        }
+        // ---- 模拟分布式调度框架：页面在线期间每 30 秒扫描一次任务表，到点的启用任务自动执行 ----
+        let hsSchedulerTimer = null;
+        function checkDueSchedules() {
+            const list = getSchedules();
+            const now = new Date();
+            const fired = [];
+            list.forEach(s => {
+                if (!s.enabled || !s.nextRun) return;
+                const due = new Date(String(s.nextRun).replace(' ', 'T'));
+                if (!isNaN(due) && due <= now) { executeScheduleTask(s); fired.push(s.name); }
+            });
+            if (!fired.length) return;
+            lsWrite(HS_SCH_KEY, list);
+            const pane = document.getElementById('reportPaneSchedule');
+            if (pane && pane.classList.contains('active')) renderScheduleList();
+            showHsToast(`调度框架已自动执行 ${fired.length} 个任务：${fired.join('、')}，报表已存档并通知相关责任人`);
+        }
+        function startReportScheduler() {
+            checkDueSchedules();
+            if (hsSchedulerTimer) clearInterval(hsSchedulerTimer);
+            hsSchedulerTimer = setInterval(checkDueSchedules, HS_SCH_TICK_MS);
         }
 
         // ============ 生成历史 ============
@@ -1768,10 +1939,12 @@ ${bodyRows}
                 <td>${r.periodText}</td>
                 <td><span class="tag tag-info">${r.genBy}</span></td>
                 <td>${r.genTime}</td>
-                <td>
+                <td style="white-space:nowrap;">
+                    <span style="display:inline-flex;gap:6px;">
                     <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="viewHistory('${r.id}')"><i class="fas fa-eye"></i> 查看</button>
                     <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="downloadHistoryRec('${r.id}')"><i class="fas fa-file-excel"></i> 导出</button>
                     <button class="btn" style="padding:4px 8px;font-size:12px;" onclick="deleteHistory('${r.id}')">删除</button>
+                    </span>
                 </td>
             </tr>`).join('');
         }
@@ -1844,6 +2017,7 @@ ${bodyRows}
             updateRiskFilterLabels();
             updateStats();
             seedReportDemoData();
+            startReportScheduler();
             window.addEventListener('resize', () => {
                 Object.values(charts).forEach(c => c.resize());
                 Object.values(reportCharts).forEach(c => c && c.resize());
